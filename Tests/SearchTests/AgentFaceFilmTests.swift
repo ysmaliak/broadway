@@ -10,36 +10,30 @@ struct AgentFaceFilmTests {
         ProcessInfo.processInfo.environment["SEARCH_FILM"].map { URL(fileURLWithPath: $0) }
     }
 
+    private let rate = 12.0
+
     @Test(.enabled(if: ProcessInfo.processInfo.environment["SEARCH_FILM"] != nil, "SEARCH_FILM names a folder to film the faces into"))
     func filmsEveryMoodAtItsSizes() throws {
         let folder = try #require(folder)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let ticks = Int(AgentCharacter.rate * 4.8)
+        let ticks = Int(rate * 6)
         let moods = AgentCharacter.Mood.allCases.map { mood in
             (mood.title, mood, [AgentCharacter.still(mood)] + frames(mood, ticks))
         }
         let stills = [("Still", AgentCharacter.Mood.idle, AgentCharacter.Mood.allCases.map(AgentCharacter.still))]
-        let asking = stride(from: 0, to: ticks, by: 24).map { first in
-            ("\(String(format: "%.1f", Double(first) / AgentCharacter.rate)) s", AgentCharacter.Mood.waving, Array(frames(.waving, ticks)[first..<min(ticks, first + 24)]))
-        }
-        let arrivals = [AgentCharacter.Mood.done, .failed].compactMap { mood in
-            AgentCharacter.arrival(from: .typing, to: mood).map { ("\(mood.title) ⇠", mood, [AgentCharacter.still(.typing)] + $0) }
-        }
         for dark in [false, true] {
             let theme = dark ? "dark" : "light"
-            for side in [CGFloat(14), 18, 22] {
+            for side in [CGFloat(14), 16, 18, 22] {
                 try sheet(moods, side: side, scale: 2, dark: dark, to: folder.appendingPathComponent("moods-\(Int(side))pt-\(theme).png"))
             }
-            for side in [CGFloat(14), 22] {
+            for side in [CGFloat(16), 32] {
                 try sheet(stills, side: side, scale: 4, dark: dark, to: folder.appendingPathComponent("stills-\(Int(side))pt-\(theme).png"))
-                try sheet(asking, side: side, scale: 4, dark: dark, to: folder.appendingPathComponent("needs-you-\(Int(side))pt-\(theme).png"))
             }
-            try sheet(arrivals, side: 22, scale: 4, dark: dark, to: folder.appendingPathComponent("arrivals-22pt-\(theme).png"))
         }
     }
 
     private func frames(_ mood: AgentCharacter.Mood, _ ticks: Int) -> [AgentCharacter.Frame] {
-        (0..<ticks).map { AgentCharacter.frame(mood, at: Double($0) / AgentCharacter.rate, seed: 7919) }
+        (0..<ticks).map { AgentCharacter.frame(mood, at: Double($0) / rate, seed: 7919) }
     }
 
     private func sheet(_ rows: [(String, AgentCharacter.Mood, [AgentCharacter.Frame])], side: CGFloat, scale: CGFloat, dark: Bool, to url: URL) throws {

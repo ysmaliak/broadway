@@ -319,8 +319,24 @@ def main():
         broadway("wait", "--tab", one, env=CLAUDE)
         time.sleep(0.8)
         claude = card("Claude Code")
+        t.ok("rule", "a fresh world starts folded, and an agent connecting and opening tabs leaves it folded",
+             agents("state").get("folded") is True, agents("state").get("folded"))
+        t.ok("faces", "a newly connected agent wears its hello or working face", claude and claude.get("face") in ("hello", "reading", "typing", "idle"), claude)
         agents("row", link=claude["id"][:8], index=0)
         time.sleep(0.6)
+        faces = (chrome().get("card") or {}).get("faces") or []
+        t.ok("faces", "with the window hidden no face runs a loop", bool(faces) and all(not f["looping"] and f["loops"] == 0 for f in faces), faces)
+        stage(False, shown=True)
+        time.sleep(1.0)
+        faces = (chrome().get("card") or {}).get("faces") or []
+        if faces and all(f.get("visible") for f in faces):
+            t.ok("faces", "shown, the face's idle loop runs on Core Animation", all(f["looping"] and f["loops"] > 0 for f in faces), faces)
+        else:
+            print("  skip [faces] shown: macOS reports the window covered on this Mac, so the face rightly stays still", faces, flush=True)
+        stage(False)
+        time.sleep(0.5)
+        faces = (chrome().get("card") or {}).get("faces") or []
+        t.ok("faces", "hidden again, the loop stops", bool(faces) and all(not f["looping"] and f["loops"] == 0 for f in faces), faces)
         for dark in (False, True):
             stage(dark)
             for name in LOOKS:
@@ -340,6 +356,10 @@ def main():
                 foot_shot(f"pic-2-one-open-{name}-{'dark' if dark else 'light'}")
         stage(False)
         look("pale")
+        listed = (chrome().get("card") or {}).get("listed") or []
+        gaps = [round(b[1] - (a[1] + a[3]), 2) for a, b in zip(listed, listed[1:])]
+        t.ok("rows", "unfolded, an agent's tab rows are the regular row's height", bool(listed) and all(abs(f[3] - 34) < 0.01 for f in listed), listed)
+        t.ok("rows", "the rows keep the regular gap above and between them", bool(listed) and abs(listed[0][1] - 3) < 0.01 and all(abs(g - 3) < 0.01 for g in gaps), listed)
 
         codex_tab = broadway("open", base + "release-notes", env=CODEX)["data"]["id"]
         for n in range(6):
@@ -357,6 +377,9 @@ def main():
         open_state = card_checks("three agents, open")
         open_box = (open_state.get("card") or {}).get("box")
 
+        listed = (chrome().get("card") or {}).get("listed") or []
+        gaps = [round(b[1] - (a[1] + a[3]), 2) for a, b in zip(listed, listed[1:])]
+        t.ok("rows", "three agents: headings and rows sit the regular gap apart", len(listed) > 3 and all(abs(g - 3) < 0.01 for g in gaps), listed)
         agents("press")
         time.sleep(1.0)
         for dark in (False, True):

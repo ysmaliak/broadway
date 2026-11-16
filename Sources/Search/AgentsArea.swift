@@ -6,7 +6,8 @@ import Combine
 @Observable
 final class AgentsFolds {
     static let shared = AgentsFolds(store: Store.settings)
-    nonisolated static let key = "agents.unfolded"
+    nonisolated static let key = "agents.open"
+    nonisolated static let retired = "agents.unfolded"
 
     var folded: Bool { didSet { if folded != oldValue { store?.set(!folded, forKey: Self.key) } } }
     var whole: Set<UUID> = []
@@ -14,6 +15,7 @@ final class AgentsFolds {
 
     init(store: UserDefaults? = nil) {
         self.store = store
+        store?.removeObject(forKey: Self.retired)
         folded = !(store?.bool(forKey: Self.key) ?? false)
     }
 
@@ -22,15 +24,18 @@ final class AgentsFolds {
 
 enum AgentsLayout {
     static let row: CGFloat = Metrics.sideRowHeight
-    static let indent: CGFloat = 16
+    static let gap: CGFloat = Metrics.sideGap
+    static let step: CGFloat = row + gap
     static let pad: CGFloat = MiniPlayerView.openInset
+    static let indent: CGFloat = SideLook.cardRowInset - pad
+    static let rowLead: CGFloat = TabRowView.iconLead
+    static let rowCorner: CGFloat = Metrics.sideRadius
     static let rim: CGFloat = (MiniPlayerView.height - row) / 2
     static let below: CGFloat = MiniPlayerView.below
     static let margin: CGFloat = 2 * rim + below
     static let lead: CGFloat = SideLook.rowLead - pad
     static let corner: CGFloat = SideLook.cardRadius - pad
     static let hover = KitTone(base: KitColor.ink, kind: .ink, opacity: 0.1)
-    static let live = KitTone(base: KitColor.ink, kind: .ink, opacity: 0.16)
     static let share: CGFloat = 0.4
     static let most = 5
     static let faces = 3
@@ -52,6 +57,25 @@ enum AgentsLayout {
         var attention = false
     }
 
+    struct RowSlots: Equatable {
+        var mark: NSRect
+        var close: NSRect
+        var dot: NSRect
+        var tail: CGFloat
+    }
+
+    static let dotSide: CGFloat = 7
+    static let tail: CGFloat = 10
+
+    static func rowSlots(width: CGFloat, height: CGFloat) -> RowSlots {
+        let side = SideLook.rowMark
+        let square = Metrics.closeSquare(height)
+        let inset = Metrics.closeInset(height)
+        let close = NSRect(x: width - inset - square, y: inset, width: square, height: square)
+        let dot = NSRect(x: close.midX - dotSide / 2, y: (height - dotSide) / 2, width: dotSide, height: dotSide)
+        return RowSlots(mark: NSRect(x: rowLead, y: (height - side) / 2, width: side, height: side), close: close, dot: dot, tail: tail)
+    }
+
     static func headed(_ sessions: Int) -> Bool { sessions > 1 }
 
     static func shown(_ count: Int, whole: Bool) -> Int {
@@ -64,7 +88,7 @@ enum AgentsLayout {
     }
 
     static func sectionHeight(_ section: Section) -> CGFloat {
-        CGFloat((section.headed ? 1 : 0) + rows(section)) * row
+        CGFloat((section.headed ? 1 : 0) + rows(section)) * step
     }
 
     static func content(_ sections: [Section]) -> CGFloat {
@@ -154,6 +178,10 @@ struct AgentSession: Identifiable, Equatable {
         let loose = pending.first { question in question.task == link.id && !tabs.contains { $0.id == question.tab } }
         let extra = loose.map { [AgentLinkState.TabFacts(question: $0.title, asking: true)] } ?? []
         return AgentLinkState.of(facts + extra, ended: link.ended)
+    }
+
+    func face(_ state: AgentLinkState, now: Date = Date()) -> AgentCharacter.Mood {
+        AgentCharacter.face(state, ended: link.ended, connected: link.connected, now: now)
     }
 
     @MainActor
@@ -450,9 +478,22 @@ final class AgentsAreaView: NSView {
         for more in mores.values { more.ground = ground }
     }
 
-    private func face(_ session: AgentSession, _ state: AgentLinkState) -> AgentHeadLook.Face {
-        AgentHeadLook.Face(id: session.id, mood: state.mood, attention: state.attention, accent: session.link.accent,
+    private func face(_ session: AgentSession, _ state: AgentLinkState, now: Date) -> AgentHeadLook.Face {
+        AgentHeadLook.Face(id: session.id, mood: session.face(state, now: now), attention: state.attention, accent: session.link.accent,
                            seed: session.link.seed, name: session.link.title)
+    }
+
+    private var greetingEnds: Date?
+
+    private func watchGreetings(_ sessions: [AgentSession], now: Date) {
+        let ends = sessions.filter { $0.link.live }.map { $0.link.connected.addingTimeInterval(AgentCharacter.helloSpan) }.filter { $0 > now }.min()
+        guard let ends, greetingEnds.map({ ends < $0 || $0 <= now }) ?? true else { return }
+        greetingEnds = ends
+        DispatchQueue.main.asyncAfter(deadline: .now() + ends.timeIntervalSince(now) + 0.05) { [weak self] in
+            guard let self else { return }
+            greetingEnds = nil
+            later()
+        }
     }
 
     private var closedRoom: CGFloat { AgentsLayout.height(sections, folded: true, column: column) }
@@ -463,6 +504,8 @@ final class AgentsAreaView: NSView {
         let questions = AgentDesk.shared.pending
         let folded = AgentsFolds.shared.folded
         let states = shown.map { $0.state(pending: questions) }
+        let now = Date()
+        watchGreetings(shown, now: now)
         let voice = AgentsLayout.voice(zip(shown, states).map { ($0.link.title, $1) })
         let unfolds = AgentsLayout.content(sections) > 0
         let only = shown.count == 1 ? shown.first : nil
@@ -470,7 +513,7 @@ final class AgentsAreaView: NSView {
         let keepsRows = !folded || (settled && (motion != nil || room > closedRoom + 0.5))
 
         var look = AgentHeadLook()
-        look.faces = zip(shown, states).filter { faces.contains($0.0.id) }.map { face($0, $1) }
+        look.faces = zip(shown, states).filter { faces.contains($0.0.id) }.map { face($0, $1, now: now) }
         look.title = voice.title
         look.line = voice.line
         look.attention = voice.attention
@@ -497,12 +540,13 @@ final class AgentsAreaView: NSView {
                 if section.headed {
                     let head = heads[session.id] ?? {
                         let made = AgentHeadView()
+                        made.listed = true
                         heads[session.id] = made
                         list.addSubview(made)
                         return made
                     }()
                     var look = AgentHeadLook()
-                    look.faces = [face(session, state)]
+                    look.faces = [face(session, state, now: now)]
                     look.title = session.link.title
                     look.line = state.line
                     look.attention = state.attention
@@ -604,7 +648,8 @@ final class AgentsAreaView: NSView {
         let moves = animated && !wasFolded && motion?.folds != true
         let lead = AgentsLayout.indent
         let inner = max(0, scroll.frame.width - lead)
-        func place(_ view: NSView, at y: CGFloat) {
+        func place(_ view: NSView, at top: CGFloat) {
+            let y = top + AgentsLayout.gap
             let frame = NSRect(x: lead, y: y, width: inner, height: side)
             if view.frame == .zero, animated, !wasFolded { view.kitEnter(frame) } else { view.kitMove(to: frame, animated: moves) }
         }
@@ -614,17 +659,17 @@ final class AgentsAreaView: NSView {
             let from = y
             if section.headed, let head = heads[session.id] {
                 place(head, at: y)
-                y += side
+                y += AgentsLayout.step
             }
             let count = AgentsLayout.shown(session.tabs.count, whole: section.whole)
             for tab in session.tabs.prefix(count) {
                 guard let view = rows[tab.id] else { continue }
                 place(view, at: y)
-                y += side
+                y += AgentsLayout.step
             }
             if count < session.tabs.count, let more = mores[session.id] {
                 place(more, at: y)
-                y += side
+                y += AgentsLayout.step
             }
             spans[session.id] = from...y
         }
@@ -672,6 +717,10 @@ final class AgentsAreaView: NSView {
         return ["room": Double(room), "moving": moving, "card": [card.minX, card.minY, card.width, card.height].map(Double.init),
                 "radius": Double(glass.cornerRadius), "glass": !glass.isHidden, "fade": Double(scroll.layer?.opacity ?? 1),
                 "rows": rows.count + heads.count + mores.count, "trace": trace,
+                "listed": list.subviews.filter { !$0.isHidden }.sorted { $0.frame.minY < $1.frame.minY }.map { view in
+                    [view.frame.minX, view.frame.minY, view.frame.width, view.frame.height].map(Double.init)
+                },
+                "faces": row.faceStates,
                 "crossfading": layer?.animationKeys()?.contains(where: { $0.hasPrefix("transition") }) ?? false]
     }
 }
@@ -706,6 +755,12 @@ final class AgentHeadView: KitHoverView {
     var closing: (() -> Void)?
     var menus: (() -> NSMenu?)?
     var ground = RowGround() { didSet { if ground != oldValue { paint() } } }
+    var listed = false {
+        didSet {
+            plate.radius = listed ? AgentsLayout.rowCorner : AgentsLayout.corner
+            needsLayout = true
+        }
+    }
     private(set) var look = AgentHeadLook()
 
     private let plate = KitPlate(radius: AgentsLayout.corner)
@@ -757,7 +812,6 @@ final class AgentHeadView: KitHoverView {
             view.removeFromSuperview()
             faces[id] = nil
         }
-        if laidOnce, next.attention, !was.attention, let asker = next.faces.first(where: \.attention) { hop(asker.id) }
         title.font = .systemFont(ofSize: 13, weight: next.strong ? SideLook.headingWeight : .medium)
         title.text = next.title
         line.text = next.line
@@ -772,17 +826,10 @@ final class AgentHeadView: KitHoverView {
         needsLayout = true
     }
 
-    private func hop(_ id: UUID) {
-        guard !Motion.reduced, window != nil, let face = faces[id] else { return }
-        face.wantsLayer = true
-        face.kitScale(1.22, curve: .none)
-        face.kitScale(1, curve: .spring(KitSpring(response: 0.34, damping: 0.42)))
-    }
-
     private func paint() {
         let ink = ground.ink
         plate.ink = ink
-        plate.fill = hovering && look.presses ? AgentsLayout.hover : nil
+        plate.fill = hovering && look.presses ? (listed ? ground.greys.hover : AgentsLayout.hover) : nil
         title.ink = ink
         line.ink = ink
         chevron.ink = ink
@@ -800,12 +847,19 @@ final class AgentHeadView: KitHoverView {
         }
     }
 
+    var faceStates: [[String: Any]] {
+        look.faces.compactMap { face in
+            guard let view = faces[face.id] as? AgentCharacterFace else { return nil }
+            return view.benchState
+        }
+    }
+
     override func layout() {
         super.layout()
         plate.kitSetFrame(bounds)
         let height = bounds.height
         let side = SideLook.rowMark
-        var x = AgentsLayout.lead
+        var x = listed ? AgentsLayout.rowLead : AgentsLayout.lead
         for face in look.faces {
             faces[face.id]?.frame = NSRect(x: x, y: (height - side) / 2, width: side, height: side)
             x += AgentsLayout.faceStep
@@ -931,12 +985,12 @@ final class AgentRowView: KitHoverView {
     let browser: Browser
     let tab: Tab
     var ground = RowGround() { didSet { if ground != oldValue { refresh() } } }
-    private let hoverGround = KitPlate(radius: AgentsLayout.corner)
-    private let liveGround = KitPlate(radius: AgentsLayout.corner)
+    private let hoverGround = KitPlate(radius: AgentsLayout.rowCorner)
+    private let liveGround = KitPlate(radius: AgentsLayout.rowCorner)
     private let mark = RowMarkView()
     private let title = KitLabel("", font: .systemFont(ofSize: 13))
     private let dot = KitBox(fill: nil, corners: .capsule)
-    private let close = AgentCloseKeyView()
+    private let close = CloseSpotView()
     private var start: NSPoint?
     private lazy var reads = KitReads { [weak self] in self?.refresh() }
 
@@ -949,7 +1003,6 @@ final class AgentRowView: KitHoverView {
         for view in [hoverGround, liveGround, mark, title, dot, close] as [NSView] { addSubview(view) }
         title.setAccessibilityElement(false)
         close.toolTip = "Close Tab"
-        close.setAccessibilityLabel("Close Tab")
         close.act = { [weak self] in
             guard let self else { return }
             self.browser.closeAgentTab(self.tab)
@@ -981,11 +1034,11 @@ final class AgentRowView: KitHoverView {
         title.opacity = tone.opacity
         title.ink = ink
         hoverGround.isHidden = live || !hovering
-        hoverGround.fill = AgentsLayout.hover
+        hoverGround.fill = ground.greys.hover
         hoverGround.ink = ink
         liveGround.isHidden = !live
-        liveGround.fill = AgentsLayout.live
-        liveGround.ink = ink
+        SelectedLook.dress(liveGround, greys: ground.greys, ink: ink)
+        close.ink = ink
         close.isHidden = !hovering
         if hovering {
             dot.isHidden = true
@@ -1012,13 +1065,13 @@ final class AgentRowView: KitHoverView {
         super.layout()
         hoverGround.kitSetFrame(bounds)
         liveGround.kitSetFrame(bounds)
-        let side = SideLook.rowMark
-        mark.frame = NSRect(x: AgentsLayout.lead, y: (bounds.height - side) / 2, width: side, height: side)
-        close.frame = NSRect(x: bounds.width - 8 - Metrics.closeSide, y: (bounds.height - Metrics.closeSide) / 2,
-                             width: Metrics.closeSide, height: Metrics.closeSide)
-        dot.frame = NSRect(x: bounds.width - 12 - 5, y: (bounds.height - 5) / 2, width: 5, height: 5)
+        let metrics = AgentsLayout.rowSlots(width: bounds.width, height: bounds.height)
+        mark.frame = metrics.mark
+        close.side = metrics.close.width
+        close.frame = metrics.close
+        dot.frame = metrics.dot
         let x = mark.frame.maxX + SideLook.markGap
-        let right = !close.isHidden ? close.frame.minX - 7 : !dot.isHidden ? dot.frame.minX - 7 : bounds.width - 10
+        let right = !close.isHidden ? close.frame.minX : !dot.isHidden ? dot.frame.minX - SideLook.markGap : bounds.width - metrics.tail
         let room = max(0, right - x)
         let size = title.measure(width: room)
         title.frame = kitSnap(NSRect(x: x, y: (bounds.height - size.height) / 2, width: min(room, size.width), height: size.height))
@@ -1066,7 +1119,7 @@ final class AgentMoreRowView: KitHoverView {
     var act: (() -> Void)?
     var count = 0 { didSet { if count != oldValue { label.text = count == 1 ? "1 more tab" : "\(count) more tabs"; setAccessibilityLabel(label.text) } } }
     var ground = RowGround() { didSet { if ground != oldValue { paint() } } }
-    private let plate = KitPlate(radius: AgentsLayout.corner)
+    private let plate = KitPlate(radius: AgentsLayout.rowCorner)
     private let symbol = KitSymbol("ellipsis", style: KitSymbol.Style(size: 11, weight: .semibold))
     private let label = KitLabel("", font: .systemFont(ofSize: 13), color: KitColor.muted)
 
@@ -1087,7 +1140,7 @@ final class AgentMoreRowView: KitHoverView {
     override var mouseDownCanMoveWindow: Bool { false }
 
     private func paint() {
-        plate.fill = hovering ? AgentsLayout.hover : nil
+        plate.fill = hovering ? ground.greys.hover : nil
         plate.ink = ground.ink
         label.color = hovering ? KitColor.ink : KitColor.muted
         label.ink = ground.ink
@@ -1100,8 +1153,8 @@ final class AgentMoreRowView: KitHoverView {
         plate.kitSetFrame(bounds)
         let side = SideLook.rowMark
         let size = symbol.intrinsicContentSize
-        symbol.frame = NSRect(x: AgentsLayout.lead + (side - size.width) / 2, y: (bounds.height - size.height) / 2, width: size.width, height: size.height)
-        let x = AgentsLayout.lead + side + SideLook.markGap
+        symbol.frame = NSRect(x: AgentsLayout.rowLead + (side - size.width) / 2, y: (bounds.height - size.height) / 2, width: size.width, height: size.height)
+        let x = AgentsLayout.rowLead + side + SideLook.markGap
         let room = max(0, bounds.width - 10 - x)
         let measured = label.measure(width: room)
         label.frame = kitSnap(NSRect(x: x, y: (bounds.height - measured.height) / 2, width: min(room, measured.width), height: measured.height))

@@ -97,6 +97,51 @@ final class AgentsAreaLookTests {
         #expect(AgentsAreaView.height(of: browser, column: 700) == before)
     }
 
+    @Test func nothingAnAgentDoesUnfoldsTheArea() async throws {
+        let links = AgentLinks.shared
+        AgentsFolds.shared.folded = true
+        let stored = Store.settings.object(forKey: AgentsFolds.key) as? Bool
+        let area = AgentsAreaView(browser: browser)
+        var seen: [Bool] = []
+        func note() {
+            area.layoutSubtreeIfNeeded()
+            seen.append(AgentsFolds.shared.folded)
+        }
+
+        let claude = links.join(.named("claude"), name: "Claude Code")
+        note()
+        let tab = agentTab(claude, "https://example.com/work", "Work", acting: "Typing")
+        note()
+        var question = AgentQuestion(kind: .approval(.send), title: "Send on example.com?")
+        question.task = claude.id
+        question.tab = tab.id
+        let asked = Task { await AgentDesk.shared.ask(question) }
+        try await Task.sleep(for: .milliseconds(50))
+        note()
+        for pending in AgentDesk.shared.pending { AgentDesk.shared.take(pending.id, .yes) }
+        _ = await asked.value
+        tab.driving = true
+        note()
+        tab.driving = false
+        links.end(claude.id, .done("Sent it"))
+        note()
+        let codex = links.join(.named("codex"), name: "Codex")
+        _ = agentTab(codex, "https://example.com/other", "Other")
+        links.end(codex.id, .failed("The page would not load"))
+        note()
+        let script = links.join(.named("script"), name: "Script", at: Date(timeIntervalSinceNow: -3600))
+        links.idleLimit = 60
+        defer { links.idleLimit = 20 * 60 }
+        links.sweep()
+        note()
+
+        #expect(links.link(script.id)?.ended == .left)
+        #expect(seen == Array(repeating: true, count: seen.count))
+        #expect(seen.count == 7)
+        #expect(Store.settings.object(forKey: AgentsFolds.key) as? Bool == stored)
+        #expect(AgentsAreaView.height(of: browser, column: 700) == (AgentsLayout.row + AgentsLayout.margin))
+    }
+
     @Test func theFoldedRowTellsVoiceOverWhoWaitsAndThatItIsShut() throws {
         let links = AgentLinks.shared
         let claude = links.join(.named("claude"), name: "Claude Code")
@@ -128,7 +173,7 @@ final class AgentsAreaLookTests {
 
         #expect(headings(in: alone) == [])
         #expect(rows(in: alone) == 2)
-        #expect(aloneHeight == (3 * AgentsLayout.row + AgentsLayout.margin))
+        #expect(aloneHeight == (AgentsLayout.row + 2 * AgentsLayout.step + AgentsLayout.margin))
         #expect(headings(in: both) == ["Claude Code: Waiting", "Codex: Waiting"])
         #expect(rows(in: both) == 3)
     }
@@ -200,7 +245,7 @@ final class AgentsAreaLookTests {
         let folder = try #require(filmFolder)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         for dark in [false, true] {
-            let size = CGSize(width: 640, height: 130)
+            let size = CGSize(width: 700, height: 130)
             let faces = NSView(frame: NSRect(origin: .zero, size: size))
             faces.wantsLayer = true
             faces.layer?.backgroundColor = NSColor(white: dark ? 0.13 : 0.97, alpha: 1).cgColor

@@ -31,7 +31,7 @@ struct AgentsAreaTests {
         let height = AgentsLayout.height(one, folded: false, column: 800)
 
         #expect(!AgentsLayout.headed(1))
-        #expect(height == (3 * AgentsLayout.row + AgentsLayout.margin))
+        #expect(height == (AgentsLayout.row + 2 * AgentsLayout.step + AgentsLayout.margin))
     }
 
     @Test func severalAgentsEachGetAHeadingOverTheirTabs() {
@@ -40,8 +40,8 @@ struct AgentsAreaTests {
         let content = AgentsLayout.content(two)
 
         #expect(AgentsLayout.headed(2))
-        #expect(content == (4 * AgentsLayout.row))
-        #expect(AgentsLayout.height(two, folded: false, column: 800) == (5 * AgentsLayout.row + AgentsLayout.margin))
+        #expect(content == (4 * AgentsLayout.step))
+        #expect(AgentsLayout.height(two, folded: false, column: 800) == (AgentsLayout.row + 4 * AgentsLayout.step + AgentsLayout.margin))
     }
 
     @Test func theAreaNeverTakesMoreThanItsShareOfTheColumn() {
@@ -81,6 +81,22 @@ struct AgentsAreaTests {
         #expect(clicking == CGPoint(x: 200, y: 65))
     }
 
+    @Test func anAgentsTabRowHasTheRegularTabRowsMetrics() {
+        let height = Metrics.sideRowHeight
+        let slots = AgentsLayout.rowSlots(width: 220, height: AgentsLayout.row)
+
+        let square = Metrics.closeSquare(height), inset = Metrics.closeInset(height)
+
+        #expect(AgentsLayout.row == height)
+        #expect(AgentsLayout.gap == Metrics.sideGap)
+        #expect(AgentsLayout.step == height + Metrics.sideGap)
+        #expect(AgentsLayout.rowCorner == Metrics.sideRadius)
+        #expect(slots.mark == NSRect(x: TabRowView.iconLead, y: (height - SideLook.rowMark) / 2, width: SideLook.rowMark, height: SideLook.rowMark))
+        #expect(slots.close == NSRect(x: 220 - inset - square, y: inset, width: square, height: square))
+        #expect(slots.dot.midX == slots.close.midX && slots.dot.midY == height / 2)
+        #expect(AgentsLayout.pad + AgentsLayout.indent == SideLook.cardRowInset)
+    }
+
     @Test func theAreaStartsFoldedAndRemembersBeingUnfolded() throws {
         let suite = "agents-fold-\(UUID().uuidString)"
         let store = try #require(UserDefaults(suiteName: suite))
@@ -98,6 +114,34 @@ struct AgentsAreaTests {
         #expect(AgentsFolds(store: store).folded)
     }
 
+    @Test func anOldUnfoldedSettingIsForgottenSoEveryoneStartsFolded() throws {
+        let suite = "agents-fold-\(UUID().uuidString)"
+        let store = try #require(UserDefaults(suiteName: suite))
+        defer { store.removePersistentDomain(forName: suite) }
+        store.set(true, forKey: AgentsFolds.retired)
+
+        let folds = AgentsFolds(store: store)
+
+        #expect(folds.folded)
+        #expect(store.object(forKey: AgentsFolds.retired) == nil)
+        #expect(store.object(forKey: AgentsFolds.key) == nil)
+    }
+
+    @Test func theChoiceIsKeptAcrossLaunchesBothWays() throws {
+        let suite = "agents-fold-\(UUID().uuidString)"
+        let store = try #require(UserDefaults(suiteName: suite))
+        defer { store.removePersistentDomain(forName: suite) }
+
+        AgentsFolds(store: store).toggle()
+        let opened = AgentsFolds(store: store).folded
+        let again = AgentsFolds(store: store)
+        again.toggle()
+
+        #expect(!opened)
+        #expect(AgentsFolds(store: store).folded)
+        #expect(store.object(forKey: AgentsFolds.key) as? Bool == false)
+    }
+
     @Test func aSessionWithManyTabsShowsFourAndAMoreRowUntilOpenedWhole() {
         let five = AgentsLayout.Section(rows: 5)
         let eight = AgentsLayout.Section(rows: 8, headed: true)
@@ -107,7 +151,7 @@ struct AgentsAreaTests {
 
         #expect(rows == [5, 5, 8])
         #expect(AgentsLayout.shown(8, whole: false) == 4)
-        #expect(AgentsLayout.sectionHeight(eight) == (6 * AgentsLayout.row))
+        #expect(AgentsLayout.sectionHeight(eight) == (6 * AgentsLayout.step))
     }
 
     @Test func aPressGoesToTheQuestionFirstAndFoldsOnceItIsInFront() {

@@ -184,7 +184,7 @@ extension Bench {
              "area": browser.agentSessions(links: AgentLinks.shared.links, front: true).map { session in
                  let said = session.state(pending: AgentDesk.shared.pending)
                  return ["id": session.id.uuidString, "name": session.link.name, "title": session.link.title, "status": said.line,
-                         "mood": said.mood.rawValue, "attention": said.attention, "accent": session.link.accent,
+                         "mood": said.mood.rawValue, "face": session.face(said).rawValue, "attention": said.attention, "accent": session.link.accent,
                          "tabs": session.tabs.map { $0.id.uuidString }] as [String: Any]
              },
              "folded": AgentsFolds.shared.folded,
