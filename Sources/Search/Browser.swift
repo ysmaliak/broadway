@@ -87,6 +87,7 @@ final class Browser: NSObject {
             if let id = activeID, let shown = tabs.first(where: { $0.id == id }), shown.unread { shown.unread = false }
             // Going to another tab ends a page's run of links (see placeForLink).
             linkRun = nil
+            keepReturns(leaving: oldValue)
             if displayTab?.id == oldValue { cancelDisplay() }
             clearTabSelection()
             // What was found belongs to the page just left; the words typed
@@ -3734,6 +3735,7 @@ extension Browser {
         if let blank = tabs.last(where: { $0.isBlank && !$0.bench && !$0.shy && split(for: $0) == nil }) {
             placeBlank(blank)
             if activeID != blank.id { leaving() }
+            noteReturn(blank, front: true, from: nil, once: true)
             activeID = blank.id
             summoning = false
             typed = ""
@@ -3750,6 +3752,7 @@ extension Browser {
         prepare(tab)
         tabs.insert(tab, at: placeForFront())
         leaving()
+        noteReturn(tab, front: true, from: nil, once: true)
         activeID = tab.id
         summoning = false
         typed = ""
@@ -3782,6 +3785,7 @@ extension Browser {
         unfoldFolder(folder)
         arrangeGroupedTabs()
         leaving()
+        noteReturn(tab, front: true, from: nil, once: true)
         activeID = tab.id
         summoning = false
         typed = ""
@@ -3801,6 +3805,7 @@ extension Browser {
         prepare(page)
         page.groupID = tab.groupID
         replaceSplitMember(tab.id, with: page.id)
+        carryReturn(from: tab, to: page)
         tabs[index] = page
         page.go(to: url)
         if activeID == tab.id { activeID = page.id; editing = false }
@@ -3912,7 +3917,8 @@ extension Browser {
     /// meant closing one pin landed you on another pin, and ⌘W bounced
     /// between the two instead of getting you out of them.
     private func leave(_ tab: Tab) {
-        let others = tabs.filter { $0.id != tab.id && !$0.asleep && !$0.agent }
+        if let back = returning(from: tab) { return select(back) }
+        let others = tabs.filter { $0.id != tab.id && !$0.asleep && !$0.agent && !$0.bench }
         let loose = others.filter { $0.pin == nil }
         if let back = (loose.isEmpty ? others : loose).max(by: { $0.touched < $1.touched }) {
             select(back)
@@ -3999,7 +4005,7 @@ extension Browser {
         let besideGroups = tabs.contains { $0.id != tab.id && $0.pin == nil && self.group(of: $0) != nil }
         let onlyPins = prefs.newTabAfterLast && !tabs.contains { $0.id != tab.id && $0.pin == nil }
         let onlyKept = besideGroups && !kept(tab) && !tabs.contains { $0.id != tab.id && !kept($0) }
-        if activeID == tab.id, onlyPins || onlyKept {
+        if activeID == tab.id, onlyPins || onlyKept, returning(from: tab) == nil {
             if tab.isBlank {
                 if besideGroups {
                     typed = ""
@@ -4023,23 +4029,15 @@ extension Browser {
             return
         }
 
+        let next = activeID == tab.id ? partner ?? successor(of: tab) : nil
         remember(tab, at: index, partner: partner?.id, onLeft: pair?.left == tab.id, split: pair, live: live)
         tab.close()
         tabs.remove(at: index)
         removeEmptyGroup(tab.groupID)
-        if activeID == tab.id {
-            // The neighbour on the right, or the last one if there is no
-            // right — through select(), same as everywhere else you land on
-            // a tab, so one that was never built yet actually wakes up
-            // instead of sitting there blank until a manual reload. Asked
-            // for, the tab viewed before this one comes first, as ⌃Tab
-            // would take you there. Search's own pages go back whatever the
-            // switch says: History or Settings is called up over what you
-            // were doing, as their cards were before 1.0.7. Closing one
-            // shouldn't leave you on its neighbour, or on the last tab when
-            // ⌘Y brought forward a History tab kept at the end of the row.
-            let before = prefs.closeGoesBack || tab.page != nil ? tabBefore(tab) : nil
-            settle(on: partner ?? before ?? tabs[min(index, tabs.count - 1)])
+        if let next {
+            settle(on: next)
+        } else if activeID == tab.id {
+            settle(on: tabs[min(index, tabs.count - 1)])
         }
         rememberSession()
     }
@@ -4472,8 +4470,8 @@ extension Browser {
         if floating == tab.id { land() }
         if editingTab == tab.id { cancelTabEdit() }
         if activeID == tab.id {
-            if let partner {
-                select(partner, floatPrevious: false)
+            if let next = partner ?? successor(of: tab) {
+                select(next, floatPrevious: false)
             } else if tabs.count > 1 {
                 select(tabs[index == tabs.count - 1 ? index - 1 : index + 1], floatPrevious: false)
             } else {
@@ -4570,8 +4568,8 @@ extension Browser {
         if floating == tab.id { land() }
         if editingTab == tab.id { cancelTabEdit() }
         if activeID == tab.id {
-            if let partner {
-                select(partner, floatPrevious: false)
+            if let next = partner ?? successor(of: tab) {
+                select(next, floatPrevious: false)
             } else if tabs.count > 1 {
                 select(tabs[index == tabs.count - 1 ? index - 1 : index + 1], floatPrevious: false)
             } else {
@@ -5314,6 +5312,7 @@ extension Browser {
         if link, let source { tab.linkedFrom = source.id }
         tabs.insert(tab, at: atEnd ? tabs.count : front ? placeForFront() : link ? placeForLink(from: source) : placeForNew())
         if link, !atEnd, !foreground { noteLink(tab, from: source) }
+        if foreground || link { noteReturn(tab, front: foreground, from: source, once: !link) }
         if mayWait, !foreground, prefs.lazyTabs, page == nil {
             tab.restore(url: url, title: TitleSource.best(history: knownTitle(for: url), named: title) ?? "")
         } else {
@@ -5362,6 +5361,7 @@ extension Browser {
         fresh.groupID = tab.groupID
         let wasActive = activeID == tab.id
         replaceSplitMember(tab.id, with: fresh.id)
+        carryReturn(from: tab, to: fresh)
         tabs[index] = fresh
         fresh.go(to: url)
         if wasActive { activeID = fresh.id }
@@ -5511,6 +5511,7 @@ extension Browser {
         if let blank = tabs.last(where: { $0.isBlank && !$0.bench && split(for: $0) == nil }) {
             placeBlank(blank)
             if activeID != blank.id { leaving() }
+            noteReturn(blank, front: true, from: nil, once: true)
             activeID = blank.id
             summoning = false
             typed = ""
@@ -5523,6 +5524,7 @@ extension Browser {
         prepare(tab)
         tabs.insert(tab, at: placeForFront())
         leaving()
+        noteReturn(tab, front: true, from: nil, once: true)
         activeID = tab.id
         summoning = false
         typed = ""
@@ -7543,10 +7545,13 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
             if prefs.usesTabGroups, !tab.shy, !tab.bench { tab.groupID = opener.groupID }
             tabs.insert(tab, at: placeForLink(from: opener, beside: beside))
             noteLink(tab, from: opener)
+            noteReturn(tab, front: false, from: opener)
             if beside { pair(tab, with: opener, onLeft: false) }
         } else {
-            tabs.insert(tab, at: placeForFront())
+            if prefs.usesTabGroups, !tab.shy, !tab.bench { tab.groupID = opener.groupID }
+            tabs.insert(tab, at: placeForLink(from: opener))
             if clicked, let run = linkRun { runBeforeScript = (tab.id, run) }
+            noteReturn(tab, front: true, from: opener)
             activeID = tab.id
             editing = false
         }
@@ -7607,8 +7612,9 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
             opener.noteBlocked(made.pageAddress, reason: .tabUnder)
             PopupGuard.strike(opener.pageAddress, for: .tabUnder)
         }
+        let shown = made.id == activeID
         close(made)
-        if let opener, tabs.contains(where: { $0.id == opener.id }) { select(opener) }
+        if shown, let opener, tabs.contains(where: { $0.id == opener.id }) { select(opener) }
     }
 
     private func speculate(_ action: WKNavigationAction, from webView: WKWebView, opener: Tab, verdict: String) {
@@ -7650,7 +7656,10 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
                 if prefs.usesTabGroups, !tab.shy, !tab.bench { tab.groupID = source.groupID }
                 tab.linkedFrom = source.id
                 tabs.insert(tab, at: placeForLink(from: source))
-                if !foreground { noteLink(tab, from: source) }
+                if !foreground {
+                    noteLink(tab, from: source)
+                    noteReturn(tab, front: false, from: source)
+                }
             }
             return tab
         }
@@ -8186,9 +8195,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
             window?.close()
             return
         }
-        // Back to whoever opened it, so you land where you started the sign-in
-        // rather than wherever the row happens to put you.
-        if let opener = tab.opener, let home = tabs.first(where: { $0.id == opener }) {
+        if tab.id == activeID, let opener = tab.opener, let home = tabs.first(where: { $0.id == opener }), !home.agent {
             select(home)
         }
         tab.pin = nil

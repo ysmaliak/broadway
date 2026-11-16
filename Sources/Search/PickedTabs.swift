@@ -86,11 +86,8 @@ extension Browser {
         defer { endStep(mark) }
         clearTabSelection()
         let ids = Set(movers.map(\.id))
-        if let activeID, ids.contains(activeID) {
-            let at = tabs.firstIndex { $0.id == activeID } ?? 0
-            let after = tabs[at...].first { !ids.contains($0.id) && standsInRow($0) }
-            let before = tabs[..<at].last { !ids.contains($0.id) && standsInRow($0) }
-            if let next = after ?? before { select(next, floatPrevious: false) }
+        if let here = active, ids.contains(here.id), let next = successor(of: here, without: ids) {
+            select(next, floatPrevious: false)
         }
         var moved = 0
         var arrived: Tab?

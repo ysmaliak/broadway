@@ -695,6 +695,8 @@ final class Tab: Identifiable {
     /// hand you back to it when they are done.
     @ObservationIgnored var opener: Tab.ID?
     @ObservationIgnored var linkedFrom: Tab.ID?
+    @ObservationIgnored var returnTo: Tab.ID?
+    @ObservationIgnored var returnWay = TabReturn.front
 
     /// A window a page opened at a size of its own, or without a toolbar:
     /// a pop-up, not a link. It is named by its site, never by its title — a

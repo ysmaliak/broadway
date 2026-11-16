@@ -107,8 +107,7 @@ def run(t, place, sidebar=True):
             state = sv.sp("state")
             popup = next(tab["id"] for tab in state["tabs"] if tab["url"] == f"{sv.BASE}/popup")
             now = order(state)
-            target = len(now) - 1
-            t.ok(f"{place}: foreground popup goes to the end", now[target] == popup, now)
+            t.ok(f"{place}: foreground popup goes right after its page", now[now.index(d) + 1] == popup, now)
             linked = cmd_click(d, "cmd-link")
             now = order()
             if place == "next":

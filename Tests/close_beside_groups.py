@@ -6,8 +6,10 @@ hidden probe (tab groups on, Start with a fresh window off, Leave a new tab
 when the last tab closes off, as it ships) holds a folded group of two pages
 and one loose page:
 
-- closing the loose page leaves an empty tab in front, not a page out of
-  the folder, and the folder stays folded;
+- closing the loose page, after another tab was looked at, leaves an empty
+  tab in front, not a page out of the folder, and the folder stays folded
+  (one opened straight from a folder's page and closed at once goes back to
+  that page, see docs/tabs.md);
 - closing that empty tab keeps an empty tab and the window: it is already
   what closing it would leave;
 - ⇧⌘T brings the page back;
@@ -46,6 +48,7 @@ def main():
         # Opened beside a page of the group, it would join it: taken out.
         loose = sv.page("gamma")
         group(id=loose, name="none")
+        sv.sp("select", id=pages[0]); time.sleep(0.3)
         # The window's first empty tab, if it is still there, goes first.
         for x in sv.sp("state")["tabs"]:
             if x.get("blank") and x["id"] != loose:
