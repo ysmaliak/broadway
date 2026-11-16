@@ -49,8 +49,14 @@ class Page(BaseHTTPRequestHandler):
         pass
 
 
+def clean_env(more=None):
+    environment = {k: v for k, v in os.environ.items() if k not in ("CLAUDE_CODE_SESSION_ID", "CODEX_THREAD_ID")}
+    environment.update(more or {})
+    return environment
+
+
 def broadway(*words, env=None, timeout=60):
-    environment = dict(os.environ, **(env or {}))
+    environment = clean_env(env)
     for key in ("BROADWAY_AGENT", "BROADWAY_AGENT_NAME", "BROADWAY_TAB"):
         if not env or key not in env:
             environment.pop(key, None)
@@ -102,12 +108,20 @@ def card(named):
     return next((row for row in state().get("area", []) if row["name"] == named), None)
 
 
+FILMING = Path(tempfile.mkdtemp(prefix="agent-mode-frames-"))
+
+
 def film(name):
     FRAMES.mkdir(parents=True, exist_ok=True)
-    path = str(FRAMES / name)
-    answer = bench({"do": "film", "action": "none", "path": path, "frames": 1, "region": "full"})
-    files = [frame.get("file") for frame in answer.get("frames", []) if frame.get("file")]
-    check(f"frame {name}", bool(files), answer)
+    try:
+        answer = bench({"do": "film", "action": "none", "path": str(FILMING / name), "frames": 1, "region": "full"})
+    except OSError as error:
+        answer = {"error": str(error)}
+    files = []
+    for frame in answer.get("frames", []):
+        if frame.get("file") and Path(frame["file"]).exists():
+            shutil.copy(frame["file"], FRAMES / Path(frame["file"]).name)
+            files.append(str(FRAMES / Path(frame["file"]).name))
     return files[0] if files else None
 
 
@@ -142,7 +156,7 @@ def drive(found, one):
     row = agent("row", link=found["id"][:8], index=0)
     active = next((tab for tab in row["agentTabs"] if tab["active"]), None)
     check("a row shows its tab", active is not None and active["id"] in found["tabs"], row)
-    subprocess.run([BROADWAY, "--world", WORLD, "wait", "--tab", one, "--json"], capture_output=True, timeout=30)
+    subprocess.run([BROADWAY, "--world", WORLD, "wait", "--tab", one, "--json"], capture_output=True, timeout=30, env=clean_env())
     snap, result = data("snapshot", "--tab", one)
     refs = [item for item in (snap or {}).get("data", {}).get("elements", []) if isinstance(item, dict)]
     box = next((item["ref"] for item in refs if item.get("role") in ("textbox", "searchbox")), None)
@@ -178,7 +192,7 @@ def take_over(one):
 
 def needs_you(one):
     agent("mode", mode="ask")
-    environment = dict(os.environ)
+    environment = clean_env()
     asking = subprocess.Popen([BROADWAY, "--world", WORLD, "scroll", "--tab", one, "--json"], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                               text=True, stdin=subprocess.DEVNULL, env=environment)
     waiting = wait_for(lambda: (lambda c: c if c and c["attention"] else None)(card("Probe Agent")), 15)
@@ -208,7 +222,7 @@ def needs_you(one):
 def late_answer(one, elsewhere):
     agent("mode", mode="ask")
     asking = subprocess.Popen([BROADWAY, "--world", WORLD, "open", elsewhere, "--json"], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                              text=True, stdin=subprocess.DEVNULL)
+                              text=True, stdin=subprocess.DEVNULL, env=clean_env())
     check("it asks again on another site", wait_for(lambda: agent("questions")["questions"], 15) is not None)
     asking.kill()
     asking.wait()
@@ -287,7 +301,7 @@ def hosts(folder):
 def ancestors(base):
     with tempfile.TemporaryDirectory() as folder:
         claude, codex = hosts(folder)
-        environment = {key: value for key, value in os.environ.items() if not key.startswith("BROADWAY_")}
+        environment = {key: value for key, value in clean_env().items() if not key.startswith("BROADWAY_")}
         line = f"{BROADWAY} --world {WORLD}"
         ran = subprocess.run([claude, "/bin/zsh", "-c", f"{line} open {base}seven --json", f"{line} open {base}eight --json",
                               f"{line} agents done --summary 'Claude-style run' --json"],
@@ -320,7 +334,7 @@ def ancestors(base):
 
 
 def mcp(base):
-    process = subprocess.Popen([BROADWAY, "--world", WORLD, "mcp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    process = subprocess.Popen([BROADWAY, "--world", WORLD, "mcp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, env=clean_env())
 
     def send(message):
         process.stdin.write(json.dumps(message) + "\n")

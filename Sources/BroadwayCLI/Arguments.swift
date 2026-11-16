@@ -210,7 +210,7 @@ enum CommandLineInput {
         let targets = takesTarget(command)
         var wordsFirst = aimed && targets && free(command, words) > command.positional.filter { $0.name != "ref" }.count
         func take(_ word: String) throws {
-            if word.hasPrefix("@"), found["ref"] == nil, target["words"] == nil, let ref = command.flags.first(where: { $0.name == "ref" }) {
+            if word.hasPrefix("@") || ref(word) != nil, found["ref"] == nil, target["words"] == nil, let ref = command.flags.first(where: { $0.name == "ref" }) {
                 found["ref"] = try coerce(word, ref, command: command)
                 waiting.removeAll { $0.name == "ref" }
                 return

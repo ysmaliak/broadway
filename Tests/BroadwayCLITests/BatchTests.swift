@@ -48,6 +48,13 @@ struct BatchTests {
         #expect(failure { try Batch.lines(["", "#"]) }?.code == "usage")
     }
 
+    @Test func aBatchStepTakesARefWithoutItsAt() throws {
+        let step = try Batch.step(Batch.Line(n: 1, text: "click e2", words: ["click", "e2"]), catalog: catalog)
+
+        #expect((step["arguments"] as? [String: Any])?["ref"] as? String == "e2")
+        #expect(ScriptRun.words("click", ["e2"]) == ["@e2"])
+    }
+
     @Test func aStepIsParsedAsTheSameCommandAlone() throws {
         let step = try Batch.step(Batch.Line(n: 2, text: "click \"Add to basket\" --nth 1 --tab 2c4d", words: ["click", "Add to basket", "--nth", "1", "--tab", "2c4d"]), catalog: catalog)
         let go = try Batch.step(Batch.Line(n: 1, text: "navigate https://shop.example", words: ["navigate", "https://shop.example"]), catalog: catalog)

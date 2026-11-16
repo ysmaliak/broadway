@@ -464,6 +464,29 @@ struct ParsingTests {
         #expect(!Person.spoken.contains("agents list"))
     }
 
+    @Test func aRefWithoutItsAtIsStillARef() throws {
+        let ref = parameter("ref")
+        let value = parameter("value", required: true)
+        let choose = command("choose", positional: [ref, value], flags: [ref, value])
+        let clicked = try CommandLineInput.parse(click, ["e2"])
+        let typed = try CommandLineInput.parse(type, ["e2", "hello agent"])
+        let chosen = try CommandLineInput.parse(choose, ["e4", "blue"])
+        let framed = try CommandLineInput.parse(click, ["f1e3"])
+        let dotted = try CommandLineInput.parse(click, ["f1.e3"])
+        let inside = try CommandLineInput.parse(click, ["Save", "--in", "e30"])
+        let named = try CommandLineInput.parse(click, ["--role", "button", "--name", "e2"])
+        let worded = try CommandLineInput.parse(click, ["e2x"])
+
+        #expect(clicked["ref"] as? String == "e2" && (clicked["target"] as? [String: Any])?["words"] == nil)
+        #expect(typed["ref"] as? String == "e2" && typed["text"] as? String == "hello agent")
+        #expect(chosen["ref"] as? String == "e4" && chosen["value"] as? String == "blue")
+        #expect(framed["ref"] as? String == "f1.e3" && dotted["ref"] as? String == "f1.e3")
+        #expect((inside["target"] as? [String: Any])?["in"] as? String == "e30" && (inside["target"] as? [String: Any])?["words"] as? String == "Save")
+        #expect((named["target"] as? [String: Any])?["name"] as? String == "e2" && named["ref"] == nil)
+        #expect(worded["ref"] == nil && (worded["target"] as? [String: Any])?["words"] as? String == "e2x")
+        #expect(try CommandLineInput.parse(type, ["@e1", "e2"])["text"] as? String == "e2")
+    }
+
     @Test func aHiddenLookAsksTheAppForNone() throws {
         let reads = Command(["name": "snapshot", "tool": "snapshot", "tabbed": true, "reads": true])
 
