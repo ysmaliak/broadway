@@ -536,7 +536,7 @@ final class BrowserToolbox: AgentToolbox {
                  properties: ["path": ["type": "string"], "reason": ["type": "string"]], required: ["path", "reason"]),
         ToolSpec(name: "mac_run", description: "Run a Terminal command on the person's Mac. Tasks are browser-only, so this asks the person every time. Say why in reason.",
                  properties: ["command": ["type": "string"], "reason": ["type": "string"]], required: ["command", "reason"]),
-    ] + AgentDiagnostics.specs + KnowledgeTools.specs
+    ] + [AgentHandoff.spec] + AgentDiagnostics.specs + KnowledgeTools.specs
 
     var browsers: [Browser] {
         if let browser { AgentBoard.note(browser) }
@@ -783,6 +783,7 @@ final class BrowserToolbox: AgentToolbox {
         case "helper_wait": return await waitForHelpers(arguments, task: task)
         case "mac_read": return await macRead(arguments, task: task)
         case "mac_run": return await macRun(arguments, task: task)
+        case "handoff": return await handoff(arguments, task: task)
         default: break
         }
         guard let found = find(arguments) else { return Self.noTab }

@@ -25,6 +25,8 @@ PAGE = b"""<!doctype html><title>Form</title><h1>Sign up</h1><form>
 </form>
 <button id="go" type="button" onclick="document.title='clicked'">Go</button>"""
 
+OTHER = b"""<!doctype html><title>Other</title><h1>Elsewhere</h1><p>Nothing to fill here</p>"""
+
 failures = []
 
 
@@ -36,11 +38,12 @@ def check(name, ok, detail=""):
 
 class Page(BaseHTTPRequestHandler):
     def do_GET(self):
+        body = OTHER if self.path.startswith("/other") else PAGE
         self.send_response(200)
         self.send_header("content-type", "text/html")
-        self.send_header("content-length", str(len(PAGE)))
+        self.send_header("content-length", str(len(body)))
         self.end_headers()
-        self.wfile.write(PAGE)
+        self.wfile.write(body)
 
     def log_message(self, *_):
         pass
@@ -77,12 +80,18 @@ class Client:
     def __init__(self):
         self.process = subprocess.Popen([BROADWAY, "--world", WORLD, "mcp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
         self.number = 0
+        self.listing_changed = False
 
     def rpc(self, method, params=None):
         self.number += 1
         self.process.stdin.write(json.dumps({"jsonrpc": "2.0", "id": self.number, "method": method, "params": params or {}}) + "\n")
         self.process.stdin.flush()
-        return json.loads(self.process.stdout.readline())
+        while True:
+            message = json.loads(self.process.stdout.readline())
+            if "id" in message:
+                return message
+            if message.get("method") == "notifications/tools/list_changed":
+                self.listing_changed = True
 
     def call(self, name, **arguments):
         result = self.rpc("tools/call", {"name": name, "arguments": arguments})["result"]
@@ -117,9 +126,18 @@ def on(base):
     listed = listing["tools"]
     names = {tool["name"] for tool in listed}
     size = len(json.dumps(listing, separators=(",", ":")))
-    check("tools/list is under 8 KB", size < 8192, size)
+    check("the short tools/list is under 6 KB", size < 6144, (size, {tool["name"]: len(json.dumps(tool, separators=(",", ":"))) for tool in listed}))
     check("no task-only tool for an outside client", not names & {"ask", "sign_in", "autofill", "helper_start", "helper_wait", "mac_read", "mac_run"}, names)
-    check("tools speak the command's words", {"go", "read", "shot", "find", "fill", "upload", "download", "drag", "select", "resize"} <= names, names)
+    check("tools speak the command's words", {"go", "read", "shot", "find", "fill", "batch", "handoff", "more_tools"} <= names, names)
+    check("run is listed", "run" in names, names)
+    check("the short list leaves the rest behind more_tools", not names & {"drag", "select", "upload", "download", "hover", "choose", "resize", "console", "history"}, names)
+    more = client.call("more_tools", query="drag select")
+    check("more_tools adds what fits", {"drag", "select"} <= set(meta(more[0]).get("added", [])), more)
+    check("and says the list changed", client.listing_changed, "no notifications/tools/list_changed")
+    names = {tool["name"] for tool in client.rpc("tools/list")["result"]["tools"]}
+    check("the added tools are listed", {"drag", "select"} <= names, names)
+    stray = client.call("click", element="e1")
+    check("an unknown argument is refused with the ones it takes", stray[0]["isError"] and "It takes" in stray[1] and meta(stray[0], "error").get("code") == "usage", stray)
     check("old names are not listed", not names & {"navigate", "text", "screenshot", "locate", "fill_form"}, names)
     check("tab is never required", all("tab" not in tool["inputSchema"].get("required", []) for tool in listed))
 
@@ -166,11 +184,15 @@ def on(base):
     check("read leaves secrets out", "hunter2" not in client.call("read", tab=tab["id"])[1])
     picture = client.call("screenshot", tab=tab["id"])[0]
     check("screenshot", any(len(base64.b64decode(part.get("data", ""))) > 1000 for part in picture["content"]))
+    client.call("navigate", tab=tab["id"], url=base + "other")
+    client.call("wait", tab=tab["id"], text="Elsewhere")
+    old = client.call("click", tab=tab["id"], ref=plain)
+    check("an old ref is refused", old[0]["isError"] and meta(old[0], "error").get("code") in ("stale_ref", "not_found"), old)
+    elsewhere = client.call("snapshot", tab=tab["id"])[1]
+    check("and never used again", plain + " " not in elsewhere, elsewhere)
     client.call("navigate", tab=tab["id"], url=base)
     client.call("wait", tab=tab["id"], selector="#go")
-    check("an old ref is refused", client.call("click", tab=tab["id"], ref=plain)[0]["isError"])
     latest = client.call("snapshot", tab=tab["id"])[1]
-    check("and never used again", plain + " " not in latest, latest)
     button = next(line.split()[0] for line in latest.splitlines() if " button " in line)
     check("click", not client.call("click", tab=tab["id"], ref=button)[0]["isError"])
     for _ in range(20):
@@ -181,6 +203,14 @@ def on(base):
     check("the click landed", "clicked" in listed, listed)
     check("press", not client.call("press", tab=tab["id"], key="Tab")[0]["isError"])
     check("scroll", not client.call("scroll", tab=tab["id"], by=20)[0]["isError"])
+    batched = client.call("batch", tab=tab["id"], steps=[{"tool": "press", "arguments": {"key": "Tab"}}, {"tool": "scroll", "arguments": {"by": 20}}])
+    check("batch runs its steps over MCP", not batched[0]["isError"] and meta(batched[0]).get("landed") == [1, 2] and "Ran 2 of 2 steps" in batched[1], batched)
+    ran = client.call("run", code='scroll({by: 10}); print("rolled " + (read().text ? "and read" : "and empty"))', tab=tab["id"])
+    check("run runs a script over MCP", not ran[0]["isError"] and "rolled" in ran[1] and meta(ran[0]).get("landed") == [1, 2], ran)
+    empty = client.call("run", code="  ")
+    check("run without code is a usage error", empty[0]["isError"] and meta(empty[0], "error").get("code") == "usage", empty)
+    lines = client.call("batch", lines=["press Tab"])
+    check("batch refuses lines over MCP", lines[0]["isError"] and meta(lines[0], "error").get("code") == "usage", lines)
     check("history", not client.call("history", limit=3)[0]["isError"])
     check("an agent's title stays out of history", "clicked" not in client.call("history", query="127.0.0.1")[1])
     other = client.data("open", url=base + "agentonly")

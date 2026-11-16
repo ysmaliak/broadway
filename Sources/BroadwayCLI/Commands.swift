@@ -53,11 +53,20 @@ final class Context {
         return reply["data"] as? [String: Any] ?? [:]
     }
 
+    static func exit(for code: String) -> Exit {
+        switch code {
+        case "usage", "unknown_command", "unknown_tool", "too_many": .mistake
+        case "needs_you": .needsYou
+        case "not_answering", "deadline": .unanswered
+        default: .failed
+        }
+    }
+
     static func failure(_ reply: [String: Any], reads: Bool = true) -> Failure? {
         if let error = reply["error"] as? [String: Any] {
             let code = error["code"] as? String ?? "failed"
             return Failure(code, error["message"] as? String ?? "That didn't work", hint: error["hint"] as? String,
-                           retrySafe: error["retry_safe"] as? Bool ?? reads, exit: code == "needs_you" ? .needsYou : code == "usage" ? .mistake : .failed,
+                           retrySafe: error["retry_safe"] as? Bool ?? reads, exit: exit(for: code),
                            data: reply["data"] as? [String: Any])
         }
         if let text = reply["error"] as? String { return Failure("failed", text, retrySafe: reads) }

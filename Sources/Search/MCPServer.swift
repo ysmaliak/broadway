@@ -64,21 +64,21 @@ final class MCPServer {
     static let hiddenOutside: Set<String> = ["ask", "sign_in", "autofill", "helper_start", "helper_wait", "mac_read", "mac_run"]
 
     static let descriptions: [String: String] = [
-        "open": "Open an address in a new tab of yours, which becomes your current tab. Answers with the page, and says when you already have that address in another tab.",
+        "open": "Open an address in a new tab, which becomes your current tab. Answers with the page.",
         "go": "Send your current tab, or tab, to an address. Answers after the load with the page.",
         "tab": "Name your current tab, or switch it to one of your tabs by id",
         "tabs": "Your session's tabs with the current one marked, then how many tabs the person has",
         "close": "Close one of your tabs, your current one unless you give tab",
-        "snapshot": "The page's controls and headings with refs that stay valid while the element is there. Use in, role, find or view to keep it short, and since for only what changed.",
+        "snapshot": "The page's controls and headings with refs. Use in, role or find to keep it short, and since for only what changed.",
         "read": "The page's visible text. Use in for one part and find for matching lines.",
         "shot": "A picture of the page or of one element. Secret fields and frames are blanked.",
         "find": "Refs by an element's words or role, with nearby text, without a whole snapshot",
-        "click": "Click an element by ref (e12) or by its words, with role, nth and in to narrow it. Set final when it sends, pays, deletes or uploads. Answers with what changed, a dialog or a new tab. A refusal means stop.",
+        "click": "Click by ref (e12) or by the element's words. Set final when it sends, pays, deletes or uploads. Answers with what changed. A refusal means stop.",
         "type": "Type into a box by ref, words or label. Answers with what changed. Password, card and code fields refuse.",
         "fill": "Fill several fields in one call, keyed by ref or label. Answers with what changed.",
         "choose": "Pick an option of a select by its value or its label. Answers with what changed.",
-        "press": "Press a key, once or more. Answers with the focus and what changed. Paste, copy and cut are refused.",
-        "scroll": "Scroll down, up, to the top or bottom, by points, or until an element is in view. Answers with what came into view.",
+        "press": "Press a key. Answers with what changed. Paste, copy and cut are refused.",
+        "scroll": "Scroll by points, to the top or bottom, or to an element. Answers with what came into view.",
         "hover": "Hover over an element in your own tab. Answers with what changed, such as a menu that opened.",
         "drag": "Drag one element onto another. Answers with what changed.",
         "select": "Select text on the page, inside an element",
@@ -86,7 +86,8 @@ final class MCPServer {
         "download": "Save a file from a link or an address into Broadway's agent folder. Answers with its path.",
         "wait": "Wait for the page to settle, or for text to come or go, an address, a title or a download. Never sleep instead.",
         "dialog": "Answer the page dialog an action reported: accept, with text for a prompt, or dismiss",
-        "batch": "Run steps you already know in one call. Each step passes the same checks as alone, and it stops at the first failure and says what landed.",
+        "batch": "Run steps you already know in one call, each with the same checks as alone. It stops at the first failure and says what landed.",
+        "handoff": "Hand your tab to the person for a captcha or a code, and wait until they give it back",
         "console": "Recent console messages of the page",
         "network": "Recent network requests of the page",
         "pdf": "The page as a PDF file. Secret fields are blanked.",
@@ -97,10 +98,8 @@ final class MCPServer {
     ]
 
     static let arguments: [String: String] = [
-        "by": "Points, negative for up", "final": "Set when it sends, pays, deletes or uploads", "submit": "Send the form after",
-        "gone": "Text to wait to go away", "paths": "Full paths of files on this Mac", "fields": "Fields by ref or label, with their values",
+        "by": "Points, negative for up", "paths": "Full paths of files on this Mac", "fields": "Fields by ref or label, with their values",
     ]
-    static let plain: Set<String> = ["tab", "ref", "url", "text", "key", "seconds", "limit", "query", "selector", "value", "role", "full", "to"]
 
     private let box: AgentToolbox
     private let task: UUID?
@@ -115,39 +114,98 @@ final class MCPServer {
         self.reply = reply
     }
 
-    static var version: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
-    }
+    static var version: String { AgentCatalog.version }
 
     var outside: Bool {
         guard let task, let origin = TaskLedger.shared.entry(task)?.origin else { return true }
         return origin == .outside
     }
 
-    func listed() -> [[String: Any]] {
-        guard outside else { return box.tools.map(\.listed) }
+    static let short: Set<String> = [
+        "open", "go", "tabs", "close", "snapshot", "read", "shot", "find", "click", "type", "fill", "press",
+        "scroll", "wait", "dialog", "batch", "run", "handoff",
+    ]
+    static let moreTools = "more_tools"
+    static let moreSpec: [String: Any] = [
+        "name": moreTools, "description": "List more tools, such as upload, download, hover, choose, drag, select, console, network, pdf, resize and history. Give words for what you need.",
+        "inputSchema": ["type": "object", "properties": ["query": ["type": "string"]]] as [String: Any],
+        "annotations": ["readOnlyHint": true, "openWorldHint": false],
+    ]
+    static let readOnly: Set<String> = ["tab", "tabs", "snapshot", "read", "shot", "find", "wait", "console", "network", "pdf", "skills", "skill", "history"]
+    static let gentle: Set<String> = ["open", "go", "scroll", "hover", "select", "resize", "handoff", "download"]
+    static let closed: Set<String> = ["tab", "tabs", "skills", "skill", "history"]
+
+    static func annotations(_ name: String) -> [String: Any] {
+        var found: [String: Any] = [:]
+        if readOnly.contains(name) { found["readOnlyHint"] = true } else if gentle.contains(name) { found["destructiveHint"] = false }
+        if closed.contains(name) { found["openWorldHint"] = false }
+        return found
+    }
+
+    private var added: Set<String> = []
+
+    var batchHere: Bool { outside && !box.tools.contains { $0.name == AgentBatch.spec.name } }
+    var specs: [ToolSpec] { box.tools + (batchHere ? [AgentBatch.spec] : []) }
+
+    func everything() -> [[String: Any]] {
         let names = Set(box.tools.map(\.name))
-        return box.tools.compactMap { spec -> [String: Any]? in
+        return specs.compactMap { spec -> [String: Any]? in
             guard !Self.hiddenOutside.contains(spec.name) else { return nil }
             let name = Self.listedNames[spec.name] ?? spec.name
             if name != spec.name, names.contains(name) { return nil }
             var properties: [String: [String: Any]] = [:]
             for (key, schema) in spec.properties where schema["unlisted"] as? Bool != true {
                 var schema = schema
-                let said = Self.plain.contains(key) ? nil : Self.arguments[key] ?? (schema["description"] as? String).map(Self.firstSentence)
-                schema["description"] = said.flatMap { $0.count <= 60 ? $0 : nil }
+                schema["description"] = Self.arguments[key]
                 properties[key] = schema
             }
             var schema: [String: Any] = ["type": "object", "properties": properties]
             let required = spec.required.filter { $0 != "tab" }
             if !required.isEmpty { schema["required"] = required }
-            return ["name": name, "description": Self.descriptions[name] ?? Self.firstSentence(spec.description), "inputSchema": schema]
+            var tool: [String: Any] = ["name": name, "description": Self.descriptions[name] ?? Self.firstSentence(spec.description), "inputSchema": schema]
+            let notes = Self.annotations(name)
+            if !notes.isEmpty { tool["annotations"] = notes }
+            return tool
         }
+    }
+
+    func listed() -> [[String: Any]] {
+        guard outside else { return box.tools.map(\.listed) }
+        let all = everything()
+        let shown = all.filter { tool in (tool["name"] as? String).map { Self.short.contains($0) || added.contains($0) } ?? false }
+        return shown.count < all.count ? shown + [Self.moreSpec] : shown
+    }
+
+    private func more(_ arguments: [String: Any]) -> ToolOutcome {
+        let words = (arguments["query"] as? String ?? "").lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+        let hidden = everything().filter { tool in (tool["name"] as? String).map { !Self.short.contains($0) && !added.contains($0) } ?? false }
+        let fits = hidden.filter { tool in
+            let said = ((tool["name"] as? String ?? "") + " " + (tool["description"] as? String ?? "")).lowercased()
+            return words.isEmpty || words.contains { said.contains($0) }
+        }
+        let taken = fits.prefix(6).compactMap { $0["name"] as? String }
+        added.formUnion(taken)
+        if !taken.isEmpty { reply(["jsonrpc": "2.0", "method": "notifications/tools/list_changed"]) }
+        let left = hidden.compactMap { $0["name"] as? String }.filter { !taken.contains($0) }
+        var said = taken.isEmpty ? "No more tools fit those words" : "Added \(taken.joined(separator: ", ")). They are in your tool list now."
+        if !left.isEmpty { said += "\nAlso there: \(left.joined(separator: ", "))" }
+        return ToolOutcome(text: said, data: ["added": taken, "more": left])
+    }
+
+    func refusal(_ tool: String, _ name: String, _ arguments: [String: Any]) -> ToolOutcome? {
+        guard outside, let spec = specs.first(where: { $0.name == tool }) else { return nil }
+        let accepted = Set(spec.properties.keys)
+        guard let stray = arguments.keys.sorted().first(where: { !accepted.contains($0) && $0 != "tab" && !$0.hasPrefix("_") }) else { return nil }
+        let needed = Set(spec.required).subtracting(["tab"])
+        let keys = spec.properties.keys.filter { $0 != "tab" }.sorted { (needed.contains($0) ? 0 : 1, $0) < (needed.contains($1) ? 0 : 1, $1) }
+        let takes = keys.map { needed.contains($0) ? "\($0) (required)" : $0 } + (accepted.contains("tab") ? ["tab"] : [])
+        return .failure("\(name) has no argument \"\(stray)\". It takes \(takes.joined(separator: ", "))", code: .usage, hint: "Call \(name) with only those arguments")
     }
 
     func resolve(_ name: String) -> String? {
         let names = Set(box.tools.map(\.name))
         if names.contains(name) { return name }
+        if name == AgentBatch.spec.name, batchHere { return name }
         return Self.listedNames.first { $0.value == name && names.contains($0.key) }?.key
     }
 
@@ -156,16 +214,58 @@ final class MCPServer {
         return String(text[..<end.lowerBound])
     }
 
+    private var active = 0
+    private(set) var client: String?
+    var environment = ProcessInfo.processInfo.environment
+
+    static func patience(client: String?, progress: Bool, environment: [String: String]) -> Double {
+        if let asked = environment["BROADWAY_WAIT_PERSON"].flatMap(Double.init) { return min(max(asked, 0), 900) }
+        if progress, client?.lowercased().contains("claude") == true { return 600 }
+        return 15
+    }
+
+    static func progress(_ question: AgentQuestion) -> String {
+        "Waiting for the person in Broadway: \(AgentQuestion.clean(question.title))"
+    }
+
+    private func watch(_ token: Any, until done: @escaping () -> Bool) -> Task<Void, Never> {
+        Task { @MainActor in
+            var told: Date?
+            var count = 0
+            while !done(), !Task.isCancelled {
+                if let question = AgentDesk.shared.pending.first(where: { $0.task == self.task }),
+                   told.map({ Date().timeIntervalSince($0) >= 20 }) ?? true {
+                    count += 1
+                    told = Date()
+                    self.reply(["jsonrpc": "2.0", "method": "notifications/progress",
+                                "params": ["progressToken": token, "progress": count, "message": Self.progress(question)] as [String: Any]])
+                }
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+        }
+    }
+    private var running: [String: Task<Void, Never>] = [:]
+    private var cancelled: Set<String> = []
+
     func handle(_ message: [String: Any]) {
         guard let method = message["method"] as? String else { return }
+        if method == "notifications/cancelled" {
+            guard let asked = (message["params"] as? [String: Any])?["requestId"] else { return }
+            let key = "\(asked)"
+            guard let work = running[key] else { return }
+            cancelled.insert(key)
+            work.cancel()
+            return
+        }
         guard let id = message["id"] else { return }
         let params = message["params"] as? [String: Any] ?? [:]
         switch method {
         case "initialize":
-            named?((params["clientInfo"] as? [String: Any])?["name"] as? String)
+            client = (params["clientInfo"] as? [String: Any])?["name"] as? String
+            named?(client)
             let asked = params["protocolVersion"] as? String ?? ""
             let version = MCPServer.versions.contains(asked) ? asked : MCPServer.versions[MCPServer.versions.count - 1]
-            answer(id, ["protocolVersion": version, "capabilities": ["tools": [String: Any]()],
+            answer(id, ["protocolVersion": version, "capabilities": ["tools": ["listChanged": true]],
                         "serverInfo": ["name": "broadway-browser", "version": Self.version],
                         "instructions": box.open ? Self.instructions : Self.offInstructions])
         case "ping":
@@ -177,24 +277,104 @@ final class MCPServer {
             guard box.open else {
                 return answer(id, MCPServer.result(.failure("Agents are off in Broadway", code: .agentsOff), tool: name))
             }
-            guard let tool = resolve(name) else { return fail(id, -32602, "no tool named \(name)") }
             var arguments = params["arguments"] as? [String: Any] ?? [:]
+            if name == Self.moreTools, outside { return answer(id, MCPServer.result(more(arguments), tool: name)) }
+            guard let tool = resolve(name) else { return fail(id, -32602, "Broadway \(Self.version) has no tool named \(name). \(AgentCatalog.olderHint)") }
+            if let refused = refusal(tool, name, arguments) { return answer(id, MCPServer.result(refused, tool: tool)) }
             if tool == "batch" { arguments = steps(arguments) }
-            let aim = outside ? aim : nil
-            Task { @MainActor in
+            let aim = outside && !(tool == AgentBatch.spec.name && batchHere) ? aim : nil
+            let key = "\(id)"
+            let token = (params["_meta"] as? [String: Any])?["progressToken"]
+            if outside, let task { AgentLinks.shared.setPatience(task, Self.patience(client: client, progress: token != nil, environment: environment)) }
+            let work = Task { @MainActor in
+                while self.active > 0, !AgentDesk.shared.waits(for: self.task), !Task.isCancelled, !self.cancelled.contains(key) {
+                    try? await Task.sleep(for: .milliseconds(20))
+                }
+                guard !self.cancelled.contains(key), !Task.isCancelled else {
+                    self.cancelled.remove(key)
+                    self.running[key] = nil
+                    return
+                }
+                self.active += 1
+                defer {
+                    self.active -= 1
+                    self.running[key] = nil
+                }
                 if let aim {
                     switch await aim(tool, arguments) {
                     case .refuse(let refused): return answer(id, MCPServer.result(refused, tool: tool))
                     case .go(let aimed): arguments = aimed
                     }
                 }
-                let outcome = await box.call(tool, arguments, task: task)
-                landed?(tool, arguments, outcome)
-                answer(id, MCPServer.result(outcome, tool: tool, tab: arguments["tab"] as? String))
+                var finished = false
+                let watching = token.map { self.watch($0) { finished } }
+                let outcome = tool == AgentBatch.spec.name && self.batchHere
+                    ? await self.batch(arguments)
+                    : ToolReply.asking(await self.box.call(tool, arguments, task: self.task), task: self.task)
+                finished = true
+                watching?.cancel()
+                self.landed?(tool, arguments, outcome)
+                if self.cancelled.contains(key) {
+                    self.cancelled.remove(key)
+                    return
+                }
+                self.answer(id, MCPServer.result(outcome, tool: tool, tab: arguments["tab"] as? String))
             }
+            running[key] = work
         default:
             fail(id, -32601, "no method \(method)")
         }
+    }
+
+    func batch(_ arguments: [String: Any]) async -> ToolOutcome {
+        switch AgentBatch.parse(arguments, tools: box.tools) {
+        case .failure(let refused):
+            return .failure(refused.message, code: refused.code, data: refused.step.map { ["step": $0] })
+        case .success(let steps):
+            let shared = arguments["tab"] as? String
+            let reply = await AgentBatch.run(steps, keepGoing: arguments["keep_going"] as? Bool == true) { step in
+                guard self.box.open else { return ToolFailure.error(.agentsOff, "Agents are off in Broadway") }
+                var given = step.arguments
+                if given["tab"] == nil, let shared, self.box.tools.first(where: { $0.name == step.tool })?.properties["tab"] != nil { given["tab"] = shared }
+                if let aim = self.aim {
+                    switch await aim(step.tool, given) {
+                    case .refuse(let refused): return ToolReply.wire(refused, tool: step.tool, tab: nil)
+                    case .go(let aimed): given = aimed
+                    }
+                }
+                let outcome = ToolReply.asking(await self.box.call(step.tool, given, task: self.task), task: self.task)
+                self.landed?(step.tool, given, outcome)
+                return ToolReply.wire(outcome, tool: step.tool, tab: given["tab"] as? String)
+            }
+            return Self.batched(reply)
+        }
+    }
+
+    static func batched(_ reply: [String: Any]) -> ToolOutcome {
+        let data = reply["data"] as? [String: Any] ?? [:]
+        let steps = data["steps"] as? [[String: Any]] ?? []
+        let lines = steps.map { step -> String in
+            let said: String
+            if let error = step["error"] as? [String: Any] {
+                said = error["message"] as? String ?? "That didn't work"
+            } else if step["ran"] as? Bool == false {
+                said = "didn't run"
+            } else {
+                said = (step["data"] as? [String: Any])?["message"] as? String ?? "done"
+            }
+            return "\(step["n"] as? Int ?? 0) \(step["line"] as? String ?? ""): \(said)"
+        }
+        let head = "Ran \(data["ran"] as? Int ?? 0) of \(data["of"] as? Int ?? steps.count) steps"
+        let body = ([head] + lines).joined(separator: "\n")
+        guard reply["ok"] as? Bool != true else {
+            return ToolOutcome(text: body, data: data, plain: data["website"] as? Bool == true ? body : nil)
+        }
+        let error = reply["error"] as? [String: Any] ?? [:]
+        let landed = (data["landed"] as? [Int] ?? []).map(String.init)
+        let message = (error["message"] as? String ?? "That didn't work") + "\n" + (landed.isEmpty ? "Nothing landed" : "Landed: \(landed.joined(separator: ", "))")
+        let from = (error["hint"] as? String)?.split(separator: " ").last.map(String.init) ?? "1"
+        return .failure(message, code: error["code"] as? String ?? "failed", hint: "Fix that, then send the steps from step \(from) again",
+                        retrySafe: error["retry_safe"] as? Bool, data: data)
     }
 
     private func steps(_ arguments: [String: Any]) -> [String: Any] {
@@ -247,9 +427,10 @@ final class MCPServer {
         if tool.hasPrefix("memory_") { return outcome.text }
         let fenced = outcome.plain != nil
         if let change = AgentChange(object: data), data["settled"] != nil {
-            let own = "Tab \(change.tab), settled \(change.settled.rawValue) in \(change.ms) ms"
-            let body = change.lines().joined(separator: "\n")
-            return fenced || change.website ? "\(own)\n\(AgentSecrets.fenced(body))" : "\(own)\n\(body)"
+            let parts = change.parts()
+            let own = ["Tab \(change.tab), settled \(change.settled.rawValue) in \(change.ms) ms"] + parts.filter { !$0.page }.map(\.text)
+            let page = parts.filter(\.page).map(\.text)
+            return (page.isEmpty ? own : own + [AgentSecrets.fenced(page.joined(separator: "\n"))]).joined(separator: "\n")
         }
         guard var body = outcome.plain ?? outcome.text else { return nil }
         guard fenced else { return body }

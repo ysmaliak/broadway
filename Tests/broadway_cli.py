@@ -479,7 +479,7 @@ def batching(base):
     check("a no ends the script", asking.returncode == 1 and parsed["data"]["steps"] == 1 and parsed["data"]["landed"] == [], output + errors)
     check("and the gated click never landed", "leaked" not in broadway("tabs").stdout)
     looping = broadway("run", "--timeout", "1", "while (true) {}")
-    check("a script that never ends stops at its timeout", looping.returncode == 1 and "deadline" in looping.stdout, looping.stdout + looping.stderr)
+    check("a script that never ends stops at its timeout", looping.returncode == 4 and "deadline" in looping.stdout, looping.stdout + looping.stderr)
 
     old, parsed = envelope("locate", "Go", "--tab", tab)
     check("the old locate still answers", old.returncode == 0 and any(e["name"] == "Go" for e in parsed["data"]["elements"]), parsed)

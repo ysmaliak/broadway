@@ -63,47 +63,7 @@ extension Builtins {
         Builtin(name: "mcp", usage: "broadway mcp [--task ID]", summary: "The browser as an MCP server on stdio", group: "Broadway",
                 details: "For MCP clients that can't run a command line. Broadway's own tasks use it too, for its fixed list of tools.",
                 examples: ["broadway mcp"]) { context, words in
-            try relay(words, context: context)
+            try MCPRelay.run(words, context: context)
         },
     ]
-
-    private static func relay(_ words: [String], context: Context) throws -> Exit {
-        var task: String?
-        var index = 0
-        while index < words.count {
-            guard words[index] == "--task", index + 1 < words.count else { throw Failure.usage("mcp takes only --task") }
-            task = words[index + 1]
-            index += 2
-        }
-        let link = try context.connection()
-        link.watched = false
-        var hello: [String: Any] = ["op": "mcp"]
-        if let task { hello["task"] = task }
-        link.send(hello)
-        guard let greeting = link.object(), greeting["mcp"] as? Bool == true else {
-            throw Failure("failed", "Broadway wouldn't take the connection")
-        }
-        let answers = Thread {
-            while let line = link.line() {
-                var out = line
-                out.append(0x0A)
-                context.console.raw(out)
-            }
-            exit(0)
-        }
-        answers.start()
-        let asks = FileHandle.standardInput
-        var kept = Data()
-        while true {
-            let chunk = asks.availableData
-            if chunk.isEmpty { break }
-            kept.append(chunk)
-            while let newline = kept.firstIndex(of: 0x0A) {
-                let line = Data(kept[kept.startIndex...newline])
-                kept = Data(kept[kept.index(after: newline)...])
-                if !link.sendRaw(line) { return .done }
-            }
-        }
-        return .done
-    }
 }

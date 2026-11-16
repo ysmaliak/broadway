@@ -348,7 +348,7 @@ extension ScriptRun {
         }
         if let error = outcome.error {
             let code = error["code"] as? String ?? "failed"
-            let exit: Exit = code == "needs_you" ? .needsYou : ["usage", "too_many"].contains(code) ? .mistake : .failed
+            let exit = Context.exit(for: code)
             throw Failure(code, error["message"] as? String ?? "That didn't work", hint: error["hint"] as? String,
                           retrySafe: error["retry_safe"] as? Bool ?? false, exit: exit, data: outcome.data)
         }

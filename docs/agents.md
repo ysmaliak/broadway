@@ -22,16 +22,30 @@ A person typing `broadway` at their own terminal gets a session named for the te
 
 - **Start.** `broadway agents connect [--name NAME]` starts the session at once. Otherwise the first command that opens or works in a tab starts it, and other commands only join a session that exists.
 - **End.** A session ends on `broadway agents done` or `broadway agents disconnect`, when its MCP connection closes, when its ancestor process exits, or after 20 minutes with no request and no tab at work. `--summary TEXT` leaves a line for the person, up to 200 characters, and `--failed` marks it as not finished.
-- **After the end.** The session's tabs are marked finished. Its heading keeps the tick or the downcast face, and the summary, until its tabs are closed. A session with no tabs leaves at once.
+- **After the end.** The session's tabs stay open, as in 0.3, and `agents done` lists them in its answer. `agents done --close` closes the ones the person never looked at. A `--tab` given to `agents done` is ignored. The tabs are marked finished. Its heading keeps the tick or the downcast face, and the summary, until its tabs are closed. A session with no tabs leaves at once.
 - **Again.** A request from the same agent after its session ended starts a new session.
 
-Two sessions of the same program are numbered, such as "Claude Code 2". Each session keeps its own last tab, so two agents working at once don't take each other's tab.
+Two sessions of the same program are numbered, such as "Claude Code 2".
+
+### Tabs are the agent's choice
+
+Each session has a **current tab**: the last tab it opened or named with `broadway tab ID`. A command without `--tab` works there, so two agents working at once don't take each other's tab. `open` always opens another tab, which becomes the current one. `go` moves the current tab. Broadway sets no limit and forces no reuse: the agent keeps as many tabs as the work needs, and closes the ones it is done with (`close`, `close --others`, `close --all`). `open` says when the session already has a tab on the same address.
+
+A link or a script in an agent's tab that opens a new window gives a tab of the same session, behind the person's and out of history, never one of the person's. The action's answer names it, and it becomes the current tab only when the agent switches to it. If the person marked that site Never Here, the new tab closes and the answer says so.
+
+Subagents of one agent share its session and its current tab, so each passes `--tab` (or sets `BROADWAY_TAB`) with the id its own `open` gave.
 
 ### The session is who asks
 
 When a command needs the person's yes, the session is what asks. The question shows on that session's tab, with the command quoted and the agent's name, and its face waves until the person answers. A yes for reading a site holds for the rest of the session. If Broadway is in the background, a notification says which agent needs the person.
 
-A command waits 100 seconds for the answer, which is under Claude Code's default two-minute Bash timeout. `--wait-person MIN` waits longer and `--no-person` fails at once. When the wait runs out the command exits 3 with `needs_you`, nothing is done, and the question stays up. A yes that arrives after the agent stopped waiting is recorded, so the agent's next try goes through. It never acts by itself.
+A command waits 100 seconds for the answer, which is under Claude Code's default two-minute Bash timeout. Over MCP a connection waits 600 seconds when the client is Claude Code and shows progress, and 15 seconds for other clients, and says at once in the client that it waits for the person. `--wait-person MIN` waits longer and `--no-person` fails at once. When the wait runs out the command exits 3 with `needs_you`, nothing is done, and the question stays up. Each step of a `batch` passes the same checks one by one.
+
+A yes that arrives after the agent stopped waiting is recorded, so the agent's next try goes through. A yes to reading a site or using tabs holds for the rest of the session. A yes to sending, paying, deleting or uploading becomes a pass for that one act, on that site and that target, which the session's next identical step uses within 120 seconds and which is then gone, so one yes never covers a second, different send. A late yes never acts by itself.
+
+### Handing a tab to the person
+
+`broadway handoff REASON` is the explicit form of taking over. It puts a card on the agent's tab with the reason, such as "Solve the captcha", tells the person, and waits until they press Done, close the card, or take the tab and hand it back. Then it answers with what changed while they had it. `--optional` adds Skip, which answers `skipped: true`. It passes the same tab gate as any command, never brings the tab forward by itself, and fails with `needs_you` when the person doesn't answer in time (300 seconds by default, 900 at most).
 
 Signing in and filling forms with saved details stay with Broadway's own tasks. An outside agent uses `broadway fill`, which asks the person every time.
 
@@ -92,5 +106,6 @@ A session's heading shows the strongest state over its tabs: waving, then drivin
 - `Sources/BroadwayCLI/Ancestor.swift`: the ancestor walk and the names sent with each request.
 - `Sources/Search/AgentLinks.swift`: sessions, their keys, ends and states. `AgentLinkCommands.swift`: how a request finds its session, and the `agents` verbs.
 - `Sources/Search/AgentGate.swift`: the modes, the acts and the verdict for each.
+- `Sources/Search/AgentCommands.swift`: the error codes (`ToolCode`) and the reply envelope. `MCPServer.swift`: the MCP server, its tool names, instructions and short list. `AgentHandoff.swift`: `handoff`. `Sources/BroadwayCLI/MCPRelay.swift`: `broadway mcp` and its hand-over after an update.
 - `Sources/Search/AgentsArea.swift`, `AgentCharacter.swift`, `AgentPointer.swift`, `AgentDriving.swift`: the area, the face, the pointer and take over.
 - Tests: `Tests/SearchTests/AgentLinksTests.swift`, and the hidden-world probe `Tests/agent_mode.py`.

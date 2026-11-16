@@ -225,7 +225,9 @@ final class AgentSocket {
             box.browser = browser
             aim(server, browser: browser, link: task)
             connection.onLine = { line in MainActor.assumeIsolated { server.handle(line) } }
-            connection.send(["mcp": true])
+            var greeting: [String: Any] = ["mcp": true]
+            if let task, request["task"] == nil { greeting["link"] = task.uuidString.lowercased() }
+            connection.send(greeting)
         default:
             guard !command(request, browser: browser, on: connection) else { return }
             connection.send(["error": "broadway status, open, task, every, mcp, tools, call, session, quit or serve"])
