@@ -276,7 +276,7 @@ def done(second):
 
 def process_end(base):
     script = f"import subprocess; subprocess.run([{BROADWAY!r}, '--world', {WORLD!r}, 'open', {base + 'four'!r}, '--json'], capture_output=True)"
-    subprocess.run([sys.executable, "-c", script], timeout=30)
+    subprocess.run([sys.executable, "-c", script], env=clean_env(), timeout=30)
     named = wait_for(lambda: next((row for row in state()["links"] if row["state"] == "connected" and row["name"] == "Python"), None))
     check("a script that opens a tab gets a session of its own", named is not None, state()["links"])
     swept = agent("linksweep")
