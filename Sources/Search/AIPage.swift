@@ -21,7 +21,7 @@ enum AIPage {
 
     /// The page on screen in `tab`, read. Nil when there is nothing to read.
     @MainActor
-    static func read(_ tab: Tab) async -> Read? {
+    static func read(_ tab: Tab, whole: Bool = false) async -> Read? {
         guard let web = tab.built else { return nil }
         let value: Any? = await withCheckedContinuation { done in
             web.evaluateJavaScript(script, in: nil, in: Web.world) { result in done.resume(returning: try? result.get()) }
@@ -31,12 +31,12 @@ enum AIPage {
         else { return nil }
         let title = String((found["title"] as? String ?? "").prefix(300))
         let links = Array((found["links"] as? [String] ?? []).prefix(400))
-        return shaped(title: title, url: tab.pageAddress, text: text, links: links)
+        return shaped(title: title, url: tab.pageAddress, text: text, links: links, whole: whole)
     }
 
-    static func shaped(title: String, url: URL?, text: String, links: [String]) -> Read {
+    static func shaped(title: String, url: URL?, text: String, links: [String], whole: Bool = false) -> Read {
         var read: Read
-        if text.count > limit {
+        if !whole, text.count > limit {
             let head = text.prefix(limit * 2 / 3), tail = text.suffix(limit / 3)
             read = Read(title: title, url: url, text: head + "\n\n[…]\n\n" + tail, links: links, cut: true)
         } else {

@@ -56,7 +56,7 @@ enum AgentSettleRule {
 
     static func cap(_ arguments: [String: Any]) -> TimeInterval? {
         if arguments["settle"] as? Bool == false || arguments["no_settle"] as? Bool == true || arguments["no-settle"] as? Bool == true { return nil }
-        guard let seconds = (arguments["settle"] as? NSNumber)?.doubleValue, !(arguments["settle"] is Bool) else { return cap }
+        guard let seconds = (arguments["settle"] as? NSNumber)?.doubleValue, !AgentTarget.flag(arguments["settle"]) else { return cap }
         return seconds <= 0 ? nil : min(seconds, longest)
     }
 

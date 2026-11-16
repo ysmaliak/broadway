@@ -70,7 +70,7 @@ final class MCPServer {
         "tabs": "Your tabs, or all tabs",
         "close": "Close your current tab, or tab, or others, or all",
         "snapshot": "The page's controls and headings with refs. Use in, role or find to keep it short, and since for only what changed.",
-        "read": "The page's visible text. Use in for one part and find for matching lines.",
+        "read": "The page's visible text. Use find for matching lines.",
         "shot": "A picture of the page or of one element. Secret fields and frames are blanked.",
         "find": "Refs by an element's words or role, with nearby text, without a whole snapshot",
         "click": "Click by ref (e12) or by the element's words. Set final when it sends, pays, deletes or uploads. Answers with what changed. A refusal means stop.",

@@ -402,6 +402,17 @@ def more(tab, base):
     check("a made-up modifier is bad input", parsed["error"]["code"] == "bad_input", parsed)
     result, parsed = envelope("select", name, "Lee", "--tab", tab)
     check("select picks text inside a box", result.returncode == 0 and parsed["data"]["selected"] == "Lee", parsed)
+    result, parsed = envelope("select", "Country", "France", "--tab", tab)
+    check("select on a dropdown chooses like choose", result.returncode == 0 and (parsed.get("data") or {}).get("did") == "choose", parsed)
+    broadway("click", ref(elements, "button", "Report"), "--tab", tab)
+    check("and the dropdown holds the option", wait_for(lambda: "|fr|" in title(tab), 3), title(tab))
+    result, parsed = envelope("type", "Country", "Spain", "--tab", tab)
+    error = parsed.get("error") or {}
+    check("typing into a dropdown names choose", error.get("code") == "not_actionable" and "broadway choose @" in (error.get("hint") or ""), parsed)
+    result = broadway("read", "--find", "BOTTOM of the page", "--tab", tab)
+    check("read --find gives the lines holding the words", result.returncode == 0 and "Bottom of the page" in result.stdout and "1 line with" in result.stdout, (result.stdout[-400:], result.stderr))
+    result = broadway("read", "--find", "harrier", "--tab", tab)
+    check("read --find with no line says where else to look", result.returncode != 0 and "snapshot --find harrier" in result.stderr, (result.stdout, result.stderr))
 
     broadway("click", ref(elements, "button", "Save remotely"), "--tab", tab)
     result, parsed = envelope("wait", "--request", "/api/save", "--seconds", "5", "--tab", tab)
@@ -464,6 +475,8 @@ def answers(tab, base):
     twice = envelope("click", "Item", "--tab", tab)[1]
     check("words that fit many say ambiguous with candidates", (twice.get("error") or {}).get("code") == "ambiguous" and "fits 200" in (twice.get("error") or {}).get("message", "") and "--nth" in (twice.get("error") or {}).get("hint", ""), twice)
     check("with the first candidates as data", len((twice.get("data") or {}).get("candidates", [])) == 5, twice.get("data"))
+    first = envelope("click", "Item", "--nth", "1", "--tab", tab)[1]
+    check("--nth 1 picks the first of many", (first.get("error") or {}).get("code") != "ambiguous" and '"Item 1"' in (first.get("error") or {}).get("message", "") + json.dumps(first.get("data") or {}), first)
     broadway("go", base + "modal", "--tab", tab)
     broadway("wait", "--tab", tab, "Cookies")
     modal = envelope("snapshot", "--tab", tab)[1]["data"]

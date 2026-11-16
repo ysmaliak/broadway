@@ -116,10 +116,20 @@ extension AgentPage {
     return { ok: true, html: html };
     """
 
+    static let listScript = find + """
+
+    var subject = target || el;
+    return subject.tagName === 'SELECT' || (subject.tagName !== 'INPUT' && subject.tagName !== 'TEXTAREA' && !subject.isContentEditable && /^(combobox|listbox)$/.test((subject.getAttribute('role') || '').toLowerCase()));
+    """
+
     static let selectScript = find + PageSelection.secretCheck + """
 
     var subject = target || el;
     if (broadwaySecret(subject)) return { failed: 'Agents never type in password, card or code fields. Ask the person to.', code: 'secret_field' };
+    var boxed = subject.tagName === 'INPUT' || subject.tagName === 'TEXTAREA';
+    if (subject.tagName === 'SELECT' || (!boxed && !subject.isContentEditable && /^(combobox|listbox)$/.test((subject.getAttribute('role') || '').toLowerCase()))) {
+      return { failed: 'That element is a dropdown, and select only selects text', code: 'not_actionable', reason: 'dropdown' };
+    }
     var picked = '';
     if (subject.tagName === 'INPUT' || subject.tagName === 'TEXTAREA') {
       var value = subject.value || '', at = text ? value.indexOf(text) : 0;
@@ -144,6 +154,7 @@ extension AgentPage {
       selection.addRange(range);
       picked = selection.toString();
     }
+    if (!picked) return { failed: 'Nothing got selected, as that text is not shown on the page', code: 'not_found' };
     return { selected: picked.slice(0, 2000) };
     """
 
@@ -288,7 +299,17 @@ extension BrowserToolbox {
     func selectText(_ tab: Tab, _ arguments: [String: Any]) async -> ToolOutcome {
         acting(tab, "Selecting")
         let ref = arguments["ref"] as? String ?? ""
-        return outcome(await inFrame(tab, ref, AgentPage.selectScript, ["text": arguments["text"] as? String ?? ""]) as? [String: Any], tab: tab, ref: ref)
+        let text = arguments["text"] as? String ?? ""
+        let said = await inFrame(tab, ref, AgentPage.selectScript, ["text": text]) as? [String: Any]
+        return dropdown(outcome(said, tab: tab, ref: ref), said, ref: ref, text: text)
+    }
+
+    func dropdown(_ failure: ToolOutcome, _ said: [String: Any]?, ref: String, text: String) -> ToolOutcome {
+        guard said?["reason"] as? String == "dropdown" else { return failure }
+        var failure = failure
+        let option = text.isEmpty ? "OPTION" : AgentChange.cell(text, most: 80)
+        failure.hint = "Pick one of its options with broadway choose @\(ref) \"\(option)\""
+        return failure
     }
 
     func resize(_ tab: Tab, _ arguments: [String: Any]) async -> ToolOutcome {

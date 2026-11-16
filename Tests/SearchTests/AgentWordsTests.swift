@@ -673,4 +673,119 @@ final class AgentWordsTests {
         #expect(stale.code == "stale_ref")
         #expect(await clicks(tab) == 0)
     }
+
+    private func wire(_ arguments: [String: Any]) throws -> [String: Any] {
+        let data = try JSONSerialization.data(withJSONObject: arguments)
+        return try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+    }
+
+    @Test func numbersOneAndZeroFromTheWireAreNumbersNotFlags() throws {
+        let one = try wire(["target": ["words": "Grant access", "nth": 1], "nth": 1, "settle": 1])
+        let off = try wire(["settle": false, "look": true])
+
+        #expect(AgentTarget(one).nth == 1)
+        #expect(AgentSettleRule.cap(one) == 1)
+        #expect(AgentSettleRule.cap(off) == nil)
+        #expect(AgentTarget.flag(off["look"]))
+        #expect(!AgentTarget.flag(one["nth"]))
+    }
+
+    @Test func nthOneFromTheWirePicksTheFirstRowsGrantAccess() async throws {
+        let rows = [("Copperline", "stock counts", 1), ("Gullwing Freight", "shipments", 2), ("Tallyho Books", "invoices", 3)].map { name, what, n in
+            "<tr><td>\(name)</td><td>Wants to see your \(what)</td><td><button type='button' onclick='window.clicks=\(n)'>Grant access</button></td></tr>"
+        }.joined()
+        let (tab, id) = try await page("<h1>Connections</h1><table><tr><th>App</th><th>Asks for</th><th></th></tr>\(rows)</table>")
+        let arguments = try wire(["tab": id, "target": ["words": "Grant access", "nth": 1], "nth": 1])
+
+        let call = Task { await box.call("click", arguments, task: task) }
+        let asked = await question()
+        AgentDesk.shared.take(try #require(asked).id, .yes)
+        let done = await call.value
+
+        #expect(asked?.kind == .approval(.grant))
+        #expect(done.code != "ambiguous")
+        #expect(!done.failed)
+        #expect(await clicks(tab) == 1)
+    }
+
+    @Test func typingIntoADropdownNamesChooseWithItsRef() async throws {
+        let (tab, id) = try await page("<label for='who'>Assignee</label><select id='who'><option>Unassigned</option><option>Hollis Grane</option></select>")
+
+        let typed = await box.call("type", ["tab": id, "ref": "Assignee", "text": "Hollis Grane"], task: task)
+        let value = try await tab.web.evaluateJavaScript("document.getElementById('who').value") as? String
+
+        #expect(typed.failed)
+        #expect(typed.code == "not_actionable")
+        #expect(typed.data?["reason"] as? String == "dropdown")
+        #expect(typed.hint?.contains("broadway choose @e") == true)
+        #expect(typed.hint?.contains("\"Hollis Grane\"") == true)
+        #expect(value == "Unassigned")
+    }
+
+    @Test func selectOnADropdownChoosesLikeChoose() async throws {
+        let (tab, id) = try await page("<label for='who'>Assignee</label><select id='who'><option>Unassigned</option><option>Hollis Grane</option></select>")
+
+        let said = await box.call("select", ["tab": id, "ref": "Assignee", "text": "Hollis Grane"], task: task)
+        let value = try await tab.web.evaluateJavaScript("document.getElementById('who').value") as? String
+
+        #expect(!said.failed, "\(said.text ?? "")")
+        #expect(said.data?["did"] as? String == "choose")
+        #expect(value == "Hollis Grane")
+    }
+
+    @Test func selectOnADropdownPassesTheSameGateAsChoose() async throws {
+        let (tab, id) = try await page("<select aria-label='Plan'><option value='plain'>Keep</option><option value='pay'>Buy now</option></select>")
+
+        let call = Task { await box.call("select", ["tab": id, "ref": "Plan", "text": "Buy now"], task: task) }
+        let asked = await question()
+        AgentDesk.shared.take(try #require(asked).id, .no)
+        let done = await call.value
+        let value = try await tab.web.evaluateJavaScript("document.querySelector('select').value") as? String
+
+        #expect(asked?.kind == .approval(.pay))
+        #expect(done.code == "said_no")
+        #expect(value == "plain")
+    }
+
+    @Test func readFindGivesTheShownLinesHoldingTheWords() async throws {
+        let (_, id) = try await page("<p>Copperline box: Price 12.00</p><p>Delivery in two days</p><p>Gullwing price on request</p><p style='display:none'>Hidden price 1.00</p>")
+
+        let found = await box.call("text", ["tab": id, "find": "PRICE"], task: task)
+        let none = await box.call("text", ["tab": id, "find": "harrier"], task: task)
+        let text = found.text ?? ""
+
+        #expect(!found.failed)
+        #expect(text.contains("2 lines with \"PRICE\""))
+        #expect(text.contains("Copperline box: Price 12.00"))
+        #expect(text.contains("Gullwing price on request"))
+        #expect(!text.contains("Delivery"))
+        #expect(!text.contains("Hidden price"))
+        #expect(none.failed)
+        #expect(none.code == "not_found")
+        #expect(none.hint?.contains("broadway snapshot --find harrier") == true)
+    }
+
+    @Test func linesHoldingWordsAreCountedAndCut() {
+        let text = (1...70).map { "Row \($0) total" }.joined(separator: "\n") + "\nNothing here"
+
+        let said = BrowserToolbox.lines(of: text, holding: "TOTAL")
+
+        #expect(said.text?.contains("70 lines with \"TOTAL\"") == true)
+        #expect(said.text?.contains("Row 60 total") == true)
+        #expect(said.text?.contains("Row 61 total") == false)
+        #expect(said.text?.contains("… 10 more lines") == true)
+        #expect(said.text?.contains("Nothing here") == false)
+    }
+
+    @Test func selectThatPicksNothingSaysSo() async throws {
+        let (_, id) = try await page("<input aria-label='Note' value=''><input aria-label='Ticket' value='Ticket T-385'>")
+
+        let empty = await box.call("select", ["tab": id, "ref": "Note"], task: task)
+        let found = await box.call("select", ["tab": id, "ref": "Ticket", "text": "T-385"], task: task)
+
+        #expect(empty.failed)
+        #expect(empty.code == "not_found")
+        #expect(!found.failed)
+        #expect(written(found).contains("T-385"))
+    }
 }

@@ -40,8 +40,13 @@ struct AgentTarget: Equatable {
         return text.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }.filter { !$0.isEmpty }
     }
 
+    static func flag(_ value: Any?) -> Bool {
+        guard let value, value is NSNumber else { return false }
+        return CFGetTypeID(value as CFTypeRef) == CFBooleanGetTypeID()
+    }
+
     static func whole(_ value: Any?) -> Int? {
-        if let number = value as? NSNumber, !(value is Bool) { return number.intValue }
+        if let number = value as? NSNumber, !flag(value) { return number.intValue }
         if let text = value as? String { return Int(text) }
         return nil
     }
