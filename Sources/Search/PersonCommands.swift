@@ -262,6 +262,56 @@ enum PersonAsk {
         wait > 0 && request["person"] as? String != "none" && !AgentSessions.shared.nobodyHome && (Store.testing || !NSApp.isHidden)
     }
 
+    static let generic = "Run this broadway command?"
+
+    static let titles: [String: String] = [
+        "fill login": "Fill your saved sign-in on SITE?",
+        "fill details": "Fill your name, address and phone on SITE?",
+        "fill card": "Fill your saved card on SITE?",
+        "tabs new": "Open a new tab?",
+        "tabs select": "Switch to another tab?",
+        "tabs close": "Close tabs?",
+        "tabs reopen": "Reopen a closed tab?",
+        "tabs move": "Move a tab?",
+        "tabs keep": "Keep an agent's tab as yours?",
+        "windows new": "Open a new window?",
+        "page reload": "Reload this page?",
+        "page back": "Go back on this page?",
+        "page forward": "Go forward on this page?",
+        "page translate": "Translate this page?",
+        "page original": "Show this page untranslated?",
+        "bookmarks add": "Add a bookmark?",
+        "bookmarks delete": "Delete a bookmark?",
+        "bookmarks open": "Open a bookmark?",
+        "history delete": "Delete pages from your history?",
+        "history clear": "Clear your history?",
+        "downloads cancel": "Cancel a download?",
+        "downloads forget": "Take a download off the list?",
+        "downloads clear": "Clear the downloads list?",
+        "spaces new": "Make a new space?",
+        "spaces switch": "Switch spaces?",
+        "spaces delete": "Delete a space?",
+        "settings set": "Change a setting?",
+        "shortcuts set": "Change a keyboard shortcut?",
+        "shortcuts clear": "Clear a keyboard shortcut?",
+        "shortcuts reset": "Reset keyboard shortcuts?",
+        "extensions install": "Install an extension?",
+        "extensions enable": "Turn on an extension?",
+        "extensions disable": "Turn off an extension?",
+        "extensions remove": "Remove an extension?",
+        "permissions reset": "Reset a site's permissions?",
+        "skills delete": "Delete a skill?",
+        "tasks delete": "Delete a task?",
+        "live delete": "Delete a Live Folder?",
+        "folders delete": "Delete a folder?",
+        "folders close": "Close a folder's tabs?",
+    ]
+
+    static func title(noun: String, verb: String, site: String?) -> String {
+        guard let words = titles["\(noun) \(verb)"] else { return generic }
+        return words.replacingOccurrences(of: "SITE", with: site ?? "this page")
+    }
+
     static func yes(_ act: AgentAct, call: PersonCall, site: String?, request: [String: Any], on connection: LineConnection) async throws {
         var wait = request["wait"] as? Double ?? (request["wait"] as? Int).map(Double.init) ?? 0
         if let link = call.link, wait == 0 { wait = AgentLinks.shared.patience(link.id) }
@@ -269,7 +319,7 @@ enum PersonAsk {
             throw PersonRefusal("needs_you", "This needs the person's yes in Broadway. Nothing was done.",
                                 hint: "Tell the person, or run it with --wait-person MIN while they are at Broadway")
         }
-        var question = AgentQuestion(kind: .approval(act), title: "Run this broadway command?")
+        var question = AgentQuestion(kind: .approval(act), title: title(noun: call.noun, verb: call.verb, site: site))
         question.tab = call.tab?.tab.id
         question.site = site
         question.quote = AgentQuestion.clean(call.line)

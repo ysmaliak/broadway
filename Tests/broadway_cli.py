@@ -1241,7 +1241,7 @@ def ai_commands(base):
     tab = good("a tab to ask about", "tabs", "new", base + "asked")["id"]
     running = subprocess.Popen([BROADWAY, "--world", WORLD, "tabs", "close", tab, "--wait-person", "1", "--json"], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     wait_for(desk, 8)
-    check("approvals list", good("approvals list", "approvals", "list")["approvals"][0]["title"] == "Run this broadway command?")
+    check("approvals list", good("approvals list", "approvals", "list")["approvals"][0]["title"] == "Close tabs?")
     check("there's no way to answer", broadway("approvals", "yes").returncode == 2)
     running.kill()
     check("a command that leaves takes its question", wait_for(lambda: not desk(), 5))

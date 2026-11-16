@@ -259,4 +259,29 @@ final class PersonCommandsTests {
         #expect(line.contains("--front"))
         #expect(line.contains("Work"))
     }
+
+    @Test func fillingAsksWithWhatItFills() {
+        #expect(PersonAsk.title(noun: "fill", verb: "login", site: "shop.example") == "Fill your saved sign-in on shop.example?")
+        #expect(PersonAsk.title(noun: "fill", verb: "details", site: "shop.example") == "Fill your name, address and phone on shop.example?")
+        #expect(PersonAsk.title(noun: "fill", verb: "card", site: "shop.example") == "Fill your saved card on shop.example?")
+        #expect(PersonAsk.title(noun: "fill", verb: "login", site: nil) == "Fill your saved sign-in on this page?")
+    }
+
+    @Test func commonCommandsAskInTheirOwnWords() {
+        #expect(PersonAsk.title(noun: "tabs", verb: "close", site: nil) == "Close tabs?")
+        #expect(PersonAsk.title(noun: "history", verb: "clear", site: nil) == "Clear your history?")
+        #expect(PersonAsk.title(noun: "nothing", verb: "known", site: nil) == PersonAsk.generic)
+        let verbs = PersonCommands.table.map { "\($0.noun) \($0.verb)" }
+        for key in PersonAsk.titles.keys { #expect(verbs.contains(key), "\(key) is not a person command") }
+        for title in PersonAsk.titles.values {
+            #expect(title.hasSuffix("?") && !title.contains(";") && !title.contains("Run this"), "\(title)")
+        }
+    }
+
+    @Test func fillingStillAsksThePersonInEveryMode() {
+        for mode in AgentMode.allCases {
+            #expect(PersonCommands.decide(.person(.signIn), mode: mode, rule: nil) == .person(.signIn), "\(mode)")
+            #expect(PersonCommands.decide(.person(.address), mode: mode, rule: nil) == .person(.address), "\(mode)")
+        }
+    }
 }
