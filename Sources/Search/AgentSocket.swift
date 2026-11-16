@@ -56,8 +56,13 @@ enum AgentCommand {
         let good = named.filter { name, _ in
             checks.first { $0["name"] as? String == name }.map { $0["ok"] as? Bool == true && $0["detail"] as? String != "not used here" } == true
         }.map(\.1)
-        let broken = checks.first { $0["ok"] as? Bool == false && $0["name"] as? String != "running" && $0["name"] as? String != "agents" && $0["name"] as? String != "plan" }
+        let hooks: Set<String> = ["claude hooks", "codex hooks"]
+        let quiet: Set<String> = ["running", "agents", "plan"]
+        let broken = checks.first { $0["ok"] as? Bool == false && !quiet.union(hooks).contains($0["name"] as? String ?? "") }
         if let broken { return "On your PATH, but \(broken["detail"] as? String ?? "something is off"). Run broadway doctor." }
+        if checks.contains(where: { $0["ok"] as? Bool == false && hooks.contains($0["name"] as? String ?? "") }) {
+            return "Run broadway setup again to let Broadway see when an agent has finished"
+        }
         return good.isEmpty ? "On your PATH. Try broadway status." : "On your PATH, set up for \(good.joined(separator: ", ")). Try broadway doctor."
     }
 

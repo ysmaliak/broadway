@@ -305,6 +305,9 @@ final class AgentTests {
         #expect(AgentCommand.summary(good) == "On your PATH, set up for fish, Claude Code. Try broadway doctor.")
         #expect(AgentCommand.summary(stale) == "On your PATH, but the skill isn't there. Run broadway doctor.")
         #expect(!AgentCommand.isSetUp([["name": "command", "ok": false]]))
+        let hookless: [[String: Any]] = [["name": "command", "ok": true], ["name": "claude", "ok": true, "detail": "skill"],
+                                         ["name": "claude hooks", "ok": false, "detail": "no hooks"], ["name": "running", "ok": false]]
+        #expect(AgentCommand.summary(hookless) == "Run broadway setup again to let Broadway see when an agent has finished")
         #expect(AgentCommand.summary([["name": "command", "ok": false]]).hasPrefix("Puts broadway on your PATH"))
     }
 

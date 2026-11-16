@@ -1260,6 +1260,10 @@ def ai_commands(base):
     connected = good("agents connect", "agents", "connect")["connected"]
     listed = good("agents list", "agents", "list")["agents"]
     check("the named agent is connected", connected["name"] == AGENT_NAME and any(row["id"] == connected["id"] and row["state"] == "connected" for row in listed), listed)
+    idle = good("agents idle", "agents", "idle", "--summary", "Asked about the dates")["agent"]
+    check("idle marks the turn finished and keeps the session", idle["id"] == connected["id"] and idle["state"] == "finished" and idle["status"] == "Asked about the dates", idle)
+    again = good("agents list after idle", "agents", "list")["agents"]
+    check("the next command makes it connected again", any(row["id"] == connected["id"] and row["state"] == "connected" for row in again), again)
     ended = good("agents disconnect", "agents", "disconnect", "--summary", "Finished CLI checks")["ended"]
     check("disconnect ends this session", ended["id"] == connected["id"] and ended["state"] == "done" and ended["summary"] == "Finished CLI checks", ended)
     reconnected = good("agents reconnect", "agents", "connect")["connected"]

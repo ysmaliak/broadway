@@ -202,4 +202,28 @@ final class AgentFinishTests {
         #expect(quiet == .ended)
         #expect(AgentCharacter.Mood.idle.title == "Thinking")
     }
+
+    @Test func onlyTheSessionsOwnKindOfProgramIsWatchedAndNeverRepointed() {
+        let link = links.join(.named("session:claude:fifteen"), name: "Claude Code", at: start)
+        links.watch(link.id, AgentProcessID(pid: 101, started: 1))
+
+        links.watch(link.id, AgentProcessID(pid: 303, started: 1))
+        let gone = links.sweep(at: start.addingTimeInterval(1))
+
+        #expect(links.link(link.id)?.process == AgentProcessID(pid: 101, started: 1))
+        #expect(gone.isEmpty)
+        #expect(AgentLinks.watchable("claude", session: "session:claude:x"))
+        #expect(!AgentLinks.watchable("codex", session: "session:claude:x"))
+        #expect(!AgentLinks.watchable("sandbox-exec", session: "session:codex:x"))
+        #expect(!AgentLinks.watchable("zsh", session: nil))
+        #expect(AgentLinks.watchable("codex", session: nil))
+    }
+
+    @Test func aCodexDesktopThreadWithNothingGoingOnReadsIdle() {
+        let state = AgentLinkState.codex(CodexThread(id: "invented-thread"), ended: nil)
+
+        #expect(state == .quiet(nil))
+        #expect(state.line == "Idle")
+        #expect(AgentsLayout.tally([state]) == "1 idle")
+    }
 }

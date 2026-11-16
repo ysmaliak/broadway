@@ -93,6 +93,27 @@ enum HookSetup {
         return String(decoding: bytes, as: UTF8.self)
     }
 
+    static func refreshing(_ agent: String, in text: String) -> Outcome {
+        guard JSONText.valid(text), JSONText.shape(Array(text.utf8)) else { return .foreign(why(text)) }
+        var bytes = Array(text.utf8)
+        for event in events {
+            guard let next = JSONText.replace(containing: Array(marker(agent).utf8), with: group(agent), event: event, in: bytes) else { return .foreign(why(text)) }
+            bytes = next
+        }
+        let made = String(decoding: bytes, as: UTF8.self)
+        return made == text ? .same : .changed(made)
+    }
+
+    static func present(_ agent: String, in text: String) -> Bool {
+        guard let object = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any],
+              let hooks = object["hooks"] as? [String: Any] else { return false }
+        return events.contains { event in
+            (hooks[event] as? [[String: Any]] ?? []).contains { entry in
+                (entry["hooks"] as? [[String: Any]] ?? []).contains { ($0["command"] as? String)?.contains(marker(agent)) == true }
+            }
+        }
+    }
+
     static func installed(_ agent: String, in text: String) -> Bool {
         guard let object = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any],
               let hooks = object["hooks"] as? [String: Any] else { return false }
@@ -264,6 +285,27 @@ enum JSONText {
         let start = list.value.lowerBound
         guard bytes[start] == UInt8(ascii: "["), let items = elements(bytes, at: start) else { return nil }
         return put(group.rendered(unit: unit, level: 3), into: bytes, open: start, close: items.close, last: items.elements.last, unit: unit, level: 3)
+    }
+
+    static func replace(containing needle: [UInt8], with group: Value, event: String, in bytes: [UInt8]) -> [UInt8]? {
+        guard let found = hooks(bytes) else { return bytes }
+        guard let member = found.inner.first(where: { $0.key == event }) else { return bytes }
+        let start = member.value.lowerBound
+        guard bytes[start] == UInt8(ascii: "[") else { return bytes }
+        guard let items = elements(bytes, at: start), let top = root(bytes) else { return nil }
+        let text = Array(group.rendered(unit: unit(bytes, top: top), level: 3).utf8)
+        let wanted = parsed(text[...])
+        var copy = bytes
+        for range in items.elements.reversed() where contains(bytes[range], needle) {
+            guard let here = parsed(bytes[range]), let list = here["hooks"] as? [Any], list.count == 1 else { continue }
+            if let wanted, here == wanted { continue }
+            copy.replaceSubrange(range, with: text)
+        }
+        return copy
+    }
+
+    static func parsed(_ bytes: ArraySlice<UInt8>) -> NSDictionary? {
+        (try? JSONSerialization.jsonObject(with: Data(bytes))) as? NSDictionary
     }
 
     static func cut(_ bytes: [UInt8], _ ranges: [Range<Int>], at index: Int, open: Int) -> [UInt8] {

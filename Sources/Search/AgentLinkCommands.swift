@@ -13,12 +13,15 @@ extension AgentSocket {
             let guessed = named ?? AgentLinks.displayName(executable: said["executable"] as? String ?? session.components(separatedBy: ":").dropFirst().first ?? "")
             found = links.liveLink(for: .named(session))
             if found == nil, create { found = links.join(.named(session), name: guessed) }
-            if found == nil, !create, let process { found = links.liveLink(for: .process(pid: process.pid, started: process.started)) }
-            if let found, let process, found.key == .named(session), AgentLinks.agentProgram(said["executable"] as? String) {
+            if found == nil, !create, let process {
+                found = links.liveLink(for: .process(pid: process.pid, started: process.started)) ?? links.live.last { $0.process == process }
+            }
+            if let found, let process, found.key == .named(session), AgentLinks.watchable(said["executable"] as? String, session: session) {
                 links.watch(found.id, process)
             }
         } else if let connection {
             found = create ? links.join(.connection(connection), name: named) : links.liveLink(for: .connection(connection))
+            if let found, let process, AgentLinks.watchable(said["executable"] as? String, session: nil) { links.watch(found.id, process) }
         } else if let id = (said["id"] as? String)?.lowercased(), !id.isEmpty {
             found = links.liveLink(for: .named(id)) ?? links.live.first { $0.id.uuidString.lowercased().hasPrefix(id) }
             if found == nil, create { found = links.join(.named(id), name: named ?? id) }
@@ -51,6 +54,12 @@ extension AgentLinks {
     nonisolated static func agentProgram(_ name: String?) -> Bool {
         let base = ((name ?? "") as NSString).lastPathComponent.lowercased()
         return ["claude", "codex", "cursor", "windsurf"].contains { base.hasPrefix($0) }
+    }
+
+    nonisolated static func watchable(_ name: String?, session: String?) -> Bool {
+        guard agentProgram(name) else { return false }
+        guard let kind = session?.components(separatedBy: ":").dropFirst().first, !kind.isEmpty else { return true }
+        return ((name ?? "") as NSString).lastPathComponent.lowercased().hasPrefix(kind)
     }
 
     static func open(_ link: AgentLink) {

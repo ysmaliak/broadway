@@ -242,7 +242,7 @@ Inside a sandbox that denies local sockets, such as Codex's, every command fails
 
 ## The guide and the skill
 
-`broadway guide` is the agents' guide, under 4 KB, and always matches the installed Broadway. `broadway setup` writes a short skill for Claude Code and Codex that says to run `broadway guide` first. The skill carries `managed-by` and `broadway-guide:` marks. On every launch Broadway runs `broadway setup claude codex --refresh` in the background, which rewrites a skill it wrote when its `broadway-guide:` is missing or older, and never creates one or touches a file it didn't write. Where the skill is broadway's, it also adds the hooks when they are missing. `broadway doctor` warns about a skill that is out of date.
+`broadway guide` is the agents' guide, under 4 KB, and always matches the installed Broadway. `broadway setup` writes a short skill for Claude Code and Codex that says to run `broadway guide` first. The skill carries `managed-by` and `broadway-guide:` marks. On every launch Broadway runs `broadway setup claude codex --refresh` in the background, which rewrites a skill it wrote when its `broadway-guide:` is missing or older, and never creates one or touches a file it didn't write. It never adds a hook either. Where Broadway's own hook entries are already there, it brings them up to date, and it never puts back an entry the person took out. Only `broadway setup claude` or `broadway setup codex` adds the hooks. `broadway doctor` warns about a skill that is out of date, and about missing hooks where the skill is broadway's. Settings › Agents then says that running `broadway setup` again lets Broadway see when an agent has finished.
 
 ## Commands from 0.3
 

@@ -176,16 +176,80 @@ final class HookSetupTests {
         #expect(try read(real) == plain)
     }
 
-    @Test func refreshAddsHooksOnlyWhereTheSkillIsBroadways() throws {
+    @Test func refreshNeverAddsHooks() throws {
         try put(Setup.skill, paths.claudeSkill)
+        try put(Setup.skill, paths.codexSkill)
+        try put(foreign, paths.claudeSettings)
 
         let steps = Setup.refresh(["claude", "codex"], paths: paths)
 
-        let settings = try read(paths.claudeSettings)
-        #expect(HookSetup.installed("claude", in: settings))
+        #expect(try read(paths.claudeSettings) == foreign)
         #expect(!FileManager.default.fileExists(atPath: paths.codexHooks))
-        #expect(!FileManager.default.fileExists(atPath: paths.codexSkill))
-        #expect(steps.contains { $0.path == paths.claudeSettings && $0.done })
+        #expect(steps.filter { $0.path == paths.claudeSettings || $0.path == paths.codexHooks }.allSatisfy { !$0.done })
+        #expect(steps.first { $0.path == paths.claudeSettings }?.note == "no hooks of broadway's here, and broadway setup claude adds them")
+    }
+
+    @Test func refreshBringsAnExistingEntryUpToDate() throws {
+        try put(Setup.skill, paths.claudeSkill)
+        let old = """
+        {
+          "theme": "dark",
+          "hooks": {
+            "Stop": [
+              {"hooks": [{"type": "command", "command": "say done"}]},
+              {"hooks": [{"type": "command", "command": "~/.local/bin/broadway agents idle --hook claude", "timeout": 30}]}
+            ]
+          }
+        }
+        """
+        try put(old, paths.claudeSettings)
+
+        let steps = Setup.refresh(["claude"], paths: paths)
+        let now = try read(paths.claudeSettings)
+        let again = Setup.refresh(["claude"], paths: paths)
+
+        #expect(steps.first { $0.path == paths.claudeSettings }?.note == "brought broadway's hooks up to date")
+        #expect(now.contains(HookSetup.command("claude")))
+        #expect(!now.contains("\"timeout\": 30"))
+        #expect(now.contains("{\"hooks\": [{\"type\": \"command\", \"command\": \"say done\"}]},"))
+        #expect(now.hasPrefix("{\n  \"theme\": \"dark\","))
+        #expect(!now.contains("SessionEnd"))
+        #expect(try read(paths.claudeSettings) == now)
+        #expect(again.first { $0.path == paths.claudeSettings }?.note == "hooks up to date")
+    }
+
+    @Test func aDeletedEntryStaysDeleted() throws {
+        try put(Setup.skill, paths.claudeSkill)
+        try put(Setup.skill, paths.codexSkill)
+        let onlyStop = """
+        {
+          "hooks": {
+            "Stop": [
+              {"hooks": [{"type": "command", "command": "\(HookSetup.command("claude"))", "timeout": 5}]}
+            ]
+          }
+        }
+        """
+        let none = "{\n  \"hooks\": {\n    \"Stop\": [{\"hooks\": [{\"type\": \"command\", \"command\": \"say done\"}]}]\n  }\n}\n"
+        try put(onlyStop, paths.claudeSettings)
+        try put(none, paths.codexHooks)
+
+        _ = Setup.refresh(["claude", "codex"], paths: paths)
+
+        #expect(try read(paths.claudeSettings) == onlyStop)
+        #expect(try read(paths.codexHooks) == none)
+    }
+
+    @Test func refreshNeverTouchesAnEntryThatAlsoHoldsTheirOwnCommand() throws {
+        try put(Setup.skill, paths.claudeSkill)
+        let shared = """
+        {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "say done"}, {"type": "command", "command": "broadway agents idle --hook claude"}]}]}}
+        """
+        try put(shared, paths.claudeSettings)
+
+        _ = Setup.refresh(["claude"], paths: paths)
+
+        #expect(try read(paths.claudeSettings) == shared)
     }
 
     @Test func refreshLeavesAStrangersSkillsHome() throws {
@@ -197,10 +261,14 @@ final class HookSetupTests {
     }
 
     @Test func doctorSaysWhenTheHooksAreMissing() throws {
+        let unused = Setup.checks(paths: paths, binary: binary, environment: [:], status: nil, running: false).first { $0.name == "claude hooks" }
+        try put(Setup.skill, paths.claudeSkill)
         let before = Setup.checks(paths: paths, binary: binary, environment: [:], status: nil, running: false).first { $0.name == "claude hooks" }
         _ = Setup.install(["claude"], paths: paths, binary: binary)
         let after = Setup.checks(paths: paths, binary: binary, environment: [:], status: nil, running: false).first { $0.name == "claude hooks" }
 
+        #expect(unused?.ok == true)
+        #expect(unused?.detail == "not used here")
         #expect(before?.ok == false)
         #expect(before?.fix == "Run broadway setup claude")
         #expect(after?.ok == true)

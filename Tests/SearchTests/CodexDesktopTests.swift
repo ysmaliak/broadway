@@ -132,7 +132,7 @@ final class CodexDesktopTests {
 
         let found = try #require(link(working))
         #expect(found.codex?.working == false)
-        #expect(AgentLinkState.codex(try #require(found.codex), ended: nil) == .idle)
+        #expect(AgentLinkState.codex(try #require(found.codex), ended: nil) == .quiet(nil))
     }
 
     @Test func aWriteToTheRolloutUpdatesTheSameCard() throws {

@@ -285,13 +285,28 @@ enum Setup {
                 continue
             }
             steps.append(older(guide(in: here)) ? write(skill, at: file, part: part) : Step(part: part, done: false, path: file, note: "up to date"))
-            if let hooks = text(paths.hooks(part)), HookSetup.installed(part, in: hooks) {
-                steps.append(Step(part: part, done: false, path: paths.hooks(part), note: "hooks already there"))
-            } else {
-                steps.append(addHooks(part, paths: paths))
-            }
+            steps.append(updateHooks(part, paths: paths))
         }
         return steps
+    }
+
+    static func updateHooks(_ part: String, paths: Paths) -> Step {
+        let file = paths.hooks(part)
+        let missing = Step(part: part, done: false, path: file, note: "no hooks of broadway's here, and broadway setup \(part) adds them")
+        guard exists(file), let here = text(file) else { return missing }
+        switch HookSetup.refreshing(part, in: here) {
+        case .same:
+            return HookSetup.present(part, in: here) ? Step(part: part, done: false, path: file, note: "hooks up to date") : missing
+        case .foreign(let why):
+            return Step(part: part, done: false, path: file, note: why)
+        case .changed(let made):
+            do {
+                try through(made, at: file)
+                return Step(part: part, done: true, path: file, note: "brought broadway's hooks up to date")
+            } catch {
+                return Step(part: part, done: false, path: file, note: error.localizedDescription)
+            }
+        }
     }
 
     private static func take(_ path: String, part: String) -> Step {
@@ -402,7 +417,7 @@ enum Setup {
         skill("codex", paths.codexSkill, wantedHere: exists(paths.codex))
         for part in ["claude", "codex"] {
             let name = part + " hooks"
-            guard exists(part == "claude" ? paths.claude : paths.codex) else {
+            guard text(part == "claude" ? paths.claudeSkill : paths.codexSkill)?.contains("managed-by: \(mark)") == true else {
                 found.append(Check(name: name, ok: true, required: false, detail: "not used here", fix: nil))
                 continue
             }
@@ -439,7 +454,7 @@ extension Builtins {
 
     static let setupCommands: [Builtin] = [
         Builtin(name: "setup", usage: "broadway setup [command] [completions] [claude] [codex] [--refresh]", summary: "Put broadway on your PATH, with completions and agent skills", group: "Setup",
-                details: "Links ~/.local/bin/broadway to this app's copy, writes fish, bash and zsh completions, and installs a skill for Claude Code and Codex where they are present. The skill is short and sends agents to broadway guide. It also adds a Stop and a SessionEnd hook, in ~/.claude/settings.json and ~/.codex/hooks.json, that run broadway agents idle --hook so the agent's card reads finished when its turn ends. It adds only its own entries and keeps the rest of each file as it was. It leaves files that aren't its own alone. broadway remove undoes it.\n--refresh  only rewrite skills broadway wrote that are older than this Broadway, and add the hooks where the skill is broadway's. It creates no skill. Broadway runs it at each launch.",
+                details: "Links ~/.local/bin/broadway to this app's copy, writes fish, bash and zsh completions, and installs a skill for Claude Code and Codex where they are present. The skill is short and sends agents to broadway guide. It also adds a Stop and a SessionEnd hook, in ~/.claude/settings.json and ~/.codex/hooks.json, that run broadway agents idle --hook so the agent's card reads finished when its turn ends. It adds only its own entries and keeps the rest of each file as it was. It leaves files that aren't its own alone. broadway remove undoes it.\n--refresh  only rewrite skills broadway wrote that are older than this Broadway, and bring broadway's own hook entries up to date where they are already there. It creates no skill and adds no hook. Broadway runs it at each launch.",
                 examples: ["broadway setup", "broadway setup completions", "broadway setup claude codex --refresh"]) { context, words in
             let refreshing = words.contains("--refresh")
             let parts = try wanted(words.filter { $0 != "--refresh" }, verb: "setup")

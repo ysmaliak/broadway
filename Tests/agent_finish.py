@@ -41,6 +41,7 @@ OUT = ROOT / ".context/agent-finish"
 CLAUDE = "0a1b2c3d-0000-4000-8000-00000000c1a0"
 CODEX = "0a1b2c3d-0000-4000-8000-00000000c0de"
 HELPER = "0a1b2c3d-0000-4000-8000-0000000000e1"
+MCP_CLAUDE = "0a1b2c3d-0000-4000-8000-0000000000bb"
 
 failures = []
 passed = [0]
@@ -272,6 +273,48 @@ def helper_session(base, scratch):
     check("with the ended face, and its tab stays", gone and gone["face"] == "ended" and len(gone["tabs"]) == 1, gone)
 
 
+def mcp_lines(url):
+    rows = [{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18", "clientInfo": {"name": "codex-mcp-client"}}},
+            {"jsonrpc": "2.0", "method": "notifications/initialized"},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "open", "arguments": {"url": url}}}]
+    return "\\n".join(json.dumps(row).replace("'", "") for row in rows) + "\\n"
+
+
+def mcp_sessions(base, scratch):
+    env = clean_env({"CLAUDE_CODE_SESSION_ID": MCP_CLAUDE})
+    feed = subprocess.Popen(["/bin/sh", "-c", f"(printf '{mcp_lines(base + 'mcp-one')}'; sleep 30) | {BROADWAY} --world {WORLD} mcp"],
+                            stdout=subprocess.DEVNULL, env=env, start_new_session=True)
+    found = wait_for(lambda: next((row for row in state()["area"] if any(t for t in row["tabs"]) and row["name"] == "Codex"
+                                   and link_row(row["id"]) and row["id"] not in seen), None), 15)
+    check("an MCP connection with Claude Code's session id gets a card", found is not None, state()["area"])
+    if found:
+        seen.add(found["id"])
+        hook("claude", "Stop", MCP_CLAUDE, background_tasks=[], session_crons=[])
+        done = wait_for(lambda: (lambda c: c if c and c["status"].startswith("Finished") else None)(card(found["id"])), 5)
+        check("its Stop hook finds the MCP session and it reads finished", done is not None, card(found["id"]))
+    os.killpg(feed.pid, signal.SIGKILL)
+    feed.wait()
+
+    fake = scratch / "codex"
+    built = subprocess.run(["cc", "-O", "-o", str(fake), str(ROOT / "Tests/agent_host.c")], capture_output=True, text=True)
+    check("the stand-in Codex compiles", built.returncode == 0, built.stderr)
+    event = json.dumps({"session_id": "0a1b2c3d-0000-4000-8000-0000000000aa", "hook_event_name": "Stop"})
+    line = (f"(printf '{mcp_lines(base + 'mcp-two')}'; sleep 30) | {BROADWAY} --world {WORLD} mcp & "
+            f"sleep 6; printf '%s' '{event}' | {BROADWAY} --world {WORLD} agents idle --hook codex; sleep 30")
+    host = subprocess.Popen([str(fake), "/bin/sh", "-c", line], stdout=subprocess.DEVNULL, env=clean_env({}), start_new_session=True)
+    other = wait_for(lambda: next((row for row in state()["area"] if row["name"] == "Codex" and row["id"] not in seen), None), 15)
+    check("an MCP connection with no session id gets a card", other is not None, state()["area"])
+    if other:
+        seen.add(other["id"])
+        done = wait_for(lambda: (lambda c: c if c and c["status"].startswith("Finished") else None)(card(other["id"])), 15)
+        check("the Codex Stop hook finds it by the agent's process and it reads finished", done is not None, card(other["id"]))
+    os.killpg(host.pid, signal.SIGKILL)
+    host.wait()
+
+
+seen = set()
+
+
 def no_wake():
     nowhere = f"agentfinish-none-{secrets.token_hex(3)}"
     result, took = hook("claude", "Stop", CLAUDE, world=nowhere)
@@ -377,6 +420,8 @@ def main():
         check("a command from the quiet agent wakes it", card(codex)["status"] == "Thinking" and listed.get("ok"), card(codex))
 
         helper_session(base, scratch)
+        seen.update(row["id"] for row in state()["area"])
+        mcp_sessions(base, scratch)
         no_wake()
 
         result, _ = hook("claude", "SessionEnd", CLAUDE, reason="prompt_input_exit")

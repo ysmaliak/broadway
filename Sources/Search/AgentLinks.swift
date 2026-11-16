@@ -153,7 +153,7 @@ final class AgentLinks {
     }
 
     func watch(_ id: UUID, _ process: AgentProcessID) {
-        guard let found = link(id), found.live, found.process != process else { return }
+        guard let found = link(id), found.live, found.process == nil else { return }
         update(id) { $0.process = process }
     }
 
@@ -533,7 +533,7 @@ enum AgentLinkState: Equatable {
         }
         if thread.working { return .working(thread.doing ?? "Working") }
         if thread.finished { return .done(thread.said) }
-        return .idle
+        return .quiet(nil)
     }
 
     static func phrase(_ acting: String, host: String?) -> String {
