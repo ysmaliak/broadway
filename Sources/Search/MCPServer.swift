@@ -6,9 +6,20 @@ struct ToolOutcome {
     var failed = false
     var data: [String: Any]?
     var plain: String?
+    var code: String?
+    var hint: String?
+    var retrySafe: Bool?
 
     static func text(_ text: String) -> ToolOutcome { ToolOutcome(text: text) }
     static func failure(_ text: String) -> ToolOutcome { ToolOutcome(text: text, failed: true) }
+
+    static func failure(_ text: String, code: String, hint: String? = nil, retrySafe: Bool? = nil, data: [String: Any]? = nil) -> ToolOutcome {
+        ToolOutcome(text: text, failed: true, data: data, code: code, hint: hint, retrySafe: retrySafe)
+    }
+
+    static func failure(_ text: String, code: ToolCode, hint: String? = nil, retrySafe: Bool? = nil, data: [String: Any]? = nil) -> ToolOutcome {
+        failure(text, code: code.rawValue, hint: hint, retrySafe: retrySafe, data: data)
+    }
 
     static func json(_ object: Any) -> ToolOutcome {
         guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes]) else {

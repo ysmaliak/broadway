@@ -115,6 +115,101 @@ enum AgentCatalog {
     }
 }
 
+enum ToolCode: String, CaseIterable {
+    case usage
+    case unknownCommand = "unknown_command"
+    case unknownTool = "unknown_tool"
+    case agentsOff = "agents_off"
+    case notRunning = "not_running"
+    case notAnswering = "not_answering"
+    case deadline
+    case sandboxed
+    case noTab = "no_tab"
+    case ambiguousTab = "ambiguous_tab"
+    case notYours = "not_yours"
+    case notAPage = "not_a_page"
+    case personPage = "person_page"
+    case staleRef = "stale_ref"
+    case refChanged = "ref_changed"
+    case notFound = "not_found"
+    case ambiguous
+    case notActionable = "not_actionable"
+    case dialogOpen = "dialog_open"
+    case driving
+    case handedBack = "handed_back"
+    case needsYou = "needs_you"
+    case saidNo = "said_no"
+    case neverHere = "never_here"
+    case personOnly = "person_only"
+    case secretField = "secret_field"
+    case refused
+    case timeout
+    case noAnswer = "no_answer"
+    case failed
+    case noWindow = "no_window"
+    case needsTask = "needs_task"
+    case needsPerson = "needs_person"
+    case tasksRunning = "tasks_running"
+    case noSession = "no_session"
+    case ambiguousSession = "ambiguous_session"
+
+    var mayHaveLanded: Bool {
+        switch self {
+        case .noAnswer, .failed, .notAnswering, .deadline: true
+        default: false
+        }
+    }
+
+    var exit: Int32 {
+        switch self {
+        case .usage, .unknownCommand, .unknownTool: 2
+        case .needsYou: 3
+        case .notAnswering, .deadline: 4
+        default: 1
+        }
+    }
+
+    var hint: String {
+        switch self {
+        case .usage: "Run broadway help COMMAND for its options"
+        case .unknownCommand, .unknownTool: "Run broadway help for the list"
+        case .agentsOff: "The person can turn agents on in Settings › Agents"
+        case .notRunning: "Open Broadway, then run this again"
+        case .notAnswering: "It may or may not have happened, so look before you repeat it"
+        case .deadline: "It may or may not have happened, so look before you repeat it. Raise --timeout for a longer wait."
+        case .sandboxed: "Run this command outside the sandbox"
+        case .noTab: "Open your own with broadway open URL, or see the list with broadway tabs"
+        case .ambiguousTab: "Give more of the tab's id. broadway tabs lists them."
+        case .notYours: "Run broadway tabs for your session's tabs"
+        case .notAPage: "Work in a tab that shows a web page: broadway open URL"
+        case .personPage: "broadway:// pages are the person's. Work in your own tab."
+        case .staleRef: "Look again with broadway snapshot, or broadway find WORDS"
+        case .refChanged: "Run the same command again to act on the element as it is now"
+        case .notFound: "Look for it with broadway find WORDS, or broadway snapshot --find WORDS"
+        case .ambiguous: "Pick one with --nth N, or narrow it with --in @ref"
+        case .notActionable: "Clear what is in the way, or look at the element with broadway snapshot"
+        case .dialogOpen: "Answer it first: broadway dialog accept, or broadway dialog dismiss"
+        case .driving: "The person is using this tab. Work elsewhere, or broadway wait --seconds 60 and look again."
+        case .handedBack: "Look again with broadway snapshot before you act"
+        case .needsYou: "Tell the person what you asked, then run the same command again"
+        case .saidNo: "Stop this step and don't try another way"
+        case .neverHere: "The person never lets agents use this site. Leave it."
+        case .personOnly: "Only the person can do this. Tell them where, in Broadway."
+        case .secretField: "Password, card and code fields are the person's. Ask them."
+        case .refused: "Broadway won't do this. Don't try another way."
+        case .timeout: "Nothing was done. broadway snapshot --since shows what changed while waiting."
+        case .noAnswer: "The page may be busy. Look with broadway snapshot before you try again."
+        case .failed: "It may or may not have happened, so look before you repeat it"
+        case .noWindow: "Ask the person to open a window in Broadway"
+        case .needsTask: "Start a task with broadway \"what to do\" so the person can answer in Broadway"
+        case .needsPerson: "Run it where someone can answer, or without --no-person"
+        case .tasksRunning: "Stop them with broadway session stop ID, or run broadway quit --force"
+        case .noSession: "Run broadway session list"
+        case .ambiguousSession: "Run broadway session list and give more of the id"
+        }
+    }
+}
+
 enum ToolFailure {
     private static let table: [(said: String, code: String)] = [
         ("older snapshot", "stale_ref"), ("left the page", "stale_ref"), ("changed since the snapshot", "stale_ref"),
@@ -129,18 +224,30 @@ enum ToolFailure {
         ("said not now", "refused"), ("said never here", "refused"), ("never lets agents", "refused"),
     ]
 
-    private static let neverLanded: Set<String> = ["stale_ref", "no_tab", "not_a_page", "timeout", "not_actionable", "refused", "bad_input", "agents_off", "ambiguous_tab", "needs_task"]
-
     static func code(_ text: String) -> String {
         table.first { text.contains($0.said) }?.code ?? "failed"
     }
 
     static func retrySafe(_ code: String, tool: String) -> Bool {
-        neverLanded.contains(code) || AgentCatalog.reads.contains(tool)
+        if AgentCatalog.reads.contains(tool) { return true }
+        guard let known = ToolCode(rawValue: code) else { return code == "bad_input" }
+        return !known.mayHaveLanded
     }
 
-    static func error(_ code: String, _ message: String, tool: String = "") -> [String: Any] {
-        ["ok": false, "error": ["code": code, "message": message, "retry_safe": retrySafe(code, tool: tool)] as [String: Any]]
+    static func hint(_ code: String) -> String? {
+        ToolCode(rawValue: code)?.hint
+    }
+
+    static func error(_ code: String, _ message: String, tool: String = "", hint: String? = nil, retrySafe: Bool? = nil, data: [String: Any]? = nil) -> [String: Any] {
+        var error: [String: Any] = ["code": code, "message": message, "retry_safe": retrySafe ?? Self.retrySafe(code, tool: tool)]
+        if let said = hint ?? Self.hint(code), !said.isEmpty { error["hint"] = said }
+        var found: [String: Any] = ["ok": false, "error": error]
+        if let data { found["data"] = data }
+        return found
+    }
+
+    static func error(_ code: ToolCode, _ message: String, tool: String = "", hint: String? = nil, retrySafe: Bool? = nil, data: [String: Any]? = nil) -> [String: Any] {
+        error(code.rawValue, message, tool: tool, hint: hint, retrySafe: retrySafe, data: data)
     }
 }
 
@@ -179,7 +286,8 @@ enum ToolReply {
     static func wire(_ outcome: ToolOutcome, tool: String, tab: String?) -> [String: Any] {
         guard !outcome.failed else {
             let text = outcome.text ?? "That didn't work"
-            return ToolFailure.error(ToolFailure.code(text), text, tool: tool)
+            return ToolFailure.error(outcome.code ?? ToolFailure.code(text), text, tool: tool, hint: outcome.hint,
+                                     retrySafe: outcome.retrySafe, data: outcome.data)
         }
         var found = data(outcome)
         if let tab, found["tab"] == nil { found["tab"] = tab }
