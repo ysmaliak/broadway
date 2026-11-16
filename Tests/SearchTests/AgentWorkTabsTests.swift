@@ -166,6 +166,9 @@ final class AgentWorkTabsTests {
     }
 
     @Test func aSessionWithoutATabCannotActButReadsThePersonsTabAndSaysSo() async throws {
+        let before = Front.shared.browser
+        Front.shared.set(browser)
+        defer { Front.shared.set(before) }
         let link = session()
         browser.arrive(server.url("/help"))
         let person = try #require(browser.active)
