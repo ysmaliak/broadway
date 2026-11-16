@@ -42,6 +42,64 @@ struct GlassKeysTests {
         #expect(label?.frame.midX == 40)
     }
 
+    @Test func theJoinKeyCarriesItsOwnGreenInsideItsGlassSoAWindowThatIsNeverKeyKeepsIt() {
+        let key = MeetingJoinButton(symbol: "video.fill", drawn: false)
+        key.frame = NSRect(x: 0, y: 0, width: 120, height: 28)
+        let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 140, height: 40), styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView?.addSubview(key)
+        defer { window.contentView = nil }
+        key.layoutSubtreeIfNeeded()
+
+        let glass = key.faceGlass
+        let holder = glass?.contentView
+        let green = key.face.fill?.usingColorSpace(.sRGB)
+
+        #expect(!window.canBecomeKey && !window.isKeyWindow)
+        #expect(glass?.effectIsInteractive == true)
+        #expect(glass?.tintColor == nil)
+        #expect(key.face.superview === holder)
+        #expect(holder?.subviews.first === key.face)
+        #expect(key.content?.superview === holder)
+        #expect(key.face.frame == glass?.bounds)
+        #expect((green?.alphaComponent ?? 0) == 1)
+        #expect((green.map { $0.greenComponent - max($0.redComponent, $0.blueComponent) } ?? 0) > 0.3)
+    }
+
+    @Test func theJoinGreenLightsOnHoverDarkensOnPressAndKeepsItsWhiteWordsReadableWithMoreContrast() {
+        func light(_ color: NSColor) -> CGFloat {
+            let c = color.usingColorSpace(.sRGB) ?? color
+            func part(_ v: CGFloat) -> CGFloat { v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
+            return 0.2126 * part(c.redComponent) + 0.7152 * part(c.greenComponent) + 0.0722 * part(c.blueComponent)
+        }
+        func contrast(_ color: NSColor) -> CGFloat { 1.05 / (light(color) + 0.05) }
+        for dark in [false, true] {
+            let rest = MeetingJoinButton.fill(dark: dark)
+            #expect(light(MeetingJoinButton.fill(dark: dark, lit: true)) > light(rest))
+            #expect(light(MeetingJoinButton.fill(dark: dark, pressed: true)) < light(rest))
+            #expect(contrast(MeetingJoinButton.fill(dark: dark, raised: true)) >= 4.5)
+            #expect(contrast(MeetingJoinButton.fill(dark: dark, raised: true, lit: true)) >= 4.5)
+        }
+        Store.settings.set(true, forKey: "contrast.testRaised")
+        defer { Store.settings.removeObject(forKey: "contrast.testRaised") }
+
+        let key = MeetingJoinButton(symbol: "video.fill", drawn: false)
+
+        #expect(key.face.fill == MeetingJoinButton.fill(dark: key.kitDark, raised: true))
+    }
+
+    @Test func noGlassKeyCarriesItsColourOnlyInTheGlassTint() {
+        let gallery = GlassKeyGallery(dark: false)
+        defer { gallery.close() }
+
+        for key in gallery.keys {
+            guard let tint = (key.glass() as? NSGlassEffectView)?.tintColor?.usingColorSpace(.sRGB) else { continue }
+            let top = max(tint.redComponent, tint.greenComponent, tint.blueComponent)
+            let spread = top - min(tint.redComponent, tint.greenComponent, tint.blueComponent)
+            #expect(tint.alphaComponent < 0.2 || top == 0 || spread / top < 0.3, "\(key.name) carries its colour in the glass tint, which a window that is not key drops: \(tint)")
+        }
+    }
+
     @Test func aGlassKeyIsStillOneVoiceOverButtonWithItsNameAndPress() {
         var pressed = 0
         let key = KitGlassKey(title: "Allow Once", kind: .primary) { pressed += 1 }

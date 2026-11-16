@@ -89,9 +89,12 @@ extension Bench {
                 answer(state())
             }
         case "shot-start":
-            answer(alerts.shot(dark: request["dark"] as? Bool ?? false) ?? ["error": "no alert to capture"])
+            answer(alerts.shot(dark: request["dark"] as? Bool ?? false, front: request["front"] as? Bool ?? false,
+                               controls: request["controls"] as? Bool ?? false, key: request["key"] as? Bool ?? false)
+                   ?? ["error": "no alert to capture"])
         case "shot-take":
-            alerts.takeShot { png in answer(["png": png?.base64EncodedString() ?? ""]) }
+            let held = alerts.shotState
+            alerts.takeShot { png in answer(held.merging(["png": png?.base64EncodedString() ?? ""]) { $1 }) }
         case "render":
             answer(["png": alerts.render(dark: request["dark"] as? Bool ?? false)?.base64EncodedString() ?? ""])
         case "shot-end":

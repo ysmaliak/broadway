@@ -388,7 +388,10 @@ final class MeetingAlerts {
     var panelFrame: NSRect { panel.frame }
     var panelShown: Bool { panel.shown }
 
-    func shot(dark: Bool) -> [String: Any]? { panel.beginShot(dark: dark) }
+    func shot(dark: Bool, front: Bool = false, controls: Bool = false, key: Bool = false) -> [String: Any]? {
+        panel.beginShot(dark: dark, front: front, controls: controls, key: key)
+    }
+    var shotState: [String: Any] { panel.shotState }
     func endShot() { panel.endShot() }
     func takeShot(then: @escaping (Data?) -> Void) { panel.take(then: then) }
     func render(dark: Bool) -> Data? { panel.render(dark: dark) }
@@ -406,8 +409,9 @@ final class MeetingAlertPanel {
     private unowned let alerts: MeetingAlerts
     private var panel: NSPanel?
     private var stack: MeetingAlertStackView?
-    private var shotWindow: NSWindow?
+    private var shotWindow: NSPanel?
     private var parked: [(NSWindow, NSRect)] = []
+    private var given: NSRunningApplication?
     private var pagesShown = false
 
     init(alerts: MeetingAlerts) {
@@ -461,11 +465,15 @@ final class MeetingAlertPanel {
         return NSPoint(x: visible.maxX - size.width, y: visible.maxY - size.height)
     }
 
-    func beginShot(dark: Bool) -> [String: Any]? {
+    func beginShot(dark: Bool, front: Bool = false, controls: Bool = false, key: Bool = false) -> [String: Any]? {
         guard Store.testing, !alerts.due.isEmpty else { return nil }
         endShot()
-        let view = MeetingAlertShotView(due: alerts.due, alerts: alerts, dark: dark, drawn: false)
-        let window = NSWindow(contentRect: view.frame, styleMask: .borderless, backing: .buffered, defer: false)
+        let view = MeetingAlertShotView(due: alerts.due, alerts: alerts, dark: dark, drawn: false, controls: controls)
+        let style: NSWindow.StyleMask = [.borderless, .nonactivatingPanel]
+        let window: NSPanel = key ? Keyed(contentRect: view.frame, styleMask: style, backing: .buffered, defer: false)
+            : Lifted(contentRect: view.frame, styleMask: style, backing: .buffered, defer: false)
+        window.hidesOnDeactivate = false
+        window.becomesKeyOnlyIfNeeded = true
         window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         window.title = "Broadway meeting alert probe"
         window.isReleasedWhenClosed = false
@@ -487,10 +495,34 @@ final class MeetingAlertPanel {
         Bench.pagesShown = true
         shotWindow = window
         window.orderBack(nil)
-        NSApp.unhideWithoutActivation()
+        if front {
+            given = NSWorkspace.shared.frontmostApplication
+            Bench.frontAsked = true
+            NSApp.activate(ignoringOtherApps: true)
+            if !NSApp.isActive, let given { NSRunningApplication.current.activate(from: given, options: .activateAllWindows) }
+            if key { window.makeKey() }
+        } else {
+            NSApp.unhideWithoutActivation()
+        }
         view.layoutSubtreeIfNeeded()
+        let scale = window.backingScaleFactor
+        func spot(_ target: NSView) -> [Int] {
+            let box = target.convert(target.bounds, to: nil)
+            return [box.minX, window.frame.height - box.maxY, box.width, box.height].map { Int(($0 * scale).rounded()) }
+        }
+        var spots: [String: [Int]] = [:]
+        if let join = view.kitSubviews(of: MeetingJoinButton.self).first { spots["join"] = spot(join) }
+        if let snooze = view.kitSubviews(of: KitGlassKey.self).first(where: { $0.title == "Snooze" }) { spots["snooze"] = spot(snooze) }
+        for (name, swatch) in view.swatches { spots[name] = spot(swatch) }
         return ["window": window.windowNumber, "pid": ProcessInfo.processInfo.processIdentifier,
-                "width": Int(window.frame.width * 2), "height": Int(window.frame.height * 2)]
+                "width": Int(window.frame.width * scale), "height": Int(window.frame.height * scale), "spots": spots]
+    }
+
+    var shotState: [String: Any] {
+        guard let window = shotWindow else { return [:] }
+        return ["active": NSApp.isActive, "key": window.isKeyWindow,
+                "frontApp": NSWorkspace.shared.frontmostApplication?.localizedName ?? "",
+                "front": NSWorkspace.shared.frontmostApplication?.processIdentifier == ProcessInfo.processInfo.processIdentifier]
     }
 
     func take(then: @escaping (Data?) -> Void) {
@@ -531,7 +563,10 @@ final class MeetingAlertPanel {
     func endShot() {
         guard let window = shotWindow else { return }
         window.orderOut(nil)
+        Bench.frontAsked = false
         NSApp.hide(nil)
+        given?.activate()
+        given = nil
         window.contentView = nil
         window.close()
         shotWindow = nil
@@ -543,9 +578,13 @@ final class MeetingAlertPanel {
         Bench.pagesShown = pagesShown
     }
 
-    private final class Lifted: NSPanel {
+    private class Lifted: NSPanel {
         override var canBecomeKey: Bool { false }
         override var canBecomeMain: Bool { false }
+    }
+
+    private final class Keyed: Lifted {
+        override var canBecomeKey: Bool { true }
     }
 }
 
@@ -610,7 +649,9 @@ final class MeetingAlertStackView: NSView {
 
 @MainActor
 final class MeetingAlertShotView: NSView {
-    init(due: [Meeting], alerts: MeetingAlerts, dark: Bool, drawn: Bool) {
+    private(set) var swatches: [(String, NSView)] = []
+
+    init(due: [Meeting], alerts: MeetingAlerts, dark: Bool, drawn: Bool, controls: Bool = false) {
         let stack = MeetingAlertStackView(alerts: alerts, drawn: drawn)
         stack.due = due
         let size = stack.intrinsicContentSize
@@ -625,6 +666,22 @@ final class MeetingAlertShotView: NSView {
         addSubview(ground)
         stack.frame = NSRect(x: width - 8 - size.width, y: 8, width: size.width, height: size.height)
         addSubview(stack)
+        guard controls else { return }
+        let green = NSColor.systemGreen.withAlphaComponent(0.8)
+        let late = KitGlass(interactive: true)
+        let made: [(String, NSView)] = [
+            ("glass interactive", KitGlass(tint: green, interactive: true)),
+            ("glass still", KitGlass(tint: green, interactive: false)),
+            ("glass tinted late", late),
+            ("fill", KitBox(fill: green, corners: .capsule)),
+        ]
+        for (index, (_, swatch)) in made.enumerated() {
+            (swatch as? KitGlass)?.capsule = true
+            swatch.frame = NSRect(x: 18, y: 24 + CGFloat(index) * 40, width: 84, height: 28)
+            addSubview(swatch)
+        }
+        swatches = made
+        DispatchQueue.main.async { late.tintColor = green }
     }
 
     @available(*, unavailable)
@@ -901,15 +958,16 @@ private final class MeetingDrawnKey: KitButton {
 @MainActor
 final class MeetingJoinButton: KitButton {
     private let glass: NSView
-    private let drawn: Bool
+    let face = KitBox(fill: nil, corners: .capsule)
 
     init(symbol: String, drawn: Bool) {
-        self.drawn = drawn
         if drawn {
-            glass = KitBox(fill: NSColor.systemGreen.withAlphaComponent(0.85), corners: .capsule)
+            glass = face
         } else {
-            let made = KitGlass(tint: NSColor.systemGreen.withAlphaComponent(0.8), interactive: true)
+            let made = KitGlass(interactive: true)
             made.capsule = true
+            face.autoresizingMask = [.width, .height]
+            made.kitCatch.addSubview(face)
             glass = made
         }
         super.init(.plain(press: 0.97), label: "Join")
@@ -920,33 +978,55 @@ final class MeetingJoinButton: KitButton {
         let row = NSStackView.kit(.horizontal, spacing: 5, [mark, word])
         row.frame.size = row.fittingSize
         content = KitFixedView(row)
+        paint()
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
+    static func fill(dark: Bool, raised: Bool = false, lit: Bool = false, pressed: Bool = false) -> NSColor {
+        let base = raised ? NSColor(srgbRed: 0.094, green: 0.431, blue: 0.18, alpha: 1) : NSColor.systemGreen.kitResolved(dark: dark).withAlphaComponent(1)
+        if pressed { return base.blended(withFraction: 0.18, of: .black) ?? base }
+        if lit { return base.blended(withFraction: 0.1, of: .white) ?? base }
+        return base
+    }
+
     override func layout() {
         super.layout()
         glass.frame = bounds
+        if face !== glass {
+            face.superview?.frame = glass.bounds
+            face.frame = glass.bounds
+        }
+    }
+
+    override func hoverChanged() {
+        super.hoverChanged()
+        paint()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        paint()
     }
 
     override func mouseDown(with event: NSEvent) {
         super.mouseDown(with: event)
-        tint()
+        paint()
     }
 
     override func mouseDragged(with event: NSEvent) {
         super.mouseDragged(with: event)
-        tint()
+        paint()
     }
 
     override func mouseUp(with event: NSEvent) {
         super.mouseUp(with: event)
-        tint()
+        paint()
     }
 
-    private func tint() {
-        (glass as? KitGlass)?.tintColor = NSColor.systemGreen.withAlphaComponent(pressed ? 0.95 : 0.8)
+    private func paint() {
+        face.fill = Self.fill(dark: kitDark, raised: Contrast.raised, lit: hovering && isEnabled, pressed: pressed)
     }
 }
 

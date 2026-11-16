@@ -5576,6 +5576,7 @@ final class Bench {
     /// its pages: from then on the app is no longer hidden, and a window
     /// ordered in would come onto the screen.
     static var pagesShown = false
+    static var frontAsked = false
     /// Windows a test run let onto a screen. Every answer names them from
     /// then on, and ./bench fails: a test must never show a window there.
     private(set) static var caught: [String] = []
@@ -5608,6 +5609,7 @@ final class Bench {
             watching.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { note in
                 MainActor.assumeIsolated {
                     if note.name == NSApplication.didUnhideNotification, pagesShown { return }
+                    if frontAsked { return }
                     caught.append("the app \(note.name == NSApplication.didUnhideNotification ? "shown" : "brought forward")")
                     NSApp.hide(nil)
                     pagesShown = false

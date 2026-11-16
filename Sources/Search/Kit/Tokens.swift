@@ -213,6 +213,13 @@ enum Grip {
     static let fade: CFTimeInterval = 0.15
 }
 
+enum Contrast {
+    static var raised: Bool {
+        if Store.testing, let test = Store.settings.object(forKey: "contrast.testRaised") as? Bool { return test }
+        return NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+    }
+}
+
 enum Motion {
     static var reduced: Bool {
         if Store.testing, let test = Store.settings.object(forKey: "motion.testReduced") as? Bool { return test }
