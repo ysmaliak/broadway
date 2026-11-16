@@ -64,11 +64,11 @@ final class MCPServer {
     static let hiddenOutside: Set<String> = ["ask", "sign_in", "autofill", "helper_start", "helper_wait", "mac_read", "mac_run"]
 
     static let descriptions: [String: String] = [
-        "open": "Open an address in a new tab, which becomes your current tab. Answers with the page.",
+        "open": "Open url or urls in new tabs of yours",
         "go": "Send your current tab, or tab, to an address. Answers after the load with the page.",
-        "tab": "Name your current tab, or switch it to one of your tabs by id",
-        "tabs": "Your session's tabs with the current one marked, then how many tabs the person has",
-        "close": "Close one of your tabs, your current one unless you give tab",
+        "tab": "Show your current tab, or switch to id",
+        "tabs": "Your tabs, or all tabs",
+        "close": "Close your current tab, or tab, or others, or all",
         "snapshot": "The page's controls and headings with refs. Use in, role or find to keep it short, and since for only what changed.",
         "read": "The page's visible text. Use in for one part and find for matching lines.",
         "shot": "A picture of the page or of one element. Secret fields and frames are blanked.",

@@ -170,6 +170,9 @@ enum PersonTabs {
             return ["space": found.name, "message": "Deleted \(found.name)"]
         },
         PersonVerb("tabs", "list", .tool) { call in
+            if let link = call.link, !link.task, call.flag("mine"), call.string("space") == nil, !call.flag("all"), !call.flag("pinned") {
+                return ToolReply.data(AgentWorkTabs.listing(link.id, box: call.box, current: AgentLinks.shared.currentTab(link.id)))
+            }
             _ = try await PersonCommands.tool(call, "tabs")
             let onlySpace = try call.string("space").map { try space(call, $0).id }
             let everything = call.flag("all") || onlySpace != nil
@@ -215,13 +218,16 @@ enum PersonTabs {
             guard let named = call.string("space") else { return try await PersonCommands.tool(call, "open", ["url": try call.need("url")]) }
             try spacesOn(call)
             let space = try space(call, named)
-            var made = await call.box.openTab(["url": try call.need("url")], task: nil, space: space.id == call.browser.spaceID ? nil : space.id)
+            let url = try call.need("url")
+            if let refused = TaskLedger.shared.refusal("open", ["url": url], task: call.link?.id) { throw PersonRefusal("refused", refused) }
+            var made = await call.box.openTab(["url": url], task: call.link?.id, space: space.id == call.browser.spaceID ? nil : space.id)
             if made.failed {
                 let text = made.text ?? "That didn't work"
                 throw PersonRefusal(ToolFailure.code(text), text)
             }
             made.plain = nil
             var data = ToolReply.data(made)
+            if let link = call.link, let id = data["id"] as? String { AgentLinks.shared.setCurrentTab(link.id, id) }
             data["space"] = space.name
             return data
         },

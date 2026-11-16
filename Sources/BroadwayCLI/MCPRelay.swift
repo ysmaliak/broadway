@@ -233,7 +233,7 @@ final class MCPRelay {
         let link = try context.connection()
         link.watched = false
         var hello: [String: Any] = ["op": "mcp"]
-        if let task { hello["task"] = task }
+        if let task { hello["task"] = task } else { hello["agent"] = Context.agent }
         link.send(hello)
         guard let greeting = link.object(), greeting["mcp"] as? Bool == true else {
             throw Failure("failed", "Broadway wouldn't take the connection")

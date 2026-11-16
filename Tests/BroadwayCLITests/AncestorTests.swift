@@ -69,6 +69,17 @@ struct AncestorTests {
         #expect(said["pid"] == nil)
     }
 
+    @Test func theAgentsOwnSessionIdKeysTheShellAndTheMCPTogether() {
+        let claude = AgentAncestor.request(environment: ["CLAUDE_CODE_SESSION_ID": "5f0c2a"], name: nil, agent: nil)
+        let codex = AgentAncestor.request(environment: ["CODEX_THREAD_ID": "t-77"], name: nil, agent: nil)
+        let named = AgentAncestor.request(environment: ["CLAUDE_CODE_SESSION_ID": "5f0c2a", "BROADWAY_AGENT": "abc123"], name: nil, agent: nil)
+
+        #expect(claude["session"] as? String == "claude:5f0c2a")
+        #expect(codex["session"] as? String == "codex:t-77")
+        #expect(named["session"] == nil)
+        #expect(named["id"] as? String == "abc123")
+    }
+
     @Test func anAgentIsNamedFromItsOwnFirstArgumentNotItsVersionedFile() {
         let claude = (arguments: ["claude", "--resume"], path: "/Users/me/.local/share/claude/versions/2.1.317", command: "2.1.317")
 

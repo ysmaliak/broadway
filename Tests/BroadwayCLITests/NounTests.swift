@@ -64,6 +64,14 @@ struct NounTests {
         #expect(try routed(["page", "find", "price"]).verb == "find")
     }
 
+    @Test func onlyABareTabsIsTheSessionView() {
+        #expect(Person.bare(["tabs"]))
+        #expect(Person.bare(["tabs", "--json"]))
+        #expect(!Person.bare(["tabs", "list"]))
+        #expect(!Person.bare(["tabs", "list", "--json"]))
+        #expect(!Person.bare(["spaces"]))
+    }
+
     @Test func openWithASpaceIsTheHiddenVerb() throws {
         let found = try routed(["open", "--space", "Work", "https://example.com"])
 

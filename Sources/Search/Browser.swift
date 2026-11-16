@@ -7501,6 +7501,11 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         // The opener's copy is what its view was made with, maybe before
         // Settings › Videos wait for a click last moved.
         configuration.mediaTypesRequiringUserActionForPlayback = Web.playback
+        if opener.agent {
+            guard let tab = agentPopup(configuration, opener: opener, url: action.request.url, sized: popup) else { return nil }
+            if !parkAgentPopup(tab, beside: opener) { tabs.append(tab) }
+            return settleAgentPopup(tab, from: opener, url: action.request.url)
+        }
         // A new window a pin's page asked for on a click — a target="_blank"
         // link, or window.open from the click, as Gmail's links and many
         // sites' do, often by way of a redirect on their own site — opens in

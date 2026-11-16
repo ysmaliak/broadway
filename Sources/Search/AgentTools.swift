@@ -539,7 +539,7 @@ final class BrowserToolbox: AgentToolbox {
                  properties: ["path": ["type": "string"], "reason": ["type": "string"]], required: ["path", "reason"]),
         ToolSpec(name: "mac_run", description: "Run a Terminal command on the person's Mac. Tasks are browser-only, so this asks the person every time. Say why in reason.",
                  properties: ["command": ["type": "string"], "reason": ["type": "string"]], required: ["command", "reason"]),
-    ] + [AgentHandoff.spec] + AgentDiagnostics.specs + KnowledgeTools.specs
+    ].map(AgentWorkTabs.widen) + [AgentHandoff.spec] + AgentWorkTabs.specs + AgentDiagnostics.specs + KnowledgeTools.specs
 
     var browsers: [Browser] {
         if let browser { AgentBoard.note(browser) }

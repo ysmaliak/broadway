@@ -188,7 +188,7 @@ public enum BroadwayCommand {
         if first == "pdf", let command = context.catalog().find(first) {
             return try Browse.run(command, Array(words.dropFirst()), called: first, context: context)
         }
-        if let routed = try Nouns.route(words) { return try Person.run(routed.noun, routed.verb, routed.rest, context: context) }
+        if let routed = try Nouns.route(words) { return try Person.run(routed.noun, routed.verb, routed.rest, context: context, bare: Person.bare(words)) }
         let spaced = first.contains(where: \.isWhitespace)
         if !spaced, !first.hasPrefix("-") {
             if words.count == 1, Address.looksLike(first) { return try Browse.person(first, context: context) }

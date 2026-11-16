@@ -37,11 +37,16 @@ struct PersonOptions {
 }
 
 enum Person {
-    static func run(_ noun: Noun, _ verb: Verb, _ words: [String], context: Context) throws -> Exit {
+    static func bare(_ words: [String]) -> Bool {
+        words.first == "tabs" && words.dropFirst().allSatisfy { $0.hasPrefix("-") }
+    }
+
+    static func run(_ noun: Noun, _ verb: Verb, _ words: [String], context: Context, bare: Bool = false) throws -> Exit {
         let options = try PersonOptions.parse(words)
         let command = verb.command
         var arguments = try CommandLineInput.parse(command, options.words)
-        if context.globals.tabFlag, !command.tabbed { throw Failure.usage("\(command.name) doesn't work on a tab, so leave out --tab") }
+        if bare { arguments["mine"] = true }
+        if context.globals.tabFlag, !command.tabbed, noun.name != "agents" { throw Failure.usage("\(command.name) doesn't work on a tab, so leave out --tab") }
         if command.tabbed, let tab = context.globals.tab { arguments["tab"] = tab }
         if verb.fromStdin { arguments["text"] = try source(arguments, context: context) }
         let interactive = isatty(STDIN_FILENO) == 1 && context.console.errTTY && !context.console.json

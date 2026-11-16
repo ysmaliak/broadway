@@ -7,7 +7,12 @@ extension AgentSocket {
         let said = request["agent"] as? [String: Any] ?? [:]
         let named = name ?? said["name"] as? String
         var found: AgentLink?
-        if let connection {
+        let session = (said["session"] as? String).flatMap { $0.isEmpty ? nil : "session:" + $0.lowercased() }
+        if said["id"] == nil, let session {
+            let guessed = named ?? AgentLinks.displayName(executable: said["executable"] as? String ?? session.components(separatedBy: ":").dropFirst().first ?? "")
+            found = links.liveLink(for: .named(session))
+            if found == nil, create { found = links.join(.named(session), name: guessed) }
+        } else if let connection {
             found = create ? links.join(.connection(connection), name: named) : links.liveLink(for: .connection(connection))
         } else if let id = (said["id"] as? String)?.lowercased(), !id.isEmpty {
             found = links.liveLink(for: .named(id)) ?? links.live.first { $0.id.uuidString.lowercased().hasPrefix(id) }
@@ -85,17 +90,17 @@ enum PersonAgents {
             return ["agents": links.links.map(links.row)]
         },
         PersonVerb("agents", "done", .tool) { call in
-            try end(call, mine: true)
+            try await end(call, mine: true)
         },
         PersonVerb("agents", "disconnect", .tool, softer: { call in
             guard let named = call.string("id") else { return nil }
             return call.link.map { PersonCommands.short($0.id).hasPrefix(named.lowercased()) } == true ? nil : .arrange
         }) { call in
-            try end(call, mine: call.string("id") == nil)
+            try await end(call, mine: call.string("id") == nil)
         },
     ]
 
-    private static func end(_ call: PersonCall, mine: Bool) throws -> [String: Any] {
+    private static func end(_ call: PersonCall, mine: Bool) async throws -> [String: Any] {
         let links = AgentLinks.shared
         let target: AgentLink
         if mine {
@@ -107,8 +112,28 @@ enum PersonAgents {
         guard !target.task else {
             throw PersonRefusal("refused", "That's a task Broadway runs. Stop it with broadway session stop.")
         }
+        if call.flag("close"), call.flag("keep") { throw PersonRefusal.usage("--close and --keep pull opposite ways, so pick one") }
         let summary = call.string("summary")
+        let here = links.currentTab(target.id)
         links.end(target.id, call.flag("failed") ? .failed(summary) : .done(summary))
-        return ["ended": links.link(target.id).map(links.row) ?? [:]]
+        var data: [String: Any] = ["ended": links.link(target.id).map(links.row) ?? [:]]
+        var lines: [String] = []
+        if call.flag("close") {
+            let found = AgentWorkTabs.tabs(of: target.id, in: call.box)
+            let unseen = found.filter { AgentWorkTabs.unseen($0.tab, in: $0.browser) }
+            let every = call.box.browsers.flatMap { $0.tabs + $0.parkedAgentTabs }
+            let said = await AgentWorkTabs.tidy(unseen, everyTab: every)
+            data["closed"] = said.closed
+            data["tidy"] = said.object
+            if !said.closed.isEmpty { lines.append("Closed \(said.closed.count) tab\(said.closed.count == 1 ? "" : "s") the person never looked at: " + said.closed.joined(separator: ", ")) }
+            lines += said.lines
+        }
+        let left = AgentWorkTabs.tabs(of: target.id, in: call.box)
+        data["tabs"] = left.map { AgentWorkTabs.row($0.tab, current: here) }
+        data["left"] = left.count
+        let ids = left.map { AgentWorkTabs.short($0.tab.id) }.joined(separator: ", ")
+        lines.insert(left.isEmpty ? "Ended. 0 tabs of yours are left open." : "Ended. \(left.count) tab\(left.count == 1 ? "" : "s") of yours left open for the person: \(ids).", at: 0)
+        data["message"] = lines.joined(separator: "\n")
+        return data
     }
 }

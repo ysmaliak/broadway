@@ -367,7 +367,7 @@ def browsing(base):
     missing, parsed = envelope("read", "--tab", "zzzzzzzz")
     check("no such tab", missing.returncode == 1 and parsed["error"]["code"] == "no_tab" and "broadway tabs" in parsed["error"]["hint"], parsed)
     check("a named tab becomes current", broadway("read", "--tab", tab).returncode == 0)
-    front = next(row for row in envelope("tabs")[1]["data"]["tabs"] if row["front"])
+    front = next(row for row in envelope("tabs", "--all")[1]["data"]["tabs"] if row["front"])
     refused, parsed = envelope("go", base, "--tab", front["id"])
     check("the front tab can't be sent elsewhere", refused.returncode == 1 and parsed["error"]["code"] == "refused", parsed)
     refused, parsed = envelope("close", "--tab", front["id"])
@@ -386,7 +386,7 @@ def browsing(base):
 
     check("a person's page", broadway(base + "first").returncode == 0)
     time.sleep(0.5)
-    first = next(row["id"] for row in envelope("tabs")[1]["data"]["tabs"] if row["front"])
+    first = next(row["id"] for row in envelope("tabs", "--all")[1]["data"]["tabs"] if row["front"])
     broadway(base + "last")
     time.sleep(0.8)
     check("a person's page is in history", "first" in broadway("history", "first").stdout)

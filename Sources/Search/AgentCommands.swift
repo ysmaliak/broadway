@@ -40,14 +40,15 @@ enum AgentCatalog {
         return found
     }
 
-    static let reads: Set<String> = ["tabs", "snapshot", "locate", "text", "screenshot", "console", "network", "pdf", "wait", "history", "skills", "skill"]
+    static let reads: Set<String> = ["tab", "tabs", "snapshot", "locate", "text", "screenshot", "console", "network", "pdf", "wait", "history", "skills", "skill"]
     static let printFlag = "--broadway-catalog"
 
     static let shapes: [String: Shape] = [
         "tabs": Shape(examples: ["broadway tabs", "broadway tabs --json"], columns: ["id", "title", "url"]),
-        "open": Shape(examples: ["broadway open https://example.com", "tab=$(broadway open https://example.com)"]),
+        "open": Shape(positional: ["url"], examples: ["broadway open https://example.com", "tab=$(broadway open https://example.com)"]),
+        "tab": Shape(positional: ["id"], examples: ["broadway tab", "broadway tab 2c4d6e8f"]),
         "navigate": Shape(command: "go", examples: ["broadway go https://example.com", "broadway go https://example.com --tab 1a2b3c4d"]),
-        "close": Shape(examples: ["broadway close", "broadway close --tab 1a2b3c4d"]),
+        "close": Shape(examples: ["broadway close", "broadway close --tab 1a2b3c4d", "broadway close --others", "broadway close --all"]),
         "snapshot": Shape(examples: ["broadway snapshot", "broadway snapshot --json | jq '.data.elements[]'"]),
         "text": Shape(command: "read", examples: ["broadway read", "broadway read | grep -i price"]),
         "screenshot": Shape(command: "shot", examples: ["broadway shot -o page.png", "broadway shot > page.png", "broadway shot --ref @e7 -o button.png", "broadway shot --full -o whole.png"]),
@@ -399,9 +400,10 @@ extension AgentSocket {
             connection.send(ToolFailure.error(.unknownCommand, "Only Broadway's own tasks use \(name)"))
             return connection.close()
         }
-        let link = self.link(for: request, create: name == "open" || spec.properties["tab"] != nil)?.id
+        let link = self.link(for: request, create: name == "open" || name == "tab" || spec.properties["tab"] != nil)?.id
         let work = Task { @MainActor in
-            connection.send(await self.perform(name, spec: spec, arguments: request["arguments"] as? [String: Any] ?? [:], browser: browser, link: link))
+            let preferred = (request["agent"] as? [String: Any])?["tab"] as? String
+            connection.send(await self.perform(name, spec: spec, arguments: request["arguments"] as? [String: Any] ?? [:], browser: browser, link: link, preferred: preferred))
             connection.close()
         }
         let gone = connection.onClose
@@ -433,25 +435,9 @@ extension AgentSocket {
         }
     }
 
-    func perform(_ name: String, spec: ToolSpec, arguments given: [String: Any], browser: Browser, link: UUID?) async -> [String: Any] {
-        var arguments = given
-        var used: String?
-        if spec.properties["tab"] != nil {
-            let named = arguments["tab"] as? String
-            switch await self.target(named, browser: browser, link: link) {
-            case .failure(let refused):
-                return ToolFailure.error(refused.code, refused.message, tool: name)
-            case .success(let id):
-                arguments["tab"] = id
-                used = id
-                if named != nil { self.remember(id, link: link) }
-            }
-        }
-        let outcome = ToolReply.asking(await self.box.call(name, arguments, task: link), task: link)
-        let reply = ToolReply.wire(outcome, tool: name, tab: used)
-        if !outcome.failed, name == "open", let id = (reply["data"] as? [String: Any])?["id"] as? String { self.remember(id, link: link) }
-        if !outcome.failed, name == "close", used == self.current(link) { self.remember(nil, link: link) }
-        return reply
+    func perform(_ name: String, spec: ToolSpec, arguments given: [String: Any], browser: Browser, link: UUID?, preferred: String? = nil) async -> [String: Any] {
+        let said = await session(name, given, task: link, browser: browser, preferred: preferred)
+        return ToolReply.wire(said.outcome, tool: name, tab: said.used)
     }
 
     func current(_ link: UUID?) -> String? {
@@ -467,9 +453,14 @@ extension AgentSocket {
         let message: String
     }
 
-    func target(_ named: String?, browser: Browser, link: UUID? = nil) async -> Result<String, TabRefusal> {
+    func target(_ named: String?, browser: Browser, link: UUID? = nil, reads: Bool = true) async -> Result<String, TabRefusal> {
         let tabs = box.tabIDs
+        let front = (Browsers.front ?? browser).active.map { String($0.id.uuidString.prefix(8)).lowercased() }
         if let named {
+            if named.lowercased() == "front" {
+                guard let front, tabs.contains(front) else { return .failure(TabRefusal(code: "no_tab", message: "The person has no tab in front")) }
+                return .success(front)
+            }
             let wanted = String(named.lowercased().prefix(8))
             let matches = wanted.isEmpty ? [] : tabs.filter { $0.hasPrefix(wanted) }
             if matches.count > 1 { return .failure(TabRefusal(code: "ambiguous_tab", message: "\(named) fits \(matches.count) tabs: give more of its id")) }
@@ -477,9 +468,13 @@ extension AgentSocket {
             return .success(only)
         }
         if let currentTab = current(link), tabs.contains(currentTab) { return .success(currentTab) }
-        let front = (Browsers.front ?? browser).active.map { String($0.id.uuidString.prefix(8)).lowercased() }
-        if let front, tabs.contains(front) { return .success(front) }
-        return .failure(TabRefusal(code: "no_tab", message: "No tab to work in"))
+        if link != nil, let last = AgentWorkTabs.tabs(of: link, in: box).last {
+            let id = AgentWorkTabs.short(last.tab.id)
+            remember(id, link: link)
+            return .success(id)
+        }
+        if reads, let front, tabs.contains(front) { return .success(front) }
+        return .failure(TabRefusal(code: "no_tab", message: reads ? "No tab to work in" : "You have no tab. Open one with broadway open URL, or name one with --tab ID."))
     }
 
     private func quit(_ request: [String: Any], on connection: LineConnection) {

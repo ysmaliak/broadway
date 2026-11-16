@@ -141,7 +141,7 @@ def on(base):
     check("old names are not listed", not names & {"navigate", "text", "screenshot", "locate", "fill_form"}, names)
     check("tab is never required", all("tab" not in tool["inputSchema"].get("required", []) for tool in listed))
 
-    tabs = client.data("tabs")["tabs"]
+    tabs = client.data("tabs", all=True)["tabs"]
     front = next(tab for tab in tabs if tab["front"])
     check("the front tab can't be sent elsewhere", client.call("navigate", tab=front["id"], url=base)[0]["isError"])
     check("the front tab can't be closed", client.call("close", tab=front["id"])[0]["isError"])

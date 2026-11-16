@@ -210,20 +210,22 @@ final class AgentSocket {
             var task = (request["task"] as? String).flatMap(UUID.init(uuidString:))
             if task == nil, browser.prefs.agentsAllowed {
                 let held = UUID()
-                task = link(for: request, create: true, connection: held, name: AgentLinks.mcpName(request["client"] as? String))?.id
-                let gone = connection.onClose
-                connection.onClose = {
-                    gone?()
-                    MainActor.assumeIsolated { AgentLinks.shared.endConnection(held) }
+                let shared = ((request["agent"] as? [String: Any])?["session"] as? String).map { !$0.isEmpty } == true
+                task = link(for: request, create: true, connection: shared ? nil : held, name: AgentLinks.mcpName(request["client"] as? String))?.id
+                if !shared {
+                    let gone = connection.onClose
+                    connection.onClose = {
+                        gone?()
+                        MainActor.assumeIsolated { AgentLinks.shared.endConnection(held) }
+                    }
                 }
             }
-            let server = MCPServer(box: box, task: task) { [weak connection] message in connection?.send(message) }
+            let server = MCPServer(box: AgentSessionBox(socket: self, browser: browser), task: task) { [weak connection] message in connection?.send(message) }
             server.named = { client in
                 guard let task, let name = AgentLinks.mcpName(client) else { return }
                 AgentLinks.shared.rename(task, name)
             }
             box.browser = browser
-            aim(server, browser: browser, link: task)
             connection.onLine = { line in MainActor.assumeIsolated { server.handle(line) } }
             var greeting: [String: Any] = ["mcp": true]
             if let task, request["task"] == nil { greeting["link"] = task.uuidString.lowercased() }

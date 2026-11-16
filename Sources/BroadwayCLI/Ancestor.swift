@@ -101,10 +101,18 @@ public struct AgentAncestor: Equatable {
         return path.isEmpty ? nil : (path as NSString).lastPathComponent
     }
 
+    public static func session(_ environment: [String: String]) -> String? {
+        for (key, kind) in [("CLAUDE_CODE_SESSION_ID", "claude"), ("CODEX_THREAD_ID", "codex")] {
+            if let value = environment[key]?.trimmingCharacters(in: .whitespaces), !value.isEmpty { return "\(kind):\(value)" }
+        }
+        return nil
+    }
+
     public static func request(environment: [String: String], name flag: String?, agent: String?) -> [String: Any] {
         var said: [String: Any] = [:]
         if let id = agent ?? environment["BROADWAY_AGENT"].flatMap({ $0.isEmpty ? nil : $0 }) { said["id"] = id }
         if let name = flag ?? environment["BROADWAY_AGENT_NAME"].flatMap({ $0.isEmpty ? nil : $0 }) { said["name"] = name }
+        if said["id"] == nil, let session = session(environment) { said["session"] = session }
         if said["id"] == nil, let found = current() {
             said["pid"] = Int(found.pid)
             said["started"] = found.started
