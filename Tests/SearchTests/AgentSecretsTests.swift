@@ -411,13 +411,12 @@ final class AgentSecretsTests {
 
         let card = await box.call("autofill", ["tab": id, "what": "card"], task: task)
         let details = await box.call("autofill", ["tab": id, "what": "details"], task: task)
-        let login = await box.call("sign_in", ["tab": id], task: task)
         var call = PersonCall(noun: "fill", verb: "card", arguments: [:], browser: browser, box: box)
         call.tab = box.find(["tab": id])
         var refused: PersonRefusal?
         do { try await PersonCommands.find("fill", "card")?.first?(call) } catch let error as PersonRefusal { refused = error }
 
-        for said in [card, details, login] {
+        for said in [card, details] {
             #expect(said.failed)
             #expect(said.code == "nothing_kept", "\(said.text ?? "")")
             #expect(said.text?.contains("nothing was asked") == true)
@@ -426,6 +425,65 @@ final class AgentSecretsTests {
         #expect(refused?.message.contains("no card") == true)
         #expect(refused?.hint?.isEmpty == false)
         #expect(AgentDesk.shared.pending.isEmpty)
+        #expect(PersonCommands.find("fill", "login")?.first == nil)
+    }
+
+    private func signInAnswered(_ id: String, account: String?, logins: [Kept], answer: AgentAnswer) async throws -> (question: AgentQuestion, said: ToolOutcome) {
+        box.logins = { _ in logins }
+        box.loginSecret = { _ in nil }
+        let asking = UUID()
+        var arguments: [String: Any] = ["tab": id]
+        if let account { arguments["account"] = account }
+        let call = Task { await box.call("sign_in", arguments, task: asking) }
+        var asked: AgentQuestion?
+        for _ in 0..<400 where asked == nil {
+            asked = AgentDesk.shared.front
+            if let front = asked, front.title.hasPrefix("Let the agent use") {
+                AgentDesk.shared.take(front.id, .yes)
+                asked = nil
+            }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        let question = try #require(asked)
+        AgentDesk.shared.take(question.id, answer)
+        return (question, await call.value)
+    }
+
+    @Test func aSignInAsksFirstAndANoReadsTheSameWhetherOrNotOneIsKept() async throws {
+        let (_, id) = try await page("<form><input name=email><input id=p type=password></form>")
+        browser.prefs.agentMode = .ask
+        let one = [Kept(host: "127.0.0.1", user: "me@example.com", used: nil, clear: true)]
+
+        let none = try await signInAnswered(id, account: nil, logins: [], answer: .no)
+        let some = try await signInAnswered(id, account: nil, logins: one, answer: .no)
+        let noAccount = try await signInAnswered(id, account: "other@example.com", logins: [], answer: .no)
+        let otherAccount = try await signInAnswered(id, account: "other@example.com", logins: one, answer: .no)
+
+        #expect(none.question.title == some.question.title)
+        #expect(none.question.quote == some.question.quote)
+        #expect(none.said.code == some.said.code)
+        #expect(none.said.text == some.said.text)
+        #expect(none.said.code == "said_no")
+        #expect(!(some.question.quote.contains("me@example.com")))
+        #expect(noAccount.question.quote == otherAccount.question.quote)
+        #expect(noAccount.said.code == otherAccount.said.code)
+        #expect(noAccount.said.text == otherAccount.said.text)
+    }
+
+    @Test func aYesWithNoSignInKeptSaysNothingWasFilled() async throws {
+        let (_, id) = try await page("<form><input name=email><input id=p type=password></form>")
+        browser.prefs.agentMode = .ask
+
+        let none = try await signInAnswered(id, account: nil, logins: [], answer: .yes)
+        let other = try await signInAnswered(id, account: "other@example.com", logins: [Kept(host: "127.0.0.1", user: "me@example.com", used: nil, clear: true)], answer: .yes)
+
+        for said in [none.said, other.said] {
+            #expect(said.code == "nothing_kept", "\(said.text ?? "")")
+            #expect(said.text?.contains("nothing was filled") == true)
+            #expect(said.hint?.contains("broadway handoff") == true)
+            #expect(said.hint?.contains("may or may not") == false)
+        }
+        #expect(other.said.text?.contains("me@example.com") == false)
     }
 
     @Test func aRefusedTouchIDFillsNothing() async throws {

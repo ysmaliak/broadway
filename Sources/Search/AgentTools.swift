@@ -1410,19 +1410,9 @@ final class BrowserToolbox: AgentToolbox {
     var book: AutofillBook = .shared
     var formPage: (Tab) -> FormPageAccess? = { $0.formPage }
 
-    func nothingKept(_ tab: Tab, what: String, account: String? = nil) async -> ToolOutcome? {
+    func nothingKept(_ tab: Tab, what: String) async -> ToolOutcome? {
         let unasked = "so nothing was asked and nothing was filled"
         switch what {
-        case "login":
-            guard let host = tab.pageAddress?.host()?.lowercased() else { return nil }
-            let clear = tab.pageAddress?.scheme?.lowercased() != "https"
-            let kept = await logins(host).filter { !clear || $0.clear }
-            if kept.isEmpty {
-                return .failure("Broadway keeps no sign-in for this site, \(unasked)", code: .nothingKept, hint: "Ask the person to sign in. broadway handoff gives them the tab.")
-            }
-            if let account, !kept.contains(where: { $0.user == account }) {
-                return .failure("Broadway keeps no such account for this site, \(unasked)", code: .nothingKept, hint: "Leave out the account to use the one kept here")
-            }
         case "card":
             if book.cards.isEmpty {
                 return .failure("Broadway keeps no card, \(unasked)", code: .nothingKept, hint: "The person can pay themselves. broadway handoff gives them the tab.")
@@ -1436,21 +1426,26 @@ final class BrowserToolbox: AgentToolbox {
     }
 
     func signIn(_ tab: Tab, account: String?, task: UUID?, asked: Bool = false) async -> ToolOutcome {
-        if let none = await nothingKept(tab, what: "login", account: account) { return none }
         guard let host = tab.pageAddress?.host()?.lowercased() else { return .failure("That page has no site to sign in to") }
-        let clear = tab.pageAddress?.scheme?.lowercased() != "https"
+        let place = tab.pageAddress
+        let site = AgentSites.site(of: place)
+        if !asked, let refused = await gate(.signIn, tab: tab, site: site, task: task, quote: account ?? "", said: "As") { return refused }
+        guard tab.pageAddress == place else { return .failure("The page changed, so nothing was filled. Look again.") }
+        let clear = place?.scheme?.lowercased() != "https"
         let kept = await logins(host).filter { !clear || $0.clear }
-        guard let login = account.flatMap({ name in kept.first { $0.user == name } }) ?? kept.first else {
-            return .failure("Broadway keeps no account for this site. Ask the person to sign in.")
+        let hint = "The person can sign in themselves. broadway handoff gives them the tab."
+        guard !kept.isEmpty else {
+            return .failure("Broadway keeps no sign-in for this site, so nothing was filled", code: .nothingKept, hint: hint)
         }
-        guard account == nil || kept.contains(where: { $0.user == account }) else { return .failure("Broadway keeps no such account for this site") }
+        if let account, !kept.contains(where: { $0.user == account }) {
+            return .failure("Broadway keeps no sign-in as \(account) for this site, so nothing was filled", code: .nothingKept, hint: hint)
+        }
         if kept.count > 1, account == nil {
             return .failure("Broadway keeps several accounts for this site: \(kept.map(\.user).joined(separator: ", ")). Say which.")
         }
-        let place = tab.pageAddress
-        let site = AgentSites.site(of: place)
-        if !asked, let refused = await gate(.signIn, tab: tab, site: site, task: task, quote: login.user, said: "As") { return refused }
-        guard tab.pageAddress == place else { return .failure("The page changed, so nothing was filled. Look again.") }
+        guard let login = account.flatMap({ name in kept.first { $0.user == name } }) ?? kept.first else {
+            return .failure("Broadway keeps no sign-in for this site, so nothing was filled", code: .nothingKept, hint: hint)
+        }
         guard let secret = await loginSecret(login) else { return .failure("The keychain refused it") }
         acting(tab, "Signing in")
         let worked: Bool = await withCheckedContinuation { done in

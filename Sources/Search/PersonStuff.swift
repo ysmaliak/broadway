@@ -115,7 +115,7 @@ enum PersonStuff {
     }
 
     private static func kept(_ call: PersonCall, _ what: String) async throws {
-        guard let tab = call.tab?.tab, let none = await call.box.nothingKept(tab, what: what, account: call.string("account")) else { return }
+        guard let tab = call.tab?.tab, let none = await call.box.nothingKept(tab, what: what) else { return }
         throw PersonRefusal(none.code ?? ToolCode.nothingKept.rawValue, none.text ?? "", hint: none.hint)
     }
 
@@ -126,7 +126,7 @@ enum PersonStuff {
         let outcome = await work(page.tab)
         if outcome.failed {
             let text = outcome.text ?? "That didn't work"
-            throw PersonRefusal(ToolFailure.code(text), text)
+            throw PersonRefusal(outcome.code ?? ToolFailure.code(text), text, hint: outcome.hint)
         }
         return ToolReply.data(outcome)
     }
@@ -338,7 +338,7 @@ enum PersonStuff {
             if let site = call.string("site")?.lowercased() { kept = kept.filter { $0.host.lowercased().contains(site) } }
             return ["logins": kept.map { ["site": $0.host, "user": $0.user, "used": PersonCommands.stamp($0.used)] }]
         },
-        PersonVerb("fill", "login", .person(.signIn), tabbed: true, first: { try await kept($0, "login") }) { call in
+        PersonVerb("fill", "login", .person(.signIn), tabbed: true) { call in
             let account = call.string("account")
             return try await filling(call) { await call.box.signIn($0, account: account, task: nil, asked: true) }
         },
