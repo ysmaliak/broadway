@@ -435,4 +435,207 @@ final class AgentWordsTests {
 
         #expect(shot.text?.contains("invalid=\"Enter a valid email\"") == true)
     }
+
+    @Test func aSignInPageSaysItNeedsAPasswordAndACodePageACode() async throws {
+        let (_, id) = try await page("<input aria-label=Email><input type=password aria-label=Password><button>Sign in</button>")
+        let shot = await box.call("snapshot", ["tab": id], task: task)
+        server.stop()
+        let (_, other) = try await page("<input autocomplete=one-time-code aria-label=Code><button>Verify</button>")
+        let code = await box.call("snapshot", ["tab": other], task: task)
+
+        #expect(shot.data?["needs"] as? String == "password")
+        #expect(shot.text?.contains("needs: a password, so run broadway fill login") == true)
+        #expect((shot.data?["lines"] as? [String])?.contains { $0.hasPrefix("needs:") } == false)
+        #expect(code.data?["needs"] as? String == "code")
+    }
+
+    @Test func aPlainAlertIsAcceptedAndReported() async throws {
+        let (tab, id) = try await page("<button onclick=\"alert('Saved'); window.after=true\">Keep</button>")
+
+        let done = await box.call("click", ["tab": id, "ref": "Keep"], task: task)
+
+        #expect(!done.failed)
+        #expect(done.text?.contains("The page said (alert, accepted): \"Saved\"") == true)
+        #expect((done.data?["dialog"] as? [String: Any])?["accepted"] as? Bool == true)
+        #expect(tab.agentDialog == nil)
+        let after = try await tab.web.evaluateJavaScript("window.after === true") as? Bool
+        #expect(after == true)
+    }
+
+    @Test func aFieldThatChangesWhatWasTypedSaysSo() async throws {
+        let (_, id) = try await page("<input aria-label=Phone oninput=\"this.value=this.value.replace(/[^0-9]/g,'')\">")
+
+        let done = await box.call("type", ["tab": id, "label": "Phone", "text": "555-0100", "replace": true], task: task)
+
+        #expect(done.text?.contains("(the field made it \"5550100\")") == true)
+    }
+
+    @Test func aScrollableBoxAndAHoverMenuAreNamed() async throws {
+        let (_, id) = try await page("""
+        <style>.menu .sub{display:none}.menu:hover .sub{display:block}</style>
+        <div class=menu><a href='#'>Teas</a><div class=sub><a href='#'>Green</a></div></div>
+        <div aria-label=Messages style='height:60px;width:200px;overflow:auto'><p>One</p><p>Two</p><p>Three</p><p>Four</p><p>Five</p></div>
+        """)
+
+        let shot = await box.call("snapshot", ["tab": id], task: task)
+
+        #expect(shot.text?.contains("link \"Teas\" -> / opens-on-hover") == true || shot.text?.contains("opens-on-hover") == true)
+        #expect(shot.text?.contains("scrollable \"Messages\" scrolls") == true)
+    }
+
+    @Test func theFirstLookAtASiteWithNotesSaysSoOnce() async throws {
+        let notes = try #require(Skill.parse("# Local tea\nsites: 127.0.0.1\n\nThe basket is at the top."))
+        box.siteNotes = { url in notes.serves(url) ? [notes] : [] }
+        let (_, id) = try await page("<button>Tea</button>")
+
+        let first = await box.call("snapshot", ["tab": id], task: task)
+        let second = await box.call("snapshot", ["tab": id], task: task)
+
+        #expect(first.text?.contains("note: Broadway has notes for this site: broadway skill local-tea") == true)
+        #expect(first.data?["skill"] as? String == "local-tea")
+        #expect(second.text?.contains("note: Broadway has notes") == false)
+        #expect(second.data?["skill"] == nil)
+    }
+
+    @Test func aRepeatWhileTheQuestionIsOpenJoinsItInsteadOfAskingAgain() async throws {
+        let (tab, id) = try await page("<button onclick='window.clicks=(window.clicks||0)+1'>Pay now</button>")
+        let mine = UUID()
+        TaskLedger.shared.open(mine, origin: .outside, title: "An agent")
+        AgentLinks.shared.setPatience(mine, 0.3)
+        defer { AgentLinks.shared.setPatience(mine, nil) }
+
+        let first = await box.call("click", ["tab": id, "ref": "Pay now"], task: mine)
+        let asked = AgentDesk.shared.pending.count
+        let second = await box.call("click", ["tab": id, "ref": "Pay now"], task: mine)
+        let still = AgentDesk.shared.pending.count
+        let third = Task { await box.call("click", ["tab": id, "ref": "Pay now"], task: mine) }
+        try? await Task.sleep(for: .milliseconds(100))
+        AgentDesk.shared.take(try #require(AgentDesk.shared.front).id, .yes)
+        let done = await third.value
+
+        #expect(first.code == "needs_you")
+        #expect(second.code == "needs_you")
+        #expect(asked == 1)
+        #expect(still == 1)
+        #expect(!done.failed)
+        #expect(await clicks(tab) == 1)
+        #expect(AgentDesk.shared.pending.isEmpty)
+    }
+
+    @Test func aSignInFormNamesTheProvidersThisSpaceIsSignedInTo() async throws {
+        let (tab, id) = try await page("""
+        <form><input type=email aria-label=Email><input type=password aria-label=Password><button>Sign in</button>
+        <button type=button>Continue with Google</button><button type=button>Continue with GitHub</button></form>
+        <footer><a href='#'>Apple</a></footer>
+        """)
+        let jar = tab.web.configuration.websiteDataStore.httpCookieStore
+        let cookie = try #require(HTTPCookie(properties: [.domain: ".google.com", .path: "/", .name: "SID", .value: "made-up", .secure: true]))
+        await jar.setCookie(cookie)
+
+        let shot = await box.call("snapshot", ["tab": id], task: task)
+        await jar.deleteCookie(cookie)
+        let after = await box.call("snapshot", ["tab": id], task: task)
+
+        #expect(shot.text?.contains("signs in with: Google (this space is signed in to it)") == true)
+        #expect(shot.data?["ways"] as? [String] == ["Google"])
+        #expect(shot.data?["needs"] as? String == "password")
+        #expect(after.data?["ways"] == nil)
+    }
+
+    @Test func twoPasswordFieldsAreASettingsPageNotASignIn() async throws {
+        let (_, id) = try await page("<input type=password aria-label=Old><input type=password aria-label=New autocomplete=new-password><input type=password aria-label=Again>")
+
+        let shot = await box.call("snapshot", ["tab": id], task: task)
+
+        #expect(shot.data?["needs"] == nil)
+    }
+
+    @Test func aClickAtAPointFindsTheElementThereAndAsksLikeARef() async throws {
+        let (tab, id) = try await page("""
+        <button style='position:fixed;left:40px;top:40px;width:120px;height:40px' onclick='window.clicks=(window.clicks||0)+1'>Keep</button>
+        <button style='position:fixed;left:40px;top:120px;width:120px;height:40px' onclick='window.clicks=(window.clicks||0)+10'>Pay now</button>
+        """)
+
+        let kept = await box.call("click", ["tab": id, "target": ["at": ["x": 100, "y": 60]]], task: task)
+        let call = Task { await box.call("click", ["tab": id, "target": ["at": ["x": 100, "y": 140]]], task: task) }
+        let asked = await question()
+        AgentDesk.shared.take(try #require(asked).id, .no)
+        let paid = await call.value
+        let empty = await box.call("click", ["tab": id, "target": ["at": ["x": 5000, "y": 5000]]], task: task)
+
+        #expect(!kept.failed)
+        #expect(kept.text?.contains("\"Keep\"") == true)
+        #expect(asked?.kind == .approval(.pay))
+        #expect(paid.code == "said_no")
+        #expect(empty.failed)
+        #expect(await clicks(tab) == 1)
+    }
+
+    @Test func givingAccessIsHeavyAndABareAllowIsNot() {
+        #expect(ActionKind.of(ActionFacts(["name": "Authorize", "tag": "button"])) == .act(.grant))
+        #expect(ActionKind.of(ActionFacts(["name": "Allow access", "tag": "a"])) == .act(.grant))
+        #expect(ActionKind.of(ActionFacts(["name": "Allow", "tag": "a"])) == .plain)
+        #expect(ActionKind.of(ActionFacts(["name": "Continue", "tag": "button", "type": "submit", "formMethod": "post",
+                                           "page": "https://accounts.example/oauth/authorize?client_id=made-up&scope=mail"])) == .act(.grant))
+        #expect(ActionKind.of(ActionFacts(["name": "Continue", "tag": "button", "type": "submit", "formMethod": "post",
+                                           "page": "https://accounts.example/oauth/authorize"])) == .act(.send))
+        #expect(AgentAct.grant.heavy)
+        #expect(AgentPolicy.verdict(.grant, mode: .auto, rule: .always) == .ask)
+        #expect(!AgentPolicy.offersAlways(.grant))
+    }
+
+    @Test func aYesToGiveAccessDoesNotHoldForTheNextOne() async throws {
+        let (tab, id) = try await page("<button onclick='window.clicks=(window.clicks||0)+1'>Authorize</button>")
+
+        let call = Task { await box.call("click", ["tab": id, "ref": "Authorize"], task: task) }
+        let asked = await question()
+        AgentDesk.shared.take(try #require(asked).id, .yes)
+        let first = await call.value
+        let again = Task { await box.call("click", ["tab": id, "ref": "Authorize"], task: task) }
+        let second = await question()
+        AgentDesk.shared.take(try #require(second).id, .no)
+        _ = await again.value
+
+        #expect(asked?.kind == .approval(.grant))
+        #expect(asked?.title.hasPrefix("Give access to your account on") == true)
+        #expect(!first.failed)
+        #expect(second != nil)
+        #expect(await clicks(tab) == 1)
+    }
+
+    @Test func anOldRefAfterAReloadOfTheSameAddressIsStaleAndTheLooksRefWorks() async throws {
+        let (tab, id) = try await page("<button onclick='window.clicks=(window.clicks||0)+1'>Keep</button><button onclick='window.clicks=(window.clicks||0)+10'>Other</button>")
+        let old = try await ref(id, "Other")
+        let before = tab.web.url
+        _ = try await tab.web.evaluateJavaScript("location.reload(); true")
+        try? await Task.sleep(for: .milliseconds(600))
+        _ = await box.call("wait", ["tab": id], task: task)
+
+        let stale = await box.call("click", ["tab": id, "ref": old], task: task)
+        let reloaded = await box.call("navigate", ["tab": id, "url": "http://127.0.0.1:\(server.port)/page"], task: task)
+        let look = reloaded.data?["look"] as? [String: Any]
+        let fresh = try #require((look?["elements"] as? [[String: Any]])?.first { $0["name"] as? String == "Keep" }?["ref"] as? String)
+        let kept = await box.call("click", ["tab": id, "ref": fresh], task: task)
+
+        #expect(tab.web.url == before)
+        #expect(stale.code == "stale_ref")
+        #expect(!kept.failed)
+        #expect(await clicks(tab) == 1)
+    }
+
+    @Test func aRefCarriedOnlyToAnotherSessionIsStaleAfterAReload() async throws {
+        let (tab, id) = try await page("<button onclick='window.clicks=(window.clicks||0)+1'>Keep</button>")
+        let mine = try await ref(id, "Keep")
+        _ = try await tab.web.evaluateJavaScript("location.reload(); true")
+        try? await Task.sleep(for: .milliseconds(600))
+        let other = UUID()
+        _ = await box.call("snapshot", ["tab": id], task: other)
+
+        let guessed = await box.call("click", ["tab": id, "ref": mine], task: task)
+        let theirs = await box.call("click", ["tab": id, "ref": mine], task: other)
+
+        #expect(guessed.code == "stale_ref")
+        #expect(!theirs.failed)
+        #expect(await clicks(tab) == 1)
+    }
 }

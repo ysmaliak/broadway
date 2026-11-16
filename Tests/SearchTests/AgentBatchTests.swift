@@ -50,7 +50,7 @@ final class AgentBatchTests {
     }
 
     private func ref(_ label: String) async throws -> String {
-        let shot = await socket.box.call("snapshot", ["tab": id], task: nil)
+        let shot = await socket.box.call("snapshot", ["tab": id], task: link)
         let line = try #require(shot.text?.split(separator: "\n").first { $0.contains("\"\(label)\"") })
         let word = String(line.split(separator: " ")[0])
         return word.hasPrefix("@") ? String(word.dropFirst()) : word

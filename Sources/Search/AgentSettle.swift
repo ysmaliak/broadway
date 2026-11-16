@@ -218,6 +218,7 @@ extension BrowserToolbox {
         var ms: Int
         var loading: Bool
         var expect: [String: Any]?
+        var alerted: AgentChange.Dialog?
     }
 
     func settle(_ watch: AgentWatch, cap: TimeInterval?, expect: AgentExpect? = nil, navigation: Bool = false) async -> Settling {
@@ -230,11 +231,18 @@ extension BrowserToolbox {
         var lastBusy = start
         var navigated = false
         var expected: [String: Any]?
+        var alerted: AgentChange.Dialog?
         while true {
             let now = Date()
             let elapsed = now.timeIntervalSince(start)
+            if let question = tab.agentDialog, question.open, case .alert = question.kind, alerted == nil {
+                alerted = AgentChange.Dialog(question)
+                question.answer(ok: true, text: nil)
+                tab.agentDialog = nil
+                lastBusy = now
+            }
             if tab.agentDialog?.open == true {
-                return Settling(settled: .dialog, busy: 0, navigated: navigated, ms: Int(elapsed * 1000), loading: tab.loading, expect: expected)
+                return Settling(settled: .dialog, busy: 0, navigated: navigated, ms: Int(elapsed * 1000), loading: tab.loading, expect: expected, alerted: alerted)
             }
             let poll = await timed(tab, AgentPage.pollScript, [:], in: watch.frame, seconds: 0.4) as? [String: Any]
             if tab.agentDialog?.open == true { continue }
@@ -251,14 +259,14 @@ extension BrowserToolbox {
             if let expect, expected?["met"] as? Bool != true, !navigating {
                 if await met(expect, tab: tab, frame: watch.frame) {
                     expected = ["kind": expect.kind, "want": expect.want, "met": true, "after": (elapsed * 10).rounded() / 10]
-                    return Settling(settled: navigated ? .navigated : .quiet, busy: 0, navigated: navigated, ms: Int(elapsed * 1000), loading: tab.loading, expect: expected)
+                    return Settling(settled: navigated ? .navigated : .quiet, busy: 0, navigated: navigated, ms: Int(elapsed * 1000), loading: tab.loading, expect: expected, alerted: alerted)
                 }
             }
             if expect == nil || elapsed >= limit {
                 if let verdict = AgentSettleRule.verdict(elapsed: elapsed, quietFor: quietFor, busy: busy, navigating: navigating, cap: limit) {
                     if let expect { expected = ["kind": expect.kind, "want": expect.want, "met": false, "after": (elapsed * 10).rounded() / 10] }
                     let settled: AgentChange.Settled = verdict == .quiet && navigated ? .navigated : verdict
-                    return Settling(settled: settled, busy: busy, navigated: navigated, ms: Int(elapsed * 1000), loading: tab.loading, expect: expected)
+                    return Settling(settled: settled, busy: busy, navigated: navigated, ms: Int(elapsed * 1000), loading: tab.loading, expect: expected, alerted: alerted)
                 }
             }
             try? await Task.sleep(for: .milliseconds(100))
@@ -334,6 +342,7 @@ extension BrowserToolbox {
                                  page: AgentChange.Page(url: AgentSecrets.shown(tab.pageAddress), title: tab.title), kept: kept)
         change.notes = box.notes
         change.expect = settling.expect
+        change.alerted = settling.alerted
         if settling.settled == .capped { change.busy = AgentChange.Busy(requests: settling.busy) }
         if let question = tab.agentDialog, question.open {
             change.settled = .dialog
@@ -413,6 +422,39 @@ enum AgentRefBook {
     }
 
     static func latest(_ tab: Tab) -> String? { pages[tab.id]?.last?.doc }
+
+    private static var told: [String: (doc: String, refs: Set<String>)] = [:]
+
+    static func key(_ task: UUID?, _ tab: Tab) -> String {
+        "\(task.map { AgentTasks.shared.root($0).uuidString } ?? "-")|\(tab.id.uuidString)"
+    }
+
+    static func tell(_ task: UUID?, _ tab: Tab, doc: String, refs: Set<String>) {
+        let key = key(task, tab)
+        if told[key]?.doc != doc { told[key] = (doc, []) }
+        told[key]?.refs.formUnion(refs)
+    }
+
+    static func wasTold(_ task: UUID?, _ tab: Tab, doc: String?, ref: String) -> Bool? {
+        guard let page = told[key(task, tab)] else { return nil }
+        return page.doc == doc && page.refs.contains(ref)
+    }
+
+    static func refs(in data: [String: Any]) -> Set<String> {
+        let navigated = (data["page"] as? [String: Any])?["navigated"] as? Bool == true
+        var found: Set<String> = []
+        func walk(_ value: Any, key: String?) {
+            if key == "went" || (navigated && key == "target") { return }
+            if let object = value as? [String: Any] {
+                if let ref = object["ref"] as? String { found.insert(ref) }
+                for (name, inner) in object where name != "ref" { walk(inner, key: name) }
+            } else if let list = value as? [Any] {
+                for inner in list { walk(inner, key: key) }
+            }
+        }
+        walk(data, key: nil)
+        return found
+    }
 
     static func earlier(_ tab: Tab, ref: String, now doc: String?) -> Page? {
         guard let number = Int(ref.dropFirst()), ref.hasPrefix("e") else { return nil }

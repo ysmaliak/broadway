@@ -6,6 +6,11 @@ enum AgentResult<Value> {
     case failure(ToolOutcome)
 }
 
+struct AgentPoint: Equatable {
+    var x: Double
+    var y: Double
+}
+
 struct AgentTarget: Equatable {
     var ref: String?
     var words: String?
@@ -70,9 +75,25 @@ struct AgentTarget: Equatable {
         nth = Self.whole(given["nth"] ?? arguments["nth"])
         inside = text("in").map(Self.bare)
         frames = (given["frames"] ?? arguments["frames"]) as? Bool == true
+        at = Self.point(given["at"] ?? (given.isEmpty ? arguments["at"] : nil))
     }
 
-    var given: Bool { ref != nil || words != nil || label != nil || !roles.isEmpty }
+    var at: AgentPoint?
+
+    static func point(_ value: Any?) -> AgentPoint? {
+        if let pair = value as? [String: Any], let x = number(pair["x"]), let y = number(pair["y"]) { return AgentPoint(x: x, y: y) }
+        if let text = value as? String {
+            let parts = text.split(separator: ",").map { Double($0.trimmingCharacters(in: .whitespaces)) }
+            if parts.count == 2, let x = parts[0], let y = parts[1] { return AgentPoint(x: x, y: y) }
+        }
+        return nil
+    }
+
+    private static func number(_ value: Any?) -> Double? {
+        (value as? Double) ?? (value as? Int).map(Double.init) ?? (value as? NSNumber)?.doubleValue ?? (value as? String).flatMap(Double.init)
+    }
+
+    var given: Bool { ref != nil || words != nil || label != nil || !roles.isEmpty || at != nil }
 
     var described: String {
         if let label { return "labelled \"\(AgentChange.cell(label))\"" }
@@ -154,8 +175,27 @@ extension BrowserToolbox {
         return .failure(AgentChange.cell(text, most: 300), code: code ?? ToolFailure.code(text), hint: hint, data: data.isEmpty ? nil : data)
     }
 
-    func resolve(_ target: AgentTarget, tab: Tab, tool: String) async -> AgentResult<String> {
-        if let ref = target.ref { return .success(ref) }
+    func toldTab(_ arguments: [String: Any], _ data: [String: Any]) -> Tab? {
+        if let tab = find(arguments)?.tab { return tab }
+        let id = (data["id"] as? String) ?? (data["tab"] as? String)
+        return id.flatMap { find(["tab": $0])?.tab }
+    }
+
+    func resolve(_ target: AgentTarget, tab: Tab, tool: String, task: UUID? = nil) async -> AgentResult<String> {
+        if let ref = target.ref {
+            if !ref.contains(".") {
+                let doc = await timed(tab, AgentPage.docScript, seconds: 2) as? String
+                if AgentRefBook.wasTold(task, tab, doc: doc, ref: ref) == false {
+                    var text = "@\(ref) is from before this page changed, so it may name something else now"
+                    if let earlier = AgentRefBook.earlier(tab, ref: ref, now: doc) {
+                        text = "@\(ref) was on \(AgentChange.cell(earlier.title.isEmpty ? "another page" : earlier.title)), this tab is now on \(AgentChange.cell(tab.title.isEmpty ? "another page" : tab.title))"
+                    }
+                    return .failure(.failure(text, code: .staleRef, hint: "Run broadway snapshot for this page's refs"))
+                }
+            }
+            return .success(ref)
+        }
+        if let at = target.at { return await resolve(at: at, tab: tab) }
         guard target.given else {
             return .failure(.failure("\(Self.command(tool)) needs a target: a ref like @e12, or the element's words", code: .usage,
                                      hint: "Run broadway snapshot or broadway find WORDS for refs"))
@@ -197,6 +237,20 @@ extension BrowserToolbox {
         if let within = element["within"] as? [String: Any], let name = within["name"] as? String, !name.isEmpty { return name }
         if let near = element["near"] as? String, !near.isEmpty { return near }
         return element["name"] as? String ?? ""
+    }
+
+    func resolve(at point: AgentPoint, tab: Tab) async -> AgentResult<String> {
+        let scale = (shotScale[tab.id] ?? 1) * max(tab.web.pageZoom, 0.1)
+        let arguments: [String: Any] = ["x": point.x / scale, "y": point.y / scale]
+        guard let said = await timed(tab, AgentPage.pointScript, arguments, seconds: 5) as? [String: Any] else {
+            return .failure(.failure("The page gave no answer", code: .noAnswer))
+        }
+        if let failed = said["failed"] as? String {
+            return .failure(.failure(failed, code: said["code"] as? String ?? "not_found",
+                                     hint: "broadway screenshot shows the window, and broadway snapshot gives refs"))
+        }
+        guard let ref = said["ref"] as? String else { return .failure(.failure("Nothing is at that point", code: "not_found")) }
+        return .success(ref)
     }
 
     func candidates(_ target: AgentTarget, tab: Tab, tool: String, most: Int) async -> (list: [[String: Any]], count: Int, failure: ToolOutcome?) {

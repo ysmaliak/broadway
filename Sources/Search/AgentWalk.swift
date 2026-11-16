@@ -111,6 +111,40 @@ extension AgentPage {
       }
       return out.join(' ');
     }
+    function broadwayNeeds() {
+      var walls = document.querySelectorAll('iframe[src*="recaptcha"],iframe[src*="hcaptcha"],iframe[src*="challenges.cloudflare.com"],iframe[src*="arkoselabs"],iframe[src*="funcaptcha"],.g-recaptcha,.h-captcha,.cf-turnstile,#cf-challenge-running');
+      for (var w = 0; w < walls.length; w++) {
+        var wall = walls[w], wr = wall.getBoundingClientRect();
+        var quiet = (wall.getAttribute('src') || '').indexOf('size=invisible') >= 0 || wall.getAttribute('data-size') === 'invisible';
+        if (!quiet && wr.width >= 40 && wr.height >= 20 && seen(wall)) return 'captcha';
+      }
+      var boxes = document.querySelectorAll('input');
+      var password = 0;
+      for (var i = 0; i < boxes.length; i++) {
+        var b = boxes[i];
+        if (!seen(b) || b.disabled) continue;
+        var called = ((b.getAttribute('autocomplete') || '') + ' ' + (b.name || '') + ' ' + (b.id || '') + ' ' + (b.getAttribute('aria-label') || '') + ' ' + (b.placeholder || '')).toLowerCase();
+        if (b.labels) for (var l = 0; l < b.labels.length; l++) called += ' ' + (b.labels[l].textContent || '').toLowerCase();
+        if (/one-time-code|\\botp\\b|one.?time|verification.?code|security.?code|2fa|two.?factor|authenticator|sms.?code/.test(called)) return 'code';
+        if ((b.type || '').toLowerCase() === 'password' && (b.getAttribute('autocomplete') || '').toLowerCase() !== 'new-password') password++;
+      }
+      return password === 1 ? 'password' : '';
+    }
+    function broadwayWays() {
+      var forms = Array.prototype.filter.call(document.querySelectorAll('input[type=password],input[type=email],input[autocomplete=username],input[autocomplete=email]'), seen);
+      if (!forms.length) return [];
+      var names = { google: 'Google', apple: 'Apple', github: 'GitHub', microsoft: 'Microsoft', facebook: 'Facebook' };
+      var found = [];
+      var near = forms[0].closest('form') || forms[0].parentElement;
+      for (var up = 0; near && up < 4 && near.parentElement && near.parentElement !== document.body; up++) near = near.parentElement;
+      (near || document.body).querySelectorAll('button,a,[role=button]').forEach(function (b) {
+        if (!seen(b) || b.closest('footer,[role=contentinfo]')) return;
+        var said = broadwayFlat(b.innerText || b.getAttribute('aria-label') || b.title || '', 60).toLowerCase();
+        var hit = said.match(/^(?:continue|sign in|log in|sign up)\\s+with\\s+(google|apple|github|microsoft|facebook)$/) || said.match(/^(google|apple|github|microsoft|facebook)$/);
+        if (hit && found.indexOf(names[hit[1]]) < 0) found.push(names[hit[1]]);
+      });
+      return found;
+    }
     function broadwayValueOf(subject, kind) {
       if (!/^(textbox|combobox|searchbox|slider|spinbutton)$/.test(kind)) return undefined;
       if ('value' in subject && subject.value && subject.tagName !== 'BUTTON') return String(subject.value).slice(0, 200);
@@ -148,7 +182,7 @@ extension AgentPage {
         line += ' takes ' + (subject.multiple ? 'files' : 'a file') + (subject.accept ? ' accept="' + subject.accept.replace(/"/g, "'").slice(0, 120) + '"' : '');
         if (item.upload.files) {
           item.upload.names = Array.prototype.slice.call(subject.files, 0, 5).map(function (f) { return String(f.name).slice(0, 80); });
-          line += ' has ' + item.upload.files + ' (' + item.upload.names.join(', ').replace(/"/g, "'") + ')';
+          line += ' has ' + item.upload.files + ' chosen="' + item.upload.names.join(', ').replace(/"/g, "'") + '"';
         }
       }
       if (subject.disabled || subject.getAttribute('aria-disabled') === 'true' || (subject.closest && subject.closest('fieldset[disabled]'))) { line += ' disabled'; item.disabled = true; }
@@ -259,6 +293,33 @@ extension AgentPage {
       collect(document);
       var unseen = 0;
       var fields = /^(textbox|searchbox|combobox|slider|spinbutton|checkbox|radio|switch|file)$/;
+      var hovers = new Set(), rules = 0;
+      try {
+        for (var si = 0; si < document.styleSheets.length && rules < 300; si++) {
+          var list;
+          try { list = document.styleSheets[si].cssRules; } catch (e) { continue; }
+          for (var ri = 0; list && ri < list.length && rules < 300; ri++) {
+            var picked = list[ri].selectorText;
+            if (!picked || picked.indexOf(':hover') < 0) continue;
+            rules++;
+            picked.split(',').forEach(function (part) {
+              var at = part.indexOf(':hover');
+              if (at < 0 || !/[\\s>+~]\\S/.test(part.slice(at + 6))) return;
+              try { document.querySelectorAll(part.slice(0, at).trim() || '*').forEach(function (n) { hovers.add(n); }); } catch (e) {}
+            });
+          }
+        }
+      } catch (e) {}
+      function hovered(el) {
+        for (var up = el, depth = 0; up && depth < 4; up = up.parentElement, depth++) if (hovers.has(up)) return true;
+        return false;
+      }
+      function scrolls(el, look) {
+        if (el === document.body || el === document.documentElement) return false;
+        if (!/(auto|scroll)/.test(look.overflowY + ' ' + look.overflowX)) return false;
+        var r = el.getBoundingClientRect();
+        return r.width >= 40 && r.height >= 40 && (el.scrollHeight > el.clientHeight + 4 || el.scrollWidth > el.clientWidth + 4);
+      }
       function visit(el, region, alpha, ground) {
         if (count >= cap || el === o.skip) return;
         if (!seen(el)) {
@@ -289,10 +350,19 @@ extension AgentPage {
         } else {
           var target = proxies.get(el) || null, seenAs = describe(el, target), kind = seenAs.kind;
           if (kind && !fields.test(kind) && !target && !el.hasAttribute('aria-label') && !el.hasAttribute('aria-labelledby') && !el.hasAttribute('title') && broadwayFaint(el, look, alpha, ground)) { unseen++; return; }
+          if (!kind && scrolls(el, look)) {
+            count++;
+            var sref = broadwayRef(el, null);
+            var called = broadwayFlat(el.getAttribute('aria-label') || (el.querySelector('h1,h2,h3,h4,[role=heading]') || {}).innerText || el.innerText, 40);
+            var boxItem = { ref: sref, role: 'scrollable', name: called, scrolls: true };
+            if (here) boxItem.region = here;
+            rows.push({ el: el, region: here, item: boxItem, line: '@' + sref + ' scrollable "' + called.replace(/"/g, "'") + '" scrolls' });
+          }
           if (kind) {
             count++;
             var ref = broadwayRef(el, target), built = broadwayItem(el, target, kind, seenAs.label, ref);
             if (here) built.item.region = here;
+            if (hovers.size && !broadwayTold.test(kind) && kind !== 'heading' && hovered(el)) { built.item.hover = true; built.line += ' opens-on-hover'; }
             rows.push({ el: el, region: here, item: built.item, line: built.line });
             var opens = kind === 'heading' || kind === 'dropzone' || el.tagName === 'SELECT' || kind === 'textbox' || (kind === 'combobox' && el.tagName !== 'INPUT') || broadwayTold.test(kind);
             if (!opens) return;
@@ -545,9 +615,24 @@ extension AgentPage {
     out.shown = picked.length;
     out.cut = walked.cut;
     out.unseen = walked.unseen || 0;
+    out.needs = inside ? '' : broadwayNeeds();
+    out.ways = inside ? [] : broadwayWays();
     out.y = window.scrollY;
     out.height = document.documentElement.scrollHeight;
     return out;
+    """
+
+    static let docScript = """
+    return window.__broadwayRefs ? window.__broadwayRefs.doc : null;
+    """
+
+    static let pointScript = walkBase + """
+
+    var el = document.elementFromPoint(x, y);
+    if (!el || el === document.documentElement) return { failed: 'Nothing is at that point', code: 'not_found' };
+    if (el.tagName === 'IFRAME' || el.tagName === 'FRAME') return { failed: 'That point is inside an embedded frame, so use a ref from broadway snapshot', code: 'not_actionable' };
+    var hit = el.closest('button,a[href],input,select,textarea,summary,label,[role=button],[role=link],[role=checkbox],[role=radio],[role=switch],[role=tab],[role=menuitem],[role=option],[role=slider],[contenteditable=true],[onclick],[tabindex]') || el;
+    return { ref: broadwayRef(hit, null) };
     """
 
     static let resolveScript = walkBase + """

@@ -220,6 +220,15 @@ extension BrowserToolbox {
                 AgentDownloadWatch.unexpect(tab)
                 return clicked
             }
+            let first = since.addingTimeInterval(8)
+            while seconds > 8, AgentDownloadWatch.latest(tab.id, since: since) == nil, Date() < first {
+                try? await Task.sleep(for: .milliseconds(150))
+            }
+            if seconds > 8, AgentDownloadWatch.latest(tab.id, since: since) == nil {
+                AgentDownloadWatch.unexpect(tab)
+                AgentWatchBox.current?.said = "Nothing started downloading within 8 s: the click did something else"
+                return .json(["started": false, "website": true])
+            }
         }
         return await awaitDownload(tab, since: since, seconds: seconds, clearing: true)
     }

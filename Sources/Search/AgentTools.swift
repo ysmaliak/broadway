@@ -180,7 +180,7 @@ enum AgentPage {
                formAction: form ? (form.getAttribute('action') ? form.action : location.href) : '',
                formMethod: form ? (form.getAttribute('method') || 'get') : '',
                formSearch: !!(form && (form.getAttribute('role') === 'search' || form.querySelector('input[type=search]'))),
-               formPassword: password, formCard: card, fileField: !!file, captcha: broadwayCaptcha() };
+               formPassword: password, formCard: card, fileField: !!file, captcha: broadwayCaptcha(), page: location.href };
     }
     """
 
@@ -439,6 +439,9 @@ enum AgentMac {
 @MainActor
 final class BrowserToolbox: AgentToolbox {
     weak var browser: Browser?
+    var siteNotes: (URL?) -> [Skill] = { SkillStore.shared.skills(for: $0) }
+    var shotScale: [UUID: Double] = [:]
+    var notesTold: Set<String> = []
 
     var open: Bool { (browser ?? Browsers.front)?.prefs.agentsAllowed ?? false }
 
@@ -605,6 +608,7 @@ final class BrowserToolbox: AgentToolbox {
             return .failure("The person said not now to this a moment ago. Stop this step, and do not try it another way.", code: .saidNo)
         }
         if let refused = unanswerable(task) { return refused }
+        let joining = task.map { AgentTasks.shared.root($0) }
         var question = AgentQuestion(kind: .approval(act), title: title ?? act.question(on: site))
         question.task = task
         question.tab = tab?.id
@@ -636,7 +640,7 @@ final class BrowserToolbox: AgentToolbox {
                 AgentLinks.shared.giveActPass(AgentTasks.shared.root(task), act, site: site, quote: quote)
             }
         }
-        guard let answer = await heard(question, tab: tab, later: late) else { return Self.stillWaiting }
+        guard let answer = await heard(question, tab: tab, join: joining, later: late) else { return Self.stillWaiting }
         return settle(answer)
     }
 
@@ -658,13 +662,19 @@ final class BrowserToolbox: AgentToolbox {
         return nil
     }
 
-    private func heard(_ question: AgentQuestion, tab: Tab?, later: @escaping (AgentAnswer) -> Void) async -> AgentAnswer? {
+    private func heard(_ question: AgentQuestion, tab: Tab?, join: UUID? = nil, later: @escaping (AgentAnswer) -> Void) async -> AgentAnswer? {
         guard let task = question.task else { return .dropped }
         if TaskLedger.shared.entry(task)?.origin == .outside {
             let asking = Task { @MainActor in await self.waved(tab) { await AgentDesk.shared.ask(question) } }
             let answer = await AgentPatience.race(asking, seconds: AgentLinks.shared.patience(task))
             guard let answer, !Task.isCancelled else {
-                Task { @MainActor in later(await asking.value) }
+                let follow = Task { @MainActor () -> AgentAnswer in
+                    let said = await asking.value
+                    later(said)
+                    if let join { AgentLinks.shared.dropAsk(join) }
+                    return said
+                }
+                if let join { AgentLinks.shared.keepAsk(join, follow) }
                 return nil
             }
             return answer
@@ -738,7 +748,9 @@ final class BrowserToolbox: AgentToolbox {
     func call(_ name: String, _ arguments: [String: Any], task: UUID?) async -> ToolOutcome {
         let outside = TaskLedger.shared.entry(task)?.origin == .outside
         if AgentDesk.shared.waits(for: task) {
-            return .failure(outside ? "This still waits for the person's yes in Broadway. Nothing was done." : "The person hasn't answered yet. Nothing was done.", code: .needsYou)
+            let waiting = ToolOutcome.failure(outside ? "This still waits for the person's yes in Broadway. Nothing was done." : "The person hasn't answered yet. Nothing was done.", code: .needsYou)
+            guard outside, let task, Self.answering.contains(name), let open = AgentLinks.shared.openAsk(AgentTasks.shared.root(task)) else { return waiting }
+            guard await AgentPatience.race(open, seconds: AgentLinks.shared.patience(task)) != nil, !AgentDesk.shared.waits(for: task) else { return waiting }
         }
         if let refused = TaskLedger.shared.refusal(name, arguments, task: task) { return .failure(refused, code: .refused) }
         if outside, let task, name == "open" || find(arguments) != nil { AgentLinks.shared.announce(task) }
@@ -755,6 +767,9 @@ final class BrowserToolbox: AgentToolbox {
             }
         }
         var said = await act(name, arguments, task: task)
+        if let data = said.data, let tab = toldTab(arguments, data), let doc = AgentRefBook.latest(tab) {
+            AgentRefBook.tell(task, tab, doc: doc, refs: AgentRefBook.refs(in: data))
+        }
         guard !Self.keepsSecrets.contains(name) else { return said }
         let sealed = Set(visible.flatMap(\.tab.sealed))
         said.data = said.data.map { AgentSecrets.scrub($0, sealed: sealed) }
@@ -805,7 +820,7 @@ final class BrowserToolbox: AgentToolbox {
         return await answered(name, arguments, tab: tab, task: task) { await self.perform(name, arguments, found: found, task: task) }
     }
 
-    private func aimed(_ name: String, _ arguments: [String: Any], tab: Tab) async -> AgentResult<[String: Any]> {
+    private func aimed(_ name: String, _ arguments: [String: Any], tab: Tab, task: UUID?) async -> AgentResult<[String: Any]> {
         var arguments = arguments
         var target: AgentTarget
         switch name {
@@ -827,7 +842,7 @@ final class BrowserToolbox: AgentToolbox {
         }
         let optional = ["screenshot", "scroll", "download", "press"].contains(name)
         guard target.given || !optional else { return .success(arguments) }
-        switch await resolve(target, tab: tab, tool: name) {
+        switch await resolve(target, tab: tab, tool: name, task: task) {
         case .failure(let failure): return .failure(failure)
         case .success(let ref): arguments["ref"] = ref
         }
@@ -852,7 +867,7 @@ final class BrowserToolbox: AgentToolbox {
         let tab = found.tab
         var arguments = given
         if Self.targeted.contains(name) {
-            switch await aimed(name, arguments, tab: tab) {
+            switch await aimed(name, arguments, tab: tab, task: task) {
             case .failure(let failure): return failure
             case .success(let aimed): arguments = aimed
             }
@@ -994,9 +1009,10 @@ final class BrowserToolbox: AgentToolbox {
             tab.web.takeSnapshot(with: configuration) { image, _ in done.resume(returning: image) }
         }
         _ = await PageSelection.run(tab, AgentPage.unshieldScript)
-        guard let image, let tiff = image.tiffRepresentation, let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else {
+        guard let image, let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff), let png = rep.representation(using: .png, properties: [:]) else {
             return .failure("No picture of that page")
         }
+        if image.size.width > 0 { shotScale[tab.id] = Double(rep.pixelsWide) / Double(image.size.width) }
         return ToolOutcome(imagePNG: png)
     }
 
@@ -1047,6 +1063,8 @@ final class BrowserToolbox: AgentToolbox {
             }
             return .text("Clicked")
         }
+        let why = framed ? "it is inside an embedded frame" : !tab.agent ? "it is in the person's own tab" : "the page has no window"
+        AgentWatchBox.current?.notes.append("(clicked in script: \(why))")
         guard let said = await inFrame(tab, ref, AgentPage.clickScript) as? [String: Any] else {
             if tab.agentDialog?.open == true { return .text("Clicked") }
             return .failure("The click was sent, but the page didn't say whether it landed", code: .failed, hint: Self.unsure, retrySafe: false)
@@ -1226,7 +1244,14 @@ final class BrowserToolbox: AgentToolbox {
             return .failure("The text was sent, but the page didn't say whether it landed", code: .failed, hint: "Look before you type again", retrySafe: false)
         }
         if said["failed"] != nil { return pageFailure(said, tab: tab, ref: ref) }
-        if let value = said.removeValue(forKey: "value") as? String, !value.isEmpty { AgentWatchBox.current?.kept["value"] = value }
+        if let value = said.removeValue(forKey: "value") as? String, !value.isEmpty {
+            AgentWatchBox.current?.kept["value"] = value
+            let typed = arguments["text"] as? String ?? ""
+            let replaced = arguments["replace"] as? Bool ?? false
+            if !typed.isEmpty, replaced ? value != typed : !value.hasSuffix(typed), value.count < 200 {
+                AgentWatchBox.current?.notes.append("(the field made it \"\(AgentChange.cell(value))\")")
+            }
+        }
         return .json(said)
     }
 

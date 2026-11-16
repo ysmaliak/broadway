@@ -23,4 +23,12 @@ extension AgentLinks {
         guard let when = Self.refusals["\(session.uuidString)|\(Self.actPass(act, site: site, quote: quote))"] else { return false }
         return now.timeIntervalSince(when) <= Self.passLife
     }
+
+    private static var asks: [UUID: Task<AgentAnswer, Never>] = [:]
+
+    func openAsk(_ session: UUID) -> Task<AgentAnswer, Never>? { Self.asks[session] }
+
+    func keepAsk(_ session: UUID, _ asking: Task<AgentAnswer, Never>) { Self.asks[session] = asking }
+
+    func dropAsk(_ session: UUID) { Self.asks[session] = nil }
 }

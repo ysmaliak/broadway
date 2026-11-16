@@ -228,8 +228,20 @@ struct AgentChange {
                       needs: object["needs"] as? String, ways: object["ways"] as? [String] ?? [], header: object["header"] as? [String] ?? [])
         }
 
+        static func needsLine(_ needs: String) -> String {
+            switch needs {
+            case "captcha": "needs: a captcha, so run broadway handoff \"Solve the captcha\" and wait, never solving it yourself"
+            case "code": "needs: a one-time code, so run broadway handoff \"Type the code you were sent\", or ask the person for it"
+            default: "needs: a password, so run broadway fill login (Broadway fills it after the person's yes, you never see it)"
+            }
+        }
+
+        static func waysLine(_ ways: [String]) -> String {
+            "signs in with: " + ways.joined(separator: ", ") + (ways.count == 1 ? " (this space is signed in to it)" : " (this space is signed in to each)")
+        }
+
         func text() -> [String] {
-            header + lines + (total > shown ? ["… \(total - shown) more: broadway snapshot, or --in @ref, --role, --find"] : [])
+            (needs.map { [Self.needsLine($0)] } ?? []) + (ways.isEmpty ? [] : [Self.waysLine(ways)]) + header + lines + (total > shown ? ["… \(total - shown) more: broadway snapshot, or --in @ref, --role, --find"] : [])
         }
     }
 
@@ -306,6 +318,7 @@ struct AgentChange {
             var said = alerted.object()
             said["accepted"] = true
             found["alerted"] = said
+            if dialog == nil { found["dialog"] = said }
         }
         for (key, value) in kept where found[key] == nil { found[key] = value }
         return found

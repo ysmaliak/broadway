@@ -29,7 +29,7 @@ enum AgentMode: String, CaseIterable {
 }
 
 enum AgentAct: String, CaseIterable {
-    case tab, signIn, address, upload, send, delete, pay, mac
+    case tab, signIn, address, upload, send, delete, grant, pay, mac
 
     var heavy: Bool { ![.tab, .signIn, .address].contains(self) }
 
@@ -44,6 +44,7 @@ enum AgentAct: String, CaseIterable {
         case .upload: return "Upload a file to \(place)?"
         case .send: return "Send on \(place)?"
         case .delete: return "Delete on \(place)?"
+        case .grant: return "Give access to your account on \(place)?"
         case .pay: return "Pay on \(place)?"
         case .mac: return "Let the agent use your Mac?"
         }
@@ -57,6 +58,7 @@ enum AgentAct: String, CaseIterable {
         case .upload: return "Upload"
         case .send: return "Send"
         case .delete: return "Delete"
+        case .grant: return "Give Access"
         case .pay: return "Pay"
         case .mac: return "Allow"
         }
@@ -82,14 +84,14 @@ enum AgentPolicy {
         if rule == .never { return .refuse }
         if act == .mac { return .ask }
         if mode == .bypass { return .go }
-        if rule == .always { return act == .pay ? .ask : .go }
+        if rule == .always { return act == .pay || act == .grant ? .ask : .go }
         if mode == .ask { return .ask }
         return act.heavy ? .ask : .go
     }
 
     static func allowsSiteRule(_ act: AgentAct, site: String?) -> Bool { site != nil && act != .mac }
 
-    static func offersAlways(_ act: AgentAct) -> Bool { act != .pay && act != .mac }
+    static func offersAlways(_ act: AgentAct) -> Bool { act != .pay && act != .mac && act != .grant }
 }
 
 struct ActionFacts: Equatable {
@@ -108,9 +110,11 @@ struct ActionFacts: Equatable {
     var formCard = false
     var fileField = false
     var captcha = false
+    var page = ""
 
     init(_ found: [String: Any] = [:]) {
         name = found["name"] as? String ?? ""
+        page = found["page"] as? String ?? ""
         optionLabel = found["optionLabel"] as? String ?? ""
         optionValue = found["optionValue"] as? String ?? ""
         role = found["role"] as? String ?? ""
@@ -142,6 +146,7 @@ enum ActionKind: Equatable {
     private static let send = words("send|send now|submit|post|publish|reply|respond|comment|tweet|share|merge|deploy|release|confirm|approve|accept|sign(?!\\s*(?:in|on|out)(?![\\p{L}\\p{N}]))|invite|apply|forward|save and send|senden|envoyer|enviar|absenden|отправить|опубликовать")
     private static let amount = try? NSRegularExpression(pattern: "(?:[$€£¥₽]\\s?\\d)|(?:\\d\\s?(?:usd|eur|gbp|rub)\\b)", options: [.caseInsensitive])
     private static let signing = words("sign in|sign on|log in|login|log on|anmelden|se connecter|iniciar sesión|entrar|войти")
+    private static let granting = words("authorize|authorise|allow access|grant access|give access|autorisieren|zugriff erlauben|zugriff gewähren|autoriser|autoriser l'accès|autorizar|permitir acceso|conceder acceso|разрешить доступ|предоставить доступ|авторизовать")
     private static let passkey = words("passkey|passkeys|security key|webauthn|face id|touch id|windows hello")
 
     private static func has(_ expression: NSRegularExpression?, _ text: String) -> Bool {
@@ -153,6 +158,13 @@ enum ActionKind: Equatable {
         let hidden = CharacterSet(charactersIn: "\u{200B}\u{200C}\u{200D}\u{2060}\u{FEFF}\u{00AD}")
         let kept = text.precomposedStringWithCompatibilityMapping.unicodeScalars.filter { !hidden.contains($0) }
         return String(String.UnicodeScalarView(kept)).replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+    }
+
+    static func consent(_ page: String) -> Bool {
+        guard let parts = URLComponents(string: page) else { return false }
+        let path = parts.path.lowercased()
+        guard ["/oauth", "/authorize", "/consent"].contains(where: path.contains) else { return false }
+        return parts.queryItems?.contains { $0.name == "client_id" && !($0.value ?? "").isEmpty } == true
     }
 
     static func signsIn(_ facts: ActionFacts) -> Bool {
@@ -171,8 +183,10 @@ enum ActionKind: Equatable {
         if facts.formCard || matches(pay) || matches(amount) { note(.pay) }
         if matches(delete) { note(.delete) }
         if matches(send) || matches(signing) { note(.send) }
+        if matches(granting) { note(.grant) }
         let submits = facts.type == "submit" || (facts.tag == "button" && facts.type.isEmpty) || enter
         let inForm = !facts.formAction.isEmpty || !facts.formMethod.isEmpty
+        if submits, consent(facts.page) { note(.grant) }
         if submits, inForm, !facts.formSearch {
             if facts.formPassword { note(.signIn) } else if facts.formMethod == "post" { note(.send) }
         }

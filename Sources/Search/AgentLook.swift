@@ -68,6 +68,8 @@ extension BrowserToolbox {
                     return .success(looked)
                 }
                 looked.fresh = said["fresh"] as? Bool == true
+                if let needs = said["needs"] as? String, !needs.isEmpty { looked.needs = needs }
+                if let ways = said["ways"] as? [String], !ways.isEmpty { looked.ways = await signedIn(ways, tab: tab) }
                 if inside == nil, looked.scope == "page" { places += frames.map { ($0.name, $0.frame) } }
             }
             let rows = said["lines"] as? [String] ?? []
@@ -113,6 +115,7 @@ extension BrowserToolbox {
         let short = String(tab.id.uuidString.prefix(8)).lowercased()
         var header = ["\(AgentChange.cell(tab.title))  \(AgentChange.short(AgentSecrets.shown(tab.pageAddress)))"]
         var body: [String]
+        var noted: String?
         if let since = looked.since {
             let marks = since.marks()
             body = marks.isEmpty ? ["Nothing changed since your last look"] : marks
@@ -120,12 +123,18 @@ extension BrowserToolbox {
             if looked.fresh, arguments["since"] as? Bool == true { header.append("New page since your last look") }
             if looked.modal { header.append("A dialog is open, so only it is shown (the page behind it: --all)") }
             if looked.unseen > 0 { header.append(Self.unseenLine(looked.unseen)) }
+            if let note = siteNote(tab, task: task) {
+                header.append("note: Broadway has notes for this site: broadway skill \(note)")
+                noted = note
+            }
             body = looked.lines
             let more = looked.total - looked.shown
             if more > 0 { body.append("… \(more) more: --all, --in @ref, --role, --find, --view") }
             if looked.cut { body.append("(More on the page: this list stopped at 5000)") }
         }
-        let written = (header + body).joined(separator: "\n")
+        var told = looked.since == nil ? looked.needs.map { [AgentChange.Look.needsLine($0)] } ?? [] : []
+        if looked.since == nil, !looked.ways.isEmpty { told.append(AgentChange.Look.waysLine(looked.ways)) }
+        let written = (header.prefix(1) + told + header.dropFirst() + body).joined(separator: "\n")
         let addressed = AIPage.addressesAI(written)
         TaskLedger.shared.saw(tab.pageAddress, addressed: addressed, task: task)
         var data: [String: Any] = ["title": tab.title, "url": AgentSecrets.shown(tab.pageAddress), "tab": short, "lines": header + body]
@@ -142,10 +151,41 @@ extension BrowserToolbox {
             data["scope"] = looked.scope
             data["regions"] = looked.regions
             if looked.unseen > 0 { data["hidden"] = looked.unseen }
+            if let needs = looked.needs { data["needs"] = needs }
+            if let noted { data["skill"] = noted }
+            if !looked.ways.isEmpty { data["ways"] = looked.ways }
             if looked.fresh, arguments["since"] as? Bool == true { data["fresh"] = true }
         }
         if addressed { data["warning"] = String(ToolReply.warning.dropLast()) }
         return ToolOutcome(text: ToolReply.notice + (addressed ? ToolReply.warning : "") + written, data: data)
+    }
+
+    static let providers: [String: (hosts: [String], names: Set<String>)] = [
+        "Google": (["google.com"], ["SID", "__Secure-1PSID", "__Secure-3PSID"]),
+        "GitHub": (["github.com"], ["user_session", "__Host-user_session_same_site"]),
+        "Apple": (["apple.com"], ["myacinfo"]),
+        "Microsoft": (["login.microsoftonline.com", "login.live.com", "live.com"], ["ESTSAUTHPERSISTENT", "ESTSAUTH", "MSPAuth"]),
+        "Facebook": (["facebook.com"], ["c_user"]),
+    ]
+
+    func signedIn(_ ways: [String], tab: Tab) async -> [String] {
+        let cookies = await tab.web.configuration.websiteDataStore.httpCookieStore.allCookies()
+        return ways.filter { way in
+            guard let known = Self.providers[way] else { return false }
+            return cookies.contains { cookie in
+                let domain = cookie.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+                return known.names.contains(cookie.name) && known.hosts.contains { domain == $0 || domain.hasSuffix("." + $0) }
+            }
+        }
+    }
+
+    func siteNote(_ tab: Tab, task: UUID?) -> String? {
+        guard let url = tab.pageAddress, let host = url.host()?.lowercased(),
+              let skill = siteNotes(url).first else { return nil }
+        let key = "\(task?.uuidString ?? "-") \(PageIndex.bare(host))"
+        guard !notesTold.contains(key) else { return nil }
+        notesTold.insert(key)
+        return skill.id
     }
 
     static func unseenLine(_ count: Int) -> String {
