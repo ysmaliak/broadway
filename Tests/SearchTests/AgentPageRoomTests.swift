@@ -50,7 +50,7 @@ final class AgentPageRoomTests {
     }
 
     private func ref(_ tab: Tab, _ name: String) async throws -> String {
-        let captured = await PageSelection.run(tab, AgentPage.snapshotScript, ["first": 1])
+        let captured = await PageSelection.run(tab, AgentPage.snapshotScript, AgentPage.snapshotArguments)
         let items = try #require((captured as? [String: Any])?["items"] as? [[String: Any]])
         return try #require(items.first { ($0["name"] as? String ?? "").contains(name) }?["ref"] as? String)
     }

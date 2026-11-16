@@ -225,7 +225,7 @@ final class AgentTests {
         let found = try #require(AgentCatalog.command(tool))
 
         #expect((found["positional"] as? [[String: Any]])?.compactMap { $0["name"] as? String } == ["ref", "text"])
-        #expect((found["flags"] as? [[String: Any]])?.compactMap { $0["name"] as? String } == ["final", "ref", "replace", "submit", "text"])
+        #expect((found["flags"] as? [[String: Any]])?.compactMap { $0["name"] as? String } == ["expect", "expect_gone", "expect_url", "final", "frames", "in", "label", "nth", "ref", "replace", "role", "settle", "submit", "target", "text", "words"])
         #expect((found["tabbed"] as? Bool) == true)
         #expect((found["reads"] as? Bool) == false)
     }
@@ -308,21 +308,19 @@ final class AgentTests {
         #expect(AgentCommand.summary([["name": "command", "ok": false]]).hasPrefix("Puts broadway on your PATH"))
     }
 
-    @Test func refBlocksComeBackWhenNothingElseTookOne() {
-        Store.settings.removeObject(forKey: "agents.ref")
-
-        let first = AgentPage.reserveRefs()
-        let beside = AgentPage.reserveRefs()
-        AgentPage.settleRefs(from: first, to: first + 3)
-        let afterOverlap = AgentPage.reserveRefs()
-        AgentPage.settleRefs(from: afterOverlap, to: afterOverlap + 2)
-        let next = AgentPage.reserveRefs()
-
-        #expect(first == 1)
-        #expect(beside == (1 + AgentPage.refBlock))
-        #expect(afterOverlap == (1 + 2 * AgentPage.refBlock))
-        #expect(next == (afterOverlap + 2))
-        Store.settings.removeObject(forKey: "agents.ref")
+    @Test func targetsReadRefsWordsAndTheNestedObject() {
+        #expect(AgentTarget(["ref": "@e12"]).ref == "e12")
+        #expect(AgentTarget(["ref": "f1e3"]).ref == "f1.e3")
+        #expect(AgentTarget(["ref": "f2.e30"]).ref == "f2.e30")
+        #expect(AgentTarget(["ref": "Add to basket"]).words == "Add to basket")
+        #expect(AgentTarget(["ref": "Add to basket"]).ref == nil)
+        let nested = AgentTarget(["target": ["words": "Pay now", "role": "button", "nth": 2, "in": "@e30"]])
+        #expect(nested == AgentTarget(words: "Pay now", roles: ["button"], nth: 2, inside: "e30"))
+        let flat = AgentTarget(["label": "Email", "role": "textbox, searchbox"])
+        #expect(flat.label == "Email")
+        #expect(flat.roles == ["textbox", "searchbox"])
+        #expect(!AgentTarget([:]).given)
+        #expect(AgentTarget(["role": "button"]).given)
     }
 
     @Test func aTaskRunsOnTheTasksRouteWithOnlyBroadwayToolsAndStaysUnread() async throws {

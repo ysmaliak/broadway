@@ -72,6 +72,22 @@ MORE = """<!doctype html><title>More</title>
 <div style="height:3000px"></div><p>Bottom of the page</p>
 """
 
+ANSWERS = """<!doctype html><title>Answers</title>
+<nav aria-label="Shop"><a href="/answers?two">Teas</a></nav>
+<main>
+<h1>Basket</h1>
+<p id="count">Your basket is empty</p>
+<button onclick="setTimeout(() => { document.getElementById('count').textContent = 'One tea in your basket'; const s = document.createElement('p'); s.setAttribute('role', 'status'); s.textContent = 'Added to basket'; document.body.appendChild(s); }, 300)">Add to basket</button>
+<button style="position:absolute;top:400px;left:20px" onclick="document.title = 'bought'">Buy now</button>
+<section aria-label="Many">BUTTONS</section>
+</main>
+<div id="pop" role="dialog" aria-label="Newsletter" style="display:none;position:fixed;inset:0;background:#fff"><button onclick="document.getElementById('pop').style.display='none'">Close</button></div>
+"""
+
+MODAL = """<!doctype html><title>Modal</title><button>Behind it</button>
+<dialog id="d"><h2>Cookies</h2><button onclick="document.getElementById('d').close()">Accept all</button></dialog>
+<script>document.getElementById('d').showModal()</script>"""
+
 INNER = """<!doctype html><title>Inner</title><button onclick="parent.postMessage('inner', '*'); document.title='inner clicked'">Inner button</button>
 <label><input type="checkbox"> Inner box</label>"""
 
@@ -105,6 +121,12 @@ class Page(BaseHTTPRequestHandler):
             body = INNER
         elif self.path.startswith("/more"):
             body = MORE
+        elif self.path.startswith("/answers"):
+            body = ANSWERS.replace("BUTTONS", "".join(f"<button>Item {n}</button>" for n in range(1, 201)))
+            if "covered" in self.path:
+                body = body.replace("display:none;position:fixed", "display:block;position:fixed")
+        elif self.path.startswith("/modal"):
+            body = MODAL
         elif self.path.startswith("/api/"):
             time.sleep(0.4)
             body = "{}"
@@ -269,7 +291,7 @@ def uploads(tab):
     result, parsed = envelope("upload", ref(elements, "button", "Choose File"), wrong, "--tab", tab)
     check("a file the field doesn't accept is refused", result.returncode == 1 and "isn't one" in parsed["error"]["message"], parsed)
     code, parsed, _ = answered("no", "upload", ref(elements, "file", "Attachments"), a, "--tab", tab)
-    check("a no stops the upload", code == 1 and parsed["error"]["code"] == "refused", parsed)
+    check("a no stops the upload", code == 1 and parsed["error"]["code"] == "said_no", parsed)
     code, parsed, _ = answered("yes", "upload", ref(elements, "file", "Attachments"), "two.txt", "--tab", tab, cwd=SCRATCH)
     check("a relative path is the caller's, not the app's", code == 0 and parsed["data"]["attached"][0]["path"].endswith("/two.txt") and wait_for(lambda: title(tab) == "plain two.txt:20", 3), parsed)
 
@@ -403,6 +425,54 @@ def more(tab, base):
     broadway("resize", "1280", "800", "--tab", tab)
 
 
+def answers(tab, base):
+    broadway("go", base + "answers", "--tab", tab)
+    broadway("wait", "--tab", tab, "Basket")
+    first = envelope("snapshot", "--tab", tab)[1]["data"]
+    again = envelope("snapshot", "--tab", tab)[1]["data"]
+    refs = [e["ref"] for e in first["elements"]]
+    given = sorted(int(r[1:]) for r in refs + [r["ref"] for r in first.get("regions", [])])
+    check("refs start at e1 on a page", given[:1] == [1], given[:3])
+    check("and stay the same between looks", refs == [e["ref"] for e in again["elements"]], (refs[:5], [e["ref"] for e in again["elements"]][:5]))
+    check("a long page shows 120 and counts the rest", first.get("shown") == 120 and first.get("total", 0) > 200, (first.get("shown"), first.get("total")))
+    many = next((r for r in first.get("regions", []) if r.get("name") == "Many"), None)
+    inside = envelope("snapshot", "--tab", tab, "--in", "@" + many["ref"])[1]["data"] if many else {}
+    check("--in shows only what is inside a part", many is not None and inside.get("total") == 200 and all(e["name"].startswith("Item") for e in inside.get("elements", [])), inside.get("total"))
+    links = envelope("snapshot", "--tab", tab, "--role", "link")[1]["data"]["elements"]
+    check("--role keeps only those roles", [e["name"] for e in links] == ["Teas"], links)
+    found = envelope("snapshot", "--tab", tab, "--find", "Item 199")[1]["data"]["elements"]
+    check("--find keeps only elements with the words", [e["name"] for e in found] == ["Item 199"], found)
+    result, parsed = envelope("click", "Add to basket", "--tab", tab, "--expect", "one tea in your basket")
+    data = parsed.get("data") or {}
+    check("a click by words lands", result.returncode == 0 and data.get("did") == "click", parsed)
+    check("its answer waits for what the page says", any("Added to basket" in (e.get("name") or "") for e in data.get("appeared", [])) or "Added to basket" in result.stdout, {k: v for k, v in data.items() if k != "look"})
+    check("and says the expected words came", (data.get("expect") or {}).get("met") is True, data.get("expect"))
+    check("the first line ends with the tab", (data.get("message") or "").endswith(" in " + tab), data.get("message"))
+    since = envelope("snapshot", "--tab", tab, "--since")[1]["data"]
+    check("--since after an answer has nothing new", not since.get("appeared"), since)
+    broadway("go", base + "answers?covered", "--tab", tab)
+    broadway("wait", "--tab", tab, "Basket")
+    covered = envelope("click", "Buy now", "--tab", tab)[1]
+    error = covered.get("error") or {}
+    check("a covered target names what covers it", error.get("code") == "not_actionable" and "Newsletter" in error.get("message", ""), covered)
+    check("and how to close it", "broadway click @e" in (error.get("hint") or ""), error)
+    check("and nothing was bought", title(tab) != "bought", title(tab))
+    stale = envelope("click", "@e900", "--tab", tab)[1]
+    check("a ref never given is stale", (stale.get("error") or {}).get("code") == "stale_ref", stale)
+    missing = envelope("click", "Checkout please", "--tab", tab)[1]
+    check("words that fit nothing say not_found", (missing.get("error") or {}).get("code") == "not_found", missing)
+    twice = envelope("click", "Item", "--tab", tab)[1]
+    check("words that fit many say ambiguous with candidates", (twice.get("error") or {}).get("code") == "ambiguous" and "fits 200" in (twice.get("error") or {}).get("message", "") and "--nth" in (twice.get("error") or {}).get("hint", ""), twice)
+    check("with the first candidates as data", len((twice.get("data") or {}).get("candidates", [])) == 5, twice.get("data"))
+    broadway("go", base + "modal", "--tab", tab)
+    broadway("wait", "--tab", tab, "Cookies")
+    modal = envelope("snapshot", "--tab", tab)[1]["data"]
+    names = [e["name"] for e in modal["elements"]]
+    check("a blocking dialog is shown alone", "Accept all" in names and "Behind it" not in names and modal.get("scope") == "dialog", names)
+    whole = [e["name"] for e in envelope("snapshot", "--tab", tab, "--all")[1]["data"]["elements"]]
+    check("--all shows the page behind it", "Behind it" in whole, whole)
+
+
 def start():
     subprocess.run(["defaults", "write", SUITE, "bench", "-bool", "true"], check=True)
     subprocess.run(["defaults", "write", SUITE, "agents.on", "-bool", "true"], check=True)
@@ -434,7 +504,7 @@ def main():
         broadway("wait", "--tab", tab, "--selector", "iframe")
         time.sleep(1.5)
         sections = [("snapshot", snapshot_sees), ("upload", uploads), ("stall", stalled_folder),
-                    ("download", lambda tab: downloads(tab, base)), ("frozen", lambda tab: frozen_downloads(tab, base)), ("more", lambda tab: more(tab, base)), ("deadline", deadline)]
+                    ("download", lambda tab: downloads(tab, base)), ("frozen", lambda tab: frozen_downloads(tab, base)), ("more", lambda tab: more(tab, base)), ("answers", lambda tab: answers(tab, base)), ("deadline", deadline)]
         for name, run in sections:
             if wanted and name not in wanted:
                 continue

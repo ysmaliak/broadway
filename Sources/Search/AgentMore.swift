@@ -21,12 +21,20 @@ struct AgentKey: Equatable {
         "Space": (49, " "),
     ]) { old, _ in old }
 
+    static let aliases: [String: String] = [
+        "enter": "Enter", "return": "Enter", "esc": "Escape", "escape": "Escape", "tab": "Tab", "space": "Space", "spacebar": "Space",
+        "backspace": "Backspace", "delete": "Delete", "del": "Delete", "up": "ArrowUp", "down": "ArrowDown", "left": "ArrowLeft", "right": "ArrowRight",
+        "arrowup": "ArrowUp", "arrowdown": "ArrowDown", "arrowleft": "ArrowLeft", "arrowright": "ArrowRight", "home": "Home", "end": "End",
+        "pageup": "PageUp", "pagedown": "PageDown",
+    ]
+
     static func parse(_ said: String) -> AgentKey? {
         let parts = said == "+" ? ["+"] : said.split(separator: "+", omittingEmptySubsequences: false).map(String.init)
         guard let last = parts.last, !last.isEmpty else { return nil }
         var found: AgentKey
-        if let known = named[last] {
-            found = AgentKey(key: last == "Space" ? " " : last, code: known.code, text: known.text)
+        let given = aliases[last.lowercased()] ?? last
+        if let known = named[given] {
+            found = AgentKey(key: given == "Space" ? " " : given, code: known.code, text: known.text)
         } else if last.count == 1, let letter = last.lowercased().first, let code = letters[letter] {
             found = AgentKey(key: last, code: code, text: last)
         } else {
@@ -73,11 +81,9 @@ extension AgentPage {
 
     static let dragScript = find + """
     var from = el;
-    if (!state.map[to]) return { failed: 'That element is from an older snapshot. Take a new one.' };
-    var target = state.map[to];
-    if (!target.isConnected) return { failed: 'That element has left the page. Take a new snapshot.' };
-    var targetNow = describe(target, state.target[to] || null);
-    if (state.said[to] !== targetNow.kind + ' ' + targetNow.label) return { failed: 'That element has changed since the snapshot. Take a new one.' };
+    var toGot = broadwayGet(to);
+    if (toGot.failed) return toGot;
+    var target = toGot.el;
     from.scrollIntoView({ block: 'center', inline: 'center' });
     var a = from.getBoundingClientRect(), b = target.getBoundingClientRect();
     var sx = a.left + a.width / 2, sy = a.top + a.height / 2, tx = b.left + b.width / 2, ty = b.top + b.height / 2;
@@ -112,8 +118,8 @@ extension AgentPage {
 
     static let selectScript = find + PageSelection.secretCheck + """
 
-    var subject = (state.target && state.target[ref]) || el;
-    if (broadwaySecret(subject)) return { failed: 'Agents never type in password, card or code fields. Ask the person to.' };
+    var subject = target || el;
+    if (broadwaySecret(subject)) return { failed: 'Agents never type in password, card or code fields. Ask the person to.', code: 'secret_field' };
     var picked = '';
     if (subject.tagName === 'INPUT' || subject.tagName === 'TEXTAREA') {
       var value = subject.value || '', at = text ? value.indexOf(text) : 0;
@@ -189,9 +195,7 @@ enum AgentFill {
 
 extension BrowserToolbox {
     func elements(_ tab: Tab, task: UUID?) async -> [[String: Any]]? {
-        let shot = await snapshot(tab, task: task)
-        guard !shot.failed else { return nil }
-        return shot.data?["elements"] as? [[String: Any]]
+        await everything(tab)
     }
 
     func findElements(_ tab: Tab, _ arguments: [String: Any], task: UUID?) async -> ToolOutcome {
@@ -214,7 +218,7 @@ extension BrowserToolbox {
         guard let fields = arguments["fields"] as? [String: Any], !fields.isEmpty, fields.count <= 50 else {
             return .failure("fill takes one to fifty fields, as {\"@e4\": \"Sam\", \"Country\": \"Spain\"}.")
         }
-        guard let all = await elements(tab, task: task) else { return .failure("The page gave no answer") }
+        guard let all = await elements(tab, task: task) else { return .failure("The page gave no answer", code: .noAnswer) }
         var plan: [(key: String, item: [String: Any], value: Any)] = []
         for key in fields.keys.sorted() {
             switch AgentFill.match(key, in: all) {
@@ -260,23 +264,31 @@ extension BrowserToolbox {
     func drag(_ tab: Tab, _ arguments: [String: Any], task: UUID?, browser: Browser) async -> ToolOutcome {
         let ref = arguments["ref"] as? String ?? ""
         let given = arguments["to"] as? String ?? ""
-        let to = given.hasPrefix("@") ? String(given.dropFirst()) : given
-        guard AgentRef(ref).frame == AgentRef(to).frame else { return .failure("Both ends of a drag must be in the same frame") }
+        var to = AgentTarget.bare(given)
+        if !AgentTarget.isRef(given) {
+            switch await resolve(AgentTarget(words: given.isEmpty ? nil : given), tab: tab, tool: "drag") {
+            case .failure(let failure): return failure
+            case .success(let found): to = found
+            }
+        }
+        guard AgentRef(ref).frame == AgentRef(to).frame else { return .failure("Both ends of a drag must be in the same frame", code: .usage) }
         let (_, failure) = await spot(tab, ref: ref)
         if let failure { return failure }
-        guard let found = await inFrame(tab, to, AgentPage.factsScript, ["submit": false]) as? [String: Any] else { return .failure("The page gave no answer") }
-        if let failed = found["failed"] as? String { return .failure(failed) }
+        guard let found = await inFrame(tab, to, AgentPage.factsScript, ["submit": false]) as? [String: Any] else { return .failure("The page gave no answer", code: .noAnswer) }
+        if found["failed"] != nil { return pageFailure(found, tab: tab, ref: to) }
         let place = tab.pageAddress
         let decided = await decide(ActionFacts(found), final: arguments["final"] as? String, tab: tab, task: task)
         if let refused = decided.refused { return refused }
         guard tab.pageAddress == place else { return .failure("The page changed while the person was answering, so nothing was dragged. Look again.") }
         acting(tab, "Dragging")
-        return outcome(await inFrame(tab, ref, AgentPage.dragScript, ["to": AgentRef(to).ref]) as? [String: Any])
+        await mark(tab, ref: ref, task: task)
+        return outcome(await inFrame(tab, ref, AgentPage.dragScript, ["to": AgentRef(to).ref]) as? [String: Any], tab: tab, ref: ref)
     }
 
     func selectText(_ tab: Tab, _ arguments: [String: Any]) async -> ToolOutcome {
         acting(tab, "Selecting")
-        return outcome(await inFrame(tab, arguments["ref"] as? String ?? "", AgentPage.selectScript, ["text": arguments["text"] as? String ?? ""]) as? [String: Any])
+        let ref = arguments["ref"] as? String ?? ""
+        return outcome(await inFrame(tab, ref, AgentPage.selectScript, ["text": arguments["text"] as? String ?? ""]) as? [String: Any], tab: tab, ref: ref)
     }
 
     func resize(_ tab: Tab, _ arguments: [String: Any]) async -> ToolOutcome {
@@ -341,10 +353,11 @@ extension BrowserToolbox {
         guard idle || !part.isEmpty else { return nil }
         let limit = Date().addingTimeInterval(min(arguments["seconds"] as? Double ?? 10, 60))
         let start = tab.devLog.sequence
+        let lately = Date().addingTimeInterval(-10)
         repeat {
             let requests = tab.devLog.entries.filter { $0.kind == .request }
             if !part.isEmpty {
-                if let hit = requests.first(where: { $0.sequence > start && $0.url.contains(part) }) {
+                if let hit = requests.first(where: { ($0.sequence > start || $0.recorded >= lately) && $0.url.contains(part) }) {
                     return .json(["ok": true, "url": AgentSecrets.diagnosticURL(hit.url), "status": hit.status, "failed": hit.failed, "website": true])
                 }
             } else if !tab.loading, Date().timeIntervalSince(requests.last?.recorded ?? .distantPast) >= 0.5 {

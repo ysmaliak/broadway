@@ -210,6 +210,7 @@ extension BrowserToolbox {
                 return .failure("That tab isn't showing a web page")
             }
             acting(tab, "Downloading")
+            await mark(tab, task: task)
             web.startDownload(using: URLRequest(url: url)) { [weak browser, weak web] download in
                 MainActor.assumeIsolated { browser?.keep(download, from: web) }
             }

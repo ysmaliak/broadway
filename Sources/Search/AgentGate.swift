@@ -139,8 +139,9 @@ enum ActionKind: Equatable {
 
     private static let pay = words("pay|pay now|buy|buy now|purchase|checkout|check out|place (your )?order|order now|complete (your )?(order|purchase)|subscribe|upgrade|donate|tip|add funds|top up|book now|reserve|transfer|bezahlen|kaufen|acheter|payer|pagar|comprar|оплатить|купить|заказать")
     private static let delete = words("delete|remove|erase|destroy|wipe|discard|trash|bin|archive all|close (my |your )?account|deactivate|cancel (my |your )?(subscription|plan|order|account)|unsubscribe|revoke|clear all|löschen|supprimer|eliminar|borrar|удалить")
-    private static let send = words("send|send now|submit|post|publish|reply|respond|comment|tweet|share|merge|deploy|release|confirm|approve|accept|sign|invite|apply|forward|save and send|senden|envoyer|enviar|absenden|отправить|опубликовать")
+    private static let send = words("send|send now|submit|post|publish|reply|respond|comment|tweet|share|merge|deploy|release|confirm|approve|accept|sign(?!\\s*(?:in|on|out)(?![\\p{L}\\p{N}]))|invite|apply|forward|save and send|senden|envoyer|enviar|absenden|отправить|опубликовать")
     private static let amount = try? NSRegularExpression(pattern: "(?:[$€£¥₽]\\s?\\d)|(?:\\d\\s?(?:usd|eur|gbp|rub)\\b)", options: [.caseInsensitive])
+    private static let signing = words("sign in|sign on|log in|login|log on|anmelden|se connecter|iniciar sesión|entrar|войти")
     private static let passkey = words("passkey|passkeys|security key|webauthn|face id|touch id|windows hello")
 
     private static func has(_ expression: NSRegularExpression?, _ text: String) -> Bool {
@@ -154,6 +155,11 @@ enum ActionKind: Equatable {
         return String(String.UnicodeScalarView(kept)).replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
     }
 
+    static func signsIn(_ facts: ActionFacts) -> Bool {
+        let names = [facts.name, facts.optionLabel, facts.optionValue].map(plainWords)
+        return names.contains { has(signing, $0) } && !names.contains { has(send, $0) || has(pay, $0) || has(delete, $0) }
+    }
+
     static func of(_ facts: ActionFacts, declared: AgentAct? = nil, enter: Bool = false) -> ActionKind {
         let names = [facts.name, facts.optionLabel, facts.optionValue].map(plainWords)
         func matches(_ expression: NSRegularExpression?) -> Bool { names.contains { has(expression, $0) } }
@@ -164,7 +170,7 @@ enum ActionKind: Equatable {
         if facts.fileField { note(.upload) }
         if facts.formCard || matches(pay) || matches(amount) { note(.pay) }
         if matches(delete) { note(.delete) }
-        if matches(send) { note(.send) }
+        if matches(send) || matches(signing) { note(.send) }
         let submits = facts.type == "submit" || (facts.tag == "button" && facts.type.isEmpty) || enter
         let inForm = !facts.formAction.isEmpty || !facts.formMethod.isEmpty
         if submits, inForm, !facts.formSearch {

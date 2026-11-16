@@ -241,8 +241,8 @@ extension BrowserToolbox {
             guard file.readable else { return .failure("Broadway can't read \(file.url.path). Nothing was attached.") }
             if let refused = AgentUploadRule.refusal(file.url.path) { return .failure("\(file.url.lastPathComponent): \(refused.fullStopped) Nothing was attached.") }
         }
-        guard let look = await inFrame(tab, ref, AgentPage.uploadLookScript) as? [String: Any] else { return .failure("The page gave no answer") }
-        if let failed = look["failed"] as? String { return .failure(failed) }
+        guard let look = await inFrame(tab, ref, AgentPage.uploadLookScript) as? [String: Any] else { return .failure("The page gave no answer", code: .noAnswer) }
+        if look["failed"] != nil { return pageFailure(look, tab: tab, ref: ref) }
         let field = look["input"] as? Bool == true
         let accept = look["accept"] as? String ?? ""
         if look["directory"] as? Bool == true { return .failure("That field asks for a folder, and only files can be given. Nothing was attached.") }
@@ -262,15 +262,16 @@ extension BrowserToolbox {
             return refused
         }
         guard tab.pageAddress == place else { return .failure("The page changed while the person was answering, so nothing was attached. Look again.") }
-        if let again = await inFrame(tab, ref, AgentPage.uploadLookScript) as? [String: Any], let failed = again["failed"] as? String { return .failure(failed) }
+        if let again = await inFrame(tab, ref, AgentPage.uploadLookScript) as? [String: Any], again["failed"] != nil { return pageFailure(again, tab: tab, ref: ref) }
+        await mark(tab, ref: ref, task: task)
         var how = ""
         if field, let web = tab.built {
             let arm = AgentUploadArm(urls: files.map(\.url), host: host)
             AgentUploadArm.arm(arm, on: web)
             let clicked = await inFrame(tab, ref, AgentPage.uploadClickScript) as? [String: Any]
-            if let failed = clicked?["failed"] as? String {
+            if let clicked, clicked["failed"] != nil {
                 AgentUploadArm.disarm(web)
-                return .failure(failed)
+                return pageFailure(clicked, tab: tab, ref: ref)
             }
             let given = await arm.wait(seconds: 2)
             AgentUploadArm.disarm(web)
@@ -283,8 +284,10 @@ extension BrowserToolbox {
             }
             guard let datas = await AgentFileLook.bytes(files.map(\.url), seconds: 8) else { return .failure("Broadway couldn't read those files in time. Nothing was attached.") }
             let rows: [[String: Any]] = zip(files, datas).map { ["name": $0.url.lastPathComponent, "type": $0.type, "data": $1.base64EncodedString()] }
-            guard let said = await inFrame(tab, ref, AgentPage.uploadBytesScript, ["files": rows]) as? [String: Any] else { return .failure("The page gave no answer") }
-            if let failed = said["failed"] as? String { return .failure(failed) }
+            guard let said = await inFrame(tab, ref, AgentPage.uploadBytesScript, ["files": rows], seconds: 30) as? [String: Any] else {
+                return .failure("The files were sent, but the page didn't say whether it took them", code: .failed, hint: "Look before you upload again", retrySafe: false)
+            }
+            if said["failed"] != nil { return pageFailure(said, tab: tab, ref: ref) }
             guard said["taken"] as? Bool == true else { return .failure("The page didn't take the files. Nothing was attached.") }
             how = said["how"] as? String ?? "field"
         }

@@ -242,7 +242,7 @@ final class AgentSecretsTests {
         let title = await PageSelection.run(tab, "return document.title", in: framed) as? String
 
         #expect(shot.contains("In shadow"), "\(shot)")
-        #expect(ref.hasPrefix("f1."), "\(ref)")
+        #expect(ref.hasPrefix("@f1."), "\(ref)")
         #expect(!shot.contains(secret), "\(shot)")
         #expect(!done.failed, "\(done.text ?? "")")
         #expect(title == "hit")

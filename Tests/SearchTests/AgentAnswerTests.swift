@@ -25,7 +25,7 @@ struct AgentAnswerTests {
         #expect(object["website"] as? Bool == true)
         #expect(object["dialog"] is NSNull)
         #expect(object["download"] is NSNull)
-        #expect(object["message"] as? String == "Clicked button \"Add to basket\" @e10")
+        #expect(object["message"] as? String == "Clicked button \"Add to basket\" @e10 in a8b6db94")
         let target = object["target"] as? [String: Any]
         #expect(target?["ref"] as? String == "e10")
         #expect(target?["role"] as? String == "button")
@@ -76,14 +76,14 @@ struct AgentAnswerTests {
         let object = change.object()
         #expect(object["id"] as? String == "a8b6db94")
         #expect(object["url"] as? String == "https://shop.example/teas")
-        #expect(object["message"] as? String == "Clicked button \"Add to basket\" @e10")
+        #expect(object["message"] as? String == "Clicked button \"Add to basket\" @e10 in a8b6db94")
     }
 
     @Test func aClickOnTheSamePageSaysWhatChanged() {
         var change = basket
         change.changed = []
         #expect(change.lines() == [
-            "Clicked button \"Add to basket\" @e10",
+            "Clicked button \"Add to basket\" @e10 in a8b6db94",
             "Same page: Lumen Tea Co.",
             "+ @e61 status \"Added Glenmoor Breakfast\"",
             "~ \"Basket: 0 items\" → \"Basket: 1 item\"",
@@ -105,7 +105,7 @@ struct AgentAnswerTests {
                                  settled: .navigated, page: .init(url: "https://shop.example/checkout", title: "Checkout", navigated: true),
                                  headings: ["Checkout", "Your details", "Payment"])
         #expect(change.lines() == [
-            "Clicked link \"Checkout\" @e2",
+            "Clicked link \"Checkout\" @e2 in a8b6db94",
             "Went to: Checkout  shop.example/checkout   (new page: refs start again)",
             "Headings: Checkout · Your details · Payment",
             "Next: broadway snapshot",
@@ -117,7 +117,7 @@ struct AgentAnswerTests {
                                  settled: .dialog, page: teas,
                                  dialog: .init(id: "d1", kind: "confirm", message: "Empty the basket?", site: "shop.example"))
         #expect(change.lines() == [
-            "Clicked button \"Empty basket\" @e8",
+            "Clicked button \"Empty basket\" @e8 in a8b6db94",
             "A confirm dialog is open: \"Empty the basket?\"",
             "Answer it: broadway dialog accept, or broadway dialog dismiss",
         ])
@@ -127,7 +127,7 @@ struct AgentAnswerTests {
         let change = AgentChange(tab: "a8b6db94", did: "click", target: .init(ref: "e3", role: "link", name: "Gift cards"), page: teas,
                                  tabs: .init(opened: [.init(id: "2c4d6e8f", title: "Gift cards", url: "https://shop.example/gift")], working: "a8b6db94"))
         #expect(change.lines() == [
-            "Clicked link \"Gift cards\" @e3",
+            "Clicked link \"Gift cards\" @e3 in a8b6db94",
             "New tab 2c4d6e8f: Gift cards  shop.example/gift. Switch to it: broadway tab 2c4d6e8f",
         ])
         var taken = change
@@ -139,7 +139,7 @@ struct AgentAnswerTests {
         let change = AgentChange(tab: "a8b6db94", did: "click", target: add, settled: .capped, busy: .init(requests: 2), ms: 5000, page: teas,
                                  went: [.init(ref: "e40", role: "dialog", name: "Cookies")], download: .init(name: "price-list.pdf", state: "started"))
         #expect(change.lines() == [
-            "Clicked button \"Add to basket\" @e10",
+            "Clicked button \"Add to basket\" @e10 in a8b6db94",
             "Same page: Lumen Tea Co.",
             "Download started: price-list.pdf. Wait for it: broadway wait --download.",
             "- @e40 dialog \"Cookies\"",
@@ -171,13 +171,13 @@ struct AgentAnswerTests {
 
     @Test func aWaitAndAnOwnFirstLine() {
         let wait = AgentChange(tab: "a8b6db94", did: "wait", ms: 1400, page: teas)
-        #expect(wait.lines().first == "Waited 1.4 s")
+        #expect(wait.lines().first == "Waited 1.4 s in a8b6db94")
         var said = wait
-        said.said = "Waited 1.4 s: \"Order placed\" is on the page"
-        #expect(said.lines().first == "Waited 1.4 s: \"Order placed\" is on the page")
+        said.said = "Waited 1.4 s: \"Order placed\" is on the page in a8b6db94"
+        #expect(said.lines().first == "Waited 1.4 s: \"Order placed\" is on the page in a8b6db94")
         let skipped = AgentChange(tab: "a8b6db94", did: "press", said: "Pressed Tab 3 times. Focus: @e14 button \"Apply code\"",
                                   settled: .skipped, page: teas)
-        #expect(skipped.lines() == ["Pressed Tab 3 times. Focus: @e14 button \"Apply code\""])
+        #expect(skipped.lines() == ["Pressed Tab 3 times. Focus: @e14 button \"Apply code\" in a8b6db94"])
     }
 
     @Test func pageWordsCannotBreakALine() {

@@ -24,7 +24,7 @@ struct AgentHoverRevalidationTests {
         let tab = try #require(browser.tabs.first { $0.agent })
         let id = String(tab.id.uuidString.prefix(8)).lowercased()
         _ = await box.call("wait", ["tab": id], task: task)
-        let captured = await PageSelection.run(tab, AgentPage.snapshotScript, ["first": 1])
+        let captured = await PageSelection.run(tab, AgentPage.snapshotScript, AgentPage.snapshotArguments)
         let snapshot = try #require(captured as? [String: Any])
         let items = try #require(snapshot["items"] as? [[String: Any]])
         let ref = try #require(items.first(where: { $0["name"] as? String == "Hover target" })?["ref"] as? String)

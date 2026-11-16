@@ -348,7 +348,9 @@ final class AgentGateTests {
         let done = await box.call("click", ["tab": id, "ref": ref], task: task)
 
         #expect(done.failed)
-        #expect(ToolFailure.code(done.text ?? "") == "stale_ref")
+        #expect(done.code == "ref_changed")
+        let reached = await clicked(tab)
+        #expect(!reached)
     }
 
     @Test func notNowLeavesThePageAlone() async throws {

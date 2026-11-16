@@ -37,7 +37,7 @@ struct ToolSpec {
 
     var listed: [String: Any] {
         ["name": name, "description": description,
-         "inputSchema": ["type": "object", "properties": properties, "required": required] as [String: Any]]
+         "inputSchema": ["type": "object", "properties": properties.mapValues { $0.filter { $0.key != "unlisted" } }, "required": required] as [String: Any]]
     }
 }
 
@@ -132,7 +132,7 @@ final class MCPServer {
             let name = Self.listedNames[spec.name] ?? spec.name
             if name != spec.name, names.contains(name) { return nil }
             var properties: [String: [String: Any]] = [:]
-            for (key, schema) in spec.properties {
+            for (key, schema) in spec.properties where schema["unlisted"] as? Bool != true {
                 var schema = schema
                 let said = Self.plain.contains(key) ? nil : Self.arguments[key] ?? (schema["description"] as? String).map(Self.firstSentence)
                 schema["description"] = said.flatMap { $0.count <= 60 ? $0 : nil }

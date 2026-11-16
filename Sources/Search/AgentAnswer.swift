@@ -191,6 +191,48 @@ struct AgentChange {
         }
     }
 
+    struct Look {
+        var lines: [String]
+        var elements: [[String: Any]]
+        var shown: Int
+        var total: Int
+        var regions: [String]
+        var needs: String?
+        var ways: [String]
+        var header: [String]
+
+        init(lines: [String], elements: [[String: Any]] = [], shown: Int, total: Int, regions: [String] = [], needs: String? = nil,
+             ways: [String] = [], header: [String] = []) {
+            self.lines = lines
+            self.elements = elements
+            self.shown = shown
+            self.total = total
+            self.regions = regions
+            self.needs = needs
+            self.ways = ways
+            self.header = header
+        }
+
+        func object() -> [String: Any] {
+            var found: [String: Any] = ["elements": elements, "shown": shown, "total": total, "regions": regions, "lines": lines,
+                                        "needs": needs ?? NSNull()]
+            if !ways.isEmpty { found["ways"] = ways }
+            if !header.isEmpty { found["header"] = header }
+            return found
+        }
+
+        init?(object: Any?) {
+            guard let object = object as? [String: Any], let lines = object["lines"] as? [String] else { return nil }
+            self.init(lines: lines, elements: object["elements"] as? [[String: Any]] ?? [], shown: object["shown"] as? Int ?? lines.count,
+                      total: object["total"] as? Int ?? lines.count, regions: object["regions"] as? [String] ?? [],
+                      needs: object["needs"] as? String, ways: object["ways"] as? [String] ?? [], header: object["header"] as? [String] ?? [])
+        }
+
+        func text() -> [String] {
+            header + lines + (total > shown ? ["… \(total - shown) more: broadway snapshot, or --in @ref, --role, --find"] : [])
+        }
+    }
+
     static let caps = (appeared: 8, went: 5, changed: 5)
 
     var tab: String
@@ -213,6 +255,11 @@ struct AgentChange {
     var more: Int
     var website: Bool
     var kept: [String: Any]
+    var notes: [String] = []
+    var expect: [String: Any]?
+    var look: Look?
+    var most = false
+    var alerted: Dialog?
 
     init(tab: String, did: String, said: String? = nil, same: [String] = [], target: Element? = nil, settled: Settled = .quiet,
          busy: Busy? = nil, ms: Int = 0, page: Page, headings: [String] = [], appeared: [Element] = [], went: [Element] = [],
@@ -250,6 +297,16 @@ struct AgentChange {
         ]
         if !same.isEmpty { found["same"] = same }
         if let busy { found["busy"] = ["requests": busy.requests] }
+        if nothing { found["nothing"] = true }
+        if let expect { found["expect"] = expect }
+        if let look { found["look"] = look.object() }
+        if most { found["most"] = true }
+        if !notes.isEmpty { found["notes"] = notes }
+        if let alerted {
+            var said = alerted.object()
+            said["accepted"] = true
+            found["alerted"] = said
+        }
         for (key, value) in kept where found[key] == nil { found[key] = value }
         return found
     }
@@ -285,13 +342,31 @@ struct AgentChange {
             download: download.map { Download(name: $0["name"] as? String ?? "", state: $0["state"] as? String ?? "", path: $0["path"] as? String) },
             more: object["more"] as? Int ?? 0,
             website: object["website"] as? Bool ?? true)
+        notes = object["notes"] as? [String] ?? []
+        expect = object["expect"] as? [String: Any]
+        look = Look(object: object["look"])
+        most = object["most"] as? Bool ?? false
+        if let said = object["alerted"] as? [String: Any] {
+            alerted = Dialog(id: said["id"] as? String ?? "", kind: said["kind"] as? String ?? "alert",
+                             message: said["message"] as? String ?? "", site: said["site"] as? String ?? "")
+        }
+    }
+
+    var nothing: Bool {
+        appeared.isEmpty && went.isEmpty && changed.isEmpty && text.isEmpty && more == 0 && !page.navigated && dialog == nil
+            && alerted == nil && tabs.opened.isEmpty && tabs.closed.isEmpty && download == nil && look == nil && settled != .skipped && settled != .capped
     }
 
     var opens: Bool { did == "open" || did == "go" || did == "navigate" }
 
     var headline: String {
+        if opens { return said ?? "\(tab)  \(Self.cell(page.title))  \(Self.short(page.url))" }
+        let line = action
+        return line.hasSuffix(" in \(tab)") ? line : line + " in \(tab)"
+    }
+
+    private var action: String {
         if let said { return said }
-        if opens { return "\(tab)  \(Self.cell(page.title))  \(Self.short(page.url))" }
         let lead: String
         switch did {
         case "click": lead = "Clicked"
@@ -316,23 +391,50 @@ struct AgentChange {
     }
 
     func lines() -> [String] {
-        var found = [headline]
+        parts().map(\.text)
+    }
+
+    func parts() -> [(text: String, page: Bool)] {
+        var found: [(text: String, page: Bool)] = [(headline, target != nil || opens || said != nil)]
+        if let expectLine { found.append((expectLine, true)) }
         if opens {
-            found.append(did == "open" ? "New tab, now your current tab" : "Went there")
-            for id in same { found.append("You already have this address in tab \(id). Use it: broadway tab \(id)") }
+            found.append((did == "open" ? "New tab, now your current tab" : "Went there", false))
+            for id in same { found.append(("You already have this address in tab \(id). Use it: broadway tab \(id)", false)) }
+            if let look { found += look.text().map { ($0, true) } }
         } else if settled != .skipped, dialog == nil, tabs.opened.isEmpty {
             if page.navigated {
-                found.append("Went to: \(Self.cell(page.title))  \(Self.short(page.url))   (new page: refs start again)")
-                if !headings.isEmpty { found.append("Headings: " + headings.prefix(5).map(Self.cell).joined(separator: " · ")) }
-                found.append("Next: broadway snapshot")
+                found.append(("Went to: \(Self.cell(page.title))  \(Self.short(page.url))   (new page: refs start again)", true))
+                if let look {
+                    found += look.text().map { ($0, true) }
+                } else {
+                    if !headings.isEmpty { found.append(("Headings: " + headings.prefix(5).map { Self.cell($0) }.joined(separator: " · "), true)) }
+                    found.append(("Next: broadway snapshot", false))
+                }
+            } else if nothing {
+                found.append(("Nothing on the page changed", false))
+            } else if most, let look {
+                found.append(("Most of the page changed:", false))
+                found += look.text().map { ($0, true) }
             } else {
-                found.append("Same page: \(Self.cell(page.title))")
+                found.append(("Same page: \(Self.cell(page.title))", true))
             }
         }
-        found += facts()
-        found += marks()
-        if settled == .capped { found.append(busyLine) }
+        found += facts().map { ($0, true) }
+        if !(most && look != nil && !page.navigated) { found += marks().map { ($0, !$0.hasPrefix("… ")) } }
+        found += notes.map { ($0, false) }
+        if settled == .capped { found.append((busyLine, false)) }
         return found
+    }
+
+    private var expectLine: String? {
+        guard let expect, let kind = expect["kind"] as? String, let want = expect["want"] as? String else { return nil }
+        let met = expect["met"] as? Bool == true
+        let after = Self.seconds(Int(((expect["after"] as? Double) ?? 0) * 1000))
+        switch kind {
+        case "gone": return "Expected \"\(Self.cell(want))\" to go: " + (met ? "gone after \(after) s" : "still there after \(after) s")
+        case "url": return "Expected the address to have \"\(Self.cell(want))\": " + (met ? "it did after \(after) s" : "not after \(after) s")
+        default: return "Expected \"\(Self.cell(want))\": " + (met ? "there after \(after) s" : "not there after \(after) s")
+        }
     }
 
     private var busyLine: String {
@@ -343,6 +445,7 @@ struct AgentChange {
 
     private func facts() -> [String] {
         var found: [String] = []
+        if let alerted { found.append("The page said (alert, accepted): \"\(Self.cell(alerted.message))\"") }
         if let dialog {
             found.append("A \(dialog.kind) dialog is open: \"\(Self.cell(dialog.message))\"")
             switch dialog.kind {
@@ -415,9 +518,9 @@ struct AgentChange {
         return line
     }
 
-    static func cell(_ text: String) -> String {
+    static func cell(_ text: String, most: Int = 120) -> String {
         let flat = String(String.UnicodeScalarView(text.unicodeScalars.map { $0.value < 32 || $0.value == 127 ? " " : $0 }))
-        return flat.count > 120 ? String(flat.prefix(119)) + "…" : flat
+        return flat.count > most ? String(flat.prefix(most - 1)) + "…" : flat
     }
 
     static func short(_ url: String) -> String {

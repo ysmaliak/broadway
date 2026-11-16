@@ -216,6 +216,7 @@ extension Browser {
         if let given = AgentUploadArm.take(webView, frame: frame, multiple: parameters.allowsMultipleSelection) {
             return completionHandler(given.isEmpty ? nil : given)
         }
+        if anyTab(for: webView)?.agentTask != nil { AgentFilePicker.note(webView) }
         let reply = FileChoiceReply(completionHandler)
         if Store.testing && !FileChoice.probing {
             Dialogs.askedInTest.append("Choose a file (\(frame.securityOrigin.host))")
