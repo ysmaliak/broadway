@@ -5,6 +5,7 @@ enum Batch {
     static let most = 25
     static let allowed: Set<String> = ["open", "go", "back", "forward", "reload", "tab", "click", "type", "fill", "choose", "press", "scroll",
                                        "hover", "drag", "select", "upload", "download", "wait", "dialog", "find", "snapshot", "read", "shot", "close"]
+    static let reads: Set<String> = ["snapshot", "text", "screenshot", "locate", "find", "wait"]
     static let personal: Set<String> = ["needs_you", "said_no", "never_here", "driving", "person_only", "secret_field", "refused"]
 
     struct Line {
@@ -153,7 +154,12 @@ enum Batch {
         guard options.from <= all.count else { throw Failure.usage("--from \(options.from) is past the last step, \(all.count)") }
         let catalog = context.catalog()
         let chosen = all.filter { $0.n >= options.from }
-        let steps = try chosen.map { try step($0, catalog: catalog) }
+        var steps = try chosen.map { try step($0, catalog: catalog) }
+        for index in steps.indices where index < steps.count - 1 || context.globals.quiet {
+            guard var arguments = steps[index]["arguments"] as? [String: Any], !reads.contains(steps[index]["tool"] as? String ?? "") else { continue }
+            arguments["look"] = false
+            steps[index]["arguments"] = arguments
+        }
         var arguments: [String: Any] = ["steps": steps, "of": all.count]
         if options.keepGoing { arguments["keep_going"] = true }
         if let tab = context.globals.tab { arguments["tab"] = tab }

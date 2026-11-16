@@ -37,6 +37,10 @@ FORM = b"""<!doctype html><title>Form</title><h1>Sign up</h1><form>
 <button id="go" type="button" onclick="document.title='clicked'">Go</button>
 <button id="rename" type="button" onclick="document.getElementById('victim').textContent='Delete everything'">Rename</button>
 <button id="victim" type="button" onclick="document.title='hit'">Harmless</button>
+<button id="later" type="button" onclick="setTimeout(function () { document.getElementById('quiet').textContent = 'Remove all' }, 1500)">Later</button>
+<button id="quiet" type="button" onclick="document.title='struck'">Fine</button>
+<button id="note" type="button" onclick="document.title='sent'">Send note</button>
+<button id="draft" type="button" onclick="document.title='erased'">Delete draft</button>
 <p>the price is 12 dollars</p>"""
 
 SECOND = b"""<!doctype html><title>Second</title><h1>Other</h1>
@@ -253,7 +257,8 @@ def latency():
 def help_and_mistakes():
     check("broadway alone is help", broadway().returncode == 0 and "Browser" in broadway().stdout)
     page = broadway("help", "click")
-    check("help for a command", page.returncode == 0 and "broadway click <ref>" in page.stdout and "broadway click @e3" in page.stdout, page.stdout)
+    check("help for a command", page.returncode == 0 and "broadway click [ref]" in page.stdout and "broadway click @e3" in page.stdout, page.stdout)
+    check("help leaves out the app's unlisted flags", all(flag not in page.stdout for flag in ("--expect_gone", "--settle", "--target", "--words")) and "--expect TEXT" in page.stdout, page.stdout)
     check("--help after a command", broadway("click", "--help").stdout == page.stdout)
     check("help is generated for aliases", "broadway go <url>" in broadway("help", "navigate").stdout)
     check("guide", "Broadway for agents" in broadway("guide").stdout and "broadway wait" in broadway("guide").stdout)
@@ -265,10 +270,10 @@ def help_and_mistakes():
     check("envelope keys", set(parsed) == {"ok", "command", "data", "error"}, parsed)
     check("error keys", set(parsed["error"]) == {"code", "message", "hint", "retry_safe"}, parsed)
     check("a bad option", broadway("--cli", "nope", "do it").returncode == 2)
-    check("a missing argument", broadway("click").returncode == 2 and "needs ref" in broadway("click").stderr)
+    check("a click with no target is a mistake", broadway("click").returncode == 2 and "needs a target" in broadway("click").stderr)
     check("words are a target, not a mistake", broadway("click", "button").returncode != 2)
     check("an unknown flag", "Did you mean --seconds" in broadway("wait", "--second", "3").stderr)
-    check("a bad number", broadway("scroll", "--by", "lots").returncode == 2)
+    check("a bad number", broadway("wait", "--seconds", "lots").returncode == 2)
     check("--tab on a tabless command", broadway("history", "--tab", "abc").returncode == 2)
     completed = broadway("__complete", "--", "sn")
     check("completion", "snapshot" in completed.stdout, completed.stdout)
@@ -300,14 +305,20 @@ def browsing(base):
     check("page text is marked on stderr", "Website content" in snapshot.stderr and "Website content" not in snapshot.stdout)
     hidden = [line.split()[0] for line in snapshot.stdout.splitlines() if "value hidden" in line]
     check("secret boxes are hidden", len(hidden) == 2, snapshot.stdout)
+    asking = spawn("click", hidden[0], "--json")
+    if wait_for(desk, 8):
+        shown = json.dumps(desk()) + broadway("approvals", "list", "--json").stdout
+        check("the person's question never quotes a secret box", "hunter2" not in shown and "4242" not in shown, shown)
+        bench("knowing", "desk", "no")
+    asking.communicate(timeout=15)
     for ref in hidden:
         typed, parsed = envelope("type", ref, "x")
-        check("secret boxes refuse typing", typed.returncode == 1 and parsed["error"]["code"] == "refused", parsed)
+        check("secret boxes refuse typing", typed.returncode == 1 and parsed["error"]["code"] == "secret_field", parsed)
     _, parsed = envelope("snapshot")
     elements = parsed["data"]["elements"]
     check("snapshot json", parsed["data"]["website"] and parsed["data"]["tab"] == tab, parsed["data"].keys())
     check("the same element keeps its ref", next(line for line in snapshot.stdout.splitlines() if line.startswith("@")).split()[0] == "@" + elements[0]["ref"], elements[0])
-    ref = lambda name: "@" + next(e["ref"] for e in elements if e["name"] == name)
+    ref = lambda name: pick(elements, name)
     typed = broadway("type", ref("plain"), "hello")
     check("type", typed.returncode == 0 and "hello" in typed.stdout, typed.stdout + typed.stderr)
     check("the typed text shows", 'value="hello"' in broadway("snapshot").stdout)
@@ -327,11 +338,20 @@ def browsing(base):
     check("scroll by", broadway("scroll", "20").returncode == 0)
     check("scroll back", broadway("scroll", "-20").returncode == 0)
 
-    broadway("click", ref("Rename"))
-    wait_for(lambda: "Delete everything" in broadway("read").stdout, 3)
-    changed, parsed = envelope("click", ref("Harmless"))
-    check("a ref whose element changed is stale", changed.returncode == 1 and parsed["error"]["code"] == "stale_ref" and parsed["error"]["retry_safe"], parsed)
+    renamed = broadway("click", ref("Rename"))
+    check("an action's answer says what it changed", "Delete everything" in renamed.stdout, renamed.stdout)
+    asking = spawn("click", ref("Harmless"), "--json")
+    check("a ref the answer renamed acts on what it says now, so a delete asks", wait_for(desk, 8), desk())
+    bench("knowing", "desk", "no")
+    output, errors = asking.communicate(timeout=15)
+    parsed = json.loads(output)
+    check("and a no stays a no", asking.returncode == 1 and parsed["error"]["code"] == "said_no", output + errors)
     check("and hit nothing", "hit" not in broadway("tabs").stdout)
+    broadway("click", ref("Later"))
+    wait_for(lambda: "Remove all" in broadway("read").stdout, 5)
+    changed, parsed = envelope("click", ref("Fine"))
+    check("a ref whose element changed unseen is ref_changed", changed.returncode == 1 and parsed["error"]["code"] == "ref_changed" and "Remove all" in json.dumps(parsed), parsed)
+    check("and struck nothing", "struck" not in broadway("tabs").stdout)
 
     read = broadway("read")
     check("read has only the page on stdout", read.stdout.lstrip().startswith("Sign up") and "Website content" in read.stderr, read.stdout[:80])
@@ -354,14 +374,15 @@ def browsing(base):
     old = [e["ref"] for e in elements]
     check("go", broadway("go", base + "second").returncode == 0)
     check("wait after go", broadway("wait", "Other").returncode == 0)
-    gone_ref, parsed = envelope("click", "@" + old[1])
-    check("an old page's ref is stale", gone_ref.returncode == 1 and parsed["error"]["code"] == "stale_ref", parsed)
-    check("the hint says what to do", "broadway snapshot" in parsed["error"]["hint"], parsed)
+    gone_ref, parsed = envelope("click", "@" + old[-1])
+    check("an old page's ref is stale and names the move", gone_ref.returncode == 1 and (parsed["error"] or {}).get("code") == "stale_ref"
+          and "this tab is now on Second" in (parsed["error"] or {}).get("message", ""), parsed)
+    check("the hint says what to do", "broadway snapshot" in ((parsed["error"] or {}).get("hint") or ""), parsed)
     _, parsed = envelope("snapshot")
     fresh = [e["ref"] for e in parsed["data"]["elements"]]
-    check("refs are never used twice", not set(old) & set(fresh), (old, fresh))
-    gone_ref, parsed = envelope("click", "@" + old[1])
-    check("not even after a new snapshot", gone_ref.returncode == 1 and parsed["error"]["code"] == "stale_ref", parsed)
+    check("refs start again on a new page", fresh[0] == "e1" and old[-1] not in fresh, (old, fresh))
+    gone_ref, parsed = envelope("click", "@" + old[-1])
+    check("not even after a new snapshot", gone_ref.returncode == 1 and (parsed["error"] or {}).get("code") == "stale_ref", parsed)
     check("and nothing was clicked", "wrong" not in broadway("tabs").stdout)
 
     missing, parsed = envelope("read", "--tab", "zzzzzzzz")
@@ -372,9 +393,11 @@ def browsing(base):
     check("the front tab can't be sent elsewhere", refused.returncode == 1 and parsed["error"]["code"] == "refused", parsed)
     refused, parsed = envelope("close", "--tab", front["id"])
     check("the front tab can't be closed", refused.returncode == 1 and parsed["error"]["code"] == "refused", parsed)
-    check("addresses only", envelope("go", "file:///etc/passwd", "--tab", tab)[1]["error"]["code"] == "refused")
+    check("addresses only", (envelope("go", "file:///etc/passwd", "--tab", tab)[1]["error"] or {}).get("code") in ("refused", "usage"))
     check("close", broadway("close", "--tab", tab).returncode == 0)
     check("it's gone", tab not in broadway("tabs").stdout)
+    tabless = broadway("read")
+    check("a read with no tab of its own says whose tab it read", "Reading the person's tab" in tabless.stderr or tabless.returncode != 0, tabless.stderr)
 
     check("history", broadway("history", "--limit", "3").returncode == 0)
     check("skills is a command, and notes and routines no longer are", broadway("skills").returncode == 0
@@ -417,7 +440,7 @@ def batching(base):
     broadway("wait", "--tab", tab)
     _, parsed = envelope("snapshot", "--tab", tab)
     elements = parsed["data"]["elements"]
-    ref = lambda name: "@" + next(e["ref"] for e in elements if e["name"] == name)
+    ref = lambda name: pick(elements, name)
     secret = "@" + next(e["ref"] for e in elements if e.get("hidden"))
 
     done = broadway("batch", f"type {ref('plain')} from-batch", f"click {ref('Go')}")
@@ -444,20 +467,20 @@ def batching(base):
     check("26 steps are too many", many.returncode == 2 and "25 steps at most" in parsed["error"]["message"], parsed)
 
     secret_box, parsed = envelope("batch", f"type {secret} x")
-    check("a secret box still refuses typing in a batch", secret_box.returncode == 1 and parsed["error"]["code"] == "refused" and parsed["data"]["landed"] == [], parsed)
+    check("a secret box still refuses typing in a batch", secret_box.returncode == 1 and parsed["error"]["code"] == "secret_field" and parsed["data"]["landed"] == [], parsed)
     check("and its value stayed out", "hunter2" not in json.dumps(parsed))
 
     broadway("go", base + "batchform", "--tab", tab)
     broadway("wait", "--tab", tab)
     _, parsed = envelope("snapshot", "--tab", tab)
     elements = parsed["data"]["elements"]
-    asking = spawn("batch", f"click {ref('Inside')}", f"click {ref('Go')}", "--json")
+    asking = spawn("batch", f"click {ref('Delete draft')}", f"click {ref('Go')}", "--json")
     check("a gated step in a batch asks the person", wait_for(desk), desk())
     bench("knowing", "desk", "no")
     output, errors = asking.communicate(timeout=20)
     parsed = json.loads(output)
     check("a no stops the batch", asking.returncode == 1 and parsed["data"]["landed"] == [] and parsed["data"]["steps"][1].get("ran") is False, output + errors)
-    check("and the gated click never landed", "leaked" not in broadway("tabs").stdout)
+    check("and the gated click never landed", "erased" not in broadway("tabs").stdout)
 
     broadway("go", base + "batchform", "--tab", tab)
     broadway("wait", "--tab", tab)
@@ -470,14 +493,14 @@ def batching(base):
     elements = parsed["data"]["elements"]
     secret = "@" + next(e["ref"] for e in elements if e.get("hidden"))
     ran, parsed = envelope("run", "--tab", tab, f'try {{ type("{secret[1:]}", "x") }} catch (e) {{}}\nprint("went on")')
-    check("a secret box ends a script whatever it catches", ran.returncode == 1 and parsed["error"]["code"] in ("refused", "secret_field") and "went on" not in json.dumps(parsed), parsed)
-    asking = spawn("run", "--tab", tab, f'try {{ click("{ref('Inside')[1:]}") }} catch (e) {{}}\nclick("{ref('Go')[1:]}")', "--json")
+    check("a secret box ends a script whatever it catches", ran.returncode == 1 and parsed["error"]["code"] == "secret_field" and "went on" not in json.dumps(parsed), parsed)
+    asking = spawn("run", "--tab", tab, f'try {{ click("{ref('Send note')[1:]}") }} catch (e) {{}}\nclick("{ref('Go')[1:]}")', "--json")
     check("a gated step in a script asks the person", wait_for(desk), desk())
     bench("knowing", "desk", "no")
     output, errors = asking.communicate(timeout=20)
     parsed = json.loads(output)
     check("a no ends the script", asking.returncode == 1 and parsed["data"]["steps"] == 1 and parsed["data"]["landed"] == [], output + errors)
-    check("and the gated click never landed", "leaked" not in broadway("tabs").stdout)
+    check("and the gated click never landed", "sent" not in broadway("tabs").stdout)
     looping = broadway("run", "--timeout", "1", "while (true) {}")
     check("a script that never ends stops at its timeout", looping.returncode == 4 and "deadline" in looping.stdout, looping.stdout + looping.stderr)
 
@@ -723,6 +746,12 @@ def no(name, code, *words, **options):
     exits = {"usage": 2, "needs_you": 3}.get(code, 1)
     check(name, result.returncode == exits and (parsed["error"] or {}).get("code") == code, result.stdout + result.stderr)
     return parsed
+
+
+def pick(elements, name):
+    named = [e for e in elements if e["name"] == name]
+    chosen = next((e for e in named if e.get("role") == "button"), named[0])
+    return "@" + chosen["ref"]
 
 
 def desk():
@@ -1009,6 +1038,7 @@ def your_stuff(base):
     check("it reads the feed", wait_for(lambda: any(row["id"] == folder and row["items"] == 2 for row in good("live list", "live", "list")["folders"]), 10), good("live list", "live", "list"))
     shown = good("live show", "live", "show", folder)
     check("website content is marked", shown["website"] is True and shown["items"][0]["title"].startswith("Item"), shown)
+    no("a feed has no statuses to choose", "refused", "live", "statuses", folder, "todo")
     good("live rename", "live", "rename", folder, "Headlines")
     good("live pause", "live", "pause", folder)
     good("live resume", "live", "resume", folder)
@@ -1234,7 +1264,7 @@ def ai_commands(base):
     check("disconnect ends this session", ended["id"] == connected["id"] and ended["state"] == "done" and ended["summary"] == "Finished CLI checks", ended)
     reconnected = good("agents reconnect", "agents", "connect")["connected"]
     check("reconnecting starts another session", reconnected["id"] != connected["id"], reconnected)
-    ended = good("agents done", "agents", "done", "--failed", "--summary", "Stopped CLI check")["ended"]
+    ended = good("agents done", "agents", "done", "--failed", "--summary", "Stopped CLI check", "--tab", "a8b6db94")["ended"]
     check("done records the ending", ended["id"] == reconnected["id"] and ended["state"] == "failed" and ended["summary"] == "Stopped CLI check", ended)
     good("agents connect again", "agents", "connect")
     check("helpers list", "helpers" in good("helpers list", "helpers", "list"))

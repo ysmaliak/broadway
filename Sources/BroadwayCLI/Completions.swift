@@ -45,10 +45,11 @@ enum Completions {
                          ("steer", "change what a task is doing"), ("queue", "add a step for later")]
             }
             if let command = catalog.find(first), Builtins.find(first) == nil {
-                found = command.flags.map { ("--\($0.name)", $0.description) }
+                found = command.listed.map { ("--\($0.name)", $0.description) }
                 if CommandLineInput.takesTarget(command) {
-                    let named = Set(command.flags.map(\.name))
+                    let named = Set(command.listed.map(\.name))
                     found += Help.targetOptions.filter { option in !named.contains(Help.flagName(option.0)) }.map { option in ("--" + Help.flagName(option.0), option.1) }
+                    if !command.reads { found += Help.expectOptions.map { option in ("--" + Help.flagName(option.0), option.1) } }
                 }
                 if command.tabbed { found.append(("--tab", "the tab to work in")) }
             }
@@ -84,7 +85,7 @@ enum Completions {
         }
         let command = verb.command
         let named = Set(command.positional.map(\.name))
-        var found = command.flags.filter { !named.contains($0.name) }.map { ("--\($0.name)", $0.description) }
+        var found = command.listed.filter { !named.contains($0.name) }.map { ("--\($0.name)", $0.description) }
         if command.tabbed { found.append(("--tab", "the tab to work in")) }
         return found
     }

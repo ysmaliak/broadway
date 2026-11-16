@@ -368,6 +368,46 @@ struct ParsingTests {
         #expect(request["cli"] as? String == "dev")
         #expect(request["agent"] != nil)
     }
+
+    @Test func unlistedFlagsStayOutOfUsageHelpAndCompletionsButStillParse() throws {
+        let command = Command(["name": "click", "tool": "click", "tabbed": true,
+                               "positional": [["name": "ref", "type": "string"]],
+                               "flags": [["name": "ref", "type": "string"], ["name": "final", "type": "string", "choices": ["send", "pay"]],
+                                         ["name": "settle", "type": "number", "unlisted": true], ["name": "expect_gone", "type": "string", "unlisted": true],
+                                         ["name": "role", "type": "string", "unlisted": true]]])
+
+        let page = Help.page(command, style: Style(color: false))
+
+        #expect(command.usage == "broadway click [ref] [--final send|pay] [--tab ID]")
+        #expect(!page.contains("--settle") && !page.contains("--expect_gone"))
+        #expect(page.contains("--role ROLE") && page.contains("--expect TEXT"))
+        #expect(try CommandLineInput.parse(command, ["@e3", "--settle", "0"])["settle"] as? Double == 0)
+    }
+
+    @Test func aClickNeedsSomethingToClick() {
+        let command = Command(["name": "click", "tool": "click", "tabbed": true,
+                               "positional": [["name": "ref", "type": "string"]], "flags": [["name": "ref", "type": "string"]]])
+
+        #expect((try? CommandLineInput.parse(command, [])) == nil)
+        #expect((try? CommandLineInput.parse(command, ["--role", "button", "--name", "Save"])) != nil)
+        #expect((try? CommandLineInput.parse(command, ["Save"])) != nil)
+    }
+
+    @Test func aHiddenLookAsksTheAppForNone() throws {
+        let reads = Command(["name": "snapshot", "tool": "snapshot", "tabbed": true, "reads": true])
+
+        #expect(try Browse.arguments(click, ["Save", "--no-look"], tab: nil, tabFlag: false).arguments["look"] as? Bool == false)
+        #expect(try Browse.arguments(click, ["Save", "--quiet-answer"], tab: nil, tabFlag: false).arguments["look"] as? Bool == false)
+        #expect(try Browse.arguments(click, ["Save"], tab: nil, tabFlag: false).arguments["look"] == nil)
+        #expect(try Browse.arguments(reads, ["--no-look"], tab: nil, tabFlag: false).arguments["look"] == nil)
+    }
+
+    @Test func aBareTabsAsksForTheSessionsOwn() {
+        #expect(Person.bare(["tabs"]))
+        #expect(Person.bare(["tabs", "--all"]))
+        #expect(!Person.bare(["tabs", "list"]))
+        #expect(!Person.bare(["tabs", "close", "a8b6db94"]))
+    }
 }
 
 extension Command {

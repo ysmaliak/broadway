@@ -7,6 +7,7 @@ struct Parameter: Equatable {
     var required: Bool
     var choices: [String]
     var many: Bool
+    var unlisted = false
 
     var shown: String {
         if type == "boolean" { return "[--\(name)]" }
@@ -22,6 +23,7 @@ struct Parameter: Equatable {
         required = found["required"] as? Bool ?? false
         choices = found["choices"] as? [String] ?? []
         many = found["many"] as? Bool ?? false
+        unlisted = found["unlisted"] as? Bool ?? false
     }
 }
 
@@ -53,11 +55,13 @@ struct Command: Equatable {
         columns = found["columns"] as? [String] ?? []
     }
 
+    var listed: [Parameter] { flags.filter { !$0.unlisted } }
+
     var usage: String {
         if let wholeUsage { return wholeUsage }
         var parts = ["broadway", name]
         parts += positional.map { $0.required ? "<\($0.name)>" : "[\($0.name)]" }
-        parts += flags.filter { flag in !positional.contains { $0.name == flag.name } }.map(\.shown)
+        parts += listed.filter { flag in !positional.contains { $0.name == flag.name } }.map(\.shown)
         if tabbed { parts.append("[--tab ID]") }
         return parts.joined(separator: " ")
     }

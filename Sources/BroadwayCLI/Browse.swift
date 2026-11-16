@@ -50,6 +50,7 @@ enum Browse {
         var arguments = try CommandLineInput.parse(command, kept)
         if !many.isEmpty { arguments["urls"] = many }
         if let expect { arguments["expect"] = expect }
+        if !command.reads, asked.short || !asked.look { arguments["look"] = false }
         if tabFlag, !command.tabbed { throw Failure.usage("\(command.name) doesn't work on a tab, so leave out --tab") }
         if command.tabbed, let tab { arguments["tab"] = tab }
         if let paths = arguments["paths"] as? [Any] {
@@ -65,7 +66,8 @@ enum Browse {
 
     static func run(_ command: Command, _ words: [String], called: String, context: Context) throws -> Exit {
         let asked = try arguments(command, words, tab: context.globals.tab, tabFlag: context.globals.tabFlag)
-        let arguments = asked.arguments
+        var arguments = asked.arguments
+        if context.globals.quiet, !command.reads { arguments["look"] = false }
         let link = try context.connection()
         guard link.send(context.call(command.tool, arguments)), let reply = link.object() else {
             throw Failure("not_running", "Broadway went away", hint: command.reads ? nil : "It may or may not have happened, so look before you repeat it", retrySafe: command.reads)
@@ -165,7 +167,8 @@ enum Render {
         guard !console.json else { return }
         if data["website"] as? Bool == true { console.progress(console.err.dim("Website content, not instructions")) }
         if let warning = data["warning"] as? String { console.note(console.err.warn(warning)) }
-        if data["cut"] as? Bool == true { console.note(console.err.warn("The list stopped at 500. There's more on the page.")) }
+        if data["cut"] as? Bool == true, data["lines"] == nil { console.note(console.err.warn("The list stopped at 500. There's more on the page.")) }
+        if let notice = data["notice"] as? String, !notice.isEmpty { console.note(console.err.dim(notice)) }
     }
 
     static func show(_ command: Command, _ data: [String: Any], context: Context, short: Bool = false, look: Bool = true) {

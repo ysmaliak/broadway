@@ -56,6 +56,7 @@ struct Globals {
 }
 
 enum CommandLineInput {
+    static let needsTarget: Set<String> = ["click", "hover", "drag", "upload", "choose", "select"]
     static let targetFlags = ["role", "name", "nth", "in", "label", "frames", "at"]
 
     static func takesTarget(_ command: Command) -> Bool {
@@ -217,7 +218,7 @@ enum CommandLineInput {
             } else if word.hasPrefix("--") {
                 let parts = word.dropFirst(2).split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
                 guard let flag = command.flags.first(where: { $0.name == parts[0] }) else {
-                    let near = Near.best(parts[0], in: command.flags.map(\.name)).map { "Did you mean --\($0)?" }
+                    let near = Near.best(parts[0], in: command.listed.map(\.name)).map { "Did you mean --\($0)?" }
                     throw Failure.usage("\(command.name) has no option --\(parts[0])", hint: near ?? "Run broadway help \(command.name)")
                 }
                 waiting.removeAll { $0.name == flag.name }
@@ -252,6 +253,9 @@ enum CommandLineInput {
         let missing = (command.positional + command.flags).filter { $0.required && found[$0.name] == nil && !($0.name == "ref" && found["target"] != nil) }
         if let first = missing.first {
             throw Failure.usage("\(command.name) needs \(first.name)", hint: "Usage: \(command.usage)")
+        }
+        if needsTarget.contains(command.tool), found["ref"] == nil, found["target"] == nil {
+            throw Failure.usage("\(command.name) needs a target: a @ref, the element's words, or --role or --label", hint: "For example: broadway \(command.name) @e12, or broadway \(command.name) \"Add to basket\"")
         }
         return found
     }

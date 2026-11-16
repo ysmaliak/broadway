@@ -57,14 +57,15 @@ enum Help {
         let named = Set(command.positional.map(\.name))
         let rows = command.positional.map { ("<\($0.name)>", $0.description.isEmpty ? $0.type : $0.description) }
         if !rows.isEmpty { out += ["", style.bold("Arguments")] + columns(rows) }
-        var options = command.flags.filter { !named.contains($0.name) }.map { flag -> (String, String) in
+        var options = command.listed.filter { !named.contains($0.name) }.map { flag -> (String, String) in
             var what = flag.description
             if !flag.choices.isEmpty { what += (what.isEmpty ? "" : " ") + "(" + flag.choices.joined(separator: ", ") + ")" }
             return ("--\(flag.name)" + (flag.type == "boolean" ? "" : " \(flag.type.uppercased())"), what)
         }
         if CommandLineInput.takesTarget(command) {
-            let named = Set(command.flags.map(\.name))
+            let named = Set(command.listed.map(\.name))
             options += Help.targetOptions.filter { option in !named.contains(Help.flagName(option.0)) }
+            if !command.reads { options += Help.expectOptions }
         }
         if command.tabbed { options.append(("--tab ID", "the tab to work in")) }
         if !options.isEmpty { out += ["", style.bold("Options")] + columns(options) }
@@ -82,6 +83,12 @@ enum Help {
         ("--at X,Y", "the element at that point of the last shot"),
         ("--quiet-answer", "print only the first line of the answer"),
         ("--no-look", "after a new page, leave out the look at it"),
+    ]
+
+    static let expectOptions: [(String, String)] = [
+        ("--expect TEXT", "say whether this text came after the action"),
+        ("--expect-gone TEXT", "say whether this text went"),
+        ("--expect-url PART", "say whether the address came to have this"),
     ]
 
     static func flagName(_ usage: String) -> String {

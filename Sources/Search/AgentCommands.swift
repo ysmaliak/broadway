@@ -95,6 +95,7 @@ enum AgentCatalog {
                                     "description": schema["description"] as? String ?? plainly[name] ?? "", "required": required]
         if let choices = schema["enum"] as? [String] { found["choices"] = choices }
         if found["type"] as? String == "array" { found["many"] = true }
+        if schema["unlisted"] as? Bool == true { found["unlisted"] = true }
         return found
     }
 
