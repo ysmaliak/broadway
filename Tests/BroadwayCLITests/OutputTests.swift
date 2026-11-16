@@ -43,6 +43,11 @@ struct OutputTests {
         #expect((error["retry_safe"] as? Bool) == true)
     }
 
+    @Test func aMenuAPageWouldOpenAndAnUnseenPageEachSayWhatToDoInstead() {
+        #expect(Failure("opens_window", "That list opens a menu of its own.").hint?.contains("broadway choose") == true)
+        #expect(Failure("unseen", "This macOS cannot hover over a page nobody is looking at.").hint?.contains("select the agent's tab") == true)
+    }
+
     @Test func aQuestionKeepsItsResumeLineInData() throws {
         let failure = Failure("needs_you", "Which?", exit: .needsYou, data: ["resume": "broadway session resume ab"])
 

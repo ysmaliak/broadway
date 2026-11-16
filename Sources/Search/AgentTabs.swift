@@ -164,6 +164,11 @@ extension Browser {
 }
 
 extension Bench {
+    static func row(_ window: NSWindow) -> [String: Any] {
+        ["number": window.windowNumber, "kind": "\(type(of: window))", "visible": window.isVisible, "level": window.level.rawValue,
+         "frame": [window.frame.minX, window.frame.minY, window.frame.width, window.frame.height], "room": window is AgentPageRoom]
+    }
+
     func agent(_ request: [String: Any], browser: Browser, _ answer: @escaping ([String: Any]) -> Void) {
         let task = (request["task"] as? String).flatMap(UUID.init(uuidString:))
         func state() -> [String: Any] {
@@ -313,8 +318,28 @@ extension Bench {
         case "sweep":
             browser.sweepAgentTabs(at: Date().addingTimeInterval(request["after"] as? Double ?? 0))
             answer(state())
+        case "windows":
+            answer(["windows": NSApp.windows.map(Self.row)])
+        case "screens":
+            var moved: [[String: Any]] = []
+            for window in NSApp.windows where window.isVisible {
+                guard let screen = NSScreen.main else { break }
+                let was = window.frame
+                window.setFrame(window.constrainFrameRect(was, to: screen), display: false)
+                if window.frame != was { moved.append(Self.row(window)) }
+            }
+            NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
+            answer(["moved": moved, "windows": NSApp.windows.map(Self.row)])
+        case "look":
+            let prefix = (request["tab"] as? String ?? "").lowercased()
+            if !prefix.isEmpty, let tab = browser.tabs.first(where: { $0.id.uuidString.lowercased().hasPrefix(prefix) }) {
+                browser.select(tab)
+            } else if let active = browser.active {
+                browser.settle(on: active)
+            }
+            answer(["active": browser.active.map { $0.id.uuidString } ?? ""])
         default:
-            answer(["error": "agents state|takeover|handback|call|questions|answer|mode|finish|fold|press|hover|whole|stage|row|heading|closelink|codex|codexopen|linksweep|sweep"])
+            answer(["error": "agents state|takeover|handback|call|questions|answer|mode|finish|fold|press|hover|whole|stage|row|heading|closelink|codex|codexopen|linksweep|sweep|windows|screens|look"])
         }
     }
 }

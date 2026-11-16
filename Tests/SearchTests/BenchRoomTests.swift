@@ -22,7 +22,8 @@ struct BenchRoomTests {
 
         first.closeAll()
 
-        #expect(room.isVisible)
+        #expect(room is AgentPageRoom)
+        #expect(!room.isVisible)
         #expect(b.web.window === room)
 
         second.closeAll()

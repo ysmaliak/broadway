@@ -5629,13 +5629,10 @@ final class Bench {
     /// Where `film float` lends the tab's stage, off every screen.
     private var hall: NSWindow?
 
-    /// A page nobody is looking at has to be somewhere to be laid out at all.
-    /// The stage takes it back the moment you pick its tab, and it comes
-    /// here again when the bench next needs it.
     func house(_ tab: Tab) {
         guard tab.bench, tab.web.window == nil else { return }
         let window = room ?? makeRoom()
-        tab.web.frame = window.contentView?.bounds ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
+        tab.web.frame = window.contentView?.bounds ?? NSRect(origin: .zero, size: AgentPageRoom.size)
         tab.web.autoresizingMask = [.width, .height]
         window.contentView?.addSubview(tab.web)
     }
@@ -5650,20 +5647,7 @@ final class Bench {
     static var aiRead: AIPage.Read?
 
     private func makeRoom() -> NSWindow {
-        // Off every screen, and never key or main: it exists so that a web
-        // view has a window, and for nothing else.
-        let window = AgentPageRoom(
-            contentRect: NSRect(x: -20000, y: -20000, width: 1280, height: 800),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        window.isReleasedWhenClosed = false
-        window.isExcludedFromWindowsMenu = true
-        window.collectionBehavior = [.transient, .ignoresCycle, .stationary]
-        window.level = NSWindow.Level(rawValue: NSWindow.Level.normal.rawValue - 1)
-        window.hasShadow = false
-        window.orderBack(nil)
+        let window = AgentPageRoom.make()
         room = window
         return window
     }

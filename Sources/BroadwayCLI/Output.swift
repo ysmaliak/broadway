@@ -40,6 +40,8 @@ struct Failure: Error {
         "not_a_page": "Pick a tab showing a web page: broadway tabs",
         "timeout": "Nothing was repeated. Check the page with broadway snapshot, or wait longer with --seconds.",
         "not_actionable": "Run broadway snapshot to see the element's state, then scroll or wait",
+        "opens_window": "Use broadway choose REF VALUE for a list, or broadway type for a date, time or colour",
+        "unseen": "Ask the person to select the agent's tab in Broadway, then try again",
         "no_answer": "The page may be busy. Check it with broadway snapshot before you try again.",
         "no_window": "Open a window in Broadway",
         "tasks_running": "Stop them with broadway session stop ID, or run broadway quit --force",

@@ -152,6 +152,8 @@ enum ToolCode: String, CaseIterable {
     case tasksRunning = "tasks_running"
     case noSession = "no_session"
     case ambiguousSession = "ambiguous_session"
+    case unseen
+    case opensWindow = "opens_window"
 
     var mayHaveLanded: Bool {
         switch self {
@@ -206,6 +208,8 @@ enum ToolCode: String, CaseIterable {
         case .tasksRunning: "Stop them with broadway session stop ID, or run broadway quit --force"
         case .noSession: "Run broadway session list"
         case .ambiguousSession: "Run broadway session list and give more of the id"
+        case .unseen: "Ask the person to select the agent's tab in Broadway, then try again"
+        case .opensWindow: "Use broadway choose REF VALUE for a list, or broadway type for a date, time or colour"
         }
     }
 }
@@ -222,6 +226,7 @@ enum ToolFailure {
         ("waits for the person's yes", "needs_you"), ("only a task can ask", "needs_task"), ("Only a running task", "needs_task"), ("runs without the person", "refused"),
         ("The person is driving", "refused"), ("handed it back", "refused"), ("hasn't answered", "refused"),
         ("said not now", "refused"), ("said never here", "refused"), ("never lets agents", "refused"),
+        ("never shows one for an agent", "opens_window"), ("page nobody is looking at", "unseen"),
     ]
 
     static func code(_ text: String) -> String {

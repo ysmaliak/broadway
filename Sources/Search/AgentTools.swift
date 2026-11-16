@@ -309,7 +309,34 @@ enum AgentPage {
     return broadwayCaptcha();
     """
 
-    static let spotScript = find + factsCheck + """
+    static let opensCheck = """
+
+    function broadwayOpens(el) {
+      if (!el || !el.tagName) return '';
+      if (el.tagName === 'SELECT') return el.multiple || el.size > 1 ? '' : 'menu';
+      if (el.tagName !== 'INPUT') return '';
+      return ['color', 'date', 'datetime-local', 'month', 'week', 'time'].indexOf((el.type || '').toLowerCase()) >= 0 ? 'picker' : '';
+    }
+    """
+
+    static let activeOpensScript = opensCheck + """
+
+    var el = document.activeElement || document.body;
+    while (el.shadowRoot && el.shadowRoot.activeElement) el = el.shadowRoot.activeElement;
+    return broadwayOpens(el);
+    """
+
+    static let menuKeys: Set<String> = [" ", "ArrowDown", "ArrowUp"]
+
+    static func refusesOwnWindow(_ opens: String?) -> String? {
+        switch opens {
+        case "menu": return "That list opens a menu of its own, and Broadway never shows one for an agent. Use choose to pick an option."
+        case "picker": return "That box opens a picker of its own, and Broadway never shows one for an agent. Use type to fill it in."
+        default: return nil
+        }
+    }
+
+    static let spotScript = find + factsCheck + opensCheck + """
 
     el.scrollIntoView({ block: 'center', inline: 'center' });
     var r = el.getBoundingClientRect();
@@ -318,7 +345,7 @@ enum AgentPage {
     var top = document.elementFromPoint(x, y);
     if (!top || !(top === el || el.contains(top) || top.contains(el))) return { failed: 'Something covers that element.' };
     if (el.disabled) return { failed: 'That element is disabled.' };
-    return { x: x, y: y, left: r.left, top: r.top, width: r.width, height: r.height, facts: broadwayFacts(el, false) };
+    return { x: x, y: y, left: r.left, top: r.top, width: r.width, height: r.height, facts: broadwayFacts(el, false), opens: broadwayOpens(el) };
     """
 
     static let boxScript = find + """
@@ -949,6 +976,7 @@ final class BrowserToolbox: AgentToolbox {
         if let failure { return failure }
         var facts = ActionFacts(spot?["facts"] as? [String: Any] ?? [:])
         let framed = AgentRef(ref).frame != nil
+        if tab.agent, !framed, let refused = AgentPage.refusesOwnWindow(spot?["opens"] as? String) { return .failure(refused) }
         if !framed, let spot { point(tab, ["x": spot["left"] ?? 0, "y": spot["top"] ?? 0, "width": spot["width"] ?? 0, "height": spot["height"] ?? 0], .click, task: task) }
         if framed, await PageSelection.run(tab, AgentPage.captchaScript) as? Bool == true { facts.captcha = true }
         if leaves(facts, tab: tab, browser: browser) {
@@ -983,7 +1011,6 @@ final class BrowserToolbox: AgentToolbox {
 
     private func hover(_ tab: Tab, _ arguments: [String: Any], task: UUID?) async -> ToolOutcome {
         guard tab.agent else { return .failure("Hover needs an agent tab. Use open for a tab of your own.") }
-        guard !NSApp.isHidden else { return .failure("Hover needs Broadway awake. Open Broadway and try again.") }
         let ref = arguments["ref"] as? String ?? ""
         guard AgentRef(ref).frame == nil else { return .failure("Hover in an embedded frame is not supported") }
         let view = tab.web
@@ -994,10 +1021,12 @@ final class BrowserToolbox: AgentToolbox {
             return .failure("That page has no view to hover over")
         }
         let room = window as? AgentPageRoom
-        guard room != nil || window.isKeyWindow else { return .failure("Hover needs an active Broadway window or a background agent page") }
+        guard room != nil || (window.isKeyWindow && !NSApp.isHidden) else { return .failure("Hover needs an active Broadway window or a background agent page") }
+        if room != nil, !AgentPageRoom.keepsAlive(view) {
+            return .failure("This macOS cannot hover over a page nobody is looking at. Ask the person to select the agent's tab in Broadway, then hover again.")
+        }
         room?.beginHover()
         defer { room?.endHover() }
-        if !window.isVisible, !NSScreen.screens.contains(where: { $0.frame.intersects(window.frame) }) { window.orderBack(nil) }
         view.showFirstFrame()
         view.alphaValue = 1
         guard AgentDiagnostics.keepAwake(view, true) else { return .failure("This WebKit version cannot keep the agent page awake for hover") }
@@ -1008,7 +1037,7 @@ final class BrowserToolbox: AgentToolbox {
             return .failure("That page has no view to hover over")
         }
         let at = view.convert(NSPoint(x: x, y: view.isFlipped ? y : view.bounds.height - y), to: nil)
-        guard !Task.isCancelled, tab.agent, !tab.driving, !NSApp.isHidden, tab.built === view, tab.pageAddress == place, view.window === window,
+        guard !Task.isCancelled, tab.agent, !tab.driving, room != nil || !NSApp.isHidden, tab.built === view, tab.pageAddress == place, view.window === window,
               at.x.isFinite, at.y.isFinite, abs(at.x) < 1_000_000_000, abs(at.y) < 1_000_000_000 else {
             return .failure("The page changed before it could be hovered. Look again.")
         }
@@ -1146,6 +1175,10 @@ final class BrowserToolbox: AgentToolbox {
         }
         if tab.agent, let window = tab.web.window {
             let view = tab.web
+            if AgentPage.menuKeys.contains(key), await PageSelection.run(tab, AgentPage.activeOpensScript) as? String == "menu",
+               let refused = AgentPage.refusesOwnWindow("menu") {
+                return .failure(refused)
+            }
             window.makeFirstResponder(view)
             for type in [NSEvent.EventType.keyDown, .keyUp] {
                 guard let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: combo.flags, timestamp: ProcessInfo.processInfo.systemUptime,

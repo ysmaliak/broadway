@@ -5841,7 +5841,7 @@ extension Browser {
 
     @discardableResult
     func liftCall(_ tab: Tab?) -> Bool {
-        guard let tab, tab.isWeb, !tab.asleep, onCall(tab), tab.web.fullscreenState == .notInFullscreen,
+        guard let tab, !tab.agent, tab.isWeb, !tab.asleep, onCall(tab), tab.web.fullscreenState == .notInFullscreen,
               !CallFloat.shared.showing, !CallFloat.shared.keepsAway(tab) else { return false }
         if floater.showing { land() }
         guard CallFloat.shared.lift(tab, from: self) else { return false }
@@ -6034,7 +6034,7 @@ extension Browser {
     /// `otherwise`: the other page of a pair, tried when this one has
     /// nothing playing.
     private func lift(_ tab: Tab?, quietly: Bool, otherwise: Tab? = nil) {
-        if quietly, let tab, CallFloat.shared.keepsAway(tab) || tab.sound.role == .mini {
+        if quietly, let tab, tab.agent || CallFloat.shared.keepsAway(tab) || tab.sound.role == .mini {
             if let otherwise { lift(otherwise, quietly: quietly) }
             return
         }

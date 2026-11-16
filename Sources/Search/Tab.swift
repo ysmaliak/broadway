@@ -958,7 +958,7 @@ final class Tab: Identifiable {
         // extension can hand over one of its own.
         FrameRate.apply(to: configuration.preferences)
         ClickIDs.apply(to: configuration.preferences, shy: shy)
-        let web = PageView(frame: .zero, configuration: configuration)
+        let web = PageView(frame: .zero, configuration: bench ? AgentPageRoom.unseen(configuration) : configuration)
         // The trackpad pinch is WebKit's own: it magnifies what is on screen
         // and lets you move around inside it, the way pinching does everywhere
         // else on a Mac. ⌘+ and ⌘- are the other thing — they lay the page out
@@ -993,6 +993,7 @@ final class Tab: Identifiable {
             self.onSearch?(self, text)
         }
         web.onFirstFrame = { [weak self] in self?.painted = true }
+        web.onWindow = { [weak self] in self?.movedHouse() }
         web.holdForFirstFrame()
         painted = !web.unpainted
         // Pages follow the appearance of the window they are drawn in, and the
@@ -2049,6 +2050,18 @@ final class Tab: Identifiable {
         }
     }
 
+    private func movedHouse() {
+        guard let built else { return }
+        if bench { built.configuration.preferences.isElementFullscreenEnabled = !(built.window is AgentPageRoom) }
+        guard agent, built.window == nil else { return }
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.agent, let built = self.built, built.window == nil else { return }
+                Bench.shared.house(self)
+            }
+        }
+    }
+
     /// The view and everything listening to it, gone — timers, video,
     /// sockets, and the document WebKit would otherwise keep in its
     /// back-forward cache. The tab keeps its address; `web` builds again the
@@ -2094,6 +2107,7 @@ final class Tab: Identifiable {
         web.readsIn = nil
         web.onImage = nil
         web.onSearch = nil
+        web.onWindow = nil
         web.stopLoading()
         // Detaching a view doesn't end capture while something still holds it.
         web.setCameraCaptureState(.none, completionHandler: nil)
@@ -2324,6 +2338,7 @@ final class PageView: WKWebView {
 
     var onMenuClosed: (() -> Void)?
     var onStep: ((Bool) -> Void)?
+    var onWindow: (() -> Void)?
     private(set) weak var started: WKNavigation?
 
     @discardableResult
@@ -2768,6 +2783,7 @@ final class PageView: WKWebView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         gateTrackingAreas()
+        onWindow?()
     }
 
     func gateTrackingAreas() {
