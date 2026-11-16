@@ -47,7 +47,7 @@ enum AgentCatalog {
         "upload": Shape(positional: ["ref", "paths"], examples: ["broadway upload @e7 ~/Desktop/report.pdf", "broadway upload @e7 a.png b.png --json"]),
         "download": Shape(positional: ["ref"], examples: ["broadway download @e9", "broadway download --url https://example.com/report.pdf", "broadway download @e9 --downloads"]),
         "press": Shape(examples: ["broadway press Enter", "broadway press ArrowDown", "broadway press Shift+Tab", "broadway press Meta+a"]),
-        "locate": Shape(positional: ["text"], examples: ["broadway locate \"Always Use HTTPS\"", "broadway locate --role switch", "broadway locate Save --role button --json"]),
+        "locate": Shape(command: "find", positional: ["text"], examples: ["broadway find \"Add to basket\"", "broadway find --role switch", "broadway find Save --role button --json"]),
         "fill_form": Shape(command: "fill", positional: ["fields"], examples: ["broadway fill '{\"@e4\": \"Sam\", \"Email\": \"sam@example.com\", \"Country\": \"Spain\", \"@e9\": true}'"]),
         "drag": Shape(positional: ["ref", "to"], examples: ["broadway drag @e5 @e9"]),
         "select": Shape(positional: ["ref", "text"], examples: ["broadway select @e12", "broadway select @e12 \"order number\""]),
@@ -55,6 +55,7 @@ enum AgentCatalog {
         "scroll": Shape(positional: ["by"], examples: ["broadway scroll 600", "broadway scroll -300", "broadway scroll @e12"]),
         "wait": Shape(positional: ["text"], examples: ["broadway wait", "broadway wait \"Order placed\"", "broadway wait --selector '#done' --seconds 20", "broadway wait --gone Loading", "broadway wait --download", "broadway wait --idle", "broadway wait --request /api/save"]),
         "history": Shape(positional: ["query"], examples: ["broadway history github", "broadway history --limit 5"], columns: ["last", "title", "url"]),
+        "handoff": Shape(positional: ["reason"], examples: ["broadway handoff \"Solve the captcha\"", "broadway handoff \"Type the code you were sent\" --seconds 600", "broadway handoff \"Pick a seat\" --optional"]),
         "ask": Shape(hidden: true),
         "skills": Shape(examples: ["broadway skills", "broadway skills --url https://github.com"]),
         "skill": Shape(positional: ["name"], examples: ["broadway skill github"]),
@@ -347,31 +348,26 @@ extension AgentSocket {
             return
         }
         let name = request["tool"] as? String ?? ""
+        if name == AgentBatch.spec.name {
+            let link = self.link(for: request, create: true)?.id
+            let work = Task { @MainActor in
+                connection.send(await self.batch(request["arguments"] as? [String: Any] ?? [:], browser: browser, link: link))
+                connection.close()
+            }
+            let gone = connection.onClose
+            connection.onClose = {
+                gone?()
+                work.cancel()
+            }
+            return
+        }
         guard let spec = box.tools.first(where: { $0.name == name }), AgentCatalog.shapes[name]?.hidden != true else {
             connection.send(ToolFailure.error("unknown_tool", "Broadway has no tool named \(name)"))
             return connection.close()
         }
         let link = self.link(for: request, create: name == "open" || spec.properties["tab"] != nil)?.id
         let work = Task { @MainActor in
-            var arguments = request["arguments"] as? [String: Any] ?? [:]
-            var used: String?
-            if spec.properties["tab"] != nil {
-                let named = arguments["tab"] as? String
-                switch await self.target(named, browser: browser, link: link) {
-                case .failure(let refused):
-                    connection.send(ToolFailure.error(refused.code, refused.message, tool: name))
-                    return connection.close()
-                case .success(let id):
-                    arguments["tab"] = id
-                    used = id
-                    if named != nil { self.remember(id, link: link) }
-                }
-            }
-            let outcome = await self.box.call(name, arguments, task: link)
-            let reply = ToolReply.wire(outcome, tool: name, tab: used)
-            if !outcome.failed, name == "open", let id = (reply["data"] as? [String: Any])?["id"] as? String { self.remember(id, link: link) }
-            if !outcome.failed, name == "close", used == self.current(link) { self.remember(nil, link: link) }
-            connection.send(reply)
+            connection.send(await self.perform(name, spec: spec, arguments: request["arguments"] as? [String: Any] ?? [:], browser: browser, link: link))
             connection.close()
         }
         let gone = connection.onClose
@@ -401,6 +397,27 @@ extension AgentSocket {
             if name == "open", let id = data["id"] as? String ?? data["tab"] as? String { self.remember(id, link: link) }
             if name == "close", arguments["tab"] as? String == self.current(link) { self.remember(nil, link: link) }
         }
+    }
+
+    func perform(_ name: String, spec: ToolSpec, arguments given: [String: Any], browser: Browser, link: UUID?) async -> [String: Any] {
+        var arguments = given
+        var used: String?
+        if spec.properties["tab"] != nil {
+            let named = arguments["tab"] as? String
+            switch await self.target(named, browser: browser, link: link) {
+            case .failure(let refused):
+                return ToolFailure.error(refused.code, refused.message, tool: name)
+            case .success(let id):
+                arguments["tab"] = id
+                used = id
+                if named != nil { self.remember(id, link: link) }
+            }
+        }
+        let outcome = await self.box.call(name, arguments, task: link)
+        let reply = ToolReply.wire(outcome, tool: name, tab: used)
+        if !outcome.failed, name == "open", let id = (reply["data"] as? [String: Any])?["id"] as? String { self.remember(id, link: link) }
+        if !outcome.failed, name == "close", used == self.current(link) { self.remember(nil, link: link) }
+        return reply
     }
 
     func current(_ link: UUID?) -> String? {

@@ -30,19 +30,49 @@ enum Setup {
     static let closing = "# <<< broadway <<<"
     static let mark = "written by broadway setup"
 
-    static func skill(guide: String) -> String {
-        """
-        ---
-        name: broadway
-        description: >
-          Broadway is the person's own web browser on this Mac, signed in to their sites, driven with the broadway
-          command. Use it for anything on the web: opening and reading pages, filling forms, clicking through
-          sites, screenshots, their open tabs and browsing history. Run broadway guide first.
-        managed-by: \(mark)
-        ---
+    static let guideVersion = "0.4"
+    static let codexToolTimeout = 900
 
-        \(guide)
-        """
+    static let skill = """
+    ---
+    name: broadway
+    description: >
+      Broadway is the person's own web browser on this Mac, signed in to their sites, driven with the broadway
+      command. Use it for anything on the web: opening and reading pages, filling forms, clicking through
+      sites, screenshots, their open tabs and browsing history. Run broadway guide first.
+    managed-by: \(mark)
+    broadway-guide: \(guideVersion)
+    ---
+
+    Run `broadway guide` before the first browser step. It is short and always matches the installed Broadway.
+
+        broadway open https://example.com     # a tab of your own. go URL moves the tab you are in
+        broadway click "Sign in"              # by words or @ref, answers with what changed
+        broadway agents done --summary "…"    # always, at the end
+
+    """
+
+    static func guide(in text: String) -> String? {
+        guard text.hasPrefix("---") else { return nil }
+        for line in text.split(separator: "\n").dropFirst() {
+            if line.hasPrefix("---") { return nil }
+            if line.hasPrefix("broadway-guide:") {
+                return line.dropFirst("broadway-guide:".count).trimmingCharacters(in: .whitespaces)
+            }
+        }
+        return nil
+    }
+
+    static func older(_ found: String?, than wanted: String = guideVersion) -> Bool {
+        guard let found, !found.isEmpty else { return true }
+        let have = found.split(separator: ".").map { Int($0) ?? 0 }
+        let want = wanted.split(separator: ".").map { Int($0) ?? 0 }
+        for index in 0..<max(have.count, want.count) {
+            let a = index < have.count ? have[index] : 0
+            let b = index < want.count ? want[index] : 0
+            if a != b { return a < b }
+        }
+        return false
     }
 
     struct Paths {
@@ -142,23 +172,43 @@ enum Setup {
         return steps
     }
 
-    private static func skills(_ paths: Paths, guide: String, wanted: [String]) -> [Step] {
+    private static func skills(_ paths: Paths, wanted: [String]) -> [Step] {
         var steps: [Step] = []
         for (part, folder, file) in [("claude", paths.claude, paths.claudeSkill), ("codex", paths.codex, paths.codexSkill)] where wanted.contains(part) {
             guard exists(folder) else {
                 steps.append(Step(part: part, done: false, path: file, note: "skipped: \(folder) isn't here"))
                 continue
             }
-            steps.append(write(skill(guide: guide), at: file, part: part))
+            steps.append(write(skill, at: file, part: part))
         }
         return steps
     }
 
-    static func install(_ wanted: [String], paths: Paths, binary: String, guide: String) -> [Step] {
+    static func install(_ wanted: [String], paths: Paths, binary: String) -> [Step] {
         var steps: [Step] = []
         if wanted.contains("command") { steps.append(link(paths, to: binary)) }
         if wanted.contains("completions") { steps += completions(paths) }
-        return steps + skills(paths, guide: guide, wanted: wanted)
+        return steps + skills(paths, wanted: wanted)
+    }
+
+    static func refresh(_ wanted: [String], paths: Paths) -> [Step] {
+        var steps: [Step] = []
+        for (part, file) in [("claude", paths.claudeSkill), ("codex", paths.codexSkill)] where wanted.contains(part) {
+            guard let here = text(file) else {
+                steps.append(Step(part: part, done: false, path: file, note: "not there"))
+                continue
+            }
+            guard here.contains("managed-by: \(mark)") else {
+                steps.append(Step(part: part, done: false, path: file, note: "left alone: this file isn't broadway's"))
+                continue
+            }
+            guard older(guide(in: here)) else {
+                steps.append(Step(part: part, done: false, path: file, note: "up to date"))
+                continue
+            }
+            steps.append(write(skill, at: file, part: part))
+        }
+        return steps
     }
 
     private static func take(_ path: String, part: String) -> Step {
@@ -206,7 +256,7 @@ enum Setup {
         (environment["PATH"] ?? "").split(separator: ":").contains { $0 == folder || $0 == folder + "/" }
     }
 
-    static func checks(paths: Paths, binary: String, environment: [String: String], status: [String: Any]?, running: Bool, guide: String) -> [Check] {
+    static func checks(paths: Paths, binary: String, environment: [String: String], status: [String: Any]?, running: Bool) -> [Check] {
         var found: [Check] = []
         let inApp = binary.contains(".app/Contents/Helpers/")
         found.append(Check(name: "app", ok: inApp, required: true, detail: inApp ? Place.bundle(of: binary) ?? "" : "this broadway isn't inside Broadway.app: \(binary)",
@@ -246,8 +296,25 @@ enum Setup {
         file("fish", paths.fish, "__complete", wantedHere: true, fix: "Run broadway setup completions")
         file("bash", paths.bash, "__complete", wantedHere: true, fix: "Run broadway setup completions")
         file("zsh", paths.zsh, "__complete", wantedHere: exists(paths.zshrc), fix: "Run broadway setup completions")
-        file("claude", paths.claudeSkill, "name: broadway", wantedHere: exists(paths.claude), fix: "Run broadway setup claude")
-        file("codex", paths.codexSkill, "name: broadway", wantedHere: exists(paths.codex), fix: "Run broadway setup codex")
+        func skill(_ name: String, _ path: String, wantedHere: Bool) {
+            guard wantedHere else {
+                found.append(Check(name: name, ok: true, required: false, detail: "not used here", fix: nil))
+                return
+            }
+            let fix = "Run broadway setup \(name)"
+            guard let here = text(path) else {
+                found.append(Check(name: name, ok: false, required: false, detail: "\(path) isn't there", fix: fix))
+                return
+            }
+            guard here.contains("name: broadway"), ours(path) else {
+                found.append(Check(name: name, ok: false, required: false, detail: "\(path) isn't broadway's", fix: fix))
+                return
+            }
+            let stale = older(guide(in: here))
+            found.append(Check(name: name, ok: !stale, required: false, detail: stale ? "\(path) is out of date" : path, fix: stale ? fix : nil))
+        }
+        skill("claude", paths.claudeSkill, wantedHere: exists(paths.claude))
+        skill("codex", paths.codexSkill, wantedHere: exists(paths.codex))
         return found
     }
 }
@@ -274,12 +341,14 @@ extension Builtins {
     }
 
     static let setupCommands: [Builtin] = [
-        Builtin(name: "setup", usage: "broadway setup [command] [completions] [claude] [codex]", summary: "Put broadway on your PATH, with completions and agent skills", group: "Setup",
-                details: "Links ~/.local/bin/broadway to this app's copy, writes fish, bash and zsh completions, and installs a skill for Claude Code and Codex where they are present. It leaves files that aren't its own alone. broadway remove undoes it.",
-                examples: ["broadway setup", "broadway setup completions"]) { context, words in
-            let parts = try wanted(words, verb: "setup")
-            let guide = Help.guideText(catalog: context.catalog())
-            return report(Setup.install(parts, paths: Setup.Paths(home: context.home), binary: context.binary, guide: guide), verb: "setup", context: context)
+        Builtin(name: "setup", usage: "broadway setup [command] [completions] [claude] [codex] [--refresh]", summary: "Put broadway on your PATH, with completions and agent skills", group: "Setup",
+                details: "Links ~/.local/bin/broadway to this app's copy, writes fish, bash and zsh completions, and installs a skill for Claude Code and Codex where they are present. The skill is short and sends agents to broadway guide. It leaves files that aren't its own alone. broadway remove undoes it.\n--refresh  only rewrite skills broadway wrote that are older than this Broadway, and create nothing. Broadway runs it at each launch.",
+                examples: ["broadway setup", "broadway setup completions", "broadway setup claude codex --refresh"]) { context, words in
+            let refreshing = words.contains("--refresh")
+            let parts = try wanted(words.filter { $0 != "--refresh" }, verb: "setup")
+            let paths = Setup.Paths(home: context.home)
+            if refreshing { return report(Setup.refresh(parts, paths: paths), verb: "setup", context: context) }
+            return report(Setup.install(parts, paths: paths, binary: context.binary), verb: "setup", context: context)
         },
         Builtin(name: "remove", usage: "broadway remove [command] [completions] [claude] [codex]", summary: "Undo broadway setup", group: "Setup",
                 examples: ["broadway remove", "broadway remove codex"]) { context, words in
@@ -292,7 +361,7 @@ extension Builtins {
             var status: [String: Any]?
             if let link, link.send(["op": "status"]) { status = link.object() }
             let checks = Setup.checks(paths: Setup.Paths(home: context.home), binary: context.binary, environment: context.environment,
-                                      status: status, running: status != nil, guide: "")
+                                      status: status, running: status != nil)
             let console = context.console
             if !console.json {
                 let wide = (checks.map(\.name.count).max() ?? 0) + 2

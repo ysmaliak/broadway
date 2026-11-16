@@ -56,8 +56,19 @@ struct Globals {
 }
 
 enum CommandLineInput {
+    static let targetFlags = ["role", "name", "nth", "in", "label", "frames", "at"]
+
+    static func takesTarget(_ command: Command) -> Bool {
+        (command.positional + command.flags).contains { $0.name == "ref" || $0.name == "target" }
+    }
+
     static func ref(_ word: String) -> String? {
-        let bare = word.hasPrefix("@") ? String(word.dropFirst()) : word
+        var bare = word.hasPrefix("@") ? String(word.dropFirst()) : word
+        if !bare.contains("."), let range = bare.range(of: #"^f[0-9]+e[0-9]+$"#, options: .regularExpression) {
+            let text = String(bare[range])
+            let split = text.dropFirst().firstIndex(of: "e") ?? text.endIndex
+            bare = String(text[..<split]) + "." + String(text[split...])
+        }
         let parts = bare.split(separator: ".", omittingEmptySubsequences: false)
         guard let element = parts.last, parts.count <= 2, element.count > 1, element.hasPrefix("e"), element.dropFirst().allSatisfy(\.isNumber) else { return nil }
         if parts.count == 2 {
@@ -102,14 +113,85 @@ enum CommandLineInput {
         }
     }
 
+    private static func point(_ text: String) throws -> [String: Any] {
+        let parts = text.split(separator: ",").map { Double($0.trimmingCharacters(in: .whitespaces)) }
+        guard parts.count == 2, let x = parts[0], let y = parts[1], x.isFinite, y.isFinite, x >= 0, y >= 0 else {
+            throw Failure.usage("--at is a point in the last shot's pixels, like --at 412,230")
+        }
+        return ["x": x, "y": y]
+    }
+
+    private static func targeted(_ command: Command, _ words: [String]) throws -> (target: [String: Any], rest: [String]) {
+        guard takesTarget(command) else { return ([:], words) }
+        var target: [String: Any] = [:]
+        var rest: [String] = []
+        var index = 0
+        var literal = false
+        while index < words.count {
+            let word = words[index]
+            index += 1
+            if literal || word == "--" || !word.hasPrefix("--") {
+                if word == "--" { literal = true }
+                rest.append(word)
+                continue
+            }
+            let parts = word.dropFirst(2).split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+            let name = parts[0]
+            guard targetFlags.contains(name), !(command.tool == "scroll" && name == "in") else {
+                rest.append(word)
+                continue
+            }
+            if name == "frames" {
+                target["frames"] = true
+                if command.flags.contains(where: { $0.name == name }) { rest.append(word) }
+                continue
+            }
+            let value: String
+            if parts.count == 2 {
+                value = parts[1]
+            } else {
+                guard index < words.count else { throw Failure.usage("--\(name) needs a value") }
+                value = words[index]
+                index += 1
+            }
+            switch name {
+            case "nth":
+                guard let nth = Int(value), nth >= 1 else { throw Failure.usage("--nth is a whole number from 1, not \(value)") }
+                target["nth"] = nth
+            case "in":
+                guard let ref = ref(value) else { throw Failure.usage("--in takes a ref like @e30, not \(value)", hint: "Refs come from broadway snapshot or broadway find") }
+                target["in"] = ref
+            case "at":
+                target["at"] = try point(value)
+            default:
+                target[name] = value
+            }
+            if command.flags.contains(where: { $0.name == name }) { rest += ["--\(name)", value] }
+        }
+        return (target, rest)
+    }
+
     static func parse(_ command: Command, _ words: [String]) throws -> [String: Any] {
+        let split = try targeted(command, words)
+        var target = split.target
+        let words = split.rest
         var found: [String: Any] = [:]
         var waiting = command.positional
         var literal = false
         var index = 0
+        let aimed = ["role", "name", "label", "at"].contains { target[$0] != nil }
+        if aimed { waiting.removeAll { $0.name == "ref" } }
+        let targets = takesTarget(command)
         func take(_ word: String) throws {
-            if word.hasPrefix("@"), found["ref"] == nil, let ref = command.flags.first(where: { $0.name == "ref" }) {
+            if word.hasPrefix("@"), found["ref"] == nil, target["words"] == nil, let ref = command.flags.first(where: { $0.name == "ref" }) {
                 found["ref"] = try coerce(word, ref, command: command)
+                waiting.removeAll { $0.name == "ref" }
+                return
+            }
+            if targets, !aimed, found["ref"] == nil, target["words"] == nil,
+               waiting.first?.name == "ref" || (waiting.isEmpty && command.positional.isEmpty) {
+                guard !word.isEmpty else { throw Failure.usage("A target needs words or a ref") }
+                target["words"] = word
                 waiting.removeAll { $0.name == "ref" }
                 return
             }
@@ -154,7 +236,20 @@ enum CommandLineInput {
                 try take(word)
             }
         }
-        let missing = (command.positional + command.flags).filter { $0.required && found[$0.name] == nil }
+        if let ref = found["ref"] as? String, target["words"] == nil {
+            target["ref"] = ref
+        }
+        if command.tool == "screenshot", target["ref"] == nil, target["words"] == nil, let inside = target["in"] as? String, !aimed {
+            target = ["ref": inside]
+            found["ref"] = inside
+        }
+        if !target.isEmpty {
+            if target["ref"] == nil, target["words"] == nil, !aimed {
+                throw Failure.usage("--\(target["in"] != nil ? "in" : "nth") narrows a target, so give one too", hint: "For example: broadway \(command.name) \"Save\" --nth 2, or --role button --name Save")
+            }
+            found["target"] = target
+        }
+        let missing = (command.positional + command.flags).filter { $0.required && found[$0.name] == nil && !($0.name == "ref" && found["target"] != nil) }
         if let first = missing.first {
             throw Failure.usage("\(command.name) needs \(first.name)", hint: "Usage: \(command.usage)")
         }

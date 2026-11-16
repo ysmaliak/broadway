@@ -50,13 +50,18 @@ struct NounTests {
     }
 
     @Test func aliasesGoToPage() throws {
-        for word in ["find", "zoom", "pdf", "translate"] {
+        for word in ["zoom", "pdf", "translate"] {
             let found = try routed([word, "x"])
 
             #expect(found.noun == "page")
             #expect(found.verb == word)
             #expect(found.rest == ["x"])
         }
+    }
+
+    @Test func findIsTheElementFinderNotTheWordCount() throws {
+        #expect(try Nouns.route(["find", "price"]) == nil)
+        #expect(try routed(["page", "find", "price"]).verb == "find")
     }
 
     @Test func openWithASpaceIsTheHiddenVerb() throws {

@@ -216,7 +216,7 @@ final class AgentTests {
 
         let names = AgentCatalog.commands(tools).compactMap { $0["name"] as? String }
 
-        #expect(names == ["tabs", "open", "go", "close", "snapshot", "read", "shot", "locate", "click", "type", "upload", "download", "fill", "drag", "select", "resize", "press", "scroll", "wait", "history", "console", "network", "pdf", "hover", "choose", "dialog", "skills", "skill"])
+        #expect(names == ["tabs", "open", "go", "close", "snapshot", "read", "shot", "find", "click", "type", "upload", "download", "fill", "drag", "select", "resize", "press", "scroll", "wait", "history", "console", "network", "pdf", "hover", "choose", "dialog", "skills", "skill"])
     }
 
     @Test func aCommandCarriesItsShape() throws {

@@ -123,14 +123,12 @@ struct ParsingTests {
 
     @Test func mistakesSayWhatToDo() {
         let missing = failure(click, [])
-        let notRef = failure(click, ["button"])
         let tooMany = failure(click, ["@e1", "@e2"])
         let unknown = failure(click, ["--finnal", "send"])
         let choice = failure(click, ["@e1", "--final", "buy"])
         let number = failure(scroll, ["--by", "lots"])
 
         #expect(missing?.message == "click needs ref")
-        #expect(notRef?.hint?.contains("broadway snapshot") == true)
         #expect(tooMany?.hint?.contains("Usage") == true)
         #expect(unknown?.hint == "Did you mean --final?")
         #expect(choice?.message == "--final is one of send, pay, not buy")
@@ -179,5 +177,190 @@ struct ParsingTests {
         #expect(Address.looksLike("example.com"))
         #expect(!Address.looksLike("summarize this"))
         #expect(!Address.looksLike("click"))
+    }
+
+    private var shot: Command {
+        command("shot", positional: [], flags: [parameter("ref"), parameter("full", type: "boolean")]).withTool("screenshot")
+    }
+
+    private var drag: Command {
+        let ref = parameter("ref", required: true)
+        let to = parameter("to", required: true)
+        return command("drag", positional: [ref, to], flags: [ref, to])
+    }
+
+    @Test func wordsAreATargetAndARefStaysARef() throws {
+        let words = try CommandLineInput.parse(click, ["Add to basket"])
+        let ref = try CommandLineInput.parse(click, ["@e12"])
+
+        #expect(words["target"] as? [String: String] == ["words": "Add to basket"])
+        #expect(words["ref"] == nil)
+        #expect(ref["ref"] as? String == "e12")
+        #expect(ref["target"] as? [String: String] == ["ref": "e12"])
+    }
+
+    @Test func nthAndInNarrowWords() throws {
+        let found = try CommandLineInput.parse(click, ["Add to basket", "--nth", "2", "--in=@e30"])
+
+        let target = try #require(found["target"] as? [String: Any])
+        #expect(target["words"] as? String == "Add to basket")
+        #expect(target["nth"] as? Int == 2)
+        #expect(target["in"] as? String == "e30")
+        #expect(failure(click, ["Save", "--nth", "0"])?.code == "usage")
+        #expect(failure(click, ["Save", "--in", "main"])?.code == "usage")
+        #expect(failure(click, ["--nth", "2"])?.code == "usage")
+    }
+
+    @Test func roleAndNameNeedNoWords() throws {
+        let found = try CommandLineInput.parse(click, ["--role", "button", "--name", "Search", "--final", "send"])
+
+        #expect(found["target"] as? [String: String] == ["role": "button", "name": "Search"])
+        #expect(found["final"] as? String == "send")
+    }
+
+    @Test func aLabelPicksTheFieldAndTheTextStillFollows() throws {
+        let labelled = try CommandLineInput.parse(type, ["--label", "Email", "sam@example.com", "--submit"])
+        let worded = try CommandLineInput.parse(type, ["Email", "sam@example.com"])
+
+        #expect(labelled["target"] as? [String: String] == ["label": "Email"])
+        #expect(labelled["text"] as? String == "sam@example.com")
+        #expect(labelled["submit"] as? Bool == true)
+        #expect(worded["target"] as? [String: String] == ["words": "Email"])
+        #expect(worded["text"] as? String == "sam@example.com")
+    }
+
+    @Test func aFrameRefTakesEitherSpelling() throws {
+        #expect(CommandLineInput.ref("@f1e3") == "f1.e3")
+        #expect(CommandLineInput.ref("@f1.e3") == "f1.e3")
+        #expect(CommandLineInput.ref("f12e345") == "f12.e345")
+        #expect(CommandLineInput.ref("@fe3") == nil)
+        #expect(try CommandLineInput.parse(click, ["@f2e7"])["ref"] as? String == "f2.e7")
+    }
+
+    @Test func theOldRefFlagAndShotInBothNameAnElement() throws {
+        let old = try CommandLineInput.parse(shot, ["--ref", "@e7"])
+        let new = try CommandLineInput.parse(shot, ["--in", "@e7"])
+        let words = try CommandLineInput.parse(shot, ["Price list"])
+
+        #expect(old["ref"] as? String == "e7")
+        #expect(new["ref"] as? String == "e7")
+        #expect(new["target"] as? [String: String] == ["ref": "e7"])
+        #expect(words["target"] as? [String: String] == ["words": "Price list"])
+    }
+
+    @Test func aPointOfTheLastShotIsATarget() throws {
+        let found = try CommandLineInput.parse(click, ["--at", "412,230"])
+
+        let point = try #require((found["target"] as? [String: Any])?["at"] as? [String: Double])
+        #expect(point == ["x": 412, "y": 230])
+        #expect(failure(click, ["--at", "412"])?.code == "usage")
+    }
+
+    @Test func dragDropsOnARefAfterWords() throws {
+        let found = try CommandLineInput.parse(drag, ["Card A", "@e9"])
+
+        #expect(found["target"] as? [String: String] == ["words": "Card A"])
+        #expect(found["to"] as? String == "@e9")
+    }
+
+    @Test func scrollKeepsPointsAndItsOwnIn() throws {
+        #expect(try CommandLineInput.parse(scroll, ["600"])["by"] as? Double == 600)
+        #expect(try CommandLineInput.parse(scroll, ["@e12"])["ref"] as? String == "e12")
+        #expect(failure(scroll, ["--in", "@e40"])?.message == "scroll has no option --in")
+    }
+
+    @Test func aCommandWithoutRefsKeepsItsOwnRoleFlag() throws {
+        let find = command("find", positional: [parameter("text")], flags: [parameter("text"), parameter("role"), parameter("limit", type: "number")])
+
+        let found = try CommandLineInput.parse(find, ["basket", "--role", "button"])
+
+        #expect(found["text"] as? String == "basket")
+        #expect(found["role"] as? String == "button")
+        #expect(found["target"] == nil)
+    }
+
+    @Test func locateAndFindReachEachOther() {
+        let old = Catalog([["name": "locate", "tool": "locate"]])
+        let new = Catalog([["name": "find", "tool": "locate", "aliases": ["locate"]]])
+
+        #expect(old.find("find")?.tool == "locate")
+        #expect(new.find("locate")?.tool == "locate")
+        #expect(new.find("find")?.tool == "locate")
+    }
+
+    @Test func answerFlagsComeOffBeforeTheApp() throws {
+        let asked = try Browse.arguments(click, ["Save", "--quiet-answer", "--no-look"], tab: "a8b6db94", tabFlag: true)
+
+        #expect(asked.short)
+        #expect(!asked.look)
+        #expect(asked.arguments["tab"] as? String == "a8b6db94")
+        #expect(asked.arguments["target"] as? [String: String] == ["words": "Save"])
+    }
+
+    @Test func severalAddressesNeedAnAppThatTakesThem() throws {
+        let url = parameter("url", required: true)
+        let one = command("open", positional: [url], flags: [url], tabbed: false)
+        let many = command("open", positional: [url], flags: [url, parameter("urls", type: "array")], tabbed: false)
+
+        let sent = try Browse.arguments(many, ["https://a.example", "https://b.example"], tab: nil, tabFlag: false)
+
+        #expect(sent.arguments["urls"] as? [String] == ["https://a.example", "https://b.example"])
+        #expect(sent.arguments["url"] as? String == "https://a.example")
+        #expect((try? Browse.arguments(one, ["https://a.example", "https://b.example"], tab: nil, tabFlag: false)) == nil)
+        #expect(try Browse.arguments(one, ["https://a.example"], tab: nil, tabFlag: false).arguments["url"] as? String == "https://a.example")
+    }
+
+    @Test func anActionCarriesOneExpectation() throws {
+        let text = try Browse.arguments(click, ["Apply", "--expect", "Code applied"], tab: nil, tabFlag: false)
+        let gone = try Browse.arguments(click, ["Apply", "--expect-gone=Loading"], tab: nil, tabFlag: false)
+        let url = try Browse.arguments(click, ["Next", "--expect-url", "/checkout"], tab: nil, tabFlag: false)
+        let reads = Command(["name": "snapshot", "tool": "snapshot", "tabbed": true, "reads": true])
+
+        #expect(text.arguments["expect"] as? [String: String] == ["kind": "text", "want": "Code applied"])
+        #expect(gone.arguments["expect"] as? [String: String] == ["kind": "gone", "want": "Loading"])
+        #expect(url.arguments["expect"] as? [String: String] == ["kind": "url", "want": "/checkout"])
+        #expect((try? Browse.arguments(click, ["Apply", "--expect", "a", "--expect-gone", "b"], tab: nil, tabFlag: false)) == nil)
+        #expect((try? Browse.arguments(reads, ["--expect", "a"], tab: nil, tabFlag: false)) == nil)
+        #expect((try? Browse.arguments(click, ["Apply", "--expect"], tab: nil, tabFlag: false)) == nil)
+    }
+
+    @Test func theTabInTheEnvironmentIsTheDefaultAndAFlagWins() throws {
+        let (fromEnvironment, _) = try Globals.extract(["click", "Save"], environment: ["BROADWAY_TAB": "2c4d6e8f"])
+        let (flagged, _) = try Globals.extract(["click", "Save", "--tab", "a8b6db94"], environment: ["BROADWAY_TAB": "2c4d6e8f"])
+
+        #expect(fromEnvironment.tab == "2c4d6e8f")
+        #expect(!fromEnvironment.tabFlag)
+        #expect(flagged.tab == "a8b6db94")
+        #expect(try Browse.arguments(click, ["Save"], tab: fromEnvironment.tab, tabFlag: false).arguments["tab"] as? String == "2c4d6e8f")
+    }
+
+    @Test func usageShowsWhichFlagsTakeAValue() {
+        let command = Command(["name": "wait", "tool": "wait", "tabbed": true,
+                               "positional": [["name": "text", "type": "string"]],
+                               "flags": [["name": "text", "type": "string"], ["name": "seconds", "type": "number"], ["name": "download", "type": "boolean"],
+                                         ["name": "state", "type": "string", "choices": ["visible", "gone"]]]])
+
+        #expect(command.usage == "broadway wait [text] [--seconds N] [--download] [--state visible|gone] [--tab ID]")
+    }
+
+    @Test func handoffTakesItsReasonAsWords() throws {
+        let command = Command(["name": "handoff", "tool": "handoff", "tabbed": true,
+                               "positional": [["name": "reason", "type": "string", "required": true]],
+                               "flags": [["name": "reason", "type": "string"], ["name": "seconds", "type": "number"], ["name": "optional", "type": "boolean"]]])
+
+        let asked = try Browse.arguments(command, ["Solve the captcha", "--seconds", "600", "--optional"], tab: "a8b6db94", tabFlag: true)
+
+        #expect(asked.arguments["reason"] as? String == "Solve the captcha")
+        #expect(asked.arguments["seconds"] as? Double == 600)
+        #expect(asked.arguments["optional"] as? Bool == true)
+        #expect(asked.arguments["tab"] as? String == "a8b6db94")
+    }
+}
+
+extension Command {
+    func withTool(_ tool: String) -> Command {
+        var found = self
+        found.tool = tool
+        return found
     }
 }

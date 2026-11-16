@@ -236,7 +236,7 @@ enum Nouns {
             Verb("page reload [--tab ID]", "Reload a page"),
             Verb("page back [--tab ID]", "Go back"),
             Verb("page forward [--tab ID]", "Go forward"),
-            Verb("page find <text> [--case] [--words] [--tab ID]", "Count a word on the page and show its lines", about: "Looks at the page's words, never at what is typed in a box", examples: ["broadway find price", "broadway page find price --case"], columns: ["line", "text"]),
+            Verb("page find <text> [--case] [--words] [--tab ID]", "Count a word on the page and show its lines", about: "Looks at the page's words, never at what is typed in a box", examples: ["broadway page find price", "broadway page find price --case"], columns: ["line", "text"]),
             Verb("page translate [language] [--tab ID]", "Translate the page on this Mac", examples: ["broadway translate", "broadway translate de"]),
             Verb("page original [--tab ID]", "Show the page as it was written"),
             Verb("page pdf [--tab ID]", "Save the page as a PDF", about: "Password and card boxes and embedded frames are blanked, as in broadway shot", examples: ["broadway pdf -o page.pdf", "broadway pdf > page.pdf"]),
@@ -323,7 +323,7 @@ enum Nouns {
     ]
 
     static let aliases: [String: (noun: String, verb: String)] = [
-        "find": ("page", "find"), "zoom": ("page", "zoom"), "pdf": ("page", "pdf"), "translate": ("page", "translate"),
+        "zoom": ("page", "zoom"), "pdf": ("page", "pdf"), "translate": ("page", "translate"),
     ]
 
     static let nounAliases = ["agent": "agents"]

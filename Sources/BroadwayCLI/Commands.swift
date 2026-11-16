@@ -76,7 +76,7 @@ struct Builtin {
 }
 
 enum Builtins {
-    static let all: [Builtin] = taskCommands + appCommands + setupCommands + everydayCommands + [
+    static let all: [Builtin] = batchCommands + taskCommands + appCommands + setupCommands + everydayCommands + [
         Builtin(name: "help", usage: "broadway help [command]", summary: "How to use broadway, or read about one command", group: "Help",
                 examples: ["broadway help", "broadway help click", "broadway help bookmarks add"]) { context, words in
             Help.show(words, context: context)
@@ -139,6 +139,7 @@ public enum BroadwayCommand {
         guard let first = words.first, !streams.contains(first), !first.contains(where: \.isWhitespace) else { return nil }
         var seconds = 600.0
         if let at = words.firstIndex(of: "--wait-person"), at + 1 < words.count, let minutes = Double(words[at + 1]) { seconds = max(seconds, minutes * 60 + 60) }
+        if first == "handoff", let at = words.firstIndex(of: "--seconds"), at + 1 < words.count, let wait = Double(words[at + 1]) { seconds = max(seconds, min(wait, 900) + 60) }
         return Date().addingTimeInterval(seconds)
     }
 

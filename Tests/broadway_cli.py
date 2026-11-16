@@ -266,7 +266,7 @@ def help_and_mistakes():
     check("error keys", set(parsed["error"]) == {"code", "message", "hint", "retry_safe"}, parsed)
     check("a bad option", broadway("--cli", "nope", "do it").returncode == 2)
     check("a missing argument", broadway("click").returncode == 2 and "needs ref" in broadway("click").stderr)
-    check("not a ref", broadway("click", "button").returncode == 2)
+    check("words are a target, not a mistake", broadway("click", "button").returncode != 2)
     check("an unknown flag", "Did you mean --seconds" in broadway("wait", "--second", "3").stderr)
     check("a bad number", broadway("scroll", "--by", "lots").returncode == 2)
     check("--tab on a tabless command", broadway("history", "--tab", "abc").returncode == 2)
@@ -317,7 +317,7 @@ def browsing(base):
     bench("knowing", "desk", "no")
     output, errors = asking.communicate(timeout=15)
     parsed = json.loads(output)
-    check("a refused card-form click stays refused", asking.returncode == 1 and parsed["error"]["code"] == "refused", output + errors)
+    check("a refused card-form click stays refused", asking.returncode == 1 and parsed["error"]["code"] in ("refused", "said_no"), output + errors)
     check("and nothing landed", "leaked" not in broadway("tabs").stdout)
     check("click", broadway("click", ref("Go")).returncode == 0)
     check("the click landed", wait_for(lambda: "clicked" in broadway("tabs").stdout, 3))
@@ -410,6 +410,66 @@ def browsing(base):
     plain = in_terminal(terminal)
     check("NO_COLOR is respected", "\x1b[" not in plain, plain)
     check("a pipe gets no colour", "\x1b[" not in broadway("tabs").stdout)
+
+
+def batching(base):
+    tab = broadway("open", base + "batchform").stdout.strip()
+    broadway("wait", "--tab", tab)
+    _, parsed = envelope("snapshot", "--tab", tab)
+    elements = parsed["data"]["elements"]
+    ref = lambda name: "@" + next(e["ref"] for e in elements if e["name"] == name)
+    secret = "@" + next(e["ref"] for e in elements if e.get("hidden"))
+
+    done = broadway("batch", f"type {ref('plain')} from-batch", f"click {ref('Go')}")
+    check("a batch runs each step", done.returncode == 0 and done.stdout.startswith("1 ok"), done.stdout + done.stderr)
+    check("and both landed", wait_for(lambda: "clicked" in broadway("tabs").stdout, 3) and 'value="from-batch"' in broadway("snapshot").stdout)
+
+    stopped, parsed = envelope("batch", f"type {ref('plain')} x", "click @e999999999", f"click {ref('Rename')}")
+    data = parsed["data"] or {}
+    check("a batch stops at the first failure", stopped.returncode == 1 and parsed["error"]["code"] == "stale_ref", parsed)
+    check("and says what landed", data.get("landed") == [1] and data["steps"][2].get("ran") is False, data)
+    check("a batch that landed is not safe to repeat", parsed["error"]["retry_safe"] is False, parsed)
+    check("the step after the failure never ran", "Delete everything" not in broadway("read").stdout)
+    text = broadway("batch", f"type {ref('plain')} y", "click @e999999999")
+    check("the text answer lists the steps and how to go on", "2 FAIL" in text.stdout and "Landed 1. Nothing from 2 on was done" in text.stdout, text.stdout)
+
+    piped = subprocess.run(
+        [BROADWAY, "--world", WORLD, "batch", "--from", "2"], input=f"# steps\nclick @e999999999\n\ntype {ref('plain')} piped\n", capture_output=True, text=True, timeout=40)
+    check("steps come from stdin and --from skips the first", piped.returncode == 0 and piped.stdout.startswith("2 ok"), piped.stdout + piped.stderr)
+
+    for words, what in ((["bookmarks list"], "a noun"), (["agents done"], "agents"), (["batch 'click x'"], "a batch"), (['"buy some tea"'], "a task")):
+        refused, parsed = envelope("batch", f"click {ref('Go')}", *words)
+        check(f"{what} is refused before anything runs", refused.returncode == 2 and parsed["error"]["code"] == "usage" and parsed["data"]["step"] == 2, parsed)
+    many, parsed = envelope("batch", *([f"click {ref('Go')}"] * 26))
+    check("26 steps are too many", many.returncode == 2 and "25 steps at most" in parsed["error"]["message"], parsed)
+
+    secret_box, parsed = envelope("batch", f"type {secret} x")
+    check("a secret box still refuses typing in a batch", secret_box.returncode == 1 and parsed["error"]["code"] == "refused" and parsed["data"]["landed"] == [], parsed)
+    check("and its value stayed out", "hunter2" not in json.dumps(parsed))
+
+    broadway("go", base + "batchform", "--tab", tab)
+    broadway("wait", "--tab", tab)
+    _, parsed = envelope("snapshot", "--tab", tab)
+    elements = parsed["data"]["elements"]
+    asking = spawn("batch", f"click {ref('Inside')}", f"click {ref('Go')}", "--json")
+    check("a gated step in a batch asks the person", wait_for(desk), desk())
+    bench("knowing", "desk", "no")
+    output, errors = asking.communicate(timeout=20)
+    parsed = json.loads(output)
+    check("a no stops the batch", asking.returncode == 1 and parsed["data"]["landed"] == [] and parsed["data"]["steps"][1].get("ran") is False, output + errors)
+    check("and the gated click never landed", "leaked" not in broadway("tabs").stdout)
+
+    old, parsed = envelope("locate", "Go", "--tab", tab)
+    check("the old locate still answers", old.returncode == 0 and any(e["name"] == "Go" for e in parsed["data"]["elements"]), parsed)
+    found = broadway("find", "Go", "--tab", tab)
+    check("find gives the same refs", found.returncode == 0 and "@e" in found.stdout and '"Go"' in found.stdout, found.stdout + found.stderr)
+    shot = broadway("shot", "--ref", ref("Go"), "-o", "/dev/null", "--tab", tab)
+    check("shot --ref still works", shot.returncode == 0, shot.stderr)
+    scrolled = broadway("scroll", "0", "--tab", tab)
+    check("a scroll answer prints numbers as numbers", "y: no" not in scrolled.stdout and scrolled.returncode == 0, scrolled.stdout)
+    chose = broadway("choose", ref("plain"), "x", "--tab", tab)
+    check("choose prints something either way", chose.stdout.strip() != "" or chose.stderr.strip() != "", chose.stdout + chose.stderr)
+    broadway("close", "--tab", tab)
 
 
 def tasks():
@@ -557,7 +617,12 @@ def setup():
     check("the command is linked", link.is_symlink() and os.readlink(link) == os.path.realpath(BROADWAY), link)
     check("fish completions", (home / ".config/fish/completions/broadway.fish").exists())
     check("claude skill", "name: broadway" in (home / ".claude/skills/broadway/SKILL.md").read_text())
-    check("codex skill", "broadway snapshot" in (home / ".codex/skills/broadway/SKILL.md").read_text())
+    codex = (home / ".codex/skills/broadway/SKILL.md").read_text()
+    check("codex skill is a stub that sends agents to the guide", "broadway-guide: " in codex and "Run `broadway guide`" in codex and len(codex) < 1200, codex)
+    stale = home / ".claude/skills/broadway/SKILL.md"
+    stale.write_text("---\nname: broadway\nmanaged-by: written by broadway setup\n---\n\ntab=$(broadway open https://example.com)\n")
+    refreshed = broadway("setup", "claude", "--refresh", env={"BROADWAY_HOME": str(home)})
+    check("--refresh rewrites an old skill broadway wrote", refreshed.returncode == 0 and "broadway-guide: " in stale.read_text(), refreshed.stdout + refreshed.stderr)
     check("zshrc gets a block", ">>> broadway >>>" in (home / ".zshrc").read_text() and "KEEP" in (home / ".zshrc").read_text())
     for shell, script in [("fish", ".config/fish/completions/broadway.fish"), ("zsh", ".local/share/broadway/broadway.zsh"), ("bash", ".local/share/bash-completion/completions/broadway")]:
         path = shutil.which(shell)
@@ -1297,6 +1362,7 @@ def the_rest(base):
     latency()
     help_and_mistakes()
     browsing(base)
+    batching(base)
     tasks()
     setup()
     check_quit("quit", "quit")

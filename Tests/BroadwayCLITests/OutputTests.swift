@@ -153,7 +153,7 @@ struct OutputTests {
 
         let page = Help.page(command, style: Style(color: false))
 
-        #expect(page.contains("usage: broadway click <ref> [options] [--tab ID]"))
+        #expect(page.contains("usage: broadway click <ref> [--final send|pay] [--tab ID]"))
         #expect(page.contains("--final STRING"))
         #expect(page.contains("(send, pay)"))
         #expect(page.contains("broadway click @e3"))
@@ -175,13 +175,45 @@ struct OutputTests {
         #expect(page.contains("broadway doctor"))
     }
 
-    @Test func theGuideListsCommandsItWasGiven() {
-        let catalog = Catalog([["name": "shot", "summary": "A picture", "tabbed": true]])
+    @Test func theGuideIsShortAndTeachesTabsAsAChoice() {
+        let guide = Help.guideText
 
-        let guide = Help.guideText(catalog: catalog)
+        #expect(guide.utf8.count < 4096)
+        #expect(!guide.contains(";"))
+        for stale in ["one working tab", "--new", "Four tabs", "four at most", "tab=$(", "wait --idle", "| grep"] {
+            #expect(!guide.contains(stale), "the guide still says \(stale)")
+        }
+        for taught in ["go moves the tab you are in. open gives you another tab", "broadway batch", "broadway find", "retry_safe", "needs_you", "--nth"] {
+            #expect(guide.contains(taught), "the guide lacks \(taught)")
+        }
+    }
 
-        #expect(guide.contains("broadway shot  # A picture"))
-        #expect(guide.contains("retry_safe"))
+    @Test func theMcpInstructionsTeachTheSameChoice() {
+        #expect(!Help.mcpInstructions.contains("one working tab"))
+        #expect(Help.mcpInstructions.contains("open gives you another tab"))
+        #expect(!Help.mcpInstructions.contains(";"))
+    }
+
+    @Test func batchIsListedOnceUnderTheBrowser() {
+        let catalog = Catalog([["name": "click", "summary": "Click"], ["name": "batch", "summary": "From the app"]])
+
+        let page = Help.overview(catalog: catalog, style: Style(color: false))
+
+        #expect(page.components(separatedBy: "\n  batch ").count == 2)
+        #expect(!page.contains("From the app"))
+    }
+
+    @Test func aTargetCommandsHelpNamesTheTargetFlags() {
+        let ref: [String: Any] = ["name": "ref", "type": "string", "required": true]
+        let click = Command(["name": "click", "tool": "click", "tabbed": true, "positional": [ref], "flags": [ref]])
+
+        let page = Help.page(click, style: Style(color: false))
+        let flags = Completions.candidates(["click"], current: "--", catalog: Catalog([["name": "click", "tool": "click", "flags": [ref]]])).map(\.0)
+
+        #expect(page.contains("--nth N"))
+        #expect(page.contains("--label WORDS"))
+        #expect(flags.contains("--role"))
+        #expect(flags.contains("--in"))
     }
 
     @Test func completionsFollowTheCatalog() {

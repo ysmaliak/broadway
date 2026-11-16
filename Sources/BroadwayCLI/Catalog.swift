@@ -8,6 +8,13 @@ struct Parameter: Equatable {
     var choices: [String]
     var many: Bool
 
+    var shown: String {
+        if type == "boolean" { return "[--\(name)]" }
+        if !choices.isEmpty { return "[--\(name) \(choices.joined(separator: "|"))]" }
+        let value = ["number": "N", "integer": "N", "array": "LIST", "object": "JSON"][type] ?? name.uppercased()
+        return "[--\(name) \(value)]"
+    }
+
     init(_ found: [String: Any]) {
         name = found["name"] as? String ?? ""
         type = found["type"] as? String ?? "string"
@@ -50,7 +57,7 @@ struct Command: Equatable {
         if let wholeUsage { return wholeUsage }
         var parts = ["broadway", name]
         parts += positional.map { $0.required ? "<\($0.name)>" : "[\($0.name)]" }
-        if !flags.filter({ flag in !positional.contains { $0.name == flag.name } }).isEmpty { parts.append("[options]") }
+        parts += flags.filter { flag in !positional.contains { $0.name == flag.name } }.map(\.shown)
         if tabbed { parts.append("[--tab ID]") }
         return parts.joined(separator: " ")
     }
@@ -65,8 +72,12 @@ struct Catalog {
         known = found != nil
     }
 
+    static let older = ["find": "locate", "locate": "find"]
+
     func find(_ word: String) -> Command? {
-        commands.first { $0.name == word || $0.aliases.contains(word) }
+        if let found = commands.first(where: { $0.name == word || $0.aliases.contains(word) }) { return found }
+        guard let other = Catalog.older[word] else { return nil }
+        return commands.first { $0.name == other || $0.aliases.contains(other) }
     }
 
     var names: [String] { commands.map(\.name) }

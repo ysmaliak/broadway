@@ -44,10 +44,15 @@ enum Completions {
                 found = [("list", "tasks now and lately"), ("resume", "follow a task again"), ("stop", "stop a task"),
                          ("steer", "change what a task is doing"), ("queue", "add a step for later")]
             }
-            if let command = catalog.find(first) {
+            if let command = catalog.find(first), Builtins.find(first) == nil {
                 found = command.flags.map { ("--\($0.name)", $0.description) }
+                if CommandLineInput.takesTarget(command) {
+                    let named = Set(command.flags.map(\.name))
+                    found += Help.targetOptions.filter { option in !named.contains(Help.flagName(option.0)) }.map { option in ("--" + Help.flagName(option.0), option.1) }
+                }
                 if command.tabbed { found.append(("--tab", "the tab to work in")) }
             }
+            if first == "batch" { found = [("--from", "run step N and on"), ("--keep-going", "go on after a failure"), ("--tab", "the tab to start in")] }
             if first == "guide" { found = [("mcp", "how MCP clients connect")] }
             if first == "completions" { found = [("fish", ""), ("zsh", ""), ("bash", "")] }
             if first == "watch" { found = [("--only", "any of \(Watch.kinds.joined(separator: ","))"), ("--count", "stop after this many"), ("--seconds", "stop after this long")] }
@@ -61,7 +66,7 @@ enum Completions {
 
     private static func commands(_ catalog: Catalog) -> [(String, String)] {
         Nouns.all.map { ($0.name, $0.summary) }
-            + catalog.commands.filter { Nouns.noun($0.name) == nil }.map { ($0.name, $0.summary) }
+            + catalog.commands.filter { Nouns.noun($0.name) == nil && Builtins.find($0.name) == nil }.map { ($0.name, $0.summary) }
             + Builtins.all.filter { !$0.hidden }.map { ($0.name, $0.summary) }
     }
 
@@ -88,6 +93,7 @@ enum Completions {
     static func wants(_ typed: [String]) -> String? {
         guard let first = typed.first else { return nil }
         if typed.last == "--tab" { return "tab" }
+        if first == "tab", typed.count == 1 { return "tab" }
         guard let noun = Nouns.noun(first) ?? Nouns.aliases[first].flatMap({ Nouns.noun($0.noun) }), let verb = verb(noun, typed) else { return nil }
         let command = verb.command
         if let last = typed.last, last.hasPrefix("--") {
