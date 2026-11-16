@@ -182,7 +182,7 @@ struct AgentsAreaTests {
 
         let voice = AgentsLayout.voice(several)
 
-        #expect(voice == AgentsLayout.Voice(title: "Agents", line: "2 working · 1 done · 1 failed · 1 idle"))
+        #expect(voice == AgentsLayout.Voice(title: "Agents", line: "3 working · 1 done · 1 failed"))
     }
 
     @Test func theRowSaysWhoWaitsAndForWhat() {

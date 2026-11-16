@@ -296,9 +296,12 @@ final class MCPServer {
                     return
                 }
                 self.active += 1
+                let caller = self.outside ? self.task : nil
+                AgentLinks.shared.calling(caller)
                 defer {
                     self.active -= 1
                     self.running[key] = nil
+                    AgentLinks.shared.called(caller)
                 }
                 if let aim {
                     switch await aim(tool, arguments) {

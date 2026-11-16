@@ -45,6 +45,7 @@ enum Person {
         let options = try PersonOptions.parse(words)
         let command = verb.command
         var arguments = try CommandLineInput.parse(command, options.words)
+        if noun.name == "agents", verb.name == "idle", let hook = arguments["hook"] as? String { return AgentHook.run(hook, context: context) }
         if bare { arguments["mine"] = true }
         if context.globals.tabFlag, !command.tabbed, noun.name != "agents" { throw Failure.usage("\(command.name) doesn't work on a tab, so leave out --tab") }
         if command.tabbed, let tab = context.globals.tab { arguments["tab"] = tab }

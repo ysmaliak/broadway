@@ -8,7 +8,7 @@ enum AgentCharacter {
         var title: String {
             switch self {
             case .hello: return "Just connected"
-            case .idle: return "Waiting"
+            case .idle: return "Thinking"
             case .reading: return "Reading"
             case .typing: return "Typing"
             case .waving: return "Needs you"

@@ -153,7 +153,7 @@ final class AgentsAreaLookTests {
         let area = AgentsAreaView(browser: browser)
         let row = try #require(head(of: area))
 
-        #expect(row.accessibilityLabel() == "Claude Code 2 needs you: 1 idle")
+        #expect(row.accessibilityLabel() == "Claude Code 2 needs you: 1 working")
         #expect(row.accessibilityValue() as? String == "Shut")
         #expect(row.accessibilityRole() == .button)
     }
@@ -174,7 +174,7 @@ final class AgentsAreaLookTests {
         #expect(headings(in: alone) == [])
         #expect(rows(in: alone) == 2)
         #expect(aloneHeight == (AgentsLayout.row + 2 * AgentsLayout.step + AgentsLayout.margin))
-        #expect(headings(in: both) == ["Claude Code: Waiting", "Codex: Waiting"])
+        #expect(headings(in: both) == ["Claude Code: Thinking", "Codex: Thinking"])
         #expect(rows(in: both) == 3)
     }
 

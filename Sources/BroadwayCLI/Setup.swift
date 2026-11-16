@@ -88,6 +88,10 @@ enum Setup {
         var claudeSkill: String { claude + "/skills/broadway/SKILL.md" }
         var codexSkill: String { codex + "/skills/broadway/SKILL.md" }
         var codexConfig: String { codex + "/config.toml" }
+        var claudeSettings: String { claude + "/settings.json" }
+        var codexHooks: String { codex + "/hooks.json" }
+
+        func hooks(_ part: String) -> String { part == "claude" ? claudeSettings : codexHooks }
     }
 
     static func codexTimeout(_ config: String) -> String? {
@@ -133,6 +137,63 @@ enum Setup {
             return Step(part: part, done: true, path: path, note: "")
         } catch {
             return Step(part: part, done: false, path: path, note: error.localizedDescription)
+        }
+    }
+
+    private static func through(_ content: String, at path: String) throws {
+        let real = URL(fileURLWithPath: path).resolvingSymlinksInPath()
+        let kept = (try? files.attributesOfItem(atPath: real.path)[.posixPermissions]) as? NSNumber
+        try put(content, at: real.path)
+        if let kept { try? files.setAttributes([.posixPermissions: kept], ofItemAtPath: real.path) }
+    }
+
+    static func addHooks(_ part: String, paths: Paths) -> Step {
+        let file = paths.hooks(part)
+        let note = "added broadway's Stop and SessionEnd hooks"
+        guard exists(file) else {
+            do {
+                try put(HookSetup.fresh(part), at: file)
+                return Step(part: part, done: true, path: file, note: note)
+            } catch {
+                return Step(part: part, done: false, path: file, note: error.localizedDescription)
+            }
+        }
+        guard let here = text(file) else { return Step(part: part, done: false, path: file, note: "left alone: it couldn't be read") }
+        switch HookSetup.adding(part, to: here) {
+        case .same:
+            return Step(part: part, done: true, path: file, note: "hooks already there")
+        case .foreign(let why):
+            return Step(part: part, done: false, path: file, note: why)
+        case .changed(let made):
+            do {
+                try through(made, at: file)
+                return Step(part: part, done: true, path: file, note: note)
+            } catch {
+                return Step(part: part, done: false, path: file, note: error.localizedDescription)
+            }
+        }
+    }
+
+    static func takeHooks(_ part: String, paths: Paths) -> Step {
+        let file = paths.hooks(part)
+        guard exists(file), let here = text(file) else { return Step(part: part, done: false, path: file, note: "not there") }
+        switch HookSetup.removing(part, from: here) {
+        case .same:
+            return Step(part: part, done: false, path: file, note: "no hooks of broadway's")
+        case .foreign(let why):
+            return Step(part: part, done: false, path: file, note: why)
+        case .changed(let made):
+            do {
+                if made == HookSetup.emptied {
+                    try files.removeItem(atPath: URL(fileURLWithPath: file).resolvingSymlinksInPath().path)
+                    if (try? files.destinationOfSymbolicLink(atPath: file)) != nil { try? files.removeItem(atPath: file) }
+                } else {
+                    try through(made, at: file)
+                }
+                return Step(part: part, done: true, path: file, note: "took out broadway's hooks")
+            } catch {
+                return Step(part: part, done: false, path: file, note: error.localizedDescription)
+            }
         }
     }
 
@@ -196,6 +257,7 @@ enum Setup {
                 continue
             }
             steps.append(write(skill, at: file, part: part))
+            steps.append(addHooks(part, paths: paths))
             if part == "codex", let config = text(paths.codexConfig), let changed = codexTimeout(config) {
                 let done = (try? put(changed, at: paths.codexConfig)) != nil
                 steps.append(Step(part: part, done: done, path: paths.codexConfig, note: done ? "gave broadway's MCP entry a \(codexToolTimeout) s tool timeout" : "couldn't write it"))
@@ -222,11 +284,12 @@ enum Setup {
                 steps.append(Step(part: part, done: false, path: file, note: "left alone: this file isn't broadway's"))
                 continue
             }
-            guard older(guide(in: here)) else {
-                steps.append(Step(part: part, done: false, path: file, note: "up to date"))
-                continue
+            steps.append(older(guide(in: here)) ? write(skill, at: file, part: part) : Step(part: part, done: false, path: file, note: "up to date"))
+            if let hooks = text(paths.hooks(part)), HookSetup.installed(part, in: hooks) {
+                steps.append(Step(part: part, done: false, path: paths.hooks(part), note: "hooks already there"))
+            } else {
+                steps.append(addHooks(part, paths: paths))
             }
-            steps.append(write(skill, at: file, part: part))
         }
         return steps
     }
@@ -264,10 +327,12 @@ enum Setup {
         if wanted.contains("claude") {
             steps.append(take(paths.claudeSkill, part: "claude"))
             rmdir((paths.claudeSkill as NSString).deletingLastPathComponent)
+            steps.append(takeHooks("claude", paths: paths))
         }
         if wanted.contains("codex") {
             steps.append(take(paths.codexSkill, part: "codex"))
             rmdir((paths.codexSkill as NSString).deletingLastPathComponent)
+            steps.append(takeHooks("codex", paths: paths))
         }
         return steps
     }
@@ -335,6 +400,18 @@ enum Setup {
         }
         skill("claude", paths.claudeSkill, wantedHere: exists(paths.claude))
         skill("codex", paths.codexSkill, wantedHere: exists(paths.codex))
+        for part in ["claude", "codex"] {
+            let name = part + " hooks"
+            guard exists(part == "claude" ? paths.claude : paths.codex) else {
+                found.append(Check(name: name, ok: true, required: false, detail: "not used here", fix: nil))
+                continue
+            }
+            let file = paths.hooks(part)
+            let good = text(file).map { HookSetup.installed(part, in: $0) } == true
+            found.append(Check(name: name, ok: good, required: false,
+                               detail: good ? "\(file) tells Broadway when a turn or a session ends" : "\(file) has no hooks of broadway's, so a finished turn shows only after a quiet time",
+                               fix: good ? nil : "Run broadway setup \(part)"))
+        }
         return found
     }
 }
@@ -362,7 +439,7 @@ extension Builtins {
 
     static let setupCommands: [Builtin] = [
         Builtin(name: "setup", usage: "broadway setup [command] [completions] [claude] [codex] [--refresh]", summary: "Put broadway on your PATH, with completions and agent skills", group: "Setup",
-                details: "Links ~/.local/bin/broadway to this app's copy, writes fish, bash and zsh completions, and installs a skill for Claude Code and Codex where they are present. The skill is short and sends agents to broadway guide. It leaves files that aren't its own alone. broadway remove undoes it.\n--refresh  only rewrite skills broadway wrote that are older than this Broadway, and create nothing. Broadway runs it at each launch.",
+                details: "Links ~/.local/bin/broadway to this app's copy, writes fish, bash and zsh completions, and installs a skill for Claude Code and Codex where they are present. The skill is short and sends agents to broadway guide. It also adds a Stop and a SessionEnd hook, in ~/.claude/settings.json and ~/.codex/hooks.json, that run broadway agents idle --hook so the agent's card reads finished when its turn ends. It adds only its own entries and keeps the rest of each file as it was. It leaves files that aren't its own alone. broadway remove undoes it.\n--refresh  only rewrite skills broadway wrote that are older than this Broadway, and add the hooks where the skill is broadway's. It creates no skill. Broadway runs it at each launch.",
                 examples: ["broadway setup", "broadway setup completions", "broadway setup claude codex --refresh"]) { context, words in
             let refreshing = words.contains("--refresh")
             let parts = try wanted(words.filter { $0 != "--refresh" }, verb: "setup")

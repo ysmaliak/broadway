@@ -212,11 +212,16 @@ final class AgentSocket {
                 let held = UUID()
                 let shared = ((request["agent"] as? [String: Any])?["session"] as? String).map { !$0.isEmpty } == true
                 task = link(for: request, create: true, connection: shared ? nil : held, name: AgentLinks.mcpName(request["client"] as? String))?.id
+                let gone = connection.onClose
                 if !shared {
-                    let gone = connection.onClose
                     connection.onClose = {
                         gone?()
                         MainActor.assumeIsolated { AgentLinks.shared.endConnection(held) }
+                    }
+                } else if let task {
+                    connection.onClose = {
+                        gone?()
+                        MainActor.assumeIsolated { AgentLinks.shared.closedShared(task) }
                     }
                 }
             }

@@ -578,6 +578,7 @@ final class BrowserToolbox: AgentToolbox {
         guard !tab.driving else { return }
         tab.agentActing = doing
         tab.agentMood = AgentMood.doing(doing)
+        AgentLinks.shared.did(tab.agentTask.map { AgentTasks.shared.root($0) }, AgentLinkState.phrase(doing, host: tab.pageAddress?.host()))
         if doing != "Reading", doing != "Looking" { tab.agentSteered = Date() }
         tab.agentActingUntil = Date().addingTimeInterval(3)
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.1) { [weak tab] in

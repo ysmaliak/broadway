@@ -179,6 +179,9 @@ enum PersonCommands {
                         if named != nil { socket.remember(id, link: call.link?.id) }
                     }
                 }
+                let caller = request["hook"] as? Bool == true ? nil : call.link?.id
+                AgentLinks.shared.calling(caller)
+                defer { AgentLinks.shared.called(caller) }
                 try entry.first?(call)
                 call.askedAt = call.tab?.tab.pageAddress
                 try await gate(entry, call, request: request, on: connection)

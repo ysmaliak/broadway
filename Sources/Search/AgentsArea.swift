@@ -126,10 +126,10 @@ enum AgentsLayout {
         for state in states {
             switch state {
             case .needsYou: asking += 1
-            case .working, .driving: working += 1
-            case .done: done += 1
+            case .working, .driving, .idle: working += 1
+            case .finished, .done: done += 1
             case .failed: failed += 1
-            case .idle: idle += 1
+            case .quiet: idle += 1
             }
         }
         let parts = [(asking, "waiting for you"), (working, "working"), (done, "done"), (failed, "failed"), (idle, "idle")]
@@ -177,7 +177,7 @@ struct AgentSession: Identifiable, Equatable {
         }
         let loose = pending.first { question in question.task == link.id && !tabs.contains { $0.id == question.tab } }
         let extra = loose.map { [AgentLinkState.TabFacts(question: $0.title, asking: true)] } ?? []
-        return AgentLinkState.of(facts + extra, ended: link.ended)
+        return AgentLinkState.of(facts + extra, ended: link.ended, rest: link.task ? nil : link.rest, last: link.last)
     }
 
     func face(_ state: AgentLinkState, now: Date = Date()) -> AgentCharacter.Mood {
@@ -480,7 +480,7 @@ final class AgentsAreaView: NSView {
 
     private func face(_ session: AgentSession, _ state: AgentLinkState, now: Date) -> AgentHeadLook.Face {
         AgentHeadLook.Face(id: session.id, mood: session.face(state, now: now), attention: state.attention, accent: session.link.accent,
-                           seed: session.link.seed, name: session.link.title)
+                           seed: session.link.seed, name: session.link.title, said: state.line)
     }
 
     private var greetingEnds: Date?
@@ -733,6 +733,7 @@ struct AgentHeadLook: Equatable {
         var accent: Int
         var seed: UInt64
         var name: String
+        var said = ""
     }
 
     var faces: [Face] = []
@@ -805,7 +806,7 @@ final class AgentHeadView: KitHoverView {
                 return made
             }()
             AgentFaces.set(view, mood: face.mood, attention: face.attention, accent: face.accent, seed: face.seed)
-            view.toolTip = next.faces.count > 1 ? face.name : face.mood.title
+            view.toolTip = next.faces.count > 1 ? face.name : face.said.isEmpty ? face.mood.title : face.said
             kept.insert(face.id)
         }
         for (id, view) in faces where !kept.contains(id) {

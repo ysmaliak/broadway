@@ -382,6 +382,8 @@ extension AgentSocket {
         if name == AgentBatch.spec.name {
             let link = self.link(for: request, create: true)?.id
             let work = Task { @MainActor in
+                AgentLinks.shared.calling(link)
+                defer { AgentLinks.shared.called(link) }
                 connection.send(await self.batch(request["arguments"] as? [String: Any] ?? [:], browser: browser, link: link))
                 connection.close()
             }
@@ -403,6 +405,8 @@ extension AgentSocket {
         }
         let link = self.link(for: request, create: name == "open" || name == "tab" || spec.properties["tab"] != nil)?.id
         let work = Task { @MainActor in
+            AgentLinks.shared.calling(link)
+            defer { AgentLinks.shared.called(link) }
             let preferred = (request["agent"] as? [String: Any])?["tab"] as? String
             connection.send(await self.perform(name, spec: spec, arguments: request["arguments"] as? [String: Any] ?? [:], browser: browser, link: link, preferred: preferred))
             connection.close()

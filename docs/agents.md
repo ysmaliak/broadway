@@ -21,7 +21,15 @@ A person typing `broadway` at their own terminal gets a session named for the te
 ### Life of a session
 
 - **Start.** `broadway agents connect [--name NAME]` starts the session at once. Otherwise the first command that opens or works in a tab starts it, and other commands only join a session that exists.
-- **End.** A session ends on `broadway agents done` or `broadway agents disconnect`, when its MCP connection closes, when its ancestor process exits, or after 20 minutes with no request and no tab at work. `--summary TEXT` leaves a line for the person, up to 200 characters, and `--failed` marks it as not finished.
+- **Between steps.** While nothing is at work in its tabs, a session's line reads "Thinking". It never says "Waiting", which read as waiting for the person.
+- **Finished turn.** When the agent's turn ends, its card reads finished, with the tick face and the last thing it did, such as "Finished after reading example.com", or the agent's own `--summary`. The session stays live: its tabs stay as they are and its next command makes the same card work again. Broadway learns it from, in order of trust:
+  - the agent's **Stop hook**, which `broadway setup claude` and `broadway setup codex` add and which runs `broadway agents idle --hook claude` (or `codex`) with the hook's event on stdin. A Stop with background tasks or scheduled wakeups still pending is not a finished turn.
+  - `broadway agents idle [--summary TEXT]`, for an agent or script that says so itself.
+  - an MCP connection that shares a session with the agent's commands closing.
+  - **Quiet time.** With no hook, after 2 minutes with no request, no call in flight, no question up, no download under way and no tab at work, the line reads "Idle", or "Idle after reading example.com", with the sleeping face.
+  A question up for the person always wins: such a session reads "Needs you", never finished or idle.
+- **End.** A session ends on `broadway agents done` or `broadway agents disconnect`, on the agent's **SessionEnd hook**, when its own MCP connection closes, when its ancestor process exits (for a session keyed by the agent's session id, when the `claude`, `codex`, `cursor` or `windsurf` process its commands came from exits), or after 20 minutes with no request and no tab at work. `--summary TEXT` leaves a line for the person, up to 200 characters, and `--failed` marks it as not finished. `agents done` wins over a finished turn.
+- **The folded header** counts sessions as waiting for you, working (which includes Thinking), done (which includes a finished turn), failed and idle. A finished agent never counts as working or as needing the person.
 - **After the end.** The session's tabs stay open, as in 0.3, and `agents done` lists them in its answer. `agents done --close` closes the ones the person never looked at. A `--tab` given to `agents done` is ignored. The tabs are marked finished. Its heading keeps the tick or the downcast face, and the summary, until its tabs are closed. A session with no tabs leaves at once.
 - **Again.** A request from the same agent after its session ended starts a new session.
 

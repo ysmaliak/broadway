@@ -27,6 +27,16 @@ enum AgentLinkEnding: Equatable {
     }
 }
 
+enum AgentRest: Equatable {
+    case finished(String?)
+    case quiet
+}
+
+struct AgentProcessID: Equatable {
+    var pid: Int32
+    var started: Int64
+}
+
 struct AgentLink: Identifiable, Equatable {
     let id: UUID
     var name: String
@@ -34,6 +44,9 @@ struct AgentLink: Identifiable, Equatable {
     let connected: Date
     var ended: AgentLinkEnding?
     var endedAt: Date?
+    var rest: AgentRest?
+    var last: String?
+    var process: AgentProcessID?
     var announced = false
     var codex: CodexThread?
     var number = 1
@@ -66,11 +79,15 @@ final class AgentLinks {
     @ObservationIgnored private var tabs: [UUID: String] = [:]
     @ObservationIgnored private var waits: [UUID: Double] = [:]
     @ObservationIgnored private var passes: [UUID: [String: Date]] = [:]
+    @ObservationIgnored private var calls: [UUID: Int] = [:]
     static let defaultPatience: Double = 100
     static let passLife: TimeInterval = 120
     @ObservationIgnored var idleLimit: TimeInterval = 20 * 60
+    @ObservationIgnored var quietLimit: TimeInterval = 2 * 60
     @ObservationIgnored var alive: (Int32, Int64) -> Bool = AgentProcess.alive
     @ObservationIgnored var ending: ((AgentLink) -> Void)?
+    @ObservationIgnored var resting: ((UUID) -> Void)?
+    @ObservationIgnored var asking: (UUID) -> Bool = { _ in false }
 
     var live: [AgentLink] { links.filter(\.live) }
 
@@ -101,6 +118,42 @@ final class AgentLinks {
 
     func heard(_ id: UUID, at now: Date = Date()) {
         heardAt[id] = now
+        if link(id)?.rest != nil { update(id) { $0.rest = nil } }
+    }
+
+    func calling(_ id: UUID?, at now: Date = Date()) {
+        guard let id, link(id) != nil else { return }
+        calls[id, default: 0] += 1
+        heard(id, at: now)
+    }
+
+    func called(_ id: UUID?, at now: Date = Date()) {
+        guard let id, let count = calls[id] else { return }
+        calls[id] = count > 1 ? count - 1 : nil
+        heardAt[id] = now
+    }
+
+    func inFlight(_ id: UUID) -> Int {
+        calls[id] ?? 0
+    }
+
+    func did(_ id: UUID?, _ what: String) {
+        guard let id, let found = link(id), found.live, !found.task, found.last != what else { return }
+        update(id) { $0.last = what }
+    }
+
+    @discardableResult
+    func finish(_ id: UUID, summary: String? = nil) -> Bool {
+        guard let found = link(id), found.live, !found.task else { return false }
+        let rest = AgentRest.finished(Self.summary(summary))
+        if found.rest != rest { update(id) { $0.rest = rest } }
+        resting?(id)
+        return true
+    }
+
+    func watch(_ id: UUID, _ process: AgentProcessID) {
+        guard let found = link(id), found.live, found.process != process else { return }
+        update(id) { $0.process = process }
     }
 
     func lastHeard(_ id: UUID) -> Date? {
@@ -182,6 +235,7 @@ final class AgentLinks {
             link.endedAt = now
         }
         tabs[id] = nil
+        calls[id] = nil
         AgentSteps.shared.said[id] = nil
         if let ended = link(id) { ending?(ended) }
         return true
@@ -192,16 +246,27 @@ final class AgentLinks {
         end(found.id, .done(nil), at: now)
     }
 
+    func closedShared(_ id: UUID) {
+        guard inFlight(id) == 0 else { return }
+        finish(id)
+    }
+
     @discardableResult
     func sweep(at now: Date = Date(), busy: (UUID) -> Bool = { _ in false }) -> [UUID] {
         var gone: [UUID] = []
         for link in links where link.live {
+            let quiet = now.timeIntervalSince(heardAt[link.id] ?? link.connected)
             if case .process(let pid, let started) = link.key, !alive(pid, started) {
                 end(link.id, .done(nil), at: now)
                 gone.append(link.id)
-            } else if !link.task, !busy(link.id), now.timeIntervalSince(heardAt[link.id] ?? link.connected) >= idleLimit {
+            } else if let process = link.process, !alive(process.pid, process.started) {
+                end(link.id, .done(nil), at: now)
+                gone.append(link.id)
+            } else if !link.task, !busy(link.id), quiet >= idleLimit {
                 end(link.id, .left, at: now)
                 gone.append(link.id)
+            } else if !link.task, link.rest == nil, inFlight(link.id) == 0, !busy(link.id), !asking(link.id), quiet >= quietLimit {
+                update(link.id) { $0.rest = .quiet }
             }
         }
         return gone
@@ -225,6 +290,7 @@ final class AgentLinks {
         tabs = [:]
         waits = [:]
         passes = [:]
+        calls = [:]
         AgentSteps.shared.said = [:]
     }
 
@@ -232,6 +298,7 @@ final class AgentLinks {
         heardAt[id] = nil
         waits[id] = nil
         passes[id] = nil
+        calls[id] = nil
         tabs[id] = nil
         AgentSteps.shared.said[id] = nil
     }
@@ -384,15 +451,19 @@ enum AgentLinkState: Equatable {
     case working(String)
     case needsYou(String)
     case driving
+    case finished(String?)
+    case quiet(String?)
     case done(String?)
     case failed(String?)
 
     var line: String {
         switch self {
-        case .idle: return "Waiting"
+        case .idle: return "Thinking"
         case .working(let doing): return doing
         case .needsYou(let question): return question.isEmpty ? "Needs you" : "Needs you: \(question)"
         case .driving: return "You're driving"
+        case .finished(let said): return said ?? "Finished"
+        case .quiet(let last): return last.map { "Idle after \(Self.lowered($0))" } ?? "Idle"
         case .done(let summary): return summary ?? "Done"
         case .failed(let summary): return summary ?? "Couldn't finish"
         }
@@ -406,6 +477,13 @@ enum AgentLinkState: Equatable {
     var working: Bool {
         if case .working = self { return true }
         return false
+    }
+
+    var resting: Bool {
+        switch self {
+        case .finished, .quiet: return true
+        default: return false
+        }
     }
 
     var animated: Bool {
@@ -424,7 +502,7 @@ enum AgentLinkState: Equatable {
         var asking = false
     }
 
-    static func of(_ tabs: [TabFacts], ended: AgentLinkEnding?, step: String? = nil) -> AgentLinkState {
+    static func of(_ tabs: [TabFacts], ended: AgentLinkEnding?, step: String? = nil, rest: AgentRest? = nil, last: String? = nil) -> AgentLinkState {
         if let asked = tabs.first(where: { $0.asking || $0.question != nil || $0.mood == .waving }) {
             return .needsYou(asked.question ?? "")
         }
@@ -432,11 +510,18 @@ enum AgentLinkState: Equatable {
         if let ended {
             return ended.failed ? .failed(ended.summary) : .done(ended.summary)
         }
+        if case .finished(let said) = rest { return .finished(said ?? last.map { "Finished after \(lowered($0))" }) }
         if let busy = tabs.first(where: { $0.acting != nil }), let acting = busy.acting {
             return .working(phrase(acting, host: busy.host))
         }
         if let step { return .working(step) }
+        if rest == .quiet { return .quiet(last) }
         return .idle
+    }
+
+    static func lowered(_ doing: String) -> String {
+        guard let first = doing.first else { return doing }
+        return first.lowercased() + doing.dropFirst()
     }
 
     static func codex(_ thread: CodexThread, ended: AgentLinkEnding?) -> AgentLinkState {
@@ -466,7 +551,8 @@ enum AgentLinkState: Equatable {
             return doing.hasPrefix("Typing") || doing.hasPrefix("Pressing") || doing.hasPrefix("Filling") ? .typing : .reading
         case .needsYou: return .waving
         case .driving: return .driving
-        case .done: return .done
+        case .finished, .done: return .done
+        case .quiet: return .ended
         case .failed: return .failed
         }
     }

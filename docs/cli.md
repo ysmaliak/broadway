@@ -2,7 +2,7 @@
 
 `broadway` drives Broadway from a terminal, for people, scripts and coding agents. It talks to the running app over a local socket and starts it hidden when it isn't running. `broadway mcp` serves the same browser tools to MCP clients that can't run a command line.
 
-Set it up from Settings › Agents › The broadway command, or run `Broadway.app/Contents/Helpers/broadway setup`. Setup links `~/.local/bin/broadway` to the app's copy, writes completions for fish, zsh and bash, and installs a skill for Claude Code and Codex where they are present. Each file it writes carries a mark, so `broadway remove` takes only its own. `broadway doctor` checks the setup.
+Set it up from Settings › Agents › The broadway command, or run `Broadway.app/Contents/Helpers/broadway setup`. Setup links `~/.local/bin/broadway` to the app's copy, writes completions for fish, zsh and bash, and installs a skill for Claude Code and Codex where they are present. Each file it writes carries a mark, so `broadway remove` takes only its own. For Claude Code and Codex it also adds a Stop and a SessionEnd hook, to `~/.claude/settings.json` and `~/.codex/hooks.json`, so an agent's card reads finished when its turn ends (see [agents.md](agents.md)). It splices in only its own entries, which it knows by the words `broadway agents idle --hook`, and keeps every other byte of those files. Running it twice changes nothing, and `broadway remove` takes its entries out and leaves the rest as it was. A file that isn't plain JSON is left alone. `broadway doctor` checks the setup, the hooks included.
 
 `broadway help` lists every command, `broadway help COMMAND` explains one, and `broadway guide` is the short guide for agents. The guide and the skill are described [below](#the-guide-and-the-skill).
 
@@ -241,7 +241,7 @@ Inside a sandbox that denies local sockets, such as Codex's, every command fails
 
 ## The guide and the skill
 
-`broadway guide` is the agents' guide, under 4 KB, and always matches the installed Broadway. `broadway setup` writes a short skill for Claude Code and Codex that says to run `broadway guide` first. The skill carries `managed-by` and `broadway-guide:` marks. On every launch Broadway runs `broadway setup claude codex --refresh` in the background, which rewrites a skill it wrote when its `broadway-guide:` is missing or older, and never creates one or touches a file it didn't write. `broadway doctor` warns about a skill that is out of date.
+`broadway guide` is the agents' guide, under 4 KB, and always matches the installed Broadway. `broadway setup` writes a short skill for Claude Code and Codex that says to run `broadway guide` first. The skill carries `managed-by` and `broadway-guide:` marks. On every launch Broadway runs `broadway setup claude codex --refresh` in the background, which rewrites a skill it wrote when its `broadway-guide:` is missing or older, and never creates one or touches a file it didn't write. Where the skill is broadway's, it also adds the hooks when they are missing. `broadway doctor` warns about a skill that is out of date.
 
 ## Commands from 0.3
 
@@ -377,6 +377,7 @@ Some things only the person can do, in Broadway. `extensions private`, `shields 
 | `agents connect [--name TEXT]` | – | start this agent's session |
 | `agents list` | – | connected and finished sessions |
 | `agents done [--summary TEXT] [--failed] [--close]` | – | end this agent's session with a line for the person. Its tabs stay, and the answer lists them. `--close` closes the ones the person never looked at |
+| `agents idle [--summary TEXT] [--hook AGENT]` | – | say this agent's turn is over: its card reads finished until its next command. `--hook claude` or `--hook codex` reads a Stop or SessionEnd hook event on stdin, never starts Broadway, prints nothing and exits 0 |
 | `agents disconnect [ID] [--summary TEXT] [--failed]` | –, A | end this session, or another agent's (A) |
 | `approvals list` | R | what waits for the person. Nothing here can answer one |
 | `helpers list [SESSION]` | R | helpers a task started |

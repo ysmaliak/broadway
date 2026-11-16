@@ -182,7 +182,12 @@ enum AgentDownloadWatch {
         records[id]?.failed = why
     }
 
-    static func latest(_ tab: UUID, since: Date) -> Record? {
+    static func downloading(_ tabs: Set<UUID>, since: Date) -> Bool {
+        guard !tabs.isEmpty else { return false }
+        return records.values.contains { tabs.contains($0.tab) && !$0.done && $0.failed == nil && $0.started >= since }
+    }
+
+        static func latest(_ tab: UUID, since: Date) -> Record? {
         order.reversed().compactMap { records[$0] }.first { $0.tab == tab && $0.started >= since }
     }
 }
