@@ -154,10 +154,12 @@ enum ToolCode: String, CaseIterable {
     case ambiguousSession = "ambiguous_session"
     case unseen
     case opensWindow = "opens_window"
+    case unmet
+    case moved
 
     var mayHaveLanded: Bool {
         switch self {
-        case .noAnswer, .failed, .notAnswering, .deadline: true
+        case .noAnswer, .failed, .notAnswering, .deadline, .unmet: true
         default: false
         }
     }
@@ -210,22 +212,26 @@ enum ToolCode: String, CaseIterable {
         case .ambiguousSession: "Run broadway session list and give more of the id"
         case .unseen: "Ask the person to select the agent's tab in Broadway, then try again"
         case .opensWindow: "Use broadway choose REF VALUE for a list, or broadway type for a date, time or colour"
+        case .unmet: "Steps before this one landed. Look with broadway snapshot, then go on with broadway batch --from N."
+        case .moved: "The page moved under the steps. Look with broadway snapshot, then go on with new refs."
         }
     }
 }
 
 enum ToolFailure {
     private static let table: [(said: String, code: String)] = [
-        ("older snapshot", "stale_ref"), ("left the page", "stale_ref"), ("changed since the snapshot", "stale_ref"),
-        ("No such tab", "no_tab"), ("isn't showing a web page", "not_a_page"), ("Timed out", "timeout"),
+        ("older snapshot", "stale_ref"), ("left the page", "stale_ref"), ("changed since the snapshot", "stale_ref"), ("That dialog has gone", "stale_ref"),
+        ("No such tab", "no_tab"), ("isn't showing a web page", "not_a_page"), ("internal pages are person-only", "person_page"),
+        ("pending page dialog", "dialog_open"), ("Timed out", "timeout"),
         ("covers that element", "not_actionable"), ("is hidden", "not_actionable"), ("is disabled", "not_actionable"),
         ("read-only", "not_actionable"), ("not a box", "not_actionable"), ("did not take the text", "not_actionable"),
         ("never type in password", "refused"), ("can't look at what is in a field", "refused"), ("never takes it elsewhere", "refused"),
         ("macOS is asking", "needs_you"), ("the clipboard is the person's", "refused"), ("Nothing was filled", "refused"), ("Only tabs an agent", "refused"), ("Nothing was attached", "refused"), ("isn't a web address", "refused"), ("isn't one of the keys", "bad_input"),
-        ("gave no answer", "no_answer"), ("nothing to read", "no_answer"), ("Broadway has no window", "no_window"),
-        ("waits for the person's yes", "needs_you"), ("only a task can ask", "needs_task"), ("Only a running task", "needs_task"), ("runs without the person", "refused"),
-        ("The person is driving", "refused"), ("handed it back", "refused"), ("hasn't answered", "refused"),
-        ("said not now", "refused"), ("said never here", "refused"), ("never lets agents", "refused"),
+        ("gave no answer", "no_answer"), ("nothing to read", "no_answer"), ("Broadway has no window", "no_window"), ("No tool named", "unknown_tool"),
+        ("waits for the person's yes", "needs_you"), ("hasn't answered", "needs_you"), ("Nobody answered", "needs_you"),
+        ("only a task can ask", "needs_task"), ("Only a running task", "needs_task"), ("runs without the person", "refused"),
+        ("The person is driving", "driving"), ("handed it back", "handed_back"),
+        ("said not now", "said_no"), ("said never here", "never_here"), ("never lets agents", "never_here"),
         ("never shows one for an agent", "opens_window"), ("page nobody is looking at", "unseen"),
     ]
 
@@ -372,6 +378,28 @@ extension AgentSocket {
         connection.onClose = {
             gone?()
             work.cancel()
+        }
+    }
+
+    func aim(_ server: MCPServer, browser: Browser, link: UUID?) {
+        server.aim = { [weak self] name, arguments in
+            guard let self, self.box.tools.first(where: { $0.name == name })?.properties["tab"] != nil else { return .go(arguments) }
+            var arguments = arguments
+            let named = arguments["tab"] as? String
+            switch await self.target(named, browser: browser, link: link) {
+            case .failure(let refused):
+                return .refuse(.failure(refused.message, code: refused.code))
+            case .success(let id):
+                arguments["tab"] = id
+                if named != nil { self.remember(id, link: link) }
+                return .go(arguments)
+            }
+        }
+        server.landed = { [weak self] name, arguments, outcome in
+            guard let self, !outcome.failed else { return }
+            let data = ToolReply.data(outcome)
+            if name == "open", let id = data["id"] as? String ?? data["tab"] as? String { self.remember(id, link: link) }
+            if name == "close", arguments["tab"] as? String == self.current(link) { self.remember(nil, link: link) }
         }
     }
 

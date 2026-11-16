@@ -147,7 +147,7 @@ enum PersonCommands {
         let outcome = await call.box.call(name, arguments, task: call.link?.id)
         if outcome.failed {
             let text = outcome.text ?? "That didn't work"
-            throw PersonRefusal(ToolFailure.code(text), text)
+            throw PersonRefusal(outcome.code ?? ToolFailure.code(text), text, hint: outcome.hint)
         }
         return ToolReply.data(outcome)
     }
@@ -208,11 +208,11 @@ enum PersonCommands {
         if kind == .open || kind == .tool { return }
         if let tab = call.tab?.tab, tab.driving || tab.handedBack {
             guard await AgentDriving.settled(tab, patience: .zero) else {
-                throw PersonRefusal("refused", "The person is driving that tab. Nothing was done. Work elsewhere, or try later.")
+                throw PersonRefusal("driving", "The person is driving that tab. Nothing was done. Work elsewhere, or try later.")
             }
             tab.handedBack = false
             if kind != .look {
-                throw PersonRefusal("refused", "The person drove that tab and handed it back. Nothing was done. Look at it again before you go on.")
+                throw PersonRefusal("handed_back", "The person drove that tab and handed it back. Nothing was done. Look at it again before you go on.")
             }
         }
         let site = call.tab.flatMap { AgentSites.site(of: $0.tab.pageAddress) }
@@ -220,7 +220,7 @@ enum PersonCommands {
         case .go:
             return
         case .refuse:
-            throw PersonRefusal("refused", "The person never lets agents act on \(site ?? "this site"). Leave it.")
+            throw PersonRefusal("never_here", "The person never lets agents act on \(site ?? "this site"). Leave it.")
         case .needsTask:
             guard let link = call.link else {
                 throw PersonRefusal("needs_task", "This needs the person's yes, and only a task can ask for it. Nothing was done.")
@@ -296,9 +296,9 @@ enum PersonAsk {
             if let site { AgentSites.shared.set(.always, for: site) }
         case .never:
             if let site { AgentSites.shared.set(.never, for: site) }
-            throw PersonRefusal("refused", "The person said never here. Leave \(site ?? "this site").")
+            throw PersonRefusal("never_here", "The person said never here. Leave \(site ?? "this site").")
         case .no, .picked:
-            throw PersonRefusal("refused", "The person said not now. Nothing was done.")
+            throw PersonRefusal("said_no", "The person said not now. Nothing was done.")
         case .dropped:
             throw PersonRefusal("needs_you", "Nobody answered in Broadway. Nothing was done.")
         }

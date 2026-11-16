@@ -74,8 +74,8 @@ final class AgentTests {
     @Test func toolsAreListedWithASchema() {
         let found = (call("tools/list")["result"] as? [String: Any])?["tools"] as? [[String: Any]]
 
-        #expect(found?.map { $0["name"] as? String } == ["tabs", "text"])
-        #expect(((found?[1]["inputSchema"] as? [String: Any])?["required"] as? [String]) == ["tab"])
+        #expect(found?.map { $0["name"] as? String } == ["tabs", "read"])
+        #expect(((found?[1]["inputSchema"] as? [String: Any])?["required"] as? [String]) == nil)
     }
 
     @Test func aCallReachesTheToolboxWithItsTask() async {

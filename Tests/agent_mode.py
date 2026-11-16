@@ -167,7 +167,7 @@ def take_over(one):
     check("take over", taken.get("changed") is True, taken)
     check("the session says you are driving", card("Probe Agent")["mood"] == "driving", card("Probe Agent"))
     refused, _ = data("scroll", "--tab", one)
-    check("the agent waits while the person drives", refused and not refused["ok"] and refused["error"]["code"] == "refused", refused)
+    check("the agent waits while the person drives", refused and not refused["ok"] and refused["error"]["code"] == "driving", refused)
     back = agent("handback")
     check("hand back", back.get("changed") is True, back)
     first, _ = data("scroll", "--tab", one)

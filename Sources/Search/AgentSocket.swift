@@ -223,6 +223,7 @@ final class AgentSocket {
                 AgentLinks.shared.rename(task, name)
             }
             box.browser = browser
+            aim(server, browser: browser, link: task)
             connection.onLine = { line in MainActor.assumeIsolated { server.handle(line) } }
             connection.send(["mcp": true])
         default:

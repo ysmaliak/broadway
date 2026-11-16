@@ -88,15 +88,16 @@ class Client:
         result = self.rpc("tools/call", {"name": name, "arguments": arguments})["result"]
         return result, "".join(part.get("text", "") for part in result["content"])
 
+    def data(self, name, **arguments):
+        return meta(self.call(name, **arguments)[0])
+
     def close(self):
         self.process.stdin.close()
         self.process.wait(timeout=5)
 
 
-def fenced(text):
-    lines = text.splitlines()
-    check("the answer is fenced", lines[0].startswith("Website content") and lines[-1] == "</" + lines[1][1:], text)
-    return json.loads("\n".join(lines[2:-1]))
+def meta(result, key="data"):
+    return result.get("_meta", {}).get("com.broadway/" + key, {})
 
 
 def on(base):
@@ -110,17 +111,42 @@ def on(base):
     client = Client()
     found = client.rpc("initialize", {"protocolVersion": "2025-06-18"})["result"]
     check("initialize", found["serverInfo"]["name"] == "broadway-browser")
-    listed = client.rpc("tools/list")["result"]["tools"]
-    check("tools", len(listed) == 35, len(listed))
-    check("the page tools the command has", {"upload", "download", "locate", "fill_form", "drag", "select", "resize"} <= {tool["name"] for tool in listed})
+    check("the version is the app's", found["serverInfo"]["version"] not in ("", "1.0.0"), found["serverInfo"])
+    check("the instructions teach tabs as a choice", "go moves the tab you are in" in found["instructions"] and "one working tab" not in found["instructions"], found["instructions"])
+    listing = client.rpc("tools/list")["result"]
+    listed = listing["tools"]
+    names = {tool["name"] for tool in listed}
+    size = len(json.dumps(listing, separators=(",", ":")))
+    check("tools/list is under 8 KB", size < 8192, size)
+    check("no task-only tool for an outside client", not names & {"ask", "sign_in", "autofill", "helper_start", "helper_wait", "mac_read", "mac_run"}, names)
+    check("tools speak the command's words", {"go", "read", "shot", "find", "fill", "upload", "download", "drag", "select", "resize"} <= names, names)
+    check("old names are not listed", not names & {"navigate", "text", "screenshot", "locate", "fill_form"}, names)
+    check("tab is never required", all("tab" not in tool["inputSchema"].get("required", []) for tool in listed))
 
-    tabs = fenced(client.call("tabs")[1])["tabs"]
+    tabs = client.data("tabs")["tabs"]
     front = next(tab for tab in tabs if tab["front"])
     check("the front tab can't be sent elsewhere", client.call("navigate", tab=front["id"], url=base)[0]["isError"])
     check("the front tab can't be closed", client.call("close", tab=front["id"])[0]["isError"])
 
-    tab = fenced(client.call("open", url=base)[1])
-    check("an agent tab stays behind", tab["agent"] and not tab["front"])
+    opened = client.call("open", url=base)
+    tab = meta(opened[0])
+    tab["id"] = tab.get("id") or tab.get("tab")
+    check("an agent tab stays behind", tab.get("agent", True) and not tab.get("front", False), tab)
+    client.call("wait", tab=tab["id"], selector="#go")
+    bare = client.call("snapshot")
+    check("snapshot without tab works after open", not bare[0]["isError"] and "Sign up" in bare[1], bare[1])
+    check("an action without tab works after open", not client.call("press", key="Tab")[0]["isError"])
+    shell = json.loads(broadway("read", "--tab", tab["id"], "--json").stdout)
+    mcp = client.data("read", tab=tab["id"])
+    check("_meta carries the command's data", shell.get("data") == mcp, (shell.get("data"), mcp))
+    check("no structuredContent, so the model reads the fenced text", "structuredContent" not in opened[0])
+    stale = client.call("click", tab=tab["id"], ref="e999999")[0]
+    error = meta(stale, "error")
+    check("an error carries its code", stale["isError"] and error.get("code") in ("stale_ref", "not_found"), stale)
+    check("an error carries its hint and retry answer", error.get("hint") and error.get("retry_safe") is True, stale)
+    for alias, arguments in (("text", {}), ("screenshot", {}), ("locate", {"text": "Go"}), ("navigate", {"url": base})):
+        check(f"the old name {alias} still answers", not client.call(alias, tab=tab["id"], **arguments)[0]["isError"], alias)
+    client.call("wait", tab=tab["id"], selector="#go")
     check("wait", not client.call("wait", tab=tab["id"], selector="#go")[0]["isError"])
     check("wait can't read a field", client.call("wait", tab=tab["id"], selector='input[value^="h"]', seconds=1)[0]["isError"])
 
@@ -128,7 +154,7 @@ def on(base):
 
     snapshot = client.call("snapshot", tab=tab["id"])[1]
     check("values stay on the page", "hunter2" not in snapshot and "4242" not in snapshot, snapshot)
-    check("page text is marked", snapshot.startswith("Website content"))
+    check("page text is fenced and broadway's facts are not", snapshot.startswith("Tab ") and snapshot.splitlines()[1].startswith("Website content"), snapshot[:200])
     hidden = [line.split()[0] for line in snapshot.splitlines() if "value hidden" in line]
     check("secret boxes are hidden", len(hidden) == 2, snapshot)
     for ref in hidden:
@@ -137,6 +163,7 @@ def on(base):
     check("type", "hello" in client.call("type", tab=tab["id"], ref=plain, text="hello")[1])
     text = client.call("text", tab=tab["id"])[1]
     check("text leaves secrets out", "hunter2" not in text and "4242" not in text)
+    check("read leaves secrets out", "hunter2" not in client.call("read", tab=tab["id"])[1])
     picture = client.call("screenshot", tab=tab["id"])[0]
     check("screenshot", any(len(base64.b64decode(part.get("data", ""))) > 1000 for part in picture["content"]))
     client.call("navigate", tab=tab["id"], url=base)
@@ -156,7 +183,8 @@ def on(base):
     check("scroll", not client.call("scroll", tab=tab["id"], by=20)[0]["isError"])
     check("history", not client.call("history", limit=3)[0]["isError"])
     check("an agent's title stays out of history", "clicked" not in client.call("history", query="127.0.0.1")[1])
-    other = fenced(client.call("open", url=base + "agentonly")[1])
+    other = client.data("open", url=base + "agentonly")
+    other["id"] = other.get("id") or other.get("tab")
     client.call("wait", tab=other["id"], selector="#go")
     check("an agent's visit stays out of history", "agentonly" not in client.call("history", query="agentonly")[1])
     client.call("close", tab=other["id"])

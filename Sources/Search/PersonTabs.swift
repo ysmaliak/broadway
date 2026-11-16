@@ -27,7 +27,7 @@ enum PersonTabs {
         if found.count > 1 { throw PersonRefusal("ambiguous_tab", "\(named) matches \(found.count) tabs: give more of its id") }
         guard let only = found.first else { throw PersonRefusal("no_tab", "No such tab: \(named)") }
         if only.tab.page != nil, !allowInternal { throw PersonRefusal("person_only", "Broadway internal pages are person-only. Agents can list their addresses but cannot read or act on them.") }
-        if only.tab.driving { throw PersonRefusal("refused", "The person is driving that tab. Nothing was done.") }
+        if only.tab.driving { throw PersonRefusal("driving", "The person is driving that tab. Nothing was done.") }
         return only
     }
 
