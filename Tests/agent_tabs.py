@@ -255,6 +255,17 @@ def drive(base):
     check("agents done --close closes the tab the person never looked at", data(done).get("closed") == [unseen_id], done)
     check("agents done keeps and lists the tab the person looked at", left == [kept_id], done)
     check("agents done gives the count in its first line", (data(done).get("message") or "").startswith("Ended. 1 tab of yours left open"), done)
+    extra_id = data(envelope("open", base + "help", agent=f"{WORLD}-other")).get("id")
+    back = data(envelope("tabs"))
+    check("after done the same agent's next command takes back its open tab as current", [t["id"] for t in back.get("tabs", [])] == [kept_id]
+          and back.get("current") == kept_id, back)
+    went = envelope("go", base + "gift")
+    check("after done go works in the tab taken back", went.get("ok") and data(envelope("tab")).get("id") == kept_id, went)
+    spare = data(envelope("open", base + "basket")).get("id")
+    envelope("tab", spare)
+    others = envelope("close", "--others")
+    check("after done close --others closes the other tabs of the agent", others.get("ok") and [t["id"] for t in mine()] == [spare], (others, mine()))
+    check("close --others leaves another agent's tab alone", extra_id in [t["id"] for t in every_tab()], every_tab())
 
     other = f"{WORLD}-mcp"
     answers = mcp([

@@ -15,13 +15,19 @@ extension AgentLinks {
 
     private static var refusals: [String: Date] = [:]
 
+    private func refusalKeys(_ session: UUID, _ act: AgentAct, site: String?, quote: String) -> [String] {
+        let pass = Self.actPass(act, site: site, quote: quote)
+        return ["\(session.uuidString)|\(pass)"] + (link(session).map { ["\($0.key)|\(pass)"] } ?? [])
+    }
+
     func noteRefusal(_ session: UUID, _ act: AgentAct, site: String?, quote: String, at now: Date = Date()) {
-        Self.refusals["\(session.uuidString)|\(Self.actPass(act, site: site, quote: quote))"] = now
+        for key in refusalKeys(session, act, site: site, quote: quote) { Self.refusals[key] = now }
     }
 
     func refusedLately(_ session: UUID, _ act: AgentAct, site: String?, quote: String, at now: Date = Date()) -> Bool {
-        guard let when = Self.refusals["\(session.uuidString)|\(Self.actPass(act, site: site, quote: quote))"] else { return false }
-        return now.timeIntervalSince(when) <= Self.passLife
+        refusalKeys(session, act, site: site, quote: quote).contains { key in
+            Self.refusals[key].map { now.timeIntervalSince($0) <= Self.passLife } == true
+        }
     }
 
     private static var asks: [UUID: Task<AgentAnswer, Never>] = [:]

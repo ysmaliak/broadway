@@ -261,6 +261,26 @@ def drive(tab, base):
     rooms = [w for w in sv.cmd({"do": "agents", "action": "windows"}).get("windows", []) if w.get("room")]
     check("and the room is still never ordered in", rooms and not any(w["visible"] for w in rooms), rooms)
 
+    mark("rest")
+    add = ref(tab, "Add a row")
+    began = time.time()
+    working = broadway("click", add, "--tab", tab) if add else None
+    awake = time.time() - began
+    rested = broadway("agents", "idle")
+    check("the session rests", rested.returncode == 0, rested.stderr)
+    time.sleep(45)
+    began = time.time()
+    after = broadway("click", add, "--tab", tab) if add else None
+    took = time.time() - began
+    check("after resting with Broadway hidden, the next command settles in normal time",
+          working is not None and working.returncode == 0 and after is not None and after.returncode == 0
+          and took <= max(2 * awake, awake + 2), (round(awake, 2), round(took, 2), after and after.stderr))
+    first = state(tab)
+    time.sleep(3)
+    second = state(tab)
+    check("and the page draws at full rate again once the agent is back at work",
+          second.get("frames", 0) - first.get("frames", 0) >= 60, (first, second))
+
 
 def start():
     subprocess.run(["defaults", "write", SUITE, "bench", "-bool", "true"], check=True)

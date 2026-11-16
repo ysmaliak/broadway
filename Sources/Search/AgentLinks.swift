@@ -77,6 +77,7 @@ final class AgentLinks {
     private(set) var links: [AgentLink] = []
     @ObservationIgnored private var heardAt: [UUID: Date] = [:]
     @ObservationIgnored private var tabs: [UUID: String] = [:]
+    @ObservationIgnored private var lastTabs: [UUID: String] = [:]
     @ObservationIgnored private var waits: [UUID: Double] = [:]
     @ObservationIgnored private var passes: [UUID: [String: Date]] = [:]
     @ObservationIgnored private var calls: [UUID: Int] = [:]
@@ -87,6 +88,7 @@ final class AgentLinks {
     @ObservationIgnored var alive: (Int32, Int64) -> Bool = AgentProcess.alive
     @ObservationIgnored var ending: ((AgentLink) -> Void)?
     @ObservationIgnored var resting: ((UUID) -> Void)?
+    @ObservationIgnored var rejoining: ((UUID, [UUID]) -> Void)?
     @ObservationIgnored var asking: (UUID) -> Bool = { _ in false }
 
     var live: [AgentLink] { links.filter(\.live) }
@@ -110,9 +112,12 @@ final class AgentLinks {
         if case .task(let task) = key { id = task }
         var made = AgentLink(id: id, name: Self.clean(name) ?? "Agent", key: key, connected: now)
         links.removeAll { $0.id == id }
+        let before = made.task ? [] : links.filter { $0.key == key && !$0.live }
+            .sorted { ($0.endedAt ?? $0.connected) < ($1.endedAt ?? $1.connected) }.map(\.id)
         made.number = number(for: made.name, besides: id)
         heardAt[id] = now
         links.append(made)
+        if !before.isEmpty { rejoining?(id, before) }
         return made
     }
 
@@ -182,6 +187,10 @@ final class AgentLinks {
         tabs[id]
     }
 
+    func lastTab(_ id: UUID) -> String? {
+        lastTabs[id]
+    }
+
     func step(_ id: UUID, _ said: String?) {
         AgentSteps.shared.said[id] = Self.summary(said)
     }
@@ -235,6 +244,7 @@ final class AgentLinks {
             link.ended = said
             link.endedAt = now
         }
+        lastTabs[id] = tabs[id]
         tabs[id] = nil
         calls[id] = nil
         AgentSteps.shared.said[id] = nil
@@ -289,6 +299,7 @@ final class AgentLinks {
         links = []
         heardAt = [:]
         tabs = [:]
+        lastTabs = [:]
         waits = [:]
         passes = [:]
         calls = [:]
@@ -297,6 +308,7 @@ final class AgentLinks {
 
     private func drop(_ id: UUID) {
         heardAt[id] = nil
+        lastTabs[id] = nil
         waits[id] = nil
         passes[id] = nil
         calls[id] = nil

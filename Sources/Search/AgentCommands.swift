@@ -403,7 +403,7 @@ extension AgentSocket {
             connection.send(ToolFailure.error(.unknownCommand, "Only Broadway's own tasks use \(name)"))
             return connection.close()
         }
-        let link = self.link(for: request, create: name == "open" || name == "tab" || spec.properties["tab"] != nil)?.id
+        let link = self.link(for: request, create: name == "open" || name == "tab" || spec.properties["tab"] != nil, rejoin: true)?.id
         let work = Task { @MainActor in
             AgentLinks.shared.calling(link)
             defer { AgentLinks.shared.called(link) }

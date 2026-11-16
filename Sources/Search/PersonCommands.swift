@@ -169,7 +169,8 @@ enum PersonCommands {
             do {
                 var call = PersonCall(noun: noun, verb: verb, arguments: request["arguments"] as? [String: Any] ?? [:], browser: browser, box: box)
                 let connecting = noun == "agents" && verb == "connect"
-                call.link = socket.link(for: request, create: connecting, name: connecting ? call.string("name") : nil)
+                call.link = socket.link(for: request, create: connecting, rejoin: noun != "agents" && request["hook"] as? Bool != true,
+                                        name: connecting ? call.string("name") : nil)
                 if entry.tabbed {
                     let named = call.arguments["tab"] as? String
                     switch await socket.target(named, browser: browser, link: call.link?.id) {

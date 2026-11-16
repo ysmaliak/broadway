@@ -109,6 +109,25 @@ enum AgentWorkTabs {
         popups = [:]
     }
 
+    static func takeBack(_ session: UUID, from ended: [UUID]) {
+        let links = AgentLinks.shared
+        var current: String?
+        for old in ended {
+            let found = AgentBoard.allTabs(of: old)
+            guard !found.isEmpty else { continue }
+            for each in found {
+                each.tab.agentTask = session
+                each.tab.agentFinished = nil
+                if each.tab.agentMood != .waving { each.tab.agentMood = nil }
+                each.tab.agentActing = nil
+            }
+            let ids = found.map { short($0.tab.id) }
+            current = links.lastTab(old).flatMap { ids.contains($0) ? $0 : nil } ?? ids.last
+        }
+        if let current { links.setCurrentTab(session, current) }
+        AgentAwake.refresh()
+    }
+
     static func tabs(of session: UUID?, in box: BrowserToolbox) -> [(tab: Tab, browser: Browser)] {
         guard let session else { return [] }
         return box.visible.filter { $0.tab.agent && $0.tab.agentTask == session }

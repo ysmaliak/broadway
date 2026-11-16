@@ -2,8 +2,9 @@ import AppKit
 import Foundation
 
 extension AgentSocket {
-    func link(for request: [String: Any], create: Bool, connection: UUID? = nil, name: String? = nil) -> AgentLink? {
+    func link(for request: [String: Any], create made: Bool, rejoin: Bool = false, connection: UUID? = nil, name: String? = nil) -> AgentLink? {
         let links = AgentLinks.shared
+        let create = made || rejoin && links.links.contains { !$0.live && !AgentBoard.allTabs(of: $0.id).isEmpty && $0.key == Self.key(request) }
         let said = request["agent"] as? [String: Any] ?? [:]
         let named = name ?? said["name"] as? String
         var found: AgentLink?
@@ -44,6 +45,14 @@ extension AgentSocket {
 }
 
 extension AgentSocket {
+    static func key(_ request: [String: Any]) -> AgentLinkKey? {
+        let said = request["agent"] as? [String: Any] ?? [:]
+        if said["id"] == nil, let session = said["session"] as? String, !session.isEmpty { return .named("session:" + session.lowercased()) }
+        if let id = (said["id"] as? String)?.lowercased(), !id.isEmpty { return .named(id) }
+        guard let process = process(said) else { return nil }
+        return .process(pid: process.pid, started: process.started)
+    }
+
     static func process(_ said: [String: Any]) -> AgentProcessID? {
         guard let pid = (said["pid"] as? NSNumber)?.int32Value, pid > 1 else { return nil }
         return AgentProcessID(pid: pid, started: (said["started"] as? NSNumber)?.int64Value ?? 0)
@@ -69,6 +78,7 @@ extension AgentLinks {
 
     static func wire() {
         let links = AgentLinks.shared
+        if links.rejoining == nil { links.rejoining = AgentWorkTabs.takeBack }
         guard links.ending == nil else { return }
         links.ending = { link in
             if !link.task { TaskLedger.shared.close(link.id) }
