@@ -225,7 +225,7 @@ final class AgentTests {
         let found = try #require(AgentCatalog.command(tool))
 
         #expect((found["positional"] as? [[String: Any]])?.compactMap { $0["name"] as? String } == ["ref", "text"])
-        #expect((found["flags"] as? [[String: Any]])?.compactMap { $0["name"] as? String } == ["expect", "expect_gone", "expect_url", "final", "frames", "in", "label", "nth", "ref", "replace", "role", "settle", "submit", "target", "text", "words"])
+        #expect((found["flags"] as? [[String: Any]])?.compactMap { $0["name"] as? String } == ["expect", "expect_gone", "expect_url", "final", "frames", "in", "label", "look", "nth", "ref", "replace", "role", "settle", "submit", "target", "text", "words"])
         #expect((found["tabbed"] as? Bool) == true)
         #expect((found["reads"] as? Bool) == false)
     }

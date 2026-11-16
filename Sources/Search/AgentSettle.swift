@@ -341,6 +341,7 @@ extension BrowserToolbox {
         var change = AgentChange(tab: short, did: did, said: box.said, target: box.target, settled: settling.settled, ms: settling.ms,
                                  page: AgentChange.Page(url: AgentSecrets.shown(tab.pageAddress), title: tab.title), kept: kept)
         change.notes = box.notes
+        let looks = arguments["look"] as? Bool != false
         change.expect = settling.expect
         change.alerted = settling.alerted
         if settling.settled == .capped { change.busy = AgentChange.Busy(requests: settling.busy) }
@@ -355,7 +356,7 @@ extension BrowserToolbox {
                 change.page.navigated = true
                 if change.settled == .quiet { change.settled = .navigated }
                 change.headings = after["headings"] as? [String] ?? []
-                if let look = await look(tab, task: task) { change.look = look }
+                if looks, let look = await look(tab, task: task) { change.look = look }
             } else {
                 change.appeared = (after["appeared"] as? [Any] ?? []).compactMap { AgentChange.Element(object: $0) }
                 change.went = (after["went"] as? [Any] ?? []).compactMap { AgentChange.Element(object: $0) }
@@ -364,7 +365,7 @@ extension BrowserToolbox {
                 change.more = after["more"] as? Int ?? 0
                 let counted = after["counted"] as? Int ?? 0
                 let total = max(after["total"] as? Int ?? 0, 1)
-                if counted > 60 || (counted * 3 > total * 2 && counted > 8), let look = await look(tab, task: task) {
+                if looks, counted > 60 || (counted * 3 > total * 2 && counted > 8), let look = await look(tab, task: task) {
                     change.look = look
                     change.most = true
                 }

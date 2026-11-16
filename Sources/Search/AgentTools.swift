@@ -169,7 +169,9 @@ enum AgentPage {
           if ((box.getAttribute('autocomplete') || '').toLowerCase().indexOf('cc-') >= 0 || /card.?(num|no)|cardnumber|cc.?num|\\bcvc\\b|\\bcvv\\b/.test(((box.getAttribute('name') || '') + ' ' + (box.id || '')).toLowerCase())) card = true;
         }
       }
-      var words = target ? (target.getAttribute('aria-label') || target.innerText || target.value || target.getAttribute('title') || target.getAttribute('alt') || '') : '';
+      var hidden = !!(target && target.matches && target.matches('input,textarea,select,[contenteditable]') && broadwaySecret(target));
+      var called = hidden ? (target.getAttribute('aria-label') || (target.labels && target.labels.length ? target.labels[0].innerText : '') || target.getAttribute('placeholder') || ((target.getAttribute('type') || '').toLowerCase() === 'password' ? 'a password field' : 'a secret field')) : '';
+      var words = target ? (hidden ? called : (target.getAttribute('aria-label') || target.innerText || target.value || target.getAttribute('title') || target.getAttribute('alt') || '')) : '';
       var link = target && target.closest && target.closest('a[href]');
       return { name: String(words).replace(/\\s+/g, ' ').trim().slice(0, 160),
                role: target ? target.getAttribute('role') || '' : '',
@@ -463,6 +465,7 @@ final class BrowserToolbox: AgentToolbox {
         "expect": ["type": "string", "description": "Words to wait for after acting. The answer says whether they came.", "unlisted": true],
         "expect_gone": ["type": "string", "description": "Words to wait to go after acting", "unlisted": true],
         "expect_url": ["type": "string", "description": "Words the address should have after acting", "unlisted": true],
+        "look": ["type": "boolean", "description": "false leaves a new page's look out of the answer", "unlisted": true],
     ]
     static func with(_ base: [String: [String: Any]], aim: Bool = true, then: Bool = true) -> [String: [String: Any]] {
         var all = base

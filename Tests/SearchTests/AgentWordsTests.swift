@@ -638,4 +638,39 @@ final class AgentWordsTests {
         #expect(!theirs.failed)
         #expect(await clicks(tab) == 1)
     }
+
+    @Test func aSecretBoxInACardFormNeverPutsItsValueInThePersonsQuestion() async throws {
+        let (_, id) = try await page("""
+        <form><input id=pass type=password value=made-up-secret-7><input autocomplete=cc-number value=4242424242424242>
+        <button type=button>Inside</button></form>
+        """)
+        let shot = await box.call("snapshot", ["tab": id], task: task)
+        let elements = shot.data?["elements"] as? [[String: Any]] ?? []
+        let secret = try #require(elements.first { ($0["name"] as? String) == "password field" }?["ref"] as? String)
+
+        let call = Task { await box.call("click", ["tab": id, "ref": secret], task: task) }
+        let asked = await question()
+        let quotes = AgentDesk.shared.pending.map(\.quote)
+        if let asked { AgentDesk.shared.take(asked.id, .no) }
+        _ = await call.value
+
+        #expect(elements.filter { ($0["name"] as? String) == "Inside" }.map { $0["role"] as? String } == ["button"])
+        #expect(asked != nil)
+        #expect(asked?.quote.contains("made-up-secret") == false)
+        #expect(asked?.quote.contains("4242") == false)
+        #expect(quotes.allSatisfy { !$0.contains("made-up-secret") })
+    }
+
+    @Test func anAnswerWithoutItsLookTellsNoRefs() async throws {
+        let (tab, id) = try await page("<button onclick='window.clicks=(window.clicks||0)+1'>Keep</button><button onclick='window.clicks=(window.clicks||0)+10'>Other</button>")
+        let old = try await ref(id, "Other")
+
+        let went = await box.call("navigate", ["tab": id, "url": "http://127.0.0.1:\(server.port)/page", "look": false], task: task)
+        let stale = await box.call("click", ["tab": id, "ref": old], task: task)
+
+        #expect(!went.failed)
+        #expect(went.data?["look"] == nil)
+        #expect(stale.code == "stale_ref")
+        #expect(await clicks(tab) == 0)
+    }
 }

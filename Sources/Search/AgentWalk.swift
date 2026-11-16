@@ -152,8 +152,23 @@ extension AgentPage {
       var aria = subject.getAttribute('aria-valuetext') || subject.getAttribute('aria-valuenow');
       return aria ? String(aria).slice(0, 200) : undefined;
     }
+    function broadwayNearText(el) {
+      for (var up = el.parentElement, i = 0; up && i < 4 && up !== document.body && up !== document.documentElement; up = up.parentElement, i++) {
+        var words = '', walker = document.createTreeWalker(up, NodeFilter.SHOW_TEXT), n;
+        while ((n = walker.nextNode()) && words.length < 200) {
+          var p = n.parentElement;
+          if (!p || p.closest('a,button,select,textarea,option,script,style,title,noscript,[role=button],[role=link],[role=option],[role=tab],[role=menuitem]')) continue;
+          words += ' ' + n.data;
+        }
+        words = broadwayFlat(words, 80);
+        if (words) return words;
+      }
+      return '';
+    }
     function broadwayItem(el, target, kind, label, ref) {
-      var said = label || (kind === 'heading' || broadwayTold.test(kind) ? '' : nearby(el));
+      var boxed = /^(textbox|searchbox|combobox|slider|spinbutton|checkbox|radio|switch)$/.test(kind);
+      var said = label || (kind === 'heading' || broadwayTold.test(kind) ? '' : boxed ? broadwayNearText(el) : nearby(el));
+      if (!said && boxed && broadwaySecret(target || el)) said = ((target || el).getAttribute('type') || '').toLowerCase() === 'password' ? 'password field' : 'secret field';
       var subject = target || el;
       var line = '@' + ref + ' ' + kind + ' "' + said + '"', item = { ref: ref, role: kind, name: said };
       var secret = broadwaySecret(subject);
