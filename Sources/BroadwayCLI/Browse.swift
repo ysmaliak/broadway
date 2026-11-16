@@ -67,7 +67,7 @@ enum Browse {
         let asked = try arguments(command, words, tab: context.globals.tab, tabFlag: context.globals.tabFlag)
         let arguments = asked.arguments
         let link = try context.connection()
-        guard link.send(["op": "call", "tool": command.tool, "arguments": arguments, "agent": Context.agent]), let reply = link.object() else {
+        guard link.send(context.call(command.tool, arguments)), let reply = link.object() else {
             throw Failure("not_running", "Broadway went away", hint: command.reads ? nil : "It may or may not have happened, so look before you repeat it", retrySafe: command.reads)
         }
         if let failure = Context.failure(reply, reads: command.reads) {

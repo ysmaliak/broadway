@@ -133,7 +133,7 @@ final class MCPRelay {
             var agent = Context.agent
             if let session { agent = ["id": session] }
             guard let link = place.connect(),
-                  link.send(["op": "call", "tool": step["tool"] as? String ?? name, "arguments": step["arguments"] ?? [:], "agent": agent]),
+                  link.send(["op": "call", "tool": step["tool"] as? String ?? name, "arguments": step["arguments"] ?? [:], "agent": agent, "cli": Setup.version(binary: binary) ?? "dev"]),
                   let reply = link.object() else {
                 return ["ok": false, "error": ["code": "not_running", "message": "Broadway went away", "retry_safe": false]]
             }

@@ -162,7 +162,7 @@ enum Batch {
             Link.watch = watch
         }
         let link = try context.connection()
-        guard link.send(["op": "call", "tool": "batch", "arguments": arguments, "agent": Context.agent]), let reply = link.object() else {
+        guard link.send(context.call("batch", arguments)), let reply = link.object() else {
             throw Failure("not_running", "Broadway went away", hint: "Some steps may have happened, so look before you repeat them", retrySafe: false)
         }
         let data = reply["data"] as? [String: Any] ?? [:]
@@ -334,7 +334,7 @@ extension ScriptRun {
                 return ["ok": false, "error": ["code": "not_running", "message": "Broadway isn't running", "retry_safe": false]]
             }
             context.hangUp()
-            guard link.send(["op": "call", "tool": step["tool"] as? String ?? name, "arguments": step["arguments"] ?? [:], "agent": Context.agent]), let reply = link.object() else {
+            guard link.send(context.call(step["tool"] as? String ?? name, step["arguments"] ?? [:])), let reply = link.object() else {
                 return ["ok": false, "error": ["code": "not_running", "message": "Broadway went away", "retry_safe": false]]
             }
             if (reply["data"] as? [String: Any])?["website"] as? Bool == true { website = true }

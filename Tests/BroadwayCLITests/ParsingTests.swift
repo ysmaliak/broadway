@@ -355,6 +355,19 @@ struct ParsingTests {
         #expect(asked.arguments["optional"] as? Bool == true)
         #expect(asked.arguments["tab"] as? String == "a8b6db94")
     }
+
+    @Test func everyCallNamesTheCommandsVersion() throws {
+        let (globals, _) = try Globals.extract(["read"], environment: [:])
+        let place = Place(socket: "/nonexistent/broadway.sock", wakes: false, world: nil, bundle: nil, named: false)
+        let context = Context(globals: globals, console: Console(json: true, quiet: true, noColor: true, environment: [:]), place: place, environment: [:], binary: "/nonexistent/broadway")
+
+        let request = context.call("text", ["tab": "a8b6db94"])
+
+        #expect(request["op"] as? String == "call")
+        #expect(request["tool"] as? String == "text")
+        #expect(request["cli"] as? String == "dev")
+        #expect(request["agent"] != nil)
+    }
 }
 
 extension Command {

@@ -20,6 +20,12 @@ final class Context {
 
     var home: String { Place.home(environment) }
 
+    private(set) lazy var cli: String = Setup.version(binary: binary) ?? "dev"
+
+    func call(_ tool: String, _ arguments: Any) -> [String: Any] {
+        ["op": "call", "tool": tool, "arguments": arguments, "agent": Context.agent, "cli": cli]
+    }
+
     func catalog() -> Catalog {
         if let loaded { return loaded }
         var found = Catalog(nil)
