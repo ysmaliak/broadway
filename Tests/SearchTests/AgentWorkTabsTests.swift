@@ -632,6 +632,23 @@ final class AgentWorkTabsTests {
         #expect(socket.current(link) == mine.first.map { short($0.tab) })
     }
 
+    @Test func anAgentTabKeepsBroadwayOutOfAppNapUntilNoneIsLeft() async {
+        let link = session()
+        AgentAwake.refresh()
+        let id = await open("/shop", link)
+        let holding = AgentAwake.holding
+        AgentAwake.refresh()
+        let kept = AgentAwake.holding
+        _ = await call("close", ["tab": id], link)
+        for found in socket.box.visible where found.tab.agent { found.browser.close(found.tab) }
+        AgentAwake.refresh()
+        let left = AgentBoard.browsers.contains { ($0.tabs + $0.parkedAgentTabs).contains(where: \.agent) }
+
+        #expect(holding)
+        #expect(kept)
+        #expect(AgentAwake.holding == left)
+    }
+
     @Test func closeAndTabsGainTheirFlagsAndTabIsACommand() {
         let tools = socket.box.tools
         let close = tools.first { $0.name == "close" }

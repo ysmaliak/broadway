@@ -71,6 +71,7 @@ enum AgentBoard {
             MainActor.assumeIsolated {
                 for browser in browsers { browser.sweepAgentTabs() }
                 AgentLinks.sweepAll()
+                AgentAwake.refresh()
             }
         }
     }

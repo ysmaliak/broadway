@@ -30,6 +30,24 @@ enum AgentAddress {
 }
 
 @MainActor
+enum AgentAwake {
+    private static var held: NSObjectProtocol?
+
+    static var holding: Bool { held != nil }
+
+    static func hold() {
+        guard held == nil else { return }
+        held = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep, reason: "An agent's pages stay awake")
+    }
+
+    static func refresh() {
+        guard let made = held, !AgentBoard.browsers.contains(where: { ($0.tabs + $0.parkedAgentTabs).contains(where: \.agent) }) else { return }
+        ProcessInfo.processInfo.endActivity(made)
+        held = nil
+    }
+}
+
+@MainActor
 enum AgentWorkTabs {
     struct Popups {
         var opened: [UUID] = []

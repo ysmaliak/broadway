@@ -671,6 +671,7 @@ final class Tab: Identifiable {
     @ObservationIgnored var bench: Bool
     @ObservationIgnored var agent = false {
         didSet {
+            if agent { AgentAwake.hold() }
             if !agent {
                 if let built { AgentDiagnostics.keepAwake(built, false) }
                 agentDialog?.answer(ok: false)
