@@ -270,4 +270,59 @@ struct AnswerTests {
         #expect(split.shown.hasSuffix("\"\n"))
         #expect(!Render.cut("short\n").rest)
     }
+
+    @Test func notesFromTheAppArePrintedOnce() {
+        var data = basket
+        data["notes"] = ["click on this target had no effect 2 times, so try another way or ask the person",
+                         "The page opened a file picker, which Broadway closed, so give it a file with broadway upload @e9 PATH",
+                         "Still loading after 5 s: 2 requests open. broadway wait to wait longer."]
+        data["picker"] = ["closed": true]
+        data["settled"] = "capped"
+        data["busy"] = ["requests": 2]
+
+        let lines = Answer.lines(data)
+
+        for note in data["notes"] as? [String] ?? [] { #expect(lines.filter { $0 == note }.count == 1, "\(note)") }
+        #expect(lines.filter { $0.contains("file picker") }.count == 1)
+        #expect(!lines.contains { $0.hasPrefix("Still busy") })
+    }
+
+    @Test func aLookFromTheAppPrintsItsHeaderNeedsAndLines() {
+        var data = basket
+        data["page"] = ["title": "Sign in", "url": "https://shop.example/login", "navigated": true]
+        data["look"] = ["lines": ["@e1 textbox \"Email\"", "@e2 button \"Continue\""], "elements": [["ref": "e1", "role": "textbox", "name": "Email"]],
+                        "shown": 2, "total": 9, "regions": ["main"], "header": ["A dialog is open, so only it is shown (the page behind it: broadway snapshot --all)"],
+                        "needs": "password", "ways": ["Google"]]
+
+        let lines = Answer.lines(data)
+
+        let start = lines.firstIndex { $0.hasPrefix("A dialog is open") } ?? -1
+        #expect(start > 0)
+        #expect(Array(lines[start...]) == ["A dialog is open, so only it is shown (the page behind it: broadway snapshot --all)",
+                                           "needs: a password, so run broadway fill login (Broadway fills it after the person's yes, you never see it)",
+                                           "signs in with: Google",
+                                           "@e1 textbox \"Email\"", "@e2 button \"Continue\"",
+                                           "… 7 more: broadway snapshot, or --in @ref, --role, --find"])
+        #expect(!Answer.lines(data, look: false).contains { $0.hasPrefix("@e1") })
+    }
+
+    @Test func aSnapshotFromTheAppPrintsItsLinesAndHiddenCount() {
+        let command = Command(["name": "snapshot", "tool": "snapshot", "tabbed": true, "reads": true])
+        let given: [String: Any] = ["title": "Teas", "url": "https://shop.example/teas", "tab": "a8b6db94", "shown": 2, "total": 2, "hidden": 3,
+                                    "lines": ["Teas  shop.example/teas", "(3 pieces of text a person can't see left out)", "@e1 link \"Moss Oolong\"", "@e2 button \"Add\""],
+                                    "elements": [["ref": "e1", "role": "link", "name": "Moss Oolong"], ["ref": "e2", "role": "button", "name": "Add"]], "needs": "captcha"]
+        var bare = given
+        bare["lines"] = nil
+
+        #expect(Render.snapshotLines(command, given) == ["Teas  shop.example/teas",
+                                                         "needs: a captcha, so run broadway handoff \"Solve the captcha\" and wait, never solving it yourself",
+                                                         "(3 pieces of text a person can't see left out)", "@e1 link \"Moss Oolong\"", "@e2 button \"Add\""])
+        #expect(Render.snapshotLines(command, bare).contains("(3 pieces of text a person can't see left out)"))
+    }
+
+    @Test func aFoundElementSaysWhatItIsIn() {
+        let line = Render.elementLine(["ref": "e7", "role": "button", "name": "Add", "in": ["role": "dialog", "name": "Basket"]])
+
+        #expect(line == "@e7 button \"Add\"   in dialog \"Basket\"")
+    }
 }

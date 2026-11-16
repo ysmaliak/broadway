@@ -88,23 +88,37 @@ enum Answer {
         let marked = marks(data)
         found += marked
         if marked.isEmpty, data["nothing"] as? Bool == true { found.append("Nothing on the page changed") }
-        if settled == "capped" { found.append(busy(data)) }
+        found += notes(data)
+        if settled == "capped", !noted(data, "busy", "loading") { found.append(busy(data)) }
         found += shown
         return found
     }
 
     static func tail(_ data: [String: Any]) -> [String] {
-        var found = facts(data) + marks(data)
-        if data["settled"] as? String == "capped" { found.append(busy(data)) }
+        var found = facts(data) + marks(data) + notes(data)
+        if data["settled"] as? String == "capped", !noted(data, "busy", "loading") { found.append(busy(data)) }
         return found + lookLines(data)
     }
 
+    static func notes(_ data: [String: Any]) -> [String] {
+        (data["notes"] as? [String] ?? []).filter { !$0.isEmpty }
+    }
+
+    static func noted(_ data: [String: Any], _ words: String...) -> Bool {
+        notes(data).contains { note in words.contains { note.localizedCaseInsensitiveContains($0) } }
+    }
+
     static func lookLines(_ data: [String: Any]) -> [String] {
-        guard let look = data["look"] as? [String: Any], let elements = look["elements"] as? [[String: Any]] else { return [] }
-        var found = Render.elementLines(elements, regions: look["regions"] as? [[String: Any]] ?? [])
-        let total = look["total"] as? Int ?? elements.count
-        let shown = look["shown"] as? Int ?? elements.count
-        if total > shown { found.append("… \(total - shown) more: broadway snapshot, or --in @ref, --role, --find") }
+        guard let look = data["look"] as? [String: Any] else { return [] }
+        let given = look["lines"] as? [String]
+        let elements = look["elements"] as? [[String: Any]] ?? []
+        guard given != nil || look["elements"] is [[String: Any]] else { return [] }
+        var found = (look["header"] as? [String] ?? []) + Render.needs(look)
+        found += given ?? Render.elementLines(elements, regions: look["regions"] as? [[String: Any]] ?? [])
+        let count = given?.count ?? elements.count
+        let total = look["total"] as? Int ?? count
+        let shown = look["shown"] as? Int ?? count
+        if total > shown, !(found.last ?? "").hasPrefix("… ") { found.append("… \(total - shown) more: broadway snapshot, or --in @ref, --role, --find") }
         return found
     }
 
@@ -142,7 +156,7 @@ enum Answer {
         }
         for site in tabs["blocked"] as? [String] ?? [] { found.append("A new tab for \(site) was closed. The person never lets agents use that site.") }
         for closed in tabs["closed"] as? [String] ?? [] { found.append("Tab \(closed) closed") }
-        if let picker = data["picker"] as? [String: Any], picker["closed"] as? Bool == true {
+        if let picker = data["picker"] as? [String: Any], picker["closed"] as? Bool == true, !noted(data, "file picker") {
             let ref = (data["target"] as? [String: Any])?["ref"] as? String
             found.append("The page opened a file picker, which Broadway closed, so give it a file with broadway upload \(ref.map { "@" + $0 } ?? "REF") PATH")
         }

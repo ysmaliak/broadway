@@ -306,7 +306,7 @@ def browsing(base):
     _, parsed = envelope("snapshot")
     elements = parsed["data"]["elements"]
     check("snapshot json", parsed["data"]["website"] and parsed["data"]["tab"] == tab, parsed["data"].keys())
-    check("the same element keeps its ref", snapshot.stdout.splitlines()[0].split()[0] == "@" + elements[0]["ref"], elements[0])
+    check("the same element keeps its ref", next(line for line in snapshot.stdout.splitlines() if line.startswith("@")).split()[0] == "@" + elements[0]["ref"], elements[0])
     ref = lambda name: "@" + next(e["ref"] for e in elements if e["name"] == name)
     typed = broadway("type", ref("plain"), "hello")
     check("type", typed.returncode == 0 and "hello" in typed.stdout, typed.stdout + typed.stderr)
@@ -458,6 +458,28 @@ def batching(base):
     parsed = json.loads(output)
     check("a no stops the batch", asking.returncode == 1 and parsed["data"]["landed"] == [] and parsed["data"]["steps"][1].get("ran") is False, output + errors)
     check("and the gated click never landed", "leaked" not in broadway("tabs").stdout)
+
+    broadway("go", base + "batchform", "--tab", tab)
+    broadway("wait", "--tab", tab)
+    _, parsed = envelope("snapshot", "--tab", tab)
+    elements = parsed["data"]["elements"]
+    script = f'type("{ref('plain')[1:]}", "from-run")\nconst hit = find("Go")\nif (hit.count) click(hit.elements[0].ref)\nprint("found", hit.count)'
+    ran = broadway("run", "--tab", tab, script)
+    check("a script runs commands and branches on their answers", ran.returncode == 0 and "found 1" in ran.stdout and "(3 steps)" in ran.stdout, ran.stdout + ran.stderr)
+    _, parsed = envelope("snapshot", "--tab", tab)
+    elements = parsed["data"]["elements"]
+    secret = "@" + next(e["ref"] for e in elements if e.get("hidden"))
+    ran, parsed = envelope("run", "--tab", tab, f'try {{ type("{secret[1:]}", "x") }} catch (e) {{}}\nprint("went on")')
+    check("a secret box ends a script whatever it catches", ran.returncode == 1 and parsed["error"]["code"] in ("refused", "secret_field") and "went on" not in json.dumps(parsed), parsed)
+    asking = spawn("run", "--tab", tab, f'try {{ click("{ref('Inside')[1:]}") }} catch (e) {{}}\nclick("{ref('Go')[1:]}")', "--json")
+    check("a gated step in a script asks the person", wait_for(desk), desk())
+    bench("knowing", "desk", "no")
+    output, errors = asking.communicate(timeout=20)
+    parsed = json.loads(output)
+    check("a no ends the script", asking.returncode == 1 and parsed["data"]["steps"] == 1 and parsed["data"]["landed"] == [], output + errors)
+    check("and the gated click never landed", "leaked" not in broadway("tabs").stdout)
+    looping = broadway("run", "--timeout", "1", "while (true) {}")
+    check("a script that never ends stops at its timeout", looping.returncode == 1 and "deadline" in looping.stdout, looping.stdout + looping.stderr)
 
     old, parsed = envelope("locate", "Go", "--tab", tab)
     check("the old locate still answers", old.returncode == 0 and any(e["name"] == "Go" for e in parsed["data"]["elements"]), parsed)

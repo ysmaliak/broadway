@@ -174,6 +174,7 @@ enum Help {
     ## Several steps
         broadway batch 'click "Add to basket" --nth 1' 'click Checkout' 'wait "Your details"'
     Each step passes the same checks as alone. It stops at the first failure and says what landed.
+        broadway run - < steps.js   # JavaScript loops and branches over these same commands, see broadway help run
         broadway click "Apply" --expect "Code applied"   # the answer says if it came. --expect-gone, --expect-url
 
     ## Rules

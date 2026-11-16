@@ -199,4 +199,15 @@ final class SetupTests {
         #expect(stale?.fix == "Run broadway setup claude")
         #expect(fresh?.ok == true)
     }
+
+    @Test func codexGetsALongToolTimeoutOnlyInBroadwaysOwnEntry() {
+        let missing = "[mcp_servers.broadway]\ncommand = \"broadway\"\nargs = [\"mcp\"]\n\n[mcp_servers.other]\ntool_timeout_sec = 10\n"
+        let short = "model = \"o3\"\n[mcp_servers.broadway]\ncommand = \"broadway\"\ntool_timeout_sec = 60\n"
+        let long = "[mcp_servers.broadway]\ntool_timeout_sec = 1200\n"
+
+        #expect(Setup.codexTimeout(missing) == "[mcp_servers.broadway]\ntool_timeout_sec = 900\ncommand = \"broadway\"\nargs = [\"mcp\"]\n\n[mcp_servers.other]\ntool_timeout_sec = 10\n")
+        #expect(Setup.codexTimeout(short) == "model = \"o3\"\n[mcp_servers.broadway]\ncommand = \"broadway\"\ntool_timeout_sec = 900\n")
+        #expect(Setup.codexTimeout(long) == nil)
+        #expect(Setup.codexTimeout("[mcp_servers.other]\ncommand = \"x\"\n") == nil)
+    }
 }

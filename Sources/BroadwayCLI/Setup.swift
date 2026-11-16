@@ -87,6 +87,22 @@ enum Setup {
         var codex: String { home + "/.codex" }
         var claudeSkill: String { claude + "/skills/broadway/SKILL.md" }
         var codexSkill: String { codex + "/skills/broadway/SKILL.md" }
+        var codexConfig: String { codex + "/config.toml" }
+    }
+
+    static func codexTimeout(_ config: String) -> String? {
+        var lines = config.components(separatedBy: "\n")
+        guard let header = lines.firstIndex(where: { ["[mcp_servers.broadway]", "[mcp_servers.\"broadway\"]"].contains($0.trimmingCharacters(in: .whitespaces)) }) else { return nil }
+        let end = lines[(header + 1)...].firstIndex { $0.trimmingCharacters(in: .whitespaces).hasPrefix("[") } ?? lines.count
+        let wanted = "tool_timeout_sec = \(codexToolTimeout)"
+        if let found = lines[(header + 1)..<end].firstIndex(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("tool_timeout_sec") }) {
+            let value = lines[found].split(separator: "=", maxSplits: 1).last.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+            guard (Double(value) ?? 0) < Double(codexToolTimeout) else { return nil }
+            lines[found] = wanted
+        } else {
+            lines.insert(wanted, at: header + 1)
+        }
+        return lines.joined(separator: "\n")
     }
 
     static func version(binary: String) -> String? {
@@ -180,6 +196,10 @@ enum Setup {
                 continue
             }
             steps.append(write(skill, at: file, part: part))
+            if part == "codex", let config = text(paths.codexConfig), let changed = codexTimeout(config) {
+                let done = (try? put(changed, at: paths.codexConfig)) != nil
+                steps.append(Step(part: part, done: done, path: paths.codexConfig, note: done ? "gave broadway's MCP entry a \(codexToolTimeout) s tool timeout" : "couldn't write it"))
+            }
         }
         return steps
     }

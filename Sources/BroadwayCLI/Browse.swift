@@ -323,17 +323,29 @@ enum Render {
             let flat = Plain.cell(near)
             line += flat.contains("\"") ? "   in \(flat)" : "   near \"\(flat)\""
         }
+        if let inside = element["in"] as? [String: Any], let role = inside["role"] as? String {
+            let name = Plain.cell(inside["name"] as? String ?? "")
+            line += name.isEmpty ? "   in \(role)" : "   in \(role) \"\(name)\""
+        }
         return line
     }
 
     static func snapshotLines(_ command: Command, _ data: [String: Any]) -> [String] {
         let elements = data["elements"] as? [[String: Any]] ?? []
+        if var given = data["lines"] as? [String], data["count"] == nil {
+            let extra = needs(data)
+            given.insert(contentsOf: extra, at: given.isEmpty ? 0 : 1)
+            return given
+        }
         var found: [String] = []
         let title = data["title"] as? String ?? ""
         let url = data["url"] as? String ?? ""
         if !title.isEmpty || !url.isEmpty, data["count"] == nil { found.append([Plain.cell(title), Answer.short(url)].filter { !$0.isEmpty }.joined(separator: "  ")) }
         found += needs(data)
         if data["scope"] as? String == "dialog" { found.append("A dialog is open, so only it is shown (the whole page: --all)") }
+        if let hidden = data["hidden"] as? Int, hidden > 0 {
+            found.append(hidden == 1 ? "(1 piece of text a person can't see left out)" : "(\(hidden) pieces of text a person can't see left out)")
+        }
         found += elementLines(elements, regions: data["regions"] as? [[String: Any]] ?? [])
         if let count = data["count"] as? Int, count > elements.count {
             found.append("… \(count - elements.count) more: --limit, --in @ref")
