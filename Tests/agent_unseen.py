@@ -211,8 +211,8 @@ def drive(tab, base):
     card = ref(tab, "Hover card")
     hovered = envelope("hover", card or "@e0", "--tab", tab)[1]
     check("hover answers", hovered.get("ok") is True, hovered)
-    after = state(tab)
-    check("a hover style applied", after.get("hover") == "rgb(220, 40, 40)" and after.get("entered") is True, after)
+    applied = wait_for(lambda: (lambda now: now if now.get("hover") == "rgb(220, 40, 40)" and now.get("entered") is True else None)(state(tab)), 3)
+    check("a hover style applied", applied is not None, state(tab))
 
     mark("shot")
     picture = SCRATCH / "unseen.png"
