@@ -215,9 +215,10 @@ enum Nouns {
         ]),
         Noun("live", "Live Folders", group: "Your stuff", [
             Verb("live list", "List live folders", columns: ["id", "name", "state", "items", "source"]),
-            Verb("live show <id>", "What a live folder holds, and a pull request folder's lists", columns: ["title", "label", "checks", "url"]),
+            Verb("live show <id>", "What a live folder holds, a pull request folder's lists and a Linear folder's statuses", columns: ["title", "label", "checks", "url"]),
             Verb("live add <name> <source> [--space NAME]", "Follow a feed, a site, a GitHub owner/repository, or github:reviews, github:mine, github:issues, github:notifications, linear:assigned, linear:mentions, linear:inbox, linear:cycle/TEAM. GitHub and Linear folders read with the space's sign-in.", examples: ["broadway live add News https://example.com/feed.xml", "broadway live add WebKit WebKit/WebKit", "broadway live add Reviews github:reviews", "broadway live add \"My Issues\" linear:assigned"]),
             Verb("live rename <id> <name>", "Rename a live folder"),
+            Verb("live statuses <id> <status...>", "Choose which statuses a Linear folder shows", about: "For assigned, created and cycle folders. The statuses are triage, backlog, todo and progress, and each team's own statuses fall under one of them. Backlog is left out until you name it. Done and canceled issues stay out of assigned and created folders.", examples: ["broadway live statuses 1a2b3c4d triage todo progress backlog", "broadway live statuses 1a2b3c4d progress"]),
             Verb("live pause <id>", "Stop reading a live folder"),
             Verb("live resume <id>", "Read a live folder again"),
             Verb("live update [id]", "Read one or all now"),

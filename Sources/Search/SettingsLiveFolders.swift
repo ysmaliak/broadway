@@ -306,6 +306,12 @@ enum LiveFolderRows {
         return ago.prefix(1).uppercased() + ago.dropFirst()
     }
 
+    static func statusesFooter(_ list: LinearAPI.List) -> String {
+        list.isCycle
+            ? "Done and canceled issues in the cycle show too. Every team's own statuses fall under these four, so In Review counts as In Progress."
+            : "Done and canceled issues never show. Every team's own statuses fall under these four, so In Review counts as In Progress."
+    }
+
     static func ago(_ date: Date, now: Date, calendar: Calendar = .current) -> String {
         let seconds = max(0, now.timeIntervalSince(date))
         if seconds < 90 { return "a moment ago" }
@@ -443,6 +449,20 @@ extension SettingsPageView {
             shape { SettingsSpaceChoice.key(browser.spaces) }
             if offersSpaces, let home = browser.spaces.first(where: { $0.id == folder.space }) {
                 line("Space", nil, id: "live.space", control: SettingsSpaceChip(home))
+            }
+        }
+        shape { live.folder(id)?.source.linearStatuses != nil }
+        if let list = LinearAPI.List(address: folder.source.address), folder.source.linearStatuses != nil {
+            section("Statuses", footer: LiveFolderRows.statusesFooter(list)) {
+                let shown = { live.folder(id)?.source.linearStatuses ?? [] }
+                for status in LinearStatus.allCases {
+                    let row = "live.status." + status.rawValue
+                    let made = toggle(row, get: { shown().contains(status) }, set: { on in
+                        live.setStatuses(id, on ? shown() + [status] : shown().filter { $0 != status })
+                    })
+                    line(status.title, status.detail, id: row, control: made)
+                    update { [weak made] in made?.isEnabled = shown() != [status] }
+                }
             }
         }
         section("Updates") {

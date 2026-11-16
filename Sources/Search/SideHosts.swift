@@ -483,6 +483,14 @@ enum FolderMenus {
                 })
             }))
         }
+        if let statuses = folder.source.linearStatuses {
+            items.append(.submenu("Statuses", LinearStatus.allCases.map { status in
+                let on = statuses.contains(status)
+                return .action(status.title, on: on, enabled: statuses != [status], run: {
+                    live.setStatuses(id, on ? statuses.filter { $0 != status } : statuses + [status])
+                })
+            }))
+        }
         if folder.source.kind == .repository {
             items.append(.submenu("Pull Requests", LiveRange.allCases.map { range in
                 .action(range.title, enabled: folder.source.range != range, run: { live.setRange(id, range) })

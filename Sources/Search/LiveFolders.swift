@@ -38,6 +38,23 @@ struct LiveSource: Codable, Equatable {
     var address: String
     var range: LiveRange? = nil
     var lists: [PullList]? = nil
+    var statuses: [String]? = nil
+
+    var linearStatuses: [LinearStatus]? {
+        guard kind == .linear, LinearAPI.List(address: address)?.choosesStatus == true else { return nil }
+        let chosen = (statuses ?? []).compactMap(LinearStatus.init(rawValue:))
+        return chosen.isEmpty ? LinearStatus.standard : LinearStatus.ordered(chosen)
+    }
+
+    var leftOut: [LinearStatus] {
+        guard let shown = linearStatuses else { return [] }
+        return LinearStatus.allCases.filter { !shown.contains($0) }
+    }
+
+    func leavesOut(_ item: LiveItem) -> Bool {
+        guard let status = item.status.flatMap(LinearStatus.init(rawValue:)) else { return false }
+        return leftOut.contains(status)
+    }
 
     var pullLists: [PullList]? {
         guard kind == .pullRequests else { return nil }
@@ -74,6 +91,7 @@ struct LiveSource: Codable, Equatable {
     var hidesPrivate: Bool { service == .gitHub }
 
     var emptyWording: String {
+        if !leftOut.isEmpty { return "No issues outside \(LinearStatus.words(leftOut))" }
         switch kind {
         case .pullRequests, .repository: return "No pull requests"
         case .issues, .linear: return "No issues"
@@ -321,6 +339,7 @@ struct LiveItem: Codable, Equatable {
     var draft: Bool? = nil
     var unanswered: Int? = nil
     var signsRead: Bool? = nil
+    var status: String? = nil
 
     var fresh: Bool {
         guard let activity else { return false }
@@ -523,7 +542,8 @@ enum LiveMerge {
         let refused = Set(hidden)
         var seen = Set<String>()
         var items: [LiveItem] = []
-        for var item in fetched where !refused.contains(LiveIdentity.of(item.key)) && seen.insert(item.key).inserted {
+        for var item in fetched where !refused.contains(LiveIdentity.of(item.key)) && !folder.source.leavesOut(item)
+            && seen.insert(item.key).inserted {
             item.opened = opened[item.key]
             item.arrived = arrived[item.key] ?? (first || known.contains(item.key) ? nil : now)
             item.noticed = baseline ? item.activity : noticed[item.key]
@@ -745,6 +765,15 @@ final class LiveFolders {
     func setLists(_ id: UUID, _ lists: [PullList]) {
         guard !lists.isEmpty else { return }
         change(id) { $0.source.lists = PullList.ordered(lists) }
+        update(id)
+    }
+
+    func setStatuses(_ id: UUID, _ statuses: [LinearStatus]) {
+        guard !statuses.isEmpty, folder(id)?.source.linearStatuses != nil else { return }
+        change(id) { folder in
+            folder.source.statuses = LinearStatus.ordered(statuses).map(\.rawValue)
+            folder.items = folder.items.filter { !folder.source.leavesOut($0) }
+        }
         update(id)
     }
 
@@ -1301,7 +1330,7 @@ final class LiveFolders {
                         if next.branch?.stack != row.branch?.stack || next.branch?.position != row.branch?.position { restack = true }
                         return next
                     }
-                    items = keeping(items, in: id, now: now)
+                    items = keeping(items, in: id, now: now).filter { !folder.source.leavesOut($0) }
                     if restack { items = LiveStacks.arranged(items) }
                     folder.items = items
                 }

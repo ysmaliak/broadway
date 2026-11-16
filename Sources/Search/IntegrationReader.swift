@@ -98,7 +98,7 @@ enum IntegrationReader {
     }
 
     static func session(_ folder: LiveFolder, list: LinearAPI.List, with integrations: Integrations) async -> LiveReader.Answer {
-        let answer = await sessionCall(LinearAPI.body(for: list), space: folder.space, workspace: LinearAPI.workspace(in: folder.source.address),
+        let answer = await sessionCall(LinearAPI.body(for: list, leaving: folder.source.leftOut), space: folder.space, workspace: LinearAPI.workspace(in: folder.source.address),
                                        cookies: await cookies(folder.space), transport: integrations.transport)
         guard let answer else { return .failed }
         guard case .answered(let data, let status) = answer else { return .signIn }

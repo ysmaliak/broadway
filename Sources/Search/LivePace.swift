@@ -113,6 +113,7 @@ enum LiveTouch {
         item.activity = fresh.activity
         item.noticed = fresh.activity ?? row.noticed
         guard source.kind != .linear else {
+            item.status = fresh.status ?? row.status
             if !keepsLabel(source) { item.label = fresh.label }
             return item
         }

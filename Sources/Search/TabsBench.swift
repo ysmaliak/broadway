@@ -201,6 +201,7 @@ enum TabsBench {
                  "state": folder.state.rawValue, "paused": folder.paused, "hidden": folder.hidden.count,
                  "status": folder.status ?? "", "sso": folder.sso?.url ?? "", "ssoOrg": folder.sso?.org ?? "",
                  "note": folder.note.map { "\($0)" } ?? "", "lists": folder.source.pullLists?.map(\.rawValue) ?? [],
+                 "statuses": folder.source.linearStatuses?.map(\.rawValue) ?? [], "empty": folder.source.emptyWording,
                  "items": folder.items.map { ["title": $0.title, "label": $0.label ?? "", "byline": $0.byline ?? "",
                                               "checks": $0.checks?.rawValue ?? "", "list": $0.list?.rawValue ?? "", "url": $0.key,
                                               "fresh": $0.fresh, "merging": live.turning($0.key), "claimed": live.claimedRow($0.key), "draft": $0.draft == true,
@@ -250,6 +251,11 @@ enum TabsBench {
             }
             let lists = args[2].split(separator: ",").compactMap { PullList.named(String($0)) }
             live.setLists(folder.id, lists)
+        case "statuses":
+            guard args.count == 3, let folder = live.folders.first(where: { $0.name == args[1] }) else {
+                answer(["error": "live statuses NAME STATUS,STATUS"]); return
+            }
+            live.setStatuses(folder.id, args[2].split(separator: ",").compactMap { LinearStatus.named(String($0)) })
         case "force":
             guard Store.testing, args.count == 3, let folder = live.folders.first(where: { $0.name == args[1] }) else {
                 answer(["error": "live force NAME waiting|fine|signIn|sso|failed, test runs only"]); return

@@ -226,6 +226,23 @@ final class IntegrationTests {
         #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
     }
 
+    @Test func aLinearFolderAsksOnlyForTheStatusesItShows() async throws {
+        let made = integrations(answering: ["/graphql": ("linear-assigned", 200)])
+        IntegrationReader.cookies = { _ in [HTTPCookie(properties: [.domain: ".linear.app", .path: "/", .name: "session", .value: "fixture"])!] }
+        var everything = LiveSource.linear(.assigned, workspace: "acme")
+        everything.statuses = LinearStatus.allCases.map(\.rawValue)
+
+        _ = await IntegrationReader.read(folder(.linear(.assigned, workspace: "acme")), with: made)
+        _ = await IntegrationReader.read(folder(everything), with: made)
+        _ = await IntegrationReader.read(folder(.linear(.inbox, workspace: "acme")), with: made)
+
+        let sent = session.real.map { String(decoding: $0.httpBody ?? Data(), as: UTF8.self) }
+        #expect(sent.count == 3)
+        #expect(sent.first?.contains(#"nin: [\"completed\", \"canceled\", \"backlog\"]"#) == true)
+        #expect(sent.dropFirst().first?.contains(#"nin: [\"completed\", \"canceled\"]"#) == true)
+        #expect(sent.last?.contains("backlog") == false)
+    }
+
     @Test func linearSignedOutAsksToSignIn() async throws {
         let made = integrations(answering: ["/graphql": ("linear-assigned", 200)])
         IntegrationReader.cookies = { _ in [] }

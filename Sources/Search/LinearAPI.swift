@@ -1,5 +1,47 @@
 import Foundation
 
+enum LinearStatus: String, CaseIterable, Identifiable {
+    case triage, backlog, unstarted, started
+
+    var id: String { rawValue }
+
+    static let standard: [LinearStatus] = [.triage, .unstarted, .started]
+
+    var title: String {
+        switch self {
+        case .triage: return "Triage"
+        case .backlog: return "Backlog"
+        case .unstarted: return "Todo"
+        case .started: return "In Progress"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .triage: return "New issues waiting to be sorted"
+        case .backlog: return "Issues nobody has planned yet"
+        case .unstarted: return "Planned and not started"
+        case .started: return "Started and not done yet"
+        }
+    }
+
+    static func named(_ text: String) -> LinearStatus? {
+        let wanted = text.lowercased().filter(\.isLetter)
+        if wanted == "progress" || wanted == "inprogress" { return .started }
+        return allCases.first { $0.rawValue == wanted || $0.title.lowercased().filter(\.isLetter) == wanted }
+    }
+
+    static func ordered(_ statuses: [LinearStatus]) -> [LinearStatus] {
+        allCases.filter(statuses.contains)
+    }
+
+    static func words(_ statuses: [LinearStatus]) -> String {
+        let titles = ordered(statuses).map(\.title)
+        guard titles.count > 1 else { return titles.first ?? "" }
+        return titles.dropLast().joined(separator: ", ") + " and " + titles[titles.count - 1]
+    }
+}
+
 enum LinearAPI {
     enum List: Equatable {
         case assigned, created, inbox, mentions
@@ -27,6 +69,18 @@ enum LinearAPI {
             case .inbox: return "inbox"
             case .mentions: return "inbox/mentions"
             case .cycle(let team): return "team/\(team)/cycle/current"
+            }
+        }
+
+        var isCycle: Bool {
+            if case .cycle = self { return true }
+            return false
+        }
+
+        var choosesStatus: Bool {
+            switch self {
+            case .assigned, .created, .cycle: return true
+            case .inbox, .mentions: return false
             }
         }
 
@@ -84,14 +138,26 @@ enum LinearAPI {
     }
     """
 
-    private static let open = #"filter: { state: { type: { nin: ["completed", "canceled"] } } }"#
+    private static func types(_ names: [String]) -> String {
+        "[" + names.map { "\"\($0)\"" }.joined(separator: ", ") + "]"
+    }
 
-    static func body(for list: List) -> Data {
+    private static func open(leaving: [LinearStatus]) -> String {
+        "filter: { state: { type: { nin: \(types(["completed", "canceled"] + LinearStatus.ordered(leaving).map(\.rawValue))) } } }"
+    }
+
+    private static func cycleIssues(leaving: [LinearStatus]) -> String {
+        let left = LinearStatus.ordered(leaving)
+        guard !left.isEmpty else { return "issues(first: 50, orderBy: updatedAt)" }
+        return "issues(first: 50, orderBy: updatedAt, filter: { state: { type: { nin: \(types(left.map(\.rawValue))) } } })"
+    }
+
+    static func body(for list: List, leaving: [LinearStatus] = []) -> Data {
         switch list {
         case .assigned:
-            return GraphQL.body("query { viewer { id assignedIssues(first: 30, orderBy: updatedAt, \(open)) { nodes { ...Row } } } }\n\(issue)")
+            return GraphQL.body("query { viewer { id assignedIssues(first: 30, orderBy: updatedAt, \(open(leaving: leaving))) { nodes { ...Row } } } }\n\(issue)")
         case .created:
-            return GraphQL.body("query { viewer { id createdIssues(first: 30, orderBy: updatedAt, \(open)) { nodes { ...Row } } } }\n\(issue)")
+            return GraphQL.body("query { viewer { id createdIssues(first: 30, orderBy: updatedAt, \(open(leaving: leaving))) { nodes { ...Row } } } }\n\(issue)")
         case .inbox, .mentions:
             return GraphQL.body("""
             query { viewer { id } notifications(first: 50) { nodes { id type createdAt readAt archivedAt ... on IssueNotification { issue { ...Row } } } } }
@@ -99,7 +165,7 @@ enum LinearAPI {
             """)
         case .cycle(let team):
             return GraphQL.body("""
-            query($key: String!) { viewer { id } teams(first: 1, filter: { key: { eq: $key } }) { nodes { activeCycle { issues(first: 50, orderBy: updatedAt) { nodes { ...Row } } } } } }
+            query($key: String!) { viewer { id } teams(first: 1, filter: { key: { eq: $key } }) { nodes { activeCycle { \(cycleIssues(leaving: leaving)) { nodes { ...Row } } } } } }
             \(issue)
             """, variables: ["key": team])
         }
@@ -167,10 +233,10 @@ enum LinearAPI {
 
     private static func row(_ issue: [String: Any], label: String? = nil, viewer: String?, notice: Date? = nil) -> LiveItem? {
         guard let url = issue["url"] as? String, let title = issue["title"] as? String else { return nil }
-        let state = (issue["state"] as? [String: Any])?["name"] as? String
-        return LiveItem(key: url, title: title, label: label ?? state, author: issue["identifier"] as? String,
+        let state = issue["state"] as? [String: Any]
+        return LiveItem(key: url, title: title, label: label ?? state?["name"] as? String, author: issue["identifier"] as? String,
                         updated: (issue["updatedAt"] as? String).flatMap(GitHubAPI.date),
-                        activity: notice ?? activity(issue, viewer: viewer))
+                        activity: notice ?? activity(issue, viewer: viewer), status: (state?["type"] as? String)?.lowercased())
     }
 
     static let statusOrder = ["triage", "started", "unstarted", "backlog", "completed", "canceled"]

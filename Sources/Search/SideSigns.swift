@@ -634,6 +634,9 @@ final class LiveNoteView: NSView, SideGrounded {
             label = "Loading \(folder.name)"
         case .empty:
             line.show(symbol: "tray", text: folder.source.emptyWording, strong: false)
+            if !folder.source.leftOut.isEmpty {
+                help = "This folder leaves out issues in \(LinearStatus.words(folder.source.leftOut)). Change it in the folder's settings."
+            }
         case .paused:
             line.show(symbol: "pause.circle", text: "Not updating", strong: false)
         case .signIn:

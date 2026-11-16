@@ -90,6 +90,23 @@ enum PersonStuff {
         try PersonCommands.pick(LiveFolders.shared.folders, id: \.id, named: try call.need("id"), what: "Live Folder")
     }
 
+    private static func statuses(_ call: PersonCall, in folder: LiveFolder) throws -> [LinearStatus] {
+        guard folder.source.linearStatuses != nil else {
+            throw PersonRefusal("refused", "\(folder.name) has no statuses to choose",
+                                hint: "Only Linear folders of assigned, created or cycle issues choose their statuses")
+        }
+        let named = call.strings("status")
+        guard !named.isEmpty else {
+            throw PersonRefusal.usage("Name at least one status", hint: "Choose from triage, backlog, todo and progress")
+        }
+        return try named.map { word in
+            guard let status = LinearStatus.named(word) else {
+                throw PersonRefusal("refused", "There is no status called \(word)", hint: "Choose from triage, backlog, todo and progress")
+            }
+            return status
+        }
+    }
+
     private static func fetch(_ call: PersonCall, can: (FetchEntry) -> Bool, _ act: (Browser, FetchEntry) -> Void) throws -> [String: Any] {
         let entry = try running(call.browser, try call.need("id"))
         guard can(entry) else { throw PersonRefusal("refused", "That can't be done to \(entry.name) as it stands") }
@@ -257,7 +274,21 @@ enum PersonStuff {
                 ["title": $0.title, "label": $0.label ?? "", "byline": $0.byline ?? "", "checks": $0.checks?.rawValue ?? "", "url": address($0.key), "fresh": $0.fresh] as [String: Any]
             }]
             if let lists = found.source.pullLists { shown["lists"] = lists.map(\.title) }
+            if let statuses = found.source.linearStatuses {
+                shown["statuses"] = statuses.map(\.title)
+                shown["leftOut"] = found.source.leftOut.map(\.title)
+            }
             return shown
+        },
+        PersonVerb("live", "statuses", .arrange, first: { call in
+            _ = try statuses(call, in: try live(call))
+        }) { call in
+            let found = try live(call)
+            let chosen = try statuses(call, in: found)
+            LiveFolders.shared.setStatuses(found.id, chosen)
+            let left = LiveFolders.shared.folder(found.id)?.source.leftOut ?? []
+            return ["id": short(found.id), "statuses": LinearStatus.ordered(chosen).map(\.title), "leftOut": left.map(\.title),
+                    "message": left.isEmpty ? "Shows every open status" : "Leaves out \(LinearStatus.words(left))"]
         },
         PersonVerb("live", "add", .arrange, first: { call in
             guard call.browser.prefs.liveFolders else {

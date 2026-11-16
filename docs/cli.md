@@ -173,6 +173,7 @@ The **C** column is how the command is gated. The classes are explained under [W
 | `tasks delete ID` | E | |
 | `live list`, `live show ID` | R | Live Folders |
 | `live add NAME SOURCE [--space NAME]`, `rename`, `pause`, `resume`, `update [ID]` | A | a source is a feed, a site, a GitHub `owner/repository`, or one of `github:reviews`, `github:mine`, `github:issues`, `github:notifications`, `linear:assigned`, `linear:mentions`, `linear:inbox`, `linear:cycle/TEAM` |
+| `live statuses ID STATUS...` | A | a Linear assigned, created or cycle folder shows only the named statuses: `triage`, `backlog`, `todo`, `progress`. Backlog is out until named |
 | `live delete ID` | E | |
 | `logins list [SITE]` | R | site and user name only |
 | `fill login [--account USER]`, `fill details`, `fill card` | P | Broadway fills the page itself. Nothing secret comes back |
