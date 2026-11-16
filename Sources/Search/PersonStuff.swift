@@ -114,6 +114,11 @@ enum PersonStuff {
         return ["id": short(entry.id), "name": entry.name, "message": "Done"]
     }
 
+    private static func kept(_ call: PersonCall, _ what: String) async throws {
+        guard let tab = call.tab?.tab, let none = await call.box.nothingKept(tab, what: what, account: call.string("account")) else { return }
+        throw PersonRefusal(none.code ?? ToolCode.nothingKept.rawValue, none.text ?? "", hint: none.hint)
+    }
+
     private static func filling(_ call: PersonCall, _ work: (Tab) async -> ToolOutcome) async throws -> [String: Any] {
         let page = try call.page
         guard !page.tab.asleep, page.tab.isWeb else { throw PersonRefusal("not_a_page", "That tab isn't showing a web page") }
@@ -333,14 +338,14 @@ enum PersonStuff {
             if let site = call.string("site")?.lowercased() { kept = kept.filter { $0.host.lowercased().contains(site) } }
             return ["logins": kept.map { ["site": $0.host, "user": $0.user, "used": PersonCommands.stamp($0.used)] }]
         },
-        PersonVerb("fill", "login", .person(.signIn), tabbed: true) { call in
+        PersonVerb("fill", "login", .person(.signIn), tabbed: true, first: { try await kept($0, "login") }) { call in
             let account = call.string("account")
             return try await filling(call) { await call.box.signIn($0, account: account, task: nil, asked: true) }
         },
-        PersonVerb("fill", "details", .person(.address), tabbed: true) { call in
+        PersonVerb("fill", "details", .person(.address), tabbed: true, first: { try await kept($0, "details") }) { call in
             try await filling(call) { await call.box.autofill($0, what: "details", task: nil, asked: true) }
         },
-        PersonVerb("fill", "card", .person(.address), tabbed: true) { call in
+        PersonVerb("fill", "card", .person(.address), tabbed: true, first: { try await kept($0, "card") }) { call in
             try await filling(call) { await call.box.autofill($0, what: "card", task: nil, asked: true) }
         },
     ]

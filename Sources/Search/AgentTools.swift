@@ -872,9 +872,12 @@ final class BrowserToolbox: AgentToolbox {
 
     static func lines(of text: String, holding words: String, warning: String = "", most: Int = 60) -> ToolOutcome {
         let shown = AgentChange.cell(words, most: 80)
-        let found = text.split(whereSeparator: \.isNewline)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { $0.range(of: words, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+        let all = text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        let found = all.indices.filter { all[$0].range(of: words, options: [.caseInsensitive, .diacriticInsensitive]) != nil }.map { at -> String in
+            let line = all[at]
+            guard at + 1 < all.count, line.count <= 30, line.split(separator: " ").count <= 3, !line.contains(where: \.isNumber) else { return line }
+            return line + (line.hasSuffix(":") ? " " : ": ") + all[at + 1]
+        }
         guard !found.isEmpty else {
             let look = words.split(separator: " ").first.map { String($0).lowercased() } ?? words
             return .failure("No line of the page's text holds \"\(shown)\"", code: .notFound,
@@ -1407,7 +1410,33 @@ final class BrowserToolbox: AgentToolbox {
     var book: AutofillBook = .shared
     var formPage: (Tab) -> FormPageAccess? = { $0.formPage }
 
+    func nothingKept(_ tab: Tab, what: String, account: String? = nil) async -> ToolOutcome? {
+        let unasked = "so nothing was asked and nothing was filled"
+        switch what {
+        case "login":
+            guard let host = tab.pageAddress?.host()?.lowercased() else { return nil }
+            let clear = tab.pageAddress?.scheme?.lowercased() != "https"
+            let kept = await logins(host).filter { !clear || $0.clear }
+            if kept.isEmpty {
+                return .failure("Broadway keeps no sign-in for this site, \(unasked)", code: .nothingKept, hint: "Ask the person to sign in. broadway handoff gives them the tab.")
+            }
+            if let account, !kept.contains(where: { $0.user == account }) {
+                return .failure("Broadway keeps no such account for this site, \(unasked)", code: .nothingKept, hint: "Leave out the account to use the one kept here")
+            }
+        case "card":
+            if book.cards.isEmpty {
+                return .failure("Broadway keeps no card, \(unasked)", code: .nothingKept, hint: "The person can pay themselves. broadway handoff gives them the tab.")
+            }
+        default:
+            if book.addresses.isEmpty, !book.hasProfile {
+                return .failure("Broadway keeps no name or address, \(unasked)", code: .nothingKept, hint: "Ask the person for the details, or type what they give you")
+            }
+        }
+        return nil
+    }
+
     func signIn(_ tab: Tab, account: String?, task: UUID?, asked: Bool = false) async -> ToolOutcome {
+        if let none = await nothingKept(tab, what: "login", account: account) { return none }
         guard let host = tab.pageAddress?.host()?.lowercased() else { return .failure("That page has no site to sign in to") }
         let clear = tab.pageAddress?.scheme?.lowercased() != "https"
         let kept = await logins(host).filter { !clear || $0.clear }
@@ -1433,6 +1462,7 @@ final class BrowserToolbox: AgentToolbox {
 
     func autofill(_ tab: Tab, what: String, task: UUID?, asked: Bool = false) async -> ToolOutcome {
         guard let page = formPage(tab) else { return .failure("That page has no form") }
+        if let none = await nothingKept(tab, what: what == "card" ? "card" : "details") { return none }
         let wantsCard = what == "card"
         let place = tab.pageAddress
         if !asked, let refused = await gate(.address, tab: tab, site: AgentSites.site(of: place), task: task) { return refused }

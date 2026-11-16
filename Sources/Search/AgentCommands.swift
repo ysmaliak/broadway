@@ -174,6 +174,7 @@ enum ToolCode: String, CaseIterable {
     case opensWindow = "opens_window"
     case unmet
     case moved
+    case nothingKept = "nothing_kept"
 
     var mayHaveLanded: Bool {
         switch self {
@@ -232,6 +233,7 @@ enum ToolCode: String, CaseIterable {
         case .opensWindow: "Use broadway choose REF VALUE for a list, or broadway type for a date, time or colour"
         case .unmet: "Steps before this one landed. Look with broadway snapshot, then go on with broadway batch --from N."
         case .moved: "The page moved under the steps. Look with broadway snapshot, then go on with new refs."
+        case .nothingKept: "Nothing was asked and nothing was filled. The person can fill it, or broadway handoff gives them the tab."
         }
     }
 }

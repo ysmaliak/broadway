@@ -404,6 +404,30 @@ final class AgentSecretsTests {
         return String(tab.id.uuidString.prefix(8)).lowercased()
     }
 
+    @Test func withNothingKeptNothingIsAskedAndTheAnswerSaysSo() async throws {
+        let id = shop(FormStub())
+        box.book = AutofillBook(keeper: MemoryKeeper())
+        box.logins = { _ in [] }
+
+        let card = await box.call("autofill", ["tab": id, "what": "card"], task: task)
+        let details = await box.call("autofill", ["tab": id, "what": "details"], task: task)
+        let login = await box.call("sign_in", ["tab": id], task: task)
+        var call = PersonCall(noun: "fill", verb: "card", arguments: [:], browser: browser, box: box)
+        call.tab = box.find(["tab": id])
+        var refused: PersonRefusal?
+        do { try await PersonCommands.find("fill", "card")?.first?(call) } catch let error as PersonRefusal { refused = error }
+
+        for said in [card, details, login] {
+            #expect(said.failed)
+            #expect(said.code == "nothing_kept", "\(said.text ?? "")")
+            #expect(said.text?.contains("nothing was asked") == true)
+        }
+        #expect(refused?.code == "nothing_kept")
+        #expect(refused?.message.contains("no card") == true)
+        #expect(refused?.hint?.isEmpty == false)
+        #expect(AgentDesk.shared.pending.isEmpty)
+    }
+
     @Test func aRefusedTouchIDFillsNothing() async throws {
         let stub = FormStub()
         let id = shop(stub)

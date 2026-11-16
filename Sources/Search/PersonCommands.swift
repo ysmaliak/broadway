@@ -89,11 +89,11 @@ struct PersonVerb {
     var kind: PersonClass
     var tabbed = false
     var softer: (@MainActor (PersonCall) -> PersonClass?)?
-    var first: (@MainActor (PersonCall) throws -> Void)?
+    var first: (@MainActor (PersonCall) async throws -> Void)?
     var run: PersonHandler
 
     init(_ noun: String, _ verb: String, _ kind: PersonClass, tabbed: Bool = false, softer: (@MainActor (PersonCall) -> PersonClass?)? = nil,
-         first: (@MainActor (PersonCall) throws -> Void)? = nil, run: @escaping PersonHandler) {
+         first: (@MainActor (PersonCall) async throws -> Void)? = nil, run: @escaping PersonHandler) {
         self.noun = noun
         self.verb = verb
         self.kind = kind
@@ -183,7 +183,7 @@ enum PersonCommands {
                 let caller = request["hook"] as? Bool == true ? nil : call.link?.id
                 AgentLinks.shared.calling(caller)
                 defer { AgentLinks.shared.called(caller) }
-                try entry.first?(call)
+                try await entry.first?(call)
                 call.askedAt = call.tab?.tab.pageAddress
                 try await gate(entry, call, request: request, on: connection)
                 let data = try await entry.run(call)

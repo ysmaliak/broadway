@@ -267,7 +267,7 @@ final class LiveStatusesTests {
         await #expect(throws: PersonRefusal.self) { try await verb.run(ask(linear, ["done"])) }
         await #expect(throws: PersonRefusal.self) { try await verb.run(ask(linear, [])) }
         await #expect(throws: PersonRefusal.self) { try await verb.run(ask(prs, ["backlog"])) }
-        #expect(throws: PersonRefusal.self) { try verb.first?(ask(prs, ["backlog"])) }
+        await #expect(throws: PersonRefusal.self) { try await verb.first?(ask(prs, ["backlog"])) }
         #expect(LiveFolders.shared.folder(linear.id)?.source.statuses == nil)
     }
 }

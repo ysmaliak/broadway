@@ -61,7 +61,7 @@ final class AgentErrorsTests {
             "not_found": (1, true), "ambiguous": (1, true), "not_actionable": (1, true), "dialog_open": (1, true), "driving": (1, true),
             "handed_back": (1, true), "needs_you": (3, true), "said_no": (1, true), "never_here": (1, true), "person_only": (1, true),
             "secret_field": (1, true), "refused": (1, true), "timeout": (1, true), "no_answer": (1, false), "failed": (1, false),
-            "not_answering": (4, false), "deadline": (4, false), "unseen": (1, true), "opens_window": (1, true), "unmet": (1, false), "moved": (1, true),
+            "not_answering": (4, false), "deadline": (4, false), "unseen": (1, true), "opens_window": (1, true), "unmet": (1, false), "moved": (1, true), "nothing_kept": (1, true),
         ]
         for (name, want) in expected {
             let code = ToolCode(rawValue: name)

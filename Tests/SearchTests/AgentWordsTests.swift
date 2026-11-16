@@ -765,6 +765,36 @@ final class AgentWordsTests {
         #expect(none.hint?.contains("broadway snapshot --find harrier") == true)
     }
 
+    @Test func aShortLabelLineComesWithTheLineAfterIt() {
+        let text = "Order CL-4471\nTotal\n\n609.00\nCustomer:\nHollis Grane\nThe total of every order this year is shown on the next page"
+
+        let total = BrowserToolbox.lines(of: text, holding: "total").text ?? ""
+        let customer = BrowserToolbox.lines(of: text, holding: "customer").text ?? ""
+
+        #expect(total.contains("2 lines with \"total\""))
+        #expect(total.contains("Total: 609.00"))
+        #expect(total.contains("The total of every order this year is shown on the next page\n") == false)
+        #expect(total.hasSuffix("The total of every order this year is shown on the next page"))
+        #expect(customer.contains("1 line with \"customer\"\nCustomer: Hollis Grane"))
+    }
+
+    @Test func findWithNoMatchSaysSoAndWhereToLook() async throws {
+        let (_, id) = try await page("<button>Archive</button><p>Copperline orders</p>")
+
+        let none = await box.call("locate", ["tab": id, "text": "Bundle margin rebate"], task: task)
+        let roleOnly = await box.call("locate", ["tab": id, "role": "switch"], task: task)
+        let some = await box.call("locate", ["tab": id, "text": "Archive"], task: task)
+
+        #expect(none.failed)
+        #expect(none.code == "not_found")
+        #expect(none.text?.contains("No element fits \"Bundle margin rebate\"") == true)
+        #expect(none.hint?.contains("broadway read --find bundle") == true)
+        #expect(none.hint?.contains("broadway snapshot") == true)
+        #expect(roleOnly.code == "not_found")
+        #expect(roleOnly.text?.contains("No switch on this page") == true)
+        #expect(!some.failed)
+    }
+
     @Test func linesHoldingWordsAreCountedAndCut() {
         let text = (1...70).map { "Row \($0) total" }.joined(separator: "\n") + "\nNothing here"
 

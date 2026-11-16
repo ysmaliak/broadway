@@ -309,6 +309,17 @@ extension BrowserToolbox {
         let limit = min(max(AgentTarget.whole(arguments["limit"]) ?? 20, 1), 200)
         let found = await candidates(target, tab: tab, tool: "locate", most: limit)
         if let failure = found.failure { return failure }
+        if found.list.isEmpty {
+            let kind = target.roles.first ?? "element"
+            let message: String
+            if let label = target.label { message = "No field is labelled \"\(AgentChange.cell(label))\"" }
+            else if let words = target.words { message = "No \(kind) fits \"\(AgentChange.cell(words))\"" }
+            else { message = "No \(kind) on this page" }
+            let look = (target.words ?? target.label).flatMap { $0.split(separator: " ").first.map { String($0).lowercased() } }
+            return .failure(message, code: .notFound,
+                            hint: look.map { "broadway read --find \($0) looks in the page text, and broadway snapshot gives a fresh look" } ?? "broadway snapshot gives a fresh look",
+                            data: ["website": true, "count": 0, "elements": [] as [Any]])
+        }
         let lines = found.list.map { element -> String in
             var line = "@\(element["ref"] as? String ?? "") \(element["role"] as? String ?? "") \"\(AgentChange.cell(element["name"] as? String ?? ""))\""
             if let within = element["within"] as? [String: Any] {
