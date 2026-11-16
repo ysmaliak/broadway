@@ -230,6 +230,7 @@ final class AgentSocket {
                 guard let task, let name = AgentLinks.mcpName(client) else { return }
                 AgentLinks.shared.rename(task, name)
             }
+            if let wait = request["wait_person"] as? String { server.environment["BROADWAY_WAIT_PERSON"] = wait }
             box.browser = browser
             connection.onLine = { line in MainActor.assumeIsolated { server.handle(line) } }
             var greeting: [String: Any] = ["mcp": true]

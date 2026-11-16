@@ -167,6 +167,30 @@ final class AgentErrorsTests {
         #expect(sent.count == 1)
     }
 
+    @Test func callsRunInTheOrderTheyCame() async {
+        let server = server()
+        var first = true
+        server.aim = { _, arguments in
+            if first {
+                first = false
+                try? await Task.sleep(for: .milliseconds(300))
+            }
+            return .go(arguments)
+        }
+        for (id, ref) in [(1, "e1"), (2, "e2"), (3, "e3"), (4, "e4")] {
+            server.handle(["id": id, "method": "tools/call", "params": ["name": "click", "arguments": ["ref": ref]]])
+        }
+        for _ in 0..<300 where sent.count < 4 { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(box.called.map { $0.1["ref"] as? String } == ["e1", "e2", "e3", "e4"])
+        #expect(sent.compactMap { $0["id"] as? Int } == [1, 2, 3, 4])
+    }
+
+    @Test func theClientsWaitSettingWins() {
+        let server = server()
+        server.environment = ["BROADWAY_WAIT_PERSON": "45"]
+        #expect(MCPServer.patience(client: "claude-code", progress: true, environment: server.environment) == 45)
+    }
+
     @Test func initializeOffersAChangingList() {
         let server = server()
         server.handle(["id": 1, "method": "initialize", "params": ["protocolVersion": "2025-06-18"]])

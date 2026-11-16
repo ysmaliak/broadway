@@ -214,7 +214,9 @@ final class MCPServer {
         return String(text[..<end.lowerBound])
     }
 
-    private var active = 0
+    private var started: Set<Int> = []
+    private var queued: [Int] = []
+    private var ticket = 0
     private(set) var client: String?
     var environment = ProcessInfo.processInfo.environment
 
@@ -285,21 +287,28 @@ final class MCPServer {
             let aim = outside && !(tool == AgentBatch.spec.name && batchHere) ? aim : nil
             let key = "\(id)"
             let token = (params["_meta"] as? [String: Any])?["progressToken"]
-            if outside, let task { AgentLinks.shared.setPatience(task, Self.patience(client: client, progress: token != nil, environment: environment)) }
+            if outside, let task, AgentLinks.shared.patience(task) != 0 {
+                AgentLinks.shared.setPatience(task, Self.patience(client: client, progress: token != nil, environment: environment))
+            }
+            ticket += 1
+            let mine = ticket
+            queued.append(mine)
             let work = Task { @MainActor in
-                while self.active > 0, !AgentDesk.shared.waits(for: self.task), !Task.isCancelled, !self.cancelled.contains(key) {
-                    try? await Task.sleep(for: .milliseconds(20))
+                while self.queued.first != mine || !(self.started.isEmpty || AgentDesk.shared.waits(for: self.task)),
+                      !Task.isCancelled, !self.cancelled.contains(key) {
+                    try? await Task.sleep(for: .milliseconds(10))
                 }
+                self.queued.removeAll { $0 == mine }
                 guard !self.cancelled.contains(key), !Task.isCancelled else {
                     self.cancelled.remove(key)
                     self.running[key] = nil
                     return
                 }
-                self.active += 1
+                self.started.insert(mine)
                 let caller = self.outside ? self.task : nil
                 AgentLinks.shared.calling(caller)
                 defer {
-                    self.active -= 1
+                    self.started.remove(mine)
                     self.running[key] = nil
                     AgentLinks.shared.called(caller)
                 }

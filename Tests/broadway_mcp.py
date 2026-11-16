@@ -245,6 +245,20 @@ def off(base):
     check("open still works", broadway(base).returncode == 0)
 
 
+def restart():
+    client = Client()
+    client.rpc("initialize", {"protocolVersion": "2025-06-18", "clientInfo": {"name": "probe"}})
+    check("before the restart", not client.call("tabs")[0]["isError"])
+    stop()
+    away = client.call("tabs")
+    check("while Broadway is away a call says not_running", away[0]["isError"] and meta(away[0], "error").get("code") == "not_running", away)
+    start("true")
+    back = client.call("tabs")
+    check("after Broadway comes back the same broadway mcp answers", not back[0]["isError"], back)
+    check("and its list is there", "tabs" in {tool["name"] for tool in client.rpc("tools/list")["result"]["tools"]})
+    client.process.stdin.close()
+
+
 def main():
     if not os.access(BROADWAY, os.X_OK):
         sys.exit("build first: ./build.sh")
@@ -254,6 +268,7 @@ def main():
     try:
         start("true")
         on(base)
+        restart()
         stop()
         start("false")
         off(base)

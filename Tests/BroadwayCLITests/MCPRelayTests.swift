@@ -87,8 +87,8 @@ final class MCPRelayTests {
 final class MCPRelayRunTests {
     private func line(_ text: String) -> Data { Data((text + "\n").utf8) }
 
-    private func object(_ data: Data) -> [String: Any] {
-        (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+    private func object(_ data: Data?) -> [String: Any] {
+        data.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] } ?? [:]
     }
 
     @Test func runJoinsTheListBeforeMoreTools() {
@@ -143,6 +143,44 @@ final class MCPRelayRunTests {
         lock.unlock()
         #expect(answer?["id"] as? Int == 9)
         #expect((answer?["result"] as? [String: Any])?["isError"] as? Bool == false)
+    }
+
+    @Test func whenBroadwayComesBackTheRelayReconnectsAndReplaysTheGreeting() {
+        let relay = MCPRelay(path: "/nonexistent", arguments: []) { _ in }
+        var old: [Data] = []
+        var fresh: [Data] = []
+        let first = AppLink { old.append($0); return true }
+        relay.attach(first)
+        _ = relay.take(line(#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#)) { relay.toApp($0) }
+        _ = relay.take(line(#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#)) { relay.toApp($0) }
+        relay.gone(first)
+        var opened = 0
+        relay.reopen = {
+            opened += 1
+            return AppLink { fresh.append($0); return true }
+        }
+        _ = relay.take(line(#"{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"tabs"}}"#)) { relay.toApp($0) }
+        #expect(old.count == 2)
+        #expect(opened == 1)
+        #expect(fresh.map { MCPRelay.method($0).method } == ["initialize", "notifications/initialized", "tools/call"])
+        #expect(relay.fromApp(line(#"{"jsonrpc":"2.0","id":1,"result":{}}"#)) == nil)
+        #expect(relay.fromApp(line(#"{"jsonrpc":"2.0","id":5,"result":{}}"#)) != nil)
+    }
+
+    @Test func withoutBroadwayACallGetsAnAnswerNotASilence() {
+        var out: [Data] = []
+        let relay = MCPRelay(path: "/nonexistent", arguments: []) { out.append($0) }
+        relay.reopen = { nil }
+        #expect(relay.take(line(#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"tabs"}}"#)) { relay.toApp($0) })
+        #expect(relay.take(line(#"{"jsonrpc":"2.0","id":6,"method":"tools/list"}"#)) { relay.toApp($0) })
+        #expect(relay.take(line(#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#)) { relay.toApp($0) })
+        #expect(out.count == 2)
+        let call = object(out.first)
+        let result = call["result"] as? [String: Any]
+        #expect(call["id"] as? Int == 4)
+        #expect(result?["isError"] as? Bool == true)
+        #expect(((result?["_meta"] as? [String: Any])?["com.broadway/error"] as? [String: Any])?["code"] as? String == "not_running")
+        #expect(object(out.last)["error"] != nil)
     }
 
     @Test func aScriptsAnswerIsFencedWhenItReadSites() {

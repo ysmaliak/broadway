@@ -13,6 +13,14 @@ struct FileIdentity: Equatable {
     }
 }
 
+final class AppLink {
+    let send: (Data) -> Bool
+
+    init(send: @escaping (Data) -> Bool) {
+        self.send = send
+    }
+}
+
 final class MCPRelay {
     static let listChanged = Data(#"{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}"#.utf8) + Data([0x0A])
 
@@ -30,6 +38,10 @@ final class MCPRelay {
     var finished: () -> Void = { exit(0) }
     var runs: (([String: Any], @escaping ([String: Any]) -> Void) -> Void)?
     private var listings: Set<String> = []
+    private var app: AppLink?
+    private var swallow: String?
+    var reopen: (() -> AppLink?)?
+    var session: String?
 
     init(path: String, arguments: [String], output: @escaping (Data) -> Void) {
         self.path = path
@@ -65,7 +77,65 @@ final class MCPRelay {
         ] as [String: Any]] as [String: Any],
     ]
 
-    func fromApp(_ line: Data) -> Data {
+    func attach(_ link: AppLink) {
+        lock.lock()
+        app = link
+        lock.unlock()
+    }
+
+    func gone(_ link: AppLink) {
+        lock.lock()
+        if app === link { app = nil }
+        lock.unlock()
+    }
+
+    func toApp(_ line: Data) -> Bool {
+        lock.lock()
+        let now = app
+        lock.unlock()
+        if let now, now.send(line) { return true }
+        if let now { gone(now) }
+        guard let fresh = reopen?() else {
+            unavailable(line)
+            return true
+        }
+        lock.lock()
+        app = fresh
+        swallow = hello == nil ? nil : helloID
+        lock.unlock()
+        if let hello { _ = fresh.send(hello) }
+        if let ready { _ = fresh.send(ready) }
+        if fresh.send(line) { return true }
+        gone(fresh)
+        unavailable(line)
+        return true
+    }
+
+    func unavailable(_ line: Data) {
+        guard let object = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any], let id = object["id"] else { return }
+        let message = "Broadway isn't running. Ask the person to open it, then try again."
+        let answer: [String: Any]
+        if object["method"] as? String == "tools/call" {
+            answer = ["jsonrpc": "2.0", "id": id, "result": [
+                "content": [["type": "text", "text": message]], "isError": true,
+                "_meta": ["com.broadway/error": ["code": "not_running", "message": message, "retry_safe": true]],
+            ] as [String: Any]]
+        } else {
+            answer = ["jsonrpc": "2.0", "id": id, "error": ["code": -32000, "message": message]]
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: answer) else { return }
+        write(data + Data([0x0A]))
+    }
+
+    func fromApp(_ line: Data) -> Data? {
+        let found = Self.method(line)
+        lock.lock()
+        if let skip = swallow, found.method == nil, found.id == skip {
+            swallow = nil
+            lock.unlock()
+            return nil
+        }
+        lock.unlock()
         guard runs != nil, let object = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any], let id = object["id"].map({ "\($0)" }) else { return line }
         lock.lock()
         let listing = listings.remove(id) != nil
@@ -230,29 +300,41 @@ final class MCPRelay {
             task = words[index + 1]
             index += 2
         }
-        let link = try context.connection()
-        link.watched = false
         var hello: [String: Any] = ["op": "mcp"]
         if let task { hello["task"] = task } else { hello["agent"] = Context.agent }
+        if let wait = context.environment["BROADWAY_WAIT_PERSON"] { hello["wait_person"] = wait }
+        let link = try context.connection()
+        link.watched = false
         link.send(hello)
         guard let greeting = link.object(), greeting["mcp"] as? Bool == true else {
             throw Failure("failed", "Broadway wouldn't take the connection")
         }
         let relay = MCPRelay(path: context.binary, arguments: Array(CommandLine.arguments.dropFirst())) { context.console.raw($0) }
+        relay.session = greeting["link"] as? String
         if task == nil {
-            let session = greeting["link"] as? String
             let place = context.place
             let binary = context.binary
-            relay.runs = { arguments, answer in answer(script(arguments, session: session, place: place, binary: binary)) }
+            relay.runs = { [weak relay] arguments, answer in answer(script(arguments, session: relay?.session, place: place, binary: binary)) }
         }
-        Thread {
-            while let raw = link.line() {
-                var out = relay.fromApp(raw)
-                out.append(0x0A)
-                relay.write(out)
-            }
-            if !relay.handedOver { exit(0) }
-        }.start()
+        func attach(_ link: Link) -> AppLink {
+            let app = AppLink { link.sendRaw($0) }
+            Thread { [weak relay] in
+                while let raw = link.line() {
+                    guard let relay, let out = relay.fromApp(raw) else { continue }
+                    relay.write(out + Data([0x0A]))
+                }
+                relay?.gone(app)
+            }.start()
+            return app
+        }
+        relay.attach(attach(link))
+        relay.reopen = { [weak relay] in
+            guard let fresh = context.place.connect() else { return nil }
+            fresh.watched = false
+            guard fresh.send(hello), let again = fresh.object(), again["mcp"] as? Bool == true else { return nil }
+            relay?.session = again["link"] as? String
+            return attach(fresh)
+        }
         let asks = FileHandle.standardInput
         var kept = Data()
         while true {
@@ -262,7 +344,7 @@ final class MCPRelay {
             while let newline = kept.firstIndex(of: 0x0A) {
                 let line = Data(kept[kept.startIndex...newline])
                 kept = Data(kept[kept.index(after: newline)...])
-                if !relay.take(line, toApp: { link.sendRaw($0) }) { return .done }
+                if !relay.take(line, toApp: { relay.toApp($0) }) { return .done }
             }
         }
         relay.childInput?.closeFile()
