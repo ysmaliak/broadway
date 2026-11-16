@@ -160,6 +160,7 @@ enum CommandLineInput {
                 value = parts[1]
             } else {
                 guard index < words.count else { throw Failure.usage("--\(name) needs a value") }
+                if name != "at" { try unknown(words[index], command) }
                 value = words[index]
                 index += 1
             }
@@ -168,7 +169,7 @@ enum CommandLineInput {
                 guard let nth = Int(value), nth >= 1 else { throw Failure.usage("--nth is a whole number from 1, not \(value)") }
                 target["nth"] = nth
             case "in":
-                guard let ref = ref(value) else { throw Failure.usage("--in takes a ref like @e30, not \(value)", hint: "Refs come from broadway snapshot or broadway find") }
+                guard let ref = ref(value) else { throw inRef(value) }
                 target["in"] = ref
             case "at":
                 target["at"] = try point(value)
@@ -178,6 +179,17 @@ enum CommandLineInput {
             if command.flags.contains(where: { $0.name == name }) { rest += ["--\(name)", value] }
         }
         return (target, rest)
+    }
+
+    private static func unknown(_ word: String, _ command: Command) throws {
+        guard word.hasPrefix("-"), word.count > 1, Double(word) == nil else { return }
+        let name = word.hasPrefix("--") ? String(word.dropFirst(2).split(separator: "=", maxSplits: 1).first ?? "") : ""
+        if !name.isEmpty, command.flags.contains(where: { $0.name == name }) || targetFlags.contains(name) { return }
+        throw Failure.usage("\(command.name) has no option \(word.split(separator: "=", maxSplits: 1).first.map(String.init) ?? word)", hint: "Usage: \(command.usage). Put -- before text that starts with a dash.")
+    }
+
+    private static func inRef(_ value: String) -> Failure {
+        Failure.usage("--in takes a ref like @e30, not \(value)", hint: "broadway find \"\(value)\" gives its ref")
     }
 
     private static func free(_ command: Command, _ words: [String]) -> Int {
@@ -255,11 +267,13 @@ enum CommandLineInput {
                     found[flag.name] = true
                 } else {
                     guard index < words.count else { throw Failure.usage("--\(flag.name) needs a value") }
+                    try unknown(words[index], command)
+                    if flag.name == "in", ref(words[index]) == nil { throw inRef(words[index]) }
                     found[flag.name] = try coerce(words[index], flag, command: command)
                     index += 1
                 }
             } else if word.hasPrefix("-"), word.count > 1, Double(word) == nil {
-                throw Failure.usage("\(command.name) has no option \(word)", hint: "Run broadway help \(command.name). Put -- before text that starts with a dash.")
+                try unknown(word, command)
             } else {
                 try take(word)
             }

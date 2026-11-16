@@ -487,6 +487,36 @@ struct ParsingTests {
         #expect(try CommandLineInput.parse(type, ["@e1", "e2"])["text"] as? String == "e2")
     }
 
+    @Test func anUnknownOptionIsNamedWhereverItStands() {
+        let read = Command(["name": "read", "tool": "text", "tabbed": true, "reads": true])
+        let find = command("find", positional: [parameter("text")], flags: [parameter("text"), parameter("role"), parameter("limit", type: "number")])
+        let snapshot = command("snapshot", flags: [parameter("in"), parameter("find"), parameter("all", type: "boolean")])
+
+        #expect(failure(read, ["--find", "-i", "total"])?.message == "read has no option -i")
+        #expect(failure(read, ["--find", "-i", "total"])?.hint?.hasPrefix("Usage: broadway read") == true)
+        #expect(failure(read, ["--find", "total", "-i"])?.message == "read has no option -i")
+        #expect(failure(read, ["--find", "--case", "total"])?.message == "read has no option --case")
+        #expect(failure(find, ["--role", "-x", "Save"])?.message == "find has no option -x")
+        #expect(failure(find, ["Save", "--bogus"])?.message == "find has no option --bogus")
+        #expect(failure(snapshot, ["--find", "--wide=1", "price"])?.message == "snapshot has no option --wide")
+        #expect(failure(click, ["--name", "-i", "Save"])?.message == "click has no option -i")
+        #expect(failure(click, ["Save", "-i"])?.message == "click has no option -i")
+        #expect(failure(click, ["-i", "Save"])?.message == "click has no option -i")
+        #expect((try? CommandLineInput.parse(read, ["--find", "-5"]))?["find"] as? String == "-5")
+        #expect((try? CommandLineInput.parse(read, ["--find=-i"]))?["find"] as? String == "-i")
+        #expect((try? CommandLineInput.parse(find, ["--role", "button", "--limit", "3"])) != nil)
+    }
+
+    @Test func inTakesARefAndSaysSo() {
+        let snapshot = command("snapshot", flags: [parameter("in"), parameter("find")])
+
+        #expect(failure(snapshot, ["--in", "Copperline"])?.message == "--in takes a ref like @e30, not Copperline")
+        #expect(failure(snapshot, ["--in", "Copperline"])?.hint == "broadway find \"Copperline\" gives its ref")
+        #expect(failure(click, ["Save", "--in", "Copperline"])?.message == "--in takes a ref like @e30, not Copperline")
+        #expect((try? CommandLineInput.parse(snapshot, ["--in", "@e30"]))?["in"] as? String == "@e30")
+        #expect((try? CommandLineInput.parse(snapshot, ["--in", "e30"]))?["in"] as? String == "e30")
+    }
+
     @Test func aHiddenLookAsksTheAppForNone() throws {
         let reads = Command(["name": "snapshot", "tool": "snapshot", "tabbed": true, "reads": true])
 
