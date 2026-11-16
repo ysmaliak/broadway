@@ -35,15 +35,24 @@ enum AgentAwake {
 
     static var holding: Bool { held != nil }
 
-    static func hold() {
-        guard held == nil else { return }
-        held = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep, reason: "An agent's pages stay awake")
+    static func atWork(_ link: AgentLink) -> Bool {
+        guard link.live else { return false }
+        guard link.rest == nil || AgentDesk.shared.pending.contains(where: { $0.task.map(AgentTasks.shared.root) == link.id }) else { return false }
+        return !AgentBoard.allTabs(of: link.id).isEmpty
+    }
+
+    static var anyAtWork: Bool {
+        AgentLinks.shared.links.contains(where: atWork)
     }
 
     static func refresh() {
-        guard let made = held, !AgentBoard.browsers.contains(where: { ($0.tabs + $0.parkedAgentTabs).contains(where: \.agent) }) else { return }
-        ProcessInfo.processInfo.endActivity(made)
-        held = nil
+        if anyAtWork {
+            guard held == nil else { return }
+            held = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep, reason: "An agent is at work in its pages")
+        } else if let made = held {
+            ProcessInfo.processInfo.endActivity(made)
+            held = nil
+        }
     }
 }
 

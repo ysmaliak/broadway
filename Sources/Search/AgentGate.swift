@@ -275,7 +275,7 @@ enum AgentAnswer: Equatable {
 final class AgentDesk {
     static let shared = AgentDesk()
 
-    private(set) var pending: [AgentQuestion] = []
+    private(set) var pending: [AgentQuestion] = [] { didSet { AgentAwake.refresh() } }
     @ObservationIgnored private var waiting: [UUID: CheckedContinuation<AgentAnswer, Never>] = [:]
     @ObservationIgnored private var granted: Set<String> = []
     @ObservationIgnored var told: ((AgentQuestion) -> Void)?

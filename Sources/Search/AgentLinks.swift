@@ -119,6 +119,7 @@ final class AgentLinks {
     func heard(_ id: UUID, at now: Date = Date()) {
         heardAt[id] = now
         if link(id)?.rest != nil { update(id) { $0.rest = nil } }
+        AgentAwake.refresh()
     }
 
     func calling(_ id: UUID?, at now: Date = Date()) {
@@ -306,6 +307,7 @@ final class AgentLinks {
     private func update(_ id: UUID, _ change: (inout AgentLink) -> Void) {
         guard let index = links.firstIndex(where: { $0.id == id }) else { return }
         change(&links[index])
+        AgentAwake.refresh()
     }
 
     nonisolated static func clean(_ name: String?) -> String? {

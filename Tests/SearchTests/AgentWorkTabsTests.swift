@@ -632,21 +632,87 @@ final class AgentWorkTabsTests {
         #expect(socket.current(link) == mine.first.map { short($0.tab) })
     }
 
-    @Test func anAgentTabKeepsBroadwayOutOfAppNapUntilNoneIsLeft() async {
-        let link = session()
-        AgentAwake.refresh()
-        let id = await open("/shop", link)
-        let holding = AgentAwake.holding
-        AgentAwake.refresh()
-        let kept = AgentAwake.holding
-        _ = await call("close", ["tab": id], link)
-        for found in socket.box.visible where found.tab.agent { found.browser.close(found.tab) }
-        AgentAwake.refresh()
-        let left = AgentBoard.browsers.contains { ($0.tabs + $0.parkedAgentTabs).contains(where: \.agent) }
+    private func atWork(_ link: UUID) -> Bool {
+        AgentLinks.shared.link(link).map(AgentAwake.atWork) ?? false
+    }
 
+    @Test func aFinishedSessionWithTabsLeftReleasesTheHoldAndTheNextCommandTakesIt() async {
+        let link = session()
+        _ = await open("/shop", link)
+        await until { AgentAwake.holding }
+        let working = atWork(link)
+
+        AgentLinks.shared.finish(link)
+        let finished = atWork(link)
+        let released = AgentAwake.holding == AgentAwake.anyAtWork
+        AgentLinks.shared.heard(link)
+        _ = await call("snapshot", [:], link)
+
+        #expect(working)
+        #expect(!finished)
+        #expect(!AgentBoard.allTabs(of: link).isEmpty)
+        #expect(released)
+        #expect(atWork(link))
+        #expect(AgentAwake.holding)
+    }
+
+    @Test func anIdleSessionWithTabsLeftReleasesTheHoldAndTheNextCommandTakesIt() async {
+        let link = session()
+        _ = await open("/shop", link)
+        let limit = AgentLinks.shared.quietLimit
+        defer { AgentLinks.shared.quietLimit = limit }
+        AgentLinks.shared.quietLimit = 0
+
+        AgentLinks.shared.sweep(at: Date().addingTimeInterval(1))
+        let idle = AgentLinks.shared.link(link)?.rest == .quiet
+        let resting = atWork(link)
+        let released = AgentAwake.holding == AgentAwake.anyAtWork
+        AgentLinks.shared.heard(link)
+        _ = await call("tab", [:], link)
+
+        #expect(idle)
+        #expect(!resting)
+        #expect(released)
+        #expect(atWork(link))
+        #expect(AgentAwake.holding)
+    }
+
+    @Test func anEndedSessionWithTabsLeftReleasesTheHoldAndANewCommandTakesIt() async {
+        let link = session()
+        _ = await open("/shop", link)
+
+        AgentLinks.shared.end(link, .done(nil))
+        let ended = atWork(link)
+        let released = AgentAwake.holding == AgentAwake.anyAtWork
+        let next = session()
+        _ = await open("/basket", next)
+        await until { AgentAwake.holding }
+
+        #expect(!ended)
+        #expect(!AgentBoard.allTabs(of: link).isEmpty)
+        #expect(released)
+        #expect(atWork(next))
+    }
+
+    @Test func aQuestionUpForThePersonCountsAsAtWork() async throws {
+        let link = session()
+        _ = await open("/shop", link)
+        browser.prefs.agentMode = .ask
+        AgentSites.shared.reset()
+
+        let opening = Task { await call("open", ["url": address("/basket")], link) }
+        let asked = try #require(await question())
+        AgentLinks.shared.finish(link)
+        let waiting = atWork(link)
+        let holding = AgentAwake.holding
+        AgentDesk.shared.take(asked.id, .no)
+        _ = await opening.value
+        AgentLinks.shared.finish(link)
+
+        #expect(waiting)
         #expect(holding)
-        #expect(kept)
-        #expect(AgentAwake.holding == left)
+        #expect(!atWork(link))
+        #expect(AgentAwake.holding == AgentAwake.anyAtWork)
     }
 
     @Test func closeAndTabsGainTheirFlagsAndTabIsACommand() {
