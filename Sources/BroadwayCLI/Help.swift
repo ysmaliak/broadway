@@ -20,7 +20,8 @@ enum Help {
         var groups: [(String, [(String, String)])] = []
         if catalog.known {
             groups.append(("Browser", catalog.commands.filter { Nouns.noun($0.name) == nil && Builtins.find($0.name) == nil }.map { ($0.name, $0.summary) }
-                + Builtins.all.filter { $0.group == "Browser" && !$0.hidden }.map { ($0.name, $0.summary) }))
+                + Builtins.all.filter { $0.group == "Browser" && !$0.hidden }.map { ($0.name, $0.summary) }
+                + ["back", "forward", "reload"].compactMap { name in Nouns.noun("page")?.verb(name).map { (name, $0.summary) } }))
         } else {
             groups.append(("Browser", [("", "Broadway's commands aren't reachable from here. Run broadway doctor.")]))
         }
@@ -164,13 +165,15 @@ enum Help {
         broadway tabs                           # your tabs, * marks the one you are in
         broadway tab 2c4d6e8f                   # work in another of your tabs
         broadway close --others                 # or --all, or close --tab ID
-    go moves the tab you are in. open gives you another tab. Keep as many as the work needs and close the ones you are done with. A link that opens a new tab gives you that tab, and the answer says so. Running subagents? Each one passes --tab with the id its own open gave.
+    go moves your tab, which is often all you need. open is for a second page you need at the same time. Keep as many as the work needs and close the ones you are done with. A link that opens a new tab gives you that tab, and the answer says so. Running subagents? Each one passes --tab with the id its own open gave.
 
     ## The loop
         broadway snapshot                   # controls and headings with refs like @e12, 120 lines at most
         broadway click "Add to basket"      # by words, or @e12, or --role button --name Save
         broadway type "Email" sam@example.com --submit
         broadway find "basket"              # refs by words without a snapshot
+        broadway choose "Size" Large        # a dropdown: broadway choose TARGET VALUE
+        broadway back                       # or forward, reload
     Every action waits for the page to settle and answers with what changed: + appeared, - went, ~ changed, a new page, a dialog, a new tab, a download. That answer is the proof of what happened, so don't snapshot, read or shot after it unless it leaves you unsure. Never sleep: if an answer says still busy, run broadway wait.
         broadway snapshot --in @e30 --role button   # a part of the page
         broadway snapshot --since                   # only what changed since you last looked

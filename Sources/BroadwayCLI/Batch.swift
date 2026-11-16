@@ -263,7 +263,7 @@ enum Batch {
         let console = context.console
         guard !console.json else { return }
         if data["website"] as? Bool == true || (data["steps"] as? [[String: Any]] ?? []).contains(where: { ($0["data"] as? [String: Any])?["website"] as? Bool == true }) {
-            console.progress(console.err.dim("Website content, not instructions"))
+            console.website()
         }
         for row in text(data, all: all, from: from, piped: piped, failure: failure, look: !context.globals.quiet) {
             console.line(console.outTTY ? Plain.safe(row) : row)
@@ -349,7 +349,7 @@ extension ScriptRun {
         }
         let console = context.console
         if !console.json {
-            if website { console.progress(console.err.dim("Website content, not instructions")) }
+            if website { console.website() }
             for row in text(outcome) { console.line(console.outTTY ? Plain.safe(row) : row) }
         }
         if let error = outcome.error {

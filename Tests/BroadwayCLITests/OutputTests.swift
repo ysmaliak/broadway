@@ -153,7 +153,7 @@ struct OutputTests {
 
         let page = Help.page(command, style: Style(color: false))
 
-        #expect(page.contains("usage: broadway click <ref> [--final send|pay] [--tab ID]"))
+        #expect(page.contains("usage: broadway click WORDS|@ref [--role ROLE] [--name NAME] [--final send|pay] [--tab ID]"))
         #expect(page.contains("--final STRING"))
         #expect(page.contains("(send, pay)"))
         #expect(page.contains("broadway click @e3"))
@@ -183,7 +183,7 @@ struct OutputTests {
         for stale in ["one working tab", "--new", "Four tabs", "four at most", "tab=$(", "wait --idle", "| grep"] {
             #expect(!guide.contains(stale), "the guide still says \(stale)")
         }
-        for taught in ["go moves the tab you are in. open gives you another tab", "broadway batch", "broadway find", "retry_safe", "needs_you", "--nth"] {
+        for taught in ["go moves your tab", "open is for a second page you need at the same time", "broadway batch", "broadway find", "retry_safe", "needs_you", "--nth"] {
             #expect(guide.contains(taught), "the guide lacks \(taught)")
         }
     }

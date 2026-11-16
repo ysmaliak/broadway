@@ -63,6 +63,14 @@ enum CommandLineInput {
         (command.positional + command.flags).contains { $0.name == "ref" || $0.name == "target" }
     }
 
+    static func form(_ command: Command) -> String {
+        let targets = takesTarget(command)
+        var parts = ["broadway", command.name]
+        if targets { parts.append("TARGET") }
+        parts += command.positional.filter { $0.required && !(targets && $0.name == "ref") }.map { $0.name.uppercased() }
+        return parts.joined(separator: " ")
+    }
+
     static func ref(_ word: String) -> String? {
         var bare = word.hasPrefix("@") ? String(word.dropFirst()) : word
         if !bare.contains("."), let range = bare.range(of: #"^f[0-9]+e[0-9]+$"#, options: .regularExpression) {
@@ -172,6 +180,23 @@ enum CommandLineInput {
         return (target, rest)
     }
 
+    private static func free(_ command: Command, _ words: [String]) -> Int {
+        var count = 0
+        var index = 0
+        while index < words.count {
+            let word = words[index]
+            index += 1
+            if word == "--" { return count + words.count - index }
+            if word.hasPrefix("--") {
+                let parts = word.dropFirst(2).split(separator: "=", maxSplits: 1).map(String.init)
+                if parts.count == 1, let flag = command.flags.first(where: { $0.name == parts[0] }), flag.type != "boolean" { index += 1 }
+            } else if !(word.hasPrefix("-") && word.count > 1 && Double(word) == nil) {
+                count += 1
+            }
+        }
+        return count
+    }
+
     static func parse(_ command: Command, _ words: [String]) throws -> [String: Any] {
         let split = try targeted(command, words)
         var target = split.target
@@ -183,16 +208,18 @@ enum CommandLineInput {
         let aimed = ["role", "name", "label", "at"].contains { target[$0] != nil }
         if aimed { waiting.removeAll { $0.name == "ref" } }
         let targets = takesTarget(command)
+        var wordsFirst = aimed && targets && free(command, words) > command.positional.filter { $0.name != "ref" }.count
         func take(_ word: String) throws {
             if word.hasPrefix("@"), found["ref"] == nil, target["words"] == nil, let ref = command.flags.first(where: { $0.name == "ref" }) {
                 found["ref"] = try coerce(word, ref, command: command)
                 waiting.removeAll { $0.name == "ref" }
                 return
             }
-            if targets, !aimed, found["ref"] == nil, target["words"] == nil,
-               waiting.first?.name == "ref" || (waiting.isEmpty && command.positional.isEmpty) {
+            if targets, found["ref"] == nil, target["words"] == nil,
+               wordsFirst || (!aimed && (waiting.first?.name == "ref" || (waiting.isEmpty && command.positional.isEmpty))) {
                 guard !word.isEmpty else { throw Failure.usage("A target needs words or a ref") }
                 target["words"] = word
+                wordsFirst = false
                 waiting.removeAll { $0.name == "ref" }
                 return
             }
@@ -252,7 +279,8 @@ enum CommandLineInput {
         }
         let missing = (command.positional + command.flags).filter { $0.required && found[$0.name] == nil && !($0.name == "ref" && found["target"] != nil) }
         if let first = missing.first {
-            throw Failure.usage("\(command.name) needs \(first.name)", hint: "Usage: \(command.usage)")
+            let named = first.name == "ref" && takesTarget(command) ? "TARGET" : command.positional.contains { $0.name == first.name } ? first.name.uppercased() : "--\(first.name)"
+            throw Failure.usage("\(command.name) needs \(named): \(form(command))", hint: "Usage: \(command.usage)")
         }
         if needsTarget.contains(command.tool), found["ref"] == nil, found["target"] == nil {
             throw Failure.usage("\(command.name) needs a target: a @ref, the element's words, or --role or --label", hint: "For example: broadway \(command.name) @e12, or broadway \(command.name) \"Add to basket\"")

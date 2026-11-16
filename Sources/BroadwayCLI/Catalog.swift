@@ -40,6 +40,7 @@ struct Command: Equatable {
     var examples: [String]
     var columns: [String]
     var wholeUsage: String?
+    var findsHere = false
 
     init(_ found: [String: Any]) {
         name = found["name"] as? String ?? ""
@@ -53,6 +54,10 @@ struct Command: Equatable {
         flags = (found["flags"] as? [[String: Any]] ?? []).map(Parameter.init)
         examples = found["examples"] as? [String] ?? []
         columns = found["columns"] as? [String] ?? []
+        if tool == "text", !flags.contains(where: { $0.name == "find" }) {
+            flags.append(Parameter(["name": "find", "type": "string", "description": "Only the lines holding these words"]))
+            findsHere = true
+        }
     }
 
     var listed: [Parameter] { flags.filter { !$0.unlisted } }
@@ -60,8 +65,15 @@ struct Command: Equatable {
     var usage: String {
         if let wholeUsage { return wholeUsage }
         var parts = ["broadway", name]
-        parts += positional.map { $0.required ? "<\($0.name)>" : "[\($0.name)]" }
-        parts += listed.filter { flag in !positional.contains { $0.name == flag.name } }.map(\.shown)
+        let targets = CommandLineInput.takesTarget(self)
+        if targets {
+            let needed = CommandLineInput.needsTarget.contains(tool) || positional.contains { $0.name == "ref" && $0.required }
+            parts.append(needed ? "WORDS|@ref" : "[WORDS|@ref]")
+        }
+        parts += positional.filter { !(targets && $0.name == "ref") }.map { $0.required ? "<\($0.name)>" : "[\($0.name)]" }
+        if targets { parts += ["[--role ROLE]", "[--name NAME]"] }
+        let aiming = Set(CommandLineInput.targetFlags + ["ref", "target"])
+        parts += listed.filter { flag in !positional.contains { $0.name == flag.name } && !(targets && aiming.contains(flag.name)) }.map(\.shown)
         if tabbed { parts.append("[--tab ID]") }
         return parts.joined(separator: " ")
     }

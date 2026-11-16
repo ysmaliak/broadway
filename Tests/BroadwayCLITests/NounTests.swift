@@ -13,6 +13,22 @@ struct NounTests {
         try #require(Nouns.noun(noun)?.verb(verb)).command
     }
 
+    @Test func backForwardAndReloadAreCommandsOfTheirOwn() throws {
+        for word in ["back", "forward", "reload"] {
+            let found = try routed([word, "--tab", "1a2b"])
+            #expect(found.noun == "page" && found.verb == word)
+        }
+        let overview = Help.overview(catalog: Catalog([["name": "click", "tool": "click"]]), style: Style(color: false))
+        #expect(overview.contains("back") && overview.contains("reload"))
+        #expect(Help.guideText.contains("broadway back"))
+    }
+
+    @Test func theGuideTeachesDropdowns() {
+        #expect(Help.guideText.contains("broadway choose TARGET VALUE"))
+        #expect(Help.guideText.contains("broadway read --find"))
+        #expect(Help.guideText.utf8.count < 4096)
+    }
+
     @Test func aVerbIsFoundAfterItsNoun() throws {
         let found = try routed(["tabs", "move", "1a2b", "--space", "Work"])
 

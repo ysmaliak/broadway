@@ -77,6 +77,8 @@ enum Person {
         return String(decoding: FileHandle.standardInput.readDataToEndOfFile(), as: UTF8.self)
     }
 
+    static let spoken: Set<String> = ["agents done", "agents disconnect", "agents idle"]
+
     static func present(_ command: Command, _ given: [String: Any], context: Context) {
         var data = given
         let console = context.console
@@ -90,6 +92,7 @@ enum Person {
         guard !console.json else { return }
         if let notice = data["notice"] as? String { console.progress(console.err.dim(notice)) }
         if let message = data["message"] as? String { console.progress(console.err.dim(message)) }
+        if spoken.contains(command.name) { return }
         var shown = data
         for key in ["message", "notice", "done"] { shown[key] = nil }
         if context.globals.output != nil, shown["path"] == nil {

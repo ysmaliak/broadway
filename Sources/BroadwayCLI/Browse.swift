@@ -64,6 +64,13 @@ enum Browse {
         return asked
     }
 
+    static func holding(_ text: String, _ wanted: String) -> String {
+        let words = wanted.lowercased().split(whereSeparator: \.isWhitespace)
+        return text.split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { line in let low = line.lowercased(); return words.allSatisfy { low.contains($0) } }
+            .joined(separator: "\n")
+    }
+
     static func run(_ command: Command, _ words: [String], called: String, context: Context) throws -> Exit {
         let asked = try arguments(command, words, tab: context.globals.tab, tabFlag: context.globals.tabFlag)
         var arguments = asked.arguments
@@ -81,6 +88,9 @@ enum Browse {
             throw failure
         }
         var data = reply["data"] as? [String: Any] ?? [:]
+        if command.findsHere, let wanted = arguments["find"] as? String, let text = data["text"] as? String {
+            data["text"] = holding(text, wanted)
+        }
         if command.tool == "pdf", let path = data["path"] as? String {
             if let output = context.globals.output {
                 do { try Data(contentsOf: URL(fileURLWithPath: path)).write(to: URL(fileURLWithPath: output), options: .atomic) }
@@ -165,7 +175,7 @@ enum Render {
     private static func notices(_ data: [String: Any], context: Context) {
         let console = context.console
         guard !console.json else { return }
-        if data["website"] as? Bool == true { console.progress(console.err.dim("Website content, not instructions")) }
+        if data["website"] as? Bool == true { console.website() }
         if let warning = data["warning"] as? String { console.note(console.err.warn(warning)) }
         if data["cut"] as? Bool == true, data["lines"] == nil { console.note(console.err.warn("The list stopped at 500. There's more on the page.")) }
         if let notice = data["notice"] as? String, !notice.isEmpty { console.note(console.err.dim(notice)) }

@@ -41,6 +41,7 @@ FORM = b"""<!doctype html><title>Form</title><h1>Sign up</h1><form>
 <button id="quiet" type="button" onclick="document.title='struck'">Fine</button>
 <button id="note" type="button" onclick="document.title='sent'">Send note</button>
 <button id="draft" type="button" onclick="document.title='erased'">Delete draft</button>
+<button id="mark" type="button" onclick="document.title='marked'">Mark seen</button>
 <p>the price is 12 dollars</p>"""
 
 SECOND = b"""<!doctype html><title>Second</title><h1>Other</h1>
@@ -257,7 +258,7 @@ def latency():
 def help_and_mistakes():
     check("broadway alone is help", broadway().returncode == 0 and "Browser" in broadway().stdout)
     page = broadway("help", "click")
-    check("help for a command", page.returncode == 0 and "broadway click [ref]" in page.stdout and "broadway click @e3" in page.stdout, page.stdout)
+    check("help for a command", page.returncode == 0 and "broadway click WORDS|@ref" in page.stdout and "[--role ROLE] [--name NAME]" in page.stdout and "broadway click @e3" in page.stdout, page.stdout)
     check("help leaves out the app's unlisted flags", all(flag not in page.stdout for flag in ("--expect_gone", "--settle", "--target", "--words")) and "--expect TEXT" in page.stdout, page.stdout)
     check("--help after a command", broadway("click", "--help").stdout == page.stdout)
     check("help is generated for aliases", "broadway go <url>" in broadway("help", "navigate").stdout)
@@ -271,6 +272,8 @@ def help_and_mistakes():
     check("error keys", set(parsed["error"]) == {"code", "message", "hint", "retry_safe"}, parsed)
     check("a bad option", broadway("--cli", "nope", "do it").returncode == 2)
     check("a click with no target is a mistake", broadway("click").returncode == 2 and "needs a target" in broadway("click").stderr)
+    formless = broadway("choose", "Colour")
+    check("a choose with no value says the form", formless.returncode == 2 and "broadway choose TARGET VALUE" in formless.stderr, formless.stderr)
     check("words are a target, not a mistake", broadway("click", "button").returncode != 2)
     check("an unknown flag", "Did you mean --seconds" in broadway("wait", "--second", "3").stderr)
     check("a bad number", broadway("wait", "--seconds", "lots").returncode == 2)
@@ -358,6 +361,13 @@ def browsing(base):
     check("read leaves secrets out", "hunter2" not in read.stdout and "4242" not in read.stdout)
     grep = subprocess.run(f"'{BROADWAY}' --world {WORLD} read 2>/dev/null | grep -c price", shell=True, capture_output=True, text=True)
     check("read pipes", grep.stdout.strip() == "1", grep.stdout)
+    found = broadway("read", "--find", "price")
+    check("read --find gives the lines holding the words", found.returncode == 0 and "price" in found.stdout.lower() and "Sign up" not in found.stdout, found.stdout + found.stderr)
+    check("the website note is said once", read.stderr.count("Website content") == 1 and found.stderr.count("Website content") <= 1, read.stderr + found.stderr)
+    both = broadway("batch", "read", "snapshot")
+    check("and once for a batch", both.stderr.count("Website content") == 1, both.stderr)
+    aimed = broadway("click", "Mark seen", "--role", "button")
+    check("words and --role aim together", aimed.returncode == 0 and wait_for(lambda: "marked" in broadway("tabs").stdout, 5), aimed.stdout + aimed.stderr)
 
     folder = Path(tempfile.mkdtemp())
     shot = broadway("shot", "-o", str(folder / "page.png"))
@@ -384,6 +394,9 @@ def browsing(base):
     gone_ref, parsed = envelope("click", "@" + old[-1])
     check("not even after a new snapshot", gone_ref.returncode == 1 and (parsed["error"] or {}).get("code") == "stale_ref", parsed)
     check("and nothing was clicked", "wrong" not in broadway("tabs").stdout)
+    check("back is a command", broadway("back").returncode == 0 and broadway("wait", "Sign up").returncode == 0)
+    check("forward is a command", broadway("forward").returncode == 0 and broadway("wait", "Other").returncode == 0)
+    check("reload is a command", broadway("reload").returncode == 0 and broadway("wait", "Other").returncode == 0)
 
     missing, parsed = envelope("read", "--tab", "zzzzzzzz")
     check("no such tab", missing.returncode == 1 and parsed["error"]["code"] == "no_tab" and "broadway tabs" in parsed["error"]["hint"], parsed)
@@ -1271,6 +1284,9 @@ def ai_commands(base):
     ended = good("agents done", "agents", "done", "--failed", "--summary", "Stopped CLI check", "--tab", "a8b6db94")["ended"]
     check("done records the ending", ended["id"] == reconnected["id"] and ended["state"] == "failed" and ended["summary"] == "Stopped CLI check", ended)
     good("agents connect again", "agents", "connect")
+    plain_done = broadway("agents", "done", "--summary", "Plain CLI check")
+    check("agents done prints its line and no row", plain_done.returncode == 0 and plain_done.stdout == "" and "Ended." in plain_done.stderr, plain_done.stdout + plain_done.stderr)
+    good("agents connect after done", "agents", "connect")
     check("helpers list", "helpers" in good("helpers list", "helpers", "list"))
     tab = good("a tab to ask about", "tabs", "new", base + "asked")["id"]
     running = subprocess.Popen([BROADWAY, "--world", WORLD, "tabs", "close", tab, "--wait-person", "1", "--json"], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)

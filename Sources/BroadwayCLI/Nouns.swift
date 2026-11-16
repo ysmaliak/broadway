@@ -328,6 +328,7 @@ enum Nouns {
 
     static let aliases: [String: (noun: String, verb: String)] = [
         "zoom": ("page", "zoom"), "pdf": ("page", "pdf"), "translate": ("page", "translate"),
+        "back": ("page", "back"), "forward": ("page", "forward"), "reload": ("page", "reload"),
     ]
 
     static let nounAliases = ["agent": "agents"]

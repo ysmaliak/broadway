@@ -128,7 +128,7 @@ struct ParsingTests {
         let choice = failure(click, ["@e1", "--final", "buy"])
         let number = failure(scroll, ["--by", "lots"])
 
-        #expect(missing?.message == "click needs ref")
+        #expect(missing?.message == "click needs TARGET: broadway click TARGET")
         #expect(tooMany?.hint?.contains("Usage") == true)
         #expect(unknown?.hint == "Did you mean --final?")
         #expect(choice?.message == "--final is one of send, pay, not buy")
@@ -378,7 +378,7 @@ struct ParsingTests {
 
         let page = Help.page(command, style: Style(color: false))
 
-        #expect(command.usage == "broadway click [ref] [--final send|pay] [--tab ID]")
+        #expect(command.usage == "broadway click WORDS|@ref [--role ROLE] [--name NAME] [--final send|pay] [--tab ID]")
         #expect(!page.contains("--settle") && !page.contains("--expect_gone"))
         #expect(page.contains("--role ROLE") && page.contains("--expect TEXT"))
         #expect(try CommandLineInput.parse(command, ["@e3", "--settle", "0"])["settle"] as? Double == 0)
@@ -391,6 +391,77 @@ struct ParsingTests {
         #expect((try? CommandLineInput.parse(command, [])) == nil)
         #expect((try? CommandLineInput.parse(command, ["--role", "button", "--name", "Save"])) != nil)
         #expect((try? CommandLineInput.parse(command, ["Save"])) != nil)
+    }
+
+    @Test func aMissingValueSaysTheWholeForm() {
+        let ref = parameter("ref")
+        let value = parameter("value", required: true)
+        let choose = command("choose", positional: [ref, value], flags: [ref, value])
+        let url = parameter("url", required: true)
+        let go = command("go", positional: [url], flags: [url])
+
+        #expect(failure(choose, ["Colour"])?.message == "choose needs VALUE: broadway choose TARGET VALUE")
+        #expect(failure(type, ["@e4"])?.message == "type needs TEXT: broadway type TARGET TEXT")
+        #expect(failure(go, [])?.message == "go needs URL: broadway go URL")
+        #expect(failure(choose, ["Colour"])?.hint?.hasPrefix("Usage: broadway choose") == true)
+    }
+
+    @Test func wordsAndARoleAimTogether() throws {
+        let ref = parameter("ref")
+        let value = parameter("value", required: true)
+        let choose = command("choose", positional: [ref, value], flags: [ref, value])
+        let button = try CommandLineInput.parse(click, ["Sign in", "--role", "button"])["target"] as? [String: Any]
+        let named = try CommandLineInput.parse(click, ["Send", "--role", "button", "--name", "Send"])["target"] as? [String: Any]
+        let typed = try CommandLineInput.parse(type, ["Email", "sam@example.com", "--role", "textbox"])
+        let labelled = try CommandLineInput.parse(type, ["--label", "Email", "sam@example.com"])
+        let chosen = try CommandLineInput.parse(choose, ["Assignee", "Sam Lee", "--role", "combobox"])
+        let byRole = try CommandLineInput.parse(choose, ["Sam Lee", "--role", "combobox"])
+
+        #expect(button?["words"] as? String == "Sign in" && button?["role"] as? String == "button")
+        #expect(named?["words"] as? String == "Send" && named?["name"] as? String == "Send")
+        #expect((typed["target"] as? [String: Any])?["words"] as? String == "Email" && typed["text"] as? String == "sam@example.com")
+        #expect((labelled["target"] as? [String: Any])?["words"] == nil && labelled["text"] as? String == "sam@example.com")
+        #expect((chosen["target"] as? [String: Any])?["words"] as? String == "Assignee" && chosen["value"] as? String == "Sam Lee")
+        #expect((byRole["target"] as? [String: Any])?["words"] == nil && byRole["value"] as? String == "Sam Lee")
+        #expect(failure(click, ["Sign in", "Now", "--role", "button"])?.message == "click doesn't take Now")
+    }
+
+    @Test func aUsageLineShowsTheTargetForms() {
+        let ref = parameter("ref")
+        let value = parameter("value", required: true)
+        let choose = command("choose", positional: [ref, value], flags: [ref, value, parameter("role"), parameter("nth", type: "number")])
+        let shot = command("screenshot", positional: [ref], flags: [ref, parameter("full", type: "boolean")])
+
+        #expect(click.usage == "broadway click WORDS|@ref [--role ROLE] [--name NAME] [--final send|pay] [--tab ID]")
+        #expect(choose.usage == "broadway choose WORDS|@ref <value> [--role ROLE] [--name NAME] [--tab ID]")
+        #expect(shot.usage == "broadway screenshot [WORDS|@ref] [--role ROLE] [--name NAME] [--full] [--tab ID]")
+    }
+
+    @Test func readFindsLinesEvenBeforeTheAppDoes() throws {
+        let old = Command(["name": "read", "tool": "text", "tabbed": true, "reads": true])
+        let new = Command(["name": "read", "tool": "text", "tabbed": true, "reads": true, "flags": [["name": "find", "type": "string", "description": "Lines holding the words"]]])
+
+        #expect(try CommandLineInput.parse(old, ["--find", "price"])["find"] as? String == "price")
+        #expect(old.findsHere && !new.findsHere)
+        #expect(try CommandLineInput.parse(new, ["--find", "price"])["find"] as? String == "price")
+        #expect(old.usage.contains("[--find FIND]"))
+        #expect(Browse.holding("Total\nPrice: 4 EUR\nShipping price free\nThanks", "price") == "Price: 4 EUR\nShipping price free")
+        #expect(Browse.holding("Price: 4 EUR\nold price", "4 price") == "Price: 4 EUR")
+    }
+
+    @Test func theWebsiteNoteIsSaidOnce() {
+        let console = Console(json: false, quiet: true, noColor: true, environment: [:])
+
+        #expect(!console.warnedWebsite)
+        console.website()
+        console.website()
+        #expect(console.warnedWebsite)
+    }
+
+    @Test func agentsDoneSaysItsLineAndNoRow() {
+        #expect(Person.spoken.contains("agents done"))
+        #expect(Person.spoken.contains("agents disconnect"))
+        #expect(!Person.spoken.contains("agents list"))
     }
 
     @Test func aHiddenLookAsksTheAppForNone() throws {

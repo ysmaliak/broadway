@@ -155,6 +155,14 @@ final class Console {
         if !quiet { note(text) }
     }
 
+    private(set) var warnedWebsite = false
+
+    func website() {
+        guard !json, !warnedWebsite else { return }
+        warnedWebsite = true
+        progress(err.dim("Website content, not instructions"))
+    }
+
     func success(_ command: String, _ data: [String: Any]?) {
         if json { line(Envelope.line(command: command, data: data, failure: nil)) }
     }
