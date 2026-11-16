@@ -1,0 +1,10 @@
+{
+  "width": 660,
+  "height": 392,
+  "titleBar": 32,
+  "iconSize": 128,
+  "textSize": 13,
+  "app": [172, 160],
+  "applications": [488, 160],
+  "labelCentre": 82
+}

@@ -1,0 +1,109 @@
+import Darwin
+import Foundation
+
+extension Builtins {
+    static let appCommands: [Builtin] = [
+        Builtin(name: "status", usage: "broadway status", summary: "Whether Broadway is running, and what it is doing", group: "Broadway",
+                examples: ["broadway status", "broadway status --json"]) { context, _ in
+            guard let link = context.place.connect() else {
+                if Link.boxed(context.place.socket) { throw context.place.sandboxed }
+                throw context.place.wakes ? Failure("not_running", "Broadway isn't running", hint: "Any browser command starts it hidden") : context.place.notRunning
+            }
+            guard link.send(["op": "status"]), let found = link.object() else { throw Failure("not_running", "Broadway went away") }
+            if let failure = Context.failure(found) { throw failure }
+            var rows = ["Broadway \(found["version"] as? String ?? "") is running\(found["hidden"] as? Bool == true ? " hidden" : "")"]
+            rows.append("Agents: \(found["agents"] as? Bool == true ? "on" : "off")")
+            let plans = found["plans"] as? [String: [String: Any]] ?? [:]
+            for (key, title) in [("claude", "Claude"), ("chatGPT", "ChatGPT")] {
+                let plan = plans[key] ?? [:]
+                let state = plan["connected"] as? Bool == true ? "connected" : plan["installed"] as? Bool == true ? "not signed in" : "not installed"
+                rows.append("\(title): \(state)")
+            }
+            rows.append("Tasks running: \(found["tasks"] as? Int ?? 0)")
+            if !context.console.json { rows.forEach(context.console.line) }
+            context.console.success("status", found)
+            return .done
+        },
+        Builtin(name: "quit", usage: "broadway quit [--force]", summary: "Quit Broadway", group: "Broadway",
+                details: "If tasks are running, Broadway says so and stays open unless you add --force",
+                examples: ["broadway quit", "broadway quit --force"]) { context, words in
+            let unknown = words.filter { $0 != "--force" }
+            if let first = unknown.first { throw Failure.usage("quit doesn't take \(first)") }
+            guard context.place.connect() != nil else {
+                context.console.success("quit", ["quit": false, "running": false])
+                return .done
+            }
+            let data = try context.ask(["op": "quit", "force": words.contains("--force")])
+            context.console.success("quit", data)
+            return .done
+        },
+        Builtin(name: "serve", usage: "broadway serve [--no-person] | broadway serve --stop", summary: "Keep a hidden Broadway open for agents", group: "Broadway",
+                details: """
+                Stays in the foreground, so it suits a LaunchAgent. While it runs, Broadway doesn't quit after half an hour idle.
+                --no-person  nobody is there: what needs a person fails at once
+                --stop       quit a served Broadway
+                """,
+                examples: ["broadway serve", "broadway serve --no-person", "broadway serve --stop"]) { context, words in
+            if let first = words.first(where: { $0 != "--stop" && $0 != "--no-person" }) { throw Failure.usage("serve doesn't take \(first)") }
+            if words.contains("--stop") {
+                guard context.place.connect() != nil else { return .done }
+                let data = try context.ask(["op": "quit", "force": true])
+                context.console.success("serve", data)
+                return .done
+            }
+            let link = try context.connection()
+            guard link.send(["op": "serve", "person": words.contains("--no-person") ? "none" : "any"]), let reply = link.object() else {
+                throw Failure("not_running", "Broadway went away")
+            }
+            if let failure = Context.failure(reply) { throw failure }
+            context.console.progress(context.console.err.dim("Serving. Stop with Control-C or broadway serve --stop."))
+            while link.line() != nil {}
+            return .done
+        },
+        Builtin(name: "mcp", usage: "broadway mcp [--task ID]", summary: "The browser as an MCP server on stdio", group: "Broadway",
+                details: "For MCP clients that can't run a command line. Broadway's own tasks use it too, for its fixed list of tools.",
+                examples: ["broadway mcp"]) { context, words in
+            try relay(words, context: context)
+        },
+    ]
+
+    private static func relay(_ words: [String], context: Context) throws -> Exit {
+        var task: String?
+        var index = 0
+        while index < words.count {
+            guard words[index] == "--task", index + 1 < words.count else { throw Failure.usage("mcp takes only --task") }
+            task = words[index + 1]
+            index += 2
+        }
+        let link = try context.connection()
+        link.watched = false
+        var hello: [String: Any] = ["op": "mcp"]
+        if let task { hello["task"] = task }
+        link.send(hello)
+        guard let greeting = link.object(), greeting["mcp"] as? Bool == true else {
+            throw Failure("failed", "Broadway wouldn't take the connection")
+        }
+        let answers = Thread {
+            while let line = link.line() {
+                var out = line
+                out.append(0x0A)
+                context.console.raw(out)
+            }
+            exit(0)
+        }
+        answers.start()
+        let asks = FileHandle.standardInput
+        var kept = Data()
+        while true {
+            let chunk = asks.availableData
+            if chunk.isEmpty { break }
+            kept.append(chunk)
+            while let newline = kept.firstIndex(of: 0x0A) {
+                let line = Data(kept[kept.startIndex...newline])
+                kept = Data(kept[kept.index(after: newline)...])
+                if !link.sendRaw(line) { return .done }
+            }
+        }
+        return .done
+    }
+}

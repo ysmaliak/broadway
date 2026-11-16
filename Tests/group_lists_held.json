@@ -1,0 +1,750 @@
+{
+ "lists": [
+  {
+   "id": "held-wedding-venues",
+   "about": "three venues for one wedding on three sites, and two strangers",
+   "tabs": [
+    {
+     "key": "schloss",
+     "title": "Schloss Nymphenburg: Hochzeit feiern im Hubertussaal",
+     "url": "https://www.schloss-nymphenburg.de/hochzeit",
+     "by": ""
+    },
+    {
+     "key": "bank",
+     "title": "Online-Banking Login - Sparkasse",
+     "url": "https://www.sparkasse.de/login",
+     "by": ""
+    },
+    {
+     "key": "alm",
+     "title": "Hochzeit auf der Alm: Preise und freie Termine 2027 - Kranzbach",
+     "url": "https://www.daskranzbach.de/hochzeit",
+     "by": ""
+    },
+    {
+     "key": "list",
+     "title": "Die 12 schönsten Hochzeitslocations rund um München - Hochzeitsportal24",
+     "url": "https://www.hochzeitsportal24.de/locations/muenchen",
+     "by": ""
+    },
+    {
+     "key": "weather",
+     "title": "Wetter München: 14-Tage-Vorhersage - wetter.com",
+     "url": "https://www.wetter.com/deutschland/muenchen",
+     "by": ""
+    }
+   ],
+   "want": [
+    {
+     "keys": [
+      "schloss",
+      "alm",
+      "list"
+     ],
+     "name_any": [
+      "hochzeit"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "held-podcast-episodes",
+   "about": "two episodes of one show, one of another, and an article",
+   "tabs": [
+    {
+     "key": "acq-1",
+     "title": "Costco - Acquired | Podcast on Spotify",
+     "url": "https://open.spotify.com/episode/4kq1A9wXc0Tn2bP7mL3s0d",
+     "by": "Acquired"
+    },
+    {
+     "key": "lex",
+     "title": "#452 – Dario Amodei: the future of AI | Podcast on Spotify",
+     "url": "https://open.spotify.com/episode/0h7PzQ2rV8mYx1cK5nB3ta",
+     "by": "Lex Fridman Podcast"
+    },
+    {
+     "key": "acq-2",
+     "title": "Hermès - Acquired | Podcast on Spotify",
+     "url": "https://open.spotify.com/episode/7uN2c4LdR9sWq0eJ6fH1xz",
+     "by": "Acquired"
+    },
+    {
+     "key": "article",
+     "title": "Why Costco keeps the $1.50 hot dog - The Atlantic",
+     "url": "https://www.theatlantic.com/business/costco-hot-dog",
+     "by": ""
+    }
+   ],
+   "want": [
+    {
+     "keys": [
+      "acq-1",
+      "acq-2"
+     ],
+     "name_any": [
+      "acquired"
+     ]
+    }
+   ],
+   "also": [
+    [
+     [
+      "acq-1",
+      "acq-2",
+      "article"
+     ]
+    ]
+   ]
+  },
+  {
+   "id": "held-derailleur-repair",
+   "about": "one repair job across a guide, a manual and a video; one cycling page that is not the job",
+   "tabs": [
+    {
+     "key": "guide",
+     "title": "Rear Derailleur Adjustment | Park Tool",
+     "url": "https://www.parktool.com/en-us/blog/repair-help/rear-derailleur-adjustment",
+     "by": ""
+    },
+    {
+     "key": "tour",
+     "title": "Tour de France 2027 route revealed: five summit finishes - Cyclingnews",
+     "url": "https://www.cyclingnews.com/races/tour-de-france-2027/route",
+     "by": ""
+    },
+    {
+     "key": "manual",
+     "title": "Shimano 105 RD-R7000 Rear Derailleur Dealer's Manual",
+     "url": "https://si.shimano.com/en/dm/RARD001",
+     "by": ""
+    },
+    {
+     "key": "video",
+     "title": "How To Adjust A Rear Derailleur – Limit Screws & Indexing - YouTube",
+     "url": "https://www.youtube.com/watch?v=UkZxPIZ1ngY",
+     "by": "Park Tool"
+    },
+    {
+     "key": "mail",
+     "title": "Inbox (3) - Gmail",
+     "url": "https://mail.google.com/mail/u/0/",
+     "by": ""
+    }
+   ],
+   "want": [
+    {
+     "keys": [
+      "guide",
+      "manual",
+      "video"
+     ],
+     "name_any": [
+      "derailleur"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "held-arxiv-unrelated",
+   "about": "five papers from one site with nothing in common",
+   "tabs": [
+    {
+     "key": "a",
+     "title": "[2606.01234] Sparse autoencoders find interpretable features in vision models",
+     "url": "https://arxiv.org/abs/2606.01234",
+     "by": ""
+    },
+    {
+     "key": "b",
+     "title": "[2605.09876] A measurement of the Hubble constant from lensed supernovae",
+     "url": "https://arxiv.org/abs/2605.09876",
+     "by": ""
+    },
+    {
+     "key": "c",
+     "title": "[2604.04321] Fast matrix multiplication over finite fields",
+     "url": "https://arxiv.org/abs/2604.04321",
+     "by": ""
+    },
+    {
+     "key": "d",
+     "title": "[2606.07770] Bird migration timing shifts under urban light pollution",
+     "url": "https://arxiv.org/abs/2606.07770",
+     "by": ""
+    },
+    {
+     "key": "e",
+     "title": "[2603.11111] Optimal auctions with budget-constrained bidders",
+     "url": "https://arxiv.org/abs/2603.11111",
+     "by": ""
+    }
+   ],
+   "want": []
+  },
+  {
+   "id": "held-taxes-two-languages",
+   "about": "one tax return in German and English; the words differ between the languages",
+   "tabs": [
+    {
+     "key": "checklist",
+     "title": "Tax return 2025 checklist - Google Docs",
+     "url": "https://docs.google.com/document/d/1Qw8ZrT5uYb2nLk0xC7vA/edit",
+     "by": ""
+    },
+    {
+     "key": "elster",
+     "title": "Mein ELSTER - Einkommensteuererklärung 2025",
+     "url": "https://www.elster.de/eportal/formulare-leistungen/alleformulare/est",
+     "by": ""
+    },
+    {
+     "key": "guide",
+     "title": "Steuererklärung 2025: Schritt für Schritt erklärt - Finanztip",
+     "url": "https://www.finanztip.de/steuererklaerung",
+     "by": ""
+    },
+    {
+     "key": "news",
+     "title": "Bundesliga: Bayern verliert in Bremen - kicker",
+     "url": "https://www.kicker.de/bundesliga/bayern-bremen",
+     "by": ""
+    },
+    {
+     "key": "how",
+     "title": "How to file a German tax return in English - All About Berlin",
+     "url": "https://allaboutberlin.com/guides/german-tax-return",
+     "by": ""
+    }
+   ],
+   "want": [
+    {
+     "keys": [
+      "checklist",
+      "elster",
+      "guide",
+      "how"
+     ],
+     "name_any": [
+      "tax",
+      "steuer"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "held-swiftui-session",
+   "about": "one conference session with its notes and release notes; a front page that is not part of it",
+   "tabs": [
+    {
+     "key": "session",
+     "title": "What's new in SwiftUI - WWDC26 - Videos - Apple Developer",
+     "url": "https://developer.apple.com/videos/play/wwdc2026/256",
+     "by": ""
+    },
+    {
+     "key": "hn",
+     "title": "Hacker News",
+     "url": "https://news.ycombinator.com/",
+     "by": ""
+    },
+    {
+     "key": "notes",
+     "title": "WWDC26 notes: What's new in SwiftUI · GitHub",
+     "url": "https://gist.github.com/majid/5f1c2e7a9b3d4c6e8f0a",
+     "by": ""
+    },
+    {
+     "key": "release",
+     "title": "SwiftUI updates | Apple Developer Documentation",
+     "url": "https://developer.apple.com/documentation/updates/swiftui",
+     "by": ""
+    }
+   ],
+   "want": [
+    {
+     "keys": [
+      "session",
+      "notes",
+      "release"
+     ],
+     "name_any": [
+      "swiftui"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "held-amazon-unrelated",
+   "about": "four things from one shop that are four errands",
+   "tabs": [
+    {
+     "key": "kettle",
+     "title": "Amazon.de: Fellow Stagg EKG Electric Kettle, Matte Black",
+     "url": "https://www.amazon.de/dp/B077JBQZPX",
+     "by": ""
+    },
+    {
+     "key": "cable",
+     "title": "Amazon.de: Anker USB-C to USB-C Cable 240W, 2 m",
+     "url": "https://www.amazon.de/dp/B0BFWR8V8M",
+     "by": ""
+    },
+    {
+     "key": "book",
+     "title": "Amazon.de: The Power Broker: Robert Moses and the Fall of New York",
+     "url": "https://www.amazon.de/dp/0394720245",
+     "by": ""
+    },
+    {
+     "key": "socks",
+     "title": "Amazon.de: Falke Men's Run Socks, 2 Pairs",
+     "url": "https://www.amazon.de/dp/B00KPWJ5KA",
+     "by": ""
+    }
+   ],
+   "want": []
+  },
+  {
+   "id": "held-game-guides",
+   "about": "one game's expansion across a guide site, a wiki and a video; a store sale that is not it",
+   "tabs": [
+    {
+     "key": "order",
+     "title": "Elden Ring: Shadow of the Erdtree boss order and recommended levels - IGN",
+     "url": "https://www.ign.com/wikis/elden-ring/Shadow_of_the_Erdtree_Boss_Order",
+     "by": ""
+    },
+    {
+     "key": "sale",
+     "title": "Steam Summer Sale 2026: the best deals under €10 - PC Gamer",
+     "url": "https://www.pcgamer.com/steam-summer-sale-2026-best-deals",
+     "by": ""
+    },
+    {
+     "key": "boss",
+     "title": "Messmer the Impaler | Elden Ring Wiki",
+     "url": "https://eldenring.wiki.fextralife.com/Messmer+the+Impaler",
+     "by": ""
+    },
+    {
+     "key": "maps",
+     "title": "All Map Fragment Locations - Elden Ring Shadow of the Erdtree - YouTube",
+     "url": "https://www.youtube.com/watch?v=Jq3xM0cQ9dE",
+     "by": "FightinCowboy"
+    }
+   ],
+   "want": [
+    {
+     "keys": [
+      "order",
+      "boss",
+      "maps"
+     ],
+     "name_any": [
+      "elden",
+      "erdtree"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "held-two-projects-one-site",
+   "about": "two pairs and a stranger, all on one workspace site",
+   "tabs": [
+    {
+     "key": "helios-plan",
+     "title": "Helios – Q1 roadmap",
+     "url": "https://www.notion.so/acme/Helios-Q1-roadmap-1a2b3c4d5e6f",
+     "by": ""
+    },
+    {
+     "key": "dinner-list",
+     "title": "Weeknight dinners – recipes",
+     "url": "https://www.notion.so/home/Weeknight-dinners-recipes-9f8e7d6c5b4a",
+     "by": ""
+    },
+    {
+     "key": "helios-retro",
+     "title": "Helios – launch retro",
+     "url": "https://www.notion.so/acme/Helios-launch-retro-0a9b8c7d6e5f",
+     "by": ""
+    },
+    {
+     "key": "reading",
+     "title": "Reading list 2026",
+     "url": "https://www.notion.so/home/Reading-list-2026-3c4d5e6f7a8b",
+     "by": ""
+    },
+    {
+     "key": "dinner-plan",
+     "title": "Weeknight dinners – meal plan for November",
+     "url": "https://www.notion.so/home/Weeknight-dinners-meal-plan-7a8b9c0d1e2f",
+     "by": ""
+    }
+   ],
+   "want": [
+    {
+     "keys": [
+      "helios-plan",
+      "helios-retro"
+     ],
+     "name_any": [
+      "helios"
+     ]
+    },
+    {
+     "keys": [
+      "dinner-list",
+      "dinner-plan"
+     ],
+     "name_any": [
+      "dinner"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "held-joins-marathon",
+   "about": "a folder already there; two tabs that belong in it arrive with two that do not",
+   "tabs": [
+    {
+     "key": "plan",
+     "title": "Novice 1 Marathon Training Program - Hal Higdon",
+     "url": "https://www.halhigdon.com/training-programs/marathon-training/novice-1-marathon",
+     "by": ""
+    },
+    {
+     "key": "entry",
+     "title": "BMW Berlin-Marathon 2027: registration and lottery",
+     "url": "https://www.bmw-berlin-marathon.com/en/registration",
+     "by": ""
+    },
+    {
+     "key": "shoes",
+     "title": "The best marathon shoes of 2026, tested over 500 km - Runner's World",
+     "url": "https://www.runnersworld.com/gear/best-marathon-shoes",
+     "by": ""
+    },
+    {
+     "key": "football",
+     "title": "Champions League: results and table - UEFA.com",
+     "url": "https://www.uefa.com/uefachampionsleague/standings",
+     "by": ""
+    },
+    {
+     "key": "pace",
+     "title": "Marathon pace calculator: long runs, tempo and race day - Strava",
+     "url": "https://www.strava.com/running-pace-calculator",
+     "by": ""
+    },
+    {
+     "key": "berlin",
+     "title": "Berlin weekend guide: where to eat in Kreuzberg - Time Out",
+     "url": "https://www.timeout.com/berlin/restaurants/kreuzberg",
+     "by": ""
+    }
+   ],
+   "folders": [
+    {
+     "name": "Marathon Training",
+     "emoji": "🏃",
+     "ai": true,
+     "keys": [
+      "plan",
+      "entry"
+     ]
+    }
+   ],
+   "batches": {
+    "together": [
+     [
+      "shoes",
+      "football",
+      "pace",
+      "berlin"
+     ]
+    ],
+    "single": [
+     [
+      "shoes"
+     ],
+     [
+      "football"
+     ],
+     [
+      "pace"
+     ],
+     [
+      "berlin"
+     ]
+    ],
+    "reversed": [
+     [
+      "berlin"
+     ],
+     [
+      "pace"
+     ],
+     [
+      "football"
+     ],
+     [
+      "shoes"
+     ]
+    ]
+   },
+   "want": [
+    {
+     "keys": [
+      "plan",
+      "entry",
+      "shoes",
+      "pace"
+     ],
+     "name_any": [
+      "marathon"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "held-names-dune-keeps",
+   "about": "a folder named Дюна gains a book page: the name still fits and stays",
+   "tabs": [
+    {"key": "kinopoisk", "title": "Дюна: Часть вторая (2024) — Кинопоиск", "url": "https://www.kinopoisk.ru/film/4540126/", "by": "", "about": ""},
+    {"key": "watch", "title": "Дюна 2 (2024) смотреть онлайн бесплатно в хорошем качестве HD 1080", "url": "https://kinogo.media/filmy/5123-djuna-2-2024.html", "by": "", "about": ""},
+    {"key": "review", "title": "«Дюна: Часть вторая»: рецензия на главный блокбастер года — Афиша Daily", "url": "https://daily.afisha.ru/cinema/26712-dyuna-chast-vtoraya-recenziya/", "by": "Афиша Daily", "about": ""},
+    {"key": "book", "title": "Книга «Мессия Дюны» Фрэнк Герберт — купить на OZ.by", "url": "https://oz.by/books/more10124511.html", "by": "Фрэнк Герберт", "about": ""}
+   ],
+   "want": [{"keys": ["kinopoisk", "watch", "review", "book"], "current": "Дюна", "keep": true, "name_any": ["дюна"]}]
+  },
+  {
+   "id": "held-names-helios-not-a-title",
+   "about": "pages of one project whose titles have louder words than the project",
+   "tabs": [
+    {"key": "roadmap", "title": "Helios Q1 Roadmap: Payments Rewrite - Notion", "url": "https://www.notion.so/acme/Helios-Q1-Roadmap-8f2a", "by": "", "about": ""},
+    {"key": "standup", "title": "Helios standup notes, Tuesday - Notion", "url": "https://www.notion.so/acme/Helios-standup-notes-2c1d", "by": "", "about": ""},
+    {"key": "board", "title": "HEL board - Helios - Linear", "url": "https://linear.app/acme/team/HEL/board", "by": "", "about": ""},
+    {"key": "design", "title": "Helios checkout flow v3 – Figma", "url": "https://www.figma.com/design/h7Pq2/Helios-checkout-flow-v3", "by": "", "about": ""}
+   ],
+   "want": [{"keys": ["roadmap", "standup", "board", "design"], "name_any": ["helios"], "name_none": ["payments", "rewrite", "standup", "checkout", "roadmap", "board", "notion", "linear", "figma"]}]
+  },
+  {
+   "id": "held-barcelona-no-shared-word",
+   "about": "a trip to Barcelona across an airline, a sight and a flat, no title word in common, among unrelated tabs",
+   "tabs": [
+    {
+     "key": "vueling",
+     "title": "BER → BCN · Vueling",
+     "url": "https://tickets.vueling.com/ScheduleSelectNew.aspx",
+     "by": "",
+     "about": ""
+    },
+    {
+     "key": "figma",
+     "title": "Onboarding v3 – Figma",
+     "url": "https://www.figma.com/design/k2J9/Onboarding-v3",
+     "by": "",
+     "about": ""
+    },
+    {
+     "key": "sagrada",
+     "title": "Sagrada Família: official tickets",
+     "url": "https://tickets.sagradafamilia.org/en/",
+     "by": "",
+     "about": ""
+    },
+    {
+     "key": "flat",
+     "title": "Sunny flat in Gràcia with a balcony - Airbnb",
+     "url": "https://www.airbnb.com/rooms/61200485",
+     "by": "",
+     "about": ""
+    },
+    {
+     "key": "hn",
+     "title": "Hacker News",
+     "url": "https://news.ycombinator.com/",
+     "by": "",
+     "about": ""
+    }
+   ],
+   "want": [
+    {
+     "keys": [
+      "vueling",
+      "sagrada",
+      "flat"
+     ],
+     "name_any": [
+      "barcelona",
+      "bcn",
+      "spain",
+      "españa",
+      "catalonia"
+     ]
+    }
+   ],
+   "also": [
+    [
+     [
+      "vueling",
+      "flat"
+     ]
+    ],
+    [
+     [
+      "sagrada",
+      "flat"
+     ]
+    ],
+    [
+     [
+      "vueling",
+      "sagrada"
+     ]
+    ]
+   ]
+  },
+  {
+   "id": "held-russian-purchase-no-shared-word",
+   "about": "choosing a washing machine in Russian across a shop, a market listing and an article, no title word in common, among unrelated tabs",
+   "tabs": [
+    {
+     "key": "bosch",
+     "title": "Стиральная машина Bosch WAN28281 — DNS",
+     "url": "https://www.dns-shop.ru/catalog/stiralnye/wan28281/",
+     "by": "",
+     "about": ""
+    },
+    {
+     "key": "gosuslugi",
+     "title": "Госуслуги — личный кабинет",
+     "url": "https://www.gosuslugi.ru/",
+     "by": "",
+     "about": ""
+    },
+    {
+     "key": "lg",
+     "title": "LG F2J3HS0W: отзывы покупателей — Яндекс Маркет",
+     "url": "https://market.yandex.ru/product--lg-f2j3hs0w/1732210983/reviews",
+     "by": "",
+     "about": ""
+    },
+    {
+     "key": "advice",
+     "title": "Как выбрать стиралку: советы мастера — Дзен",
+     "url": "https://dzen.ru/a/ZkV1",
+     "by": "",
+     "about": ""
+    },
+    {
+     "key": "weather",
+     "title": "Погода в Москве на 10 дней — Гисметео",
+     "url": "https://www.gismeteo.ru/weather-moscow-4368/10-days/",
+     "by": "",
+     "about": ""
+    }
+   ],
+   "want": [
+    {
+     "keys": [
+      "bosch",
+      "lg",
+      "advice"
+     ],
+     "name_any": [
+      "стирал",
+      "washing",
+      "washer"
+     ]
+    }
+   ],
+   "also": [
+    [
+     [
+      "bosch",
+      "lg"
+     ]
+    ],
+    [
+     [
+      "bosch",
+      "advice"
+     ]
+    ],
+    [
+     [
+      "lg",
+      "advice"
+     ]
+    ]
+   ]
+  },
+  {
+   "id": "held-different-concerts",
+   "about": "three concerts by three different artists: near in meaning, nothing to group",
+   "tabs": [
+    {
+     "key": "swift",
+     "title": "Taylor Swift | The Eras Tour Tickets - Ticketmaster",
+     "url": "https://www.ticketmaster.de/artist/taylor-swift-tickets/1093",
+     "by": "",
+     "about": ""
+    },
+    {
+     "key": "mahler",
+     "title": "Mahler 5 with Kirill Petrenko - Berliner Philharmoniker",
+     "url": "https://www.berliner-philharmoniker.de/en/concert/calendar/59012/",
+     "by": "",
+     "about": ""
+    },
+    {
+     "key": "notes",
+     "title": "Notes - iCloud",
+     "url": "https://www.icloud.com/notes/",
+     "by": "",
+     "about": ""
+    },
+    {
+     "key": "coldplay",
+     "title": "Coldplay: Music of the Spheres - Eventim",
+     "url": "https://www.eventim.de/artist/coldplay/",
+     "by": "",
+     "about": ""
+    }
+   ],
+   "want": []
+  },
+  {
+   "id": "held-two-disasters",
+   "about": "two unrelated disaster stories from two outlets: near in meaning, nothing to group",
+   "tabs": [
+    {
+     "key": "hurricane",
+     "title": "Hurricane makes landfall on Florida's Gulf Coast - AP News",
+     "url": "https://apnews.com/article/hurricane-florida-landfall-5d1c",
+     "by": "",
+     "about": ""
+    },
+    {
+     "key": "wildfire",
+     "title": "Wildfire forces evacuations near Athens - Reuters",
+     "url": "https://www.reuters.com/world/europe/wildfire-athens-evacuations-2026-08-12/",
+     "by": "",
+     "about": ""
+    },
+    {
+     "key": "github",
+     "title": "Notifications - GitHub",
+     "url": "https://github.com/notifications",
+     "by": "",
+     "about": ""
+    }
+   ],
+   "want": []
+  }
+ ]
+}

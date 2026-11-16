@@ -1,0 +1,149 @@
+import Foundation
+
+final class LineConnection {
+    private let fd: Int32
+    private let source: DispatchSourceRead
+    private var bytes = Data()
+    private var closed = false
+    var onLine: (([String: Any]) -> Void)?
+    var onClose: (() -> Void)?
+
+    static let longest = 4_000_000
+
+    init(fd: Int32) {
+        self.fd = fd
+        _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
+        var quiet: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &quiet, socklen_t(MemoryLayout<Int32>.size))
+        source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: .main)
+        source.setEventHandler { [weak self] in self?.read() }
+        source.setCancelHandler { Darwin.close(fd) }
+        source.resume()
+    }
+
+    private func read() {
+        var chunk = [UInt8](repeating: 0, count: 65536)
+        let count = Darwin.read(fd, &chunk, chunk.count)
+        if count == 0 || (count < 0 && errno != EAGAIN) { return close() }
+        guard count > 0 else { return }
+        bytes.append(contentsOf: chunk[0..<count])
+        while let newline = bytes.firstIndex(of: 0x0A) {
+            let line = bytes[bytes.startIndex..<newline]
+            bytes = Data(bytes[bytes.index(after: newline)...])
+            if line.isEmpty { continue }
+            guard let found = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else {
+                send(["error": "not a JSON object"])
+                continue
+            }
+            onLine?(found)
+        }
+        if bytes.count > LineConnection.longest {
+            send(["error": "request too long"])
+            close()
+        }
+    }
+
+    func send(_ object: [String: Any]) {
+        guard !closed, var out = try? JSONSerialization.data(withJSONObject: object) else { return }
+        out.append(0x0A)
+        let quiet = fcntl(fd, F_GETFL)
+        _ = fcntl(fd, F_SETFL, quiet & ~O_NONBLOCK)
+        out.withUnsafeBytes { raw in
+            var sent = 0
+            while sent < raw.count {
+                let wrote = Darwin.write(fd, raw.baseAddress!.advanced(by: sent), raw.count - sent)
+                if wrote <= 0 { break }
+                sent += wrote
+            }
+        }
+        _ = fcntl(fd, F_SETFL, quiet)
+    }
+
+    func close() {
+        guard !closed else { return }
+        closed = true
+        source.cancel()
+        onClose?()
+    }
+}
+
+final class UnixLineServer {
+    private let path: String
+    private var listener: Int32 = -1
+    private var accepting: DispatchSourceRead?
+    private var connections: [ObjectIdentifier: LineConnection] = [:]
+    var connected: ((LineConnection) -> Void)?
+
+    init(path: String) {
+        self.path = path
+    }
+
+    var running: Bool { accepting != nil }
+
+    func start() -> Bool {
+        guard !running else { return true }
+        let folder = (path as NSString).deletingLastPathComponent
+        try? FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
+        unlink(path)
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else { return false }
+        var address = sockaddr_un()
+        address.sun_family = sa_family_t(AF_UNIX)
+        let room = MemoryLayout.size(ofValue: address.sun_path)
+        guard path.utf8.count < room else {
+            close(fd)
+            return false
+        }
+        withUnsafeMutablePointer(to: &address.sun_path) { sun in
+            sun.withMemoryRebound(to: CChar.self, capacity: room) { _ = strlcpy($0, path, room) }
+        }
+        let size = socklen_t(MemoryLayout<sockaddr_un>.size)
+        let mask = umask(0o177)
+        let bound = withUnsafePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, size) }
+        }
+        umask(mask)
+        guard bound == 0, chmod(path, 0o600) == 0, listen(fd, 16) == 0 else {
+            close(fd)
+            unlink(path)
+            return false
+        }
+        _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
+        let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: .main)
+        source.setEventHandler { [weak self] in self?.accept() }
+        source.setCancelHandler { close(fd) }
+        source.resume()
+        accepting = source
+        listener = fd
+        return true
+    }
+
+    func stop() {
+        accepting?.cancel()
+        accepting = nil
+        listener = -1
+        connections.values.forEach { $0.close() }
+        connections = [:]
+        unlink(path)
+    }
+
+    private func accept() {
+        let fd = Darwin.accept(listener, nil, nil)
+        guard fd >= 0 else { return }
+        var uid = uid_t(0)
+        var gid = gid_t(0)
+        guard getpeereid(fd, &uid, &gid) == 0, uid == getuid() else {
+            close(fd)
+            return
+        }
+        let connection = LineConnection(fd: fd)
+        let key = ObjectIdentifier(connection)
+        connections[key] = connection
+        let before = connection.onClose
+        connection.onClose = { [weak self] in
+            before?()
+            self?.connections[key] = nil
+        }
+        connected?(connection)
+    }
+}

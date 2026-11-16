@@ -1,0 +1,27 @@
+name: An idea
+description: Something Broadway could do, or do differently.
+labels: [idea]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Broadway tries to stay quiet and small, so not every good idea fits. Saying what you are trying to do helps more than naming a button.
+  - type: textarea
+    id: need
+    attributes:
+      label: What you are trying to do
+      description: The task, and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+      description: How you picture it. If another browser does it well, say which and how.
+  - type: dropdown
+    id: build
+    attributes:
+      label: Would you like to build it?
+      options:
+        - No, just the idea
+        - Yes, with a pull request

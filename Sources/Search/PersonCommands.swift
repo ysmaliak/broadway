@@ -1,0 +1,306 @@
+import AppKit
+import Foundation
+
+struct PersonRefusal: Error {
+    var code: String
+    var message: String
+    var hint: String?
+
+    init(_ code: String, _ message: String, hint: String? = nil) {
+        self.code = code
+        self.message = message
+        self.hint = hint
+    }
+
+    static func usage(_ message: String, hint: String? = nil) -> PersonRefusal { PersonRefusal("usage", message, hint: hint) }
+    static func missing(_ what: String, _ named: String) -> PersonRefusal { PersonRefusal("not_found", "No such \(what): \(named)") }
+    static func ambiguous(_ what: String, _ named: String, _ count: Int) -> PersonRefusal {
+        PersonRefusal("ambiguous", "\(named) matches \(count) of them. Give more of the \(what).")
+    }
+    static func person(_ message: String, where place: String) -> PersonRefusal {
+        PersonRefusal("person_only", message, hint: "The person can do this in Broadway: \(place)")
+    }
+}
+
+enum PersonClass: Equatable {
+    case tool
+    case look
+    case arrange
+    case erase
+    case person(AgentAct)
+    case open
+}
+
+@MainActor
+struct PersonCall {
+    var noun: String
+    var verb: String
+    var arguments: [String: Any]
+    var browser: Browser
+    var box: BrowserToolbox
+    var tab: (tab: Tab, browser: Browser)?
+    var askedAt: URL?
+    var link: AgentLink?
+
+    func string(_ key: String) -> String? {
+        guard let text = arguments[key] as? String else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    func need(_ key: String) throws -> String {
+        guard let found = string(key) else { throw PersonRefusal.usage("\(noun) \(verb) needs \(key)") }
+        return found
+    }
+
+    func flag(_ key: String) -> Bool { arguments[key] as? Bool == true }
+
+    func strings(_ key: String) -> [String] { arguments[key] as? [String] ?? [] }
+
+    func number(_ key: String) -> Double? { arguments[key] as? Double ?? (arguments[key] as? Int).map(Double.init) }
+
+    var page: (tab: Tab, browser: Browser) {
+        get throws {
+            guard let tab else { throw PersonRefusal("no_tab", "No tab to work in") }
+            return tab
+        }
+    }
+
+    var line: String {
+        var words = ["broadway", noun, verb]
+        for key in arguments.keys.sorted() where key != "tab" {
+            switch arguments[key] {
+            case let text as String: words.append(text)
+            case let list as [Any]: words += list.map { "\($0)" }
+            case let on as Bool where on: words.append("--\(key)")
+            case let number as NSNumber: words.append("--\(key) \(number)")
+            default: break
+            }
+        }
+        return words.joined(separator: " ")
+    }
+}
+
+typealias PersonHandler = @MainActor (PersonCall) async throws -> [String: Any]
+
+struct PersonVerb {
+    var noun: String
+    var verb: String
+    var kind: PersonClass
+    var tabbed = false
+    var softer: (@MainActor (PersonCall) -> PersonClass?)?
+    var first: (@MainActor (PersonCall) throws -> Void)?
+    var run: PersonHandler
+
+    init(_ noun: String, _ verb: String, _ kind: PersonClass, tabbed: Bool = false, softer: (@MainActor (PersonCall) -> PersonClass?)? = nil,
+         first: (@MainActor (PersonCall) throws -> Void)? = nil, run: @escaping PersonHandler) {
+        self.noun = noun
+        self.verb = verb
+        self.kind = kind
+        self.tabbed = tabbed
+        self.softer = softer
+        self.first = first
+        self.run = run
+    }
+
+    var name: String { "\(noun) \(verb)" }
+}
+
+@MainActor
+enum PersonCommands {
+    static let table: [PersonVerb] = PersonTabs.verbs + PersonFolders.verbs + PersonGroups.verbs + PersonStuff.verbs + PersonPages.verbs + PersonSettings.verbs + PersonKnowledge.verbs + PersonAgents.verbs + completionVerbs
+
+    private static let completionVerbs = [
+        PersonVerb("complete", "values", .look) { call in
+            var rows: [[String: Any]] = []
+            switch call.string("of") {
+            case "space": rows = call.browser.spaces.map { ["value": $0.name, "about": "space"] }
+            case "tab": rows = PersonTabs.everyTab(call).map { ["value": short($0.tab.id), "about": $0.tab.title] }
+            case "setting": rows = SettingsIndex.items.map { ["value": $0.id, "about": $0.title] }
+            case "shortcut": rows = PersonSettings.commands.map { ["value": $0.id, "about": $0.title] }
+            case "folder": rows = call.browser.tabGroups.map { ["value": $0.name, "about": "folder"] }
+            default: break
+            }
+            return ["values": rows]
+        },
+    ]
+
+    static var names: [String] { table.filter { $0.noun != "complete" }.map(\.name).sorted() }
+
+    static func find(_ noun: String, _ verb: String) -> PersonVerb? {
+        table.first { $0.noun == noun && $0.verb == verb }
+    }
+
+    static func short(_ id: UUID) -> String { String(id.uuidString.prefix(8)).lowercased() }
+
+    static func stamp(_ date: Date?) -> String { date.map(ISO8601DateFormatter().string(from:)) ?? "" }
+
+    static func pick<Item>(_ items: [Item], id: (Item) -> UUID, named: String, what: String) throws -> Item {
+        let wanted = named.lowercased()
+        let found = items.filter { id($0).uuidString.lowercased().hasPrefix(wanted) }
+        if found.count > 1 { throw PersonRefusal.ambiguous("id", named, found.count) }
+        guard let only = found.first else { throw PersonRefusal.missing(what, named) }
+        return only
+    }
+
+    static func tool(_ call: PersonCall, _ name: String, _ arguments: [String: Any] = [:]) async throws -> [String: Any] {
+        let outcome = await call.box.call(name, arguments, task: call.link?.id)
+        if outcome.failed {
+            let text = outcome.text ?? "That didn't work"
+            throw PersonRefusal(ToolFailure.code(text), text)
+        }
+        return ToolReply.data(outcome)
+    }
+
+    static func handle(_ request: [String: Any], browser: Browser, socket: AgentSocket, on connection: LineConnection) {
+        let box = socket.box
+        box.browser = browser
+        let noun = request["noun"] as? String ?? ""
+        let verb = request["verb"] as? String ?? ""
+        guard let entry = find(noun, verb) else {
+            connection.send(failure(PersonRefusal.usage("Broadway has no \(noun) \(verb)", hint: "This broadway and this Broadway may be different versions")))
+            return connection.close()
+        }
+        guard entry.kind == .open || box.open else {
+            connection.send(ToolFailure.error("agents_off", "Agents are off in Broadway"))
+            return connection.close()
+        }
+        Task { @MainActor in
+            do {
+                var call = PersonCall(noun: noun, verb: verb, arguments: request["arguments"] as? [String: Any] ?? [:], browser: browser, box: box)
+                let connecting = noun == "agents" && verb == "connect"
+                call.link = socket.link(for: request, create: connecting, name: connecting ? call.string("name") : nil)
+                if entry.tabbed {
+                    let named = call.arguments["tab"] as? String
+                    switch await socket.target(named, browser: browser, link: call.link?.id) {
+                    case .failure(let refused): throw PersonRefusal(refused.code, refused.message)
+                    case .success(let id):
+                        call.tab = box.find(["tab": id])
+                        if named != nil { socket.remember(id, link: call.link?.id) }
+                    }
+                }
+                try entry.first?(call)
+                call.askedAt = call.tab?.tab.pageAddress
+                try await gate(entry, call, request: request, on: connection)
+                let data = try await entry.run(call)
+                let sealed = Set(box.visible.flatMap(\.tab.sealed))
+                connection.send(["ok": true, "data": AgentSecrets.scrub(data, sealed: sealed)])
+            } catch let refused as PersonRefusal {
+                connection.send(failure(refused))
+            } catch {
+                connection.send(ToolFailure.error("failed", "That didn't work"))
+            }
+            connection.close()
+        }
+    }
+
+    static func failure(_ refused: PersonRefusal) -> [String: Any] {
+        var reply = ToolFailure.error(refused.code, refused.message)
+        var error = reply["error"] as? [String: Any] ?? [:]
+        error["retry_safe"] = true
+        if let hint = refused.hint { error["hint"] = hint }
+        reply["error"] = error
+        return reply
+    }
+
+    private static func gate(_ entry: PersonVerb, _ call: PersonCall, request: [String: Any], on connection: LineConnection) async throws {
+        let kind = entry.softer?(call) ?? entry.kind
+        if kind == .open || kind == .tool { return }
+        if let tab = call.tab?.tab, tab.driving || tab.handedBack {
+            guard await AgentDriving.settled(tab, patience: .zero) else {
+                throw PersonRefusal("refused", "The person is driving that tab. Nothing was done. Work elsewhere, or try later.")
+            }
+            tab.handedBack = false
+            if kind != .look {
+                throw PersonRefusal("refused", "The person drove that tab and handed it back. Nothing was done. Look at it again before you go on.")
+            }
+        }
+        let site = call.tab.flatMap { AgentSites.site(of: $0.tab.pageAddress) }
+        switch decide(kind, mode: call.browser.prefs.agentMode, rule: AgentSites.shared.rule(for: site)) {
+        case .go:
+            return
+        case .refuse:
+            throw PersonRefusal("refused", "The person never lets agents act on \(site ?? "this site"). Leave it.")
+        case .needsTask:
+            guard let link = call.link else {
+                throw PersonRefusal("needs_task", "This needs the person's yes, and only a task can ask for it. Nothing was done.")
+            }
+            if AgentDesk.shared.isGranted(.tab, task: link.id, site: site) { return }
+            try await PersonAsk.yes(.tab, call: call, site: site, request: request, on: connection)
+            AgentDesk.shared.grant(.tab, task: link.id, site: site)
+        case .person(let act):
+            try await PersonAsk.yes(act, call: call, site: site, request: request, on: connection)
+        }
+    }
+
+    static func decide(_ kind: PersonClass, mode: AgentMode, rule: SiteRule?) -> PersonGate {
+        let act: AgentAct
+        switch kind {
+        case .open, .tool: return .go
+        case .erase: act = .delete
+        case .person(let wanted): act = wanted
+        case .look, .arrange: act = .tab
+        }
+        let verdict = AgentPolicy.verdict(act, mode: mode, rule: rule)
+        if verdict == .refuse { return .refuse }
+        if case .person = kind { return .person(act) }
+        guard verdict == .ask else { return .go }
+        return kind == .look ? .needsTask : .person(act)
+    }
+}
+
+enum PersonGate: Equatable {
+    case go
+    case refuse
+    case needsTask
+    case person(AgentAct)
+}
+
+@MainActor
+enum PersonAsk {
+    static func reachable(wait: Double, request: [String: Any]) -> Bool {
+        wait > 0 && request["person"] as? String != "none" && !AgentSessions.shared.nobodyHome && (Store.testing || !NSApp.isHidden)
+    }
+
+    static func yes(_ act: AgentAct, call: PersonCall, site: String?, request: [String: Any], on connection: LineConnection) async throws {
+        var wait = request["wait"] as? Double ?? (request["wait"] as? Int).map(Double.init) ?? 0
+        if let link = call.link, wait == 0 { wait = AgentLinks.shared.patience(link.id) }
+        guard reachable(wait: wait, request: request) else {
+            throw PersonRefusal("needs_you", "This needs the person's yes in Broadway. Nothing was done.",
+                                hint: "Tell the person, or run it with --wait-person MIN while they are at Broadway")
+        }
+        var question = AgentQuestion(kind: .approval(act), title: "Run this broadway command?")
+        question.tab = call.tab?.tab.id
+        question.site = site
+        question.quote = AgentQuestion.clean(call.line)
+        question.quoteLabel = call.link.map { "From \($0.name)" } ?? "From a terminal"
+        question.task = call.link?.id
+        let id = question.id
+        connection.send(["event": "asking", "message": "Waiting for your yes in Broadway"])
+        let gone = connection.onClose
+        connection.onClose = {
+            gone?()
+            MainActor.assumeIsolated { AgentDesk.shared.take(id, .dropped) }
+        }
+        let clock = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(wait))
+            if !Task.isCancelled { AgentDesk.shared.take(id, .dropped) }
+        }
+        let answer = await AgentDesk.shared.ask(question)
+        clock.cancel()
+        connection.onClose = gone
+        switch answer {
+        case .yes:
+            return
+        case .always:
+            if let site { AgentSites.shared.set(.always, for: site) }
+        case .never:
+            if let site { AgentSites.shared.set(.never, for: site) }
+            throw PersonRefusal("refused", "The person said never here. Leave \(site ?? "this site").")
+        case .no, .picked:
+            throw PersonRefusal("refused", "The person said not now. Nothing was done.")
+        case .dropped:
+            throw PersonRefusal("needs_you", "Nobody answered in Broadway. Nothing was done.")
+        }
+    }
+}

@@ -1,0 +1,10 @@
+{"data": {"viewer": {"id": "user-sam", "assignedIssues": {"nodes": [
+  {"identifier": "ENG-231", "title": "Rate limit the export endpoint", "url": "https://linear.app/acme/issue/ENG-231/rate-limit-the-export-endpoint",
+   "updatedAt": "2026-11-03T22:01:10.511Z", "state": {"name": "In Progress", "type": "started"},
+   "comments": {"nodes": [{"createdAt": "2026-11-03T21:30:00.000Z", "user": {"id": "user-dana"}}]},
+   "history": {"nodes": [{"createdAt": "2026-11-03T22:01:10.511Z", "actor": null}, {"createdAt": "2026-11-03T20:00:00.000Z", "actor": {"id": "user-sam"}}]}},
+  {"identifier": "ENG-198", "title": "Flaky login test on CI", "url": "https://linear.app/acme/issue/ENG-198/flaky-login-test-on-ci",
+   "updatedAt": "2026-11-01T10:00:00.000Z", "state": {"name": "Todo", "type": "unstarted"},
+   "comments": {"nodes": [{"createdAt": "2026-10-30T09:00:00.000Z", "user": {"id": "user-dana"}}]},
+   "history": {"nodes": [{"createdAt": "2026-11-01T10:00:00.000Z", "actor": {"id": "user-sam"}}]}}
+]}}}}

@@ -1,0 +1,16 @@
+{
+  "data": {
+    "issue": {
+      "identifier": "ENG-231",
+      "title": "Keep the export small",
+      "url": "https://linear.app/acme/issue/ENG-231/keep-the-export-small",
+      "updatedAt": "2026-11-04T03:01:00Z",
+      "state": {
+        "name": "In Progress"
+      },
+      "creator": {
+        "name": "Sam Octo"
+      }
+    }
+  }
+}

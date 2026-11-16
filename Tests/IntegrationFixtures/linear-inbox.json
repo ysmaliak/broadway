@@ -1,0 +1,15 @@
+{"data": {"notifications": {"nodes": [
+  {"id": "n1", "type": "issueMention", "readAt": null, "archivedAt": null,
+   "issue": {"identifier": "DES-12", "title": "Icon set for settings", "url": "https://linear.app/acme/issue/DES-12/icon-set-for-settings",
+             "updatedAt": "2026-11-03T20:00:00.000Z", "state": {"name": "Backlog", "type": "backlog"}}},
+  {"id": "n2", "type": "issueAssignedToYou", "readAt": null, "archivedAt": null,
+   "issue": {"identifier": "ENG-231", "title": "Rate limit the export endpoint", "url": "https://linear.app/acme/issue/ENG-231/rate-limit-the-export-endpoint",
+             "updatedAt": "2026-11-03T22:01:10.511Z", "state": {"name": "In Progress", "type": "started"}}},
+  {"id": "n3", "type": "issueNewComment", "readAt": "2026-11-03T08:00:00.000Z", "archivedAt": null,
+   "issue": {"identifier": "ENG-198", "title": "Flaky login test on CI", "url": "https://linear.app/acme/issue/ENG-198/flaky-login-test-on-ci",
+             "updatedAt": "2026-11-01T10:00:00.000Z", "state": {"name": "Todo", "type": "unstarted"}}},
+  {"id": "n4", "type": "issueCommentMention", "readAt": null, "archivedAt": null,
+   "issue": {"identifier": "ENG-231", "title": "Rate limit the export endpoint", "url": "https://linear.app/acme/issue/ENG-231/rate-limit-the-export-endpoint",
+             "updatedAt": "2026-11-03T22:01:10.511Z", "state": {"name": "In Progress", "type": "started"}}},
+  {"id": "n5", "type": "projectUpdateCreated", "readAt": null, "archivedAt": null}
+]}}}

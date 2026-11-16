@@ -1,0 +1,40 @@
+name: Something is wrong
+description: Broadway does something it shouldn't, or doesn't do what it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A security problem goes to support@broadwaybrowser.com, as SECURITY.md says, not here. Leave out anything of yours you would not post in public.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to see it
+      description: The steps, from a new window if you can. Name the page if a site is involved, and say whether Safari does the same.
+  - type: input
+    id: version
+    attributes:
+      label: Broadway version
+      description: Broadway › About Broadway
+      placeholder: "0.3 (202611161200)"
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "macOS 27.0.1"
+    validations:
+      required: true
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: A picture, a film or a log, if it helps.

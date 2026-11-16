@@ -1,0 +1,8 @@
+{"data": {"viewer": {"assignedIssues": {"nodes": [
+  {"identifier": "ENG-240", "title": "Add a CSV download to reports", "url": "https://linear.app/acme/issue/ENG-240/add-a-csv-download-to-reports",
+   "updatedAt": "2026-11-04T01:00:00.000Z", "state": {"name": "Todo", "type": "unstarted"}},
+  {"identifier": "ENG-231", "title": "Rate limit the export endpoint", "url": "https://linear.app/acme/issue/ENG-231/rate-limit-the-export-endpoint",
+   "updatedAt": "2026-11-03T22:01:10.511Z", "state": {"name": "In Review", "type": "started"}},
+  {"identifier": "ENG-198", "title": "Flaky login test on CI", "url": "https://linear.app/acme/issue/ENG-198/flaky-login-test-on-ci",
+   "updatedAt": "2026-11-01T10:00:00.000Z", "state": {"name": "Todo", "type": "unstarted"}}
+]}}}}

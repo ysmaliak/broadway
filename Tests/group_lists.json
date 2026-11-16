@@ -1,0 +1,618 @@
+{
+ "lists": [
+  {
+   "id": "picture",
+   "about": "a working day's sidebar: two videos of one channel, two pages of one project, and three tabs that go with nothing",
+   "tabs": [
+    {"key": "sleep", "title": "I finally fixed my sleep - YouTube", "url": "https://www.youtube.com/watch?v=Qa7nR2x4bW1", "by": "Sam Rowe", "about": "Six months of trying to keep one bedtime, and what finally worked."},
+    {"key": "maker-house", "title": "Самоделкин – покупка дома, переезд, новые проекты - YouTube", "url": "https://www.youtube.com/watch?v=m3Ht8pXq2Ls", "by": "Самоделкин", "about": "Большой разговор: зачем купил дом за городом, как переезжали и что будет на канале дальше."},
+    {"key": "maker-pickup", "title": "Меняю ПИКАП на ДОМ У МОРЯ - YouTube", "url": "https://www.youtube.com/watch?v=c5Wd1kZr7Tn", "by": "Самоделкин", "about": "Отдал старый пикап и смотрю, какой дом у моря за него дают."},
+    {"key": "popup", "title": "Lantern Popup Options", "url": "https://claude.ai/artifact/6b1e4d27-0c9a-4f3e-8d71-5a2c9e04f1b8", "by": "", "about": "Five ways to draw Lantern's popups inside the native popover."},
+    {"key": "settings", "title": "Lantern Settings Options", "url": "https://claude.ai/artifact/c7f20a93-4e1b-4d6c-a2f5-81e3b07d9c46", "by": "", "about": "Five insides for Lantern's Settings window."},
+    {"key": "riley", "title": "Riley Park on X: \"I forgot that I shipped this app two years ago and it still makes $3k a month\" / X", "url": "https://x.com/rileyparkdev/status/1988712204417531122", "by": "Riley Park", "about": ""},
+    {"key": "status", "title": "Claude Status", "url": "https://status.claude.com/", "by": "", "about": "Welcome to Claude's home for real-time and historical data on system performance."}
+   ],
+   "want": [
+    {"keys": ["maker-house", "maker-pickup"], "name_any": ["самоделкин", "samodelkin"]},
+    {"keys": ["popup", "settings"], "name_any": ["lantern"]}
+   ]
+  },
+  {
+   "id": "heat-pump-research",
+   "about": "research on one topic across sites, among unrelated tabs",
+   "tabs": [
+    {"key": "energy", "title": "Heat Pump Systems | Department of Energy", "url": "https://www.energy.gov/energysaver/heat-pump-systems", "by": "", "about": "Heat pumps offer an energy-efficient alternative to furnaces and air conditioners for all climates."},
+    {"key": "mail", "title": "Inbox (3) - sam.rowe@example.com - Fastmail", "url": "https://app.fastmail.com/mail/Inbox/", "by": "", "about": ""},
+    {"key": "reddit", "title": "Anyone regret replacing a gas furnace with a heat pump in a cold climate? : r/hvacadvice", "url": "https://www.reddit.com/r/hvacadvice/comments/1gk2p9x/anyone_regret_replacing_a_gas_furnace_with_a_heat/", "by": "r/hvacadvice", "about": ""},
+    {"key": "weather", "title": "Minneapolis, MN 10-Day Weather Forecast - The Weather Channel", "url": "https://weather.com/weather/tenday/l/Minneapolis+MN", "by": "", "about": ""},
+    {"key": "cost", "title": "How Much Does a Heat Pump Cost in 2026? – Forbes Home", "url": "https://www.forbes.com/home-improvement/hvac/heat-pump-cost/", "by": "Forbes Home", "about": "Average heat pump installation costs by type, size and home."},
+    {"key": "video", "title": "Heat Pumps: the Future of Home Heating - YouTube", "url": "https://www.youtube.com/watch?v=7J52mDjZzto", "by": "Technology Connections", "about": "How a heat pump works and why it beats burning gas, even when it is cold."},
+    {"key": "chess", "title": "Play Chess Online Against the Computer - Chess.com", "url": "https://www.chess.com/play/computer", "by": "", "about": ""}
+   ],
+   "want": [{"keys": ["energy", "reddit", "cost", "video"], "name_any": ["heat pump"]}]
+  },
+  {
+   "id": "standing-desk-shopping",
+   "about": "a shopping comparison across shops and reviews",
+   "tabs": [
+    {"key": "flexispot", "title": "E7 Pro Standing Desk | FlexiSpot", "url": "https://www.flexispot.com/e7-pro-standing-desk", "by": "", "about": "Dual-motor standing desk frame with a 440 lb capacity."},
+    {"key": "calendar", "title": "Google Calendar - Week of November 9, 2026", "url": "https://calendar.google.com/calendar/u/0/r/week", "by": "", "about": ""},
+    {"key": "uplift", "title": "UPLIFT V2 Standing Desk - Design Your Desk | UPLIFT Desk", "url": "https://www.upliftdesk.com/uplift-v2-standing-desk-v2-or-v2-commercial/", "by": "", "about": "Build a height adjustable desk with a top, frame and accessories of your choice."},
+    {"key": "wirecutter", "title": "The 4 Best Standing Desks of 2026 | Reviews by Wirecutter", "url": "https://www.nytimes.com/wirecutter/reviews/best-standing-desk/", "by": "Wirecutter", "about": "After testing more than 30 desks, these are the standing desks we recommend."},
+    {"key": "reddit", "title": "Uplift V2 vs Flexispot E7 Pro - which did you pick and why? : r/StandingDesk", "url": "https://www.reddit.com/r/StandingDesk/comments/1h3kq7a/uplift_v2_vs_flexispot_e7_pro_which_did_you_pick/", "by": "r/StandingDesk", "about": ""},
+    {"key": "spotify", "title": "Spotify – Deep Focus", "url": "https://open.spotify.com/playlist/37i9dQZF1DWZeKCadgRdKQ", "by": "Spotify", "about": "Keep calm and focus with ambient and post-rock music."}
+   ],
+   "want": [{"keys": ["flexispot", "uplift", "wirecutter", "reddit"], "name_any": ["desk"]}]
+  },
+  {
+   "id": "kyoto-trip",
+   "about": "a trip: flights, a hotel, a guide and a rail pass",
+   "tabs": [
+    {"key": "flights", "title": "Berlin to Osaka | Google Flights", "url": "https://www.google.com/travel/flights/search", "by": "", "about": ""},
+    {"key": "hn", "title": "Hacker News", "url": "https://news.ycombinator.com/", "by": "", "about": ""},
+    {"key": "hotel", "title": "The 10 best hotels in Kyoto, Japan (from $62) - Booking.com", "url": "https://www.booking.com/city/jp/kyoto.html", "by": "", "about": "Great savings on hotels in Kyoto, Japan online."},
+    {"key": "guide", "title": "Kyoto Travel Guide - What to do in Kyoto City - japan-guide.com", "url": "https://www.japan-guide.com/e/e2158.html", "by": "", "about": "Kyoto served as Japan's capital for over a thousand years. Temples, shrines and gardens."},
+    {"key": "bank", "title": "Accounts - N26", "url": "https://app.n26.com/accounts", "by": "", "about": ""},
+    {"key": "rail", "title": "Kansai Area Pass: Osaka, Kyoto, Nara by train | JR-WEST", "url": "https://www.westjr.co.jp/global/en/ticket/pass/kansai/", "by": "", "about": "Unlimited rides on JR trains between Kansai Airport, Osaka, Kyoto and Nara."}
+   ],
+   "want": [{"keys": ["flights", "hotel", "guide", "rail"], "name_any": ["kyoto", "japan", "kansai"]}],
+   "also": [[["hotel", "guide", "rail"]]]
+  },
+  {
+   "id": "work-ticket",
+   "about": "a ticket with its pull request, its error and the documentation, beside another pull request of the same repository",
+   "tabs": [
+    {"key": "ticket", "title": "ENG-2314 Token refresh race logs users out › Linear", "url": "https://linear.app/acme/issue/ENG-2314/token-refresh-race-logs-users-out", "by": "", "about": ""},
+    {"key": "pr", "title": "Serialise token refresh so parallel requests share one (ENG-2314) by samrowe · Pull Request #4821 · acme/rocket", "url": "https://github.com/acme/rocket/pull/4821", "by": "samrowe", "about": "Fixes ENG-2314. Two requests could refresh the access token at once and the second invalidated the first."},
+    {"key": "other-pr", "title": "Bump eslint from 9.12 to 9.14 by dependabot · Pull Request #4830 · acme/rocket", "url": "https://github.com/acme/rocket/pull/4830", "by": "dependabot", "about": ""},
+    {"key": "sentry", "title": "TokenRefreshError: refresh token already used | acme-rocket | Sentry", "url": "https://acme.sentry.io/issues/5120934411/", "by": "", "about": ""},
+    {"key": "slack", "title": "general (Channel) - Acme - Slack", "url": "https://app.slack.com/client/T02AB3CDE/C02AB3CDF", "by": "", "about": ""},
+    {"key": "rfc", "title": "RFC 6749 - The OAuth 2.0 Authorization Framework: Refreshing an Access Token", "url": "https://datatracker.ietf.org/doc/html/rfc6749", "by": "", "about": "If the authorization server issued a refresh token to the client, the client makes a refresh request to the token endpoint."}
+   ],
+   "want": [{"keys": ["ticket", "pr", "sentry", "rfc"], "name_any": ["token", "refresh", "2314"]}],
+   "also": [[["ticket", "pr", "sentry"]]]
+  },
+  {
+   "id": "youtube-unrelated",
+   "about": "six videos that share nothing but the site",
+   "tabs": [
+    {"key": "lofi", "title": "lofi hip hop radio 📚 beats to relax/study to - YouTube", "url": "https://www.youtube.com/watch?v=jfKfPfyJRdk", "by": "Lofi Girl", "about": ""},
+    {"key": "pizza", "title": "How to Make Neapolitan Pizza Dough at Home - YouTube", "url": "https://www.youtube.com/watch?v=1-SJGQ2HLp8", "by": "Vito Iacopelli", "about": ""},
+    {"key": "keynote", "title": "WWDC26 Keynote - YouTube", "url": "https://www.youtube.com/watch?v=Qw3n9fVh2cA", "by": "Apple", "about": ""},
+    {"key": "marathon", "title": "I Ran a Marathon With No Training - YouTube", "url": "https://www.youtube.com/watch?v=Lm0bY4tR7kE", "by": "Michelle Khare", "about": ""},
+    {"key": "tax", "title": "Как подать декларацию 3-НДФЛ через личный кабинет - YouTube", "url": "https://www.youtube.com/watch?v=d9XwP2aKc3M", "by": "Налоги просто", "about": ""},
+    {"key": "chess", "title": "Magnus Carlsen vs Hikaru Nakamura | Speed Chess Final - YouTube", "url": "https://www.youtube.com/watch?v=Vt5m2JqLx8g", "by": "Chess.com", "about": ""}
+   ],
+   "want": []
+  },
+  {
+   "id": "wikipedia-unrelated",
+   "about": "five articles of one encyclopedia on five subjects",
+   "tabs": [
+    {"key": "octopus", "title": "Octopus - Wikipedia", "url": "https://en.wikipedia.org/wiki/Octopus", "by": "", "about": ""},
+    {"key": "treaty", "title": "Treaty of Westphalia - Wikipedia", "url": "https://en.wikipedia.org/wiki/Peace_of_Westphalia", "by": "", "about": ""},
+    {"key": "fft", "title": "Fast Fourier transform - Wikipedia", "url": "https://en.wikipedia.org/wiki/Fast_Fourier_transform", "by": "", "about": ""},
+    {"key": "bjork", "title": "Björk - Wikipedia", "url": "https://en.wikipedia.org/wiki/Bj%C3%B6rk", "by": "", "about": ""},
+    {"key": "sourdough", "title": "Sourdough - Wikipedia", "url": "https://en.wikipedia.org/wiki/Sourdough", "by": "", "about": ""}
+   ],
+   "want": []
+  },
+  {
+   "id": "github-unrelated",
+   "about": "five repositories with nothing in common but GitHub",
+   "tabs": [
+    {"key": "ripgrep", "title": "BurntSushi/ripgrep: ripgrep recursively searches directories for a regex pattern", "url": "https://github.com/BurntSushi/ripgrep", "by": "BurntSushi", "about": ""},
+    {"key": "excalidraw", "title": "excalidraw/excalidraw: Virtual whiteboard for sketching hand-drawn like diagrams", "url": "https://github.com/excalidraw/excalidraw", "by": "excalidraw", "about": ""},
+    {"key": "dotfiles", "title": "mathiasbynens/dotfiles: .files, including ~/.macos — sensible hacker defaults for macOS", "url": "https://github.com/mathiasbynens/dotfiles", "by": "mathiasbynens", "about": ""},
+    {"key": "whisper", "title": "ggerganov/whisper.cpp: Port of OpenAI's Whisper model in C/C++", "url": "https://github.com/ggerganov/whisper.cpp", "by": "ggerganov", "about": ""},
+    {"key": "recipes", "title": "dpapathanasiou/recipes: A collection of cooking recipes in json format", "url": "https://github.com/dpapathanasiou/recipes", "by": "dpapathanasiou", "about": ""}
+   ],
+   "want": []
+  },
+  {
+   "id": "rav4-two-languages",
+   "about": "one purchase researched in Russian and in English, with unrelated Russian tabs",
+   "tabs": [
+    {"key": "autoru", "title": "Купить Toyota RAV4 2019 года с пробегом в Минске — Автомалиновка", "url": "https://cars.av.by/toyota/rav4/year-2019", "by": "", "about": "Объявления о продаже Toyota RAV4 2019 года с пробегом."},
+    {"key": "news", "title": "Главные новости дня — Onliner", "url": "https://www.onliner.by/", "by": "", "about": ""},
+    {"key": "drom", "title": "Отзывы владельцев Toyota RAV4 XA50: все минусы и поломки — Дром", "url": "https://www.drom.ru/reviews/toyota/rav4/", "by": "", "about": "Отзывы владельцев Тойота РАВ4 пятого поколения."},
+    {"key": "review", "title": "2019 Toyota RAV4 Review: 5 Years Later, Should You Buy One Used? - YouTube", "url": "https://www.youtube.com/watch?v=Hq2cT9LwX0s", "by": "The Car Care Nut", "about": "A Toyota master technician on what goes wrong with the 2019 RAV4."},
+    {"key": "bank", "title": "Курсы валют на сегодня — Национальный банк", "url": "https://www.nbrb.by/statistics/rates/ratesdaily", "by": "", "about": ""},
+    {"key": "kufar", "title": "Toyota RAV4, 2019 г., 2.0 бензин, вариатор — Kufar Авто", "url": "https://auto.kufar.by/vi/cars/toyota-rav4-2019-204817733", "by": "", "about": ""}
+   ],
+   "want": [{"keys": ["autoru", "drom", "review", "kufar"], "name_any": ["rav4"]}]
+  },
+  {
+   "id": "planning-near-duplicates",
+   "about": "the same document open twice and its sheet, beside other documents of the same suite",
+   "tabs": [
+    {"key": "doc-1", "title": "Q4 Planning - Google Docs", "url": "https://docs.google.com/document/d/1bXq0PzT7mK2vLr9cN4sWy8uHgE5oJaF3dZ6iQ1tRkY0/edit", "by": "", "about": ""},
+    {"key": "cv", "title": "Résumé 2026 - Google Docs", "url": "https://docs.google.com/document/d/1Tn5wAz3LcP9eRk7uGq2oXv4bJy6mD8sHf0iK1tZrE2a/edit", "by": "", "about": ""},
+    {"key": "doc-2", "title": "Q4 Planning - Google Docs", "url": "https://docs.google.com/document/d/1bXq0PzT7mK2vLr9cN4sWy8uHgE5oJaF3dZ6iQ1tRkY0/edit?tab=t.0", "by": "", "about": ""},
+    {"key": "sheet", "title": "Q4 Planning Budget - Google Sheets", "url": "https://docs.google.com/spreadsheets/d/1vK8mZq3TcR5yLw2nPx9oBj7uGd4sHa6eF0iJ1tYkE3b/edit", "by": "", "about": ""},
+    {"key": "poem", "title": "Wedding toast draft - Google Docs", "url": "https://docs.google.com/document/d/1Hy4cLm8QxT2vNz6wRk0oPj3bGd9sFa5eU7iK1tYrE6c/edit", "by": "", "about": ""}
+   ],
+   "want": [{"keys": ["doc-1", "doc-2", "sheet"], "name_any": ["q4", "planning"]}]
+  },
+  {
+   "id": "nothing-to-group",
+   "about": "eight tabs from eight sites on eight subjects",
+   "tabs": [
+    {"key": "mail", "title": "Inbox - Fastmail", "url": "https://app.fastmail.com/mail/Inbox/", "by": "", "about": ""},
+    {"key": "weather", "title": "Warsaw, Poland Weather Forecast | AccuWeather", "url": "https://www.accuweather.com/en/pl/warsaw/274663/weather-forecast/274663", "by": "", "about": ""},
+    {"key": "recipe", "title": "Classic Shakshuka Recipe - NYT Cooking", "url": "https://cooking.nytimes.com/recipes/1014721-shakshuka-with-feta", "by": "Melissa Clark", "about": ""},
+    {"key": "docs", "title": "Array.prototype.flatMap() - JavaScript | MDN", "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/flatMap", "by": "", "about": ""},
+    {"key": "bank", "title": "Revolut - Accounts", "url": "https://app.revolut.com/home", "by": "", "about": ""},
+    {"key": "song", "title": "Khruangbin - Maria También (Official Video) - YouTube", "url": "https://www.youtube.com/watch?v=R1c3BzQ7yLk", "by": "Khruangbin", "about": ""},
+    {"key": "map", "title": "Tempelhofer Feld - Google Maps", "url": "https://www.google.com/maps/place/Tempelhofer+Feld", "by": "", "about": ""},
+    {"key": "wiki", "title": "Voyager 1 - Wikipedia", "url": "https://en.wikipedia.org/wiki/Voyager_1", "by": "", "about": ""}
+   ],
+   "want": []
+  },
+  {
+   "id": "severance-series",
+   "about": "one series followed across sites",
+   "tabs": [
+    {"key": "recap", "title": "Severance Season 2 Premiere Recap: Hello, Ms. Cobel - Vulture", "url": "https://www.vulture.com/article/severance-season-2-episode-1-recap-hello-ms-cobel.html", "by": "Vulture", "about": ""},
+    {"key": "jobs", "title": "Software Engineer jobs in Berlin | LinkedIn", "url": "https://www.linkedin.com/jobs/search/", "by": "", "about": ""},
+    {"key": "review", "title": "Severance season 2 review: the best show on TV gets even stranger - The Verge", "url": "https://www.theverge.com/24341182/severance-season-2-review-apple-tv-plus", "by": "The Verge", "about": ""},
+    {"key": "watch", "title": "Severance - Apple TV+", "url": "https://tv.apple.com/us/show/severance/umc.cmc.1srk2goyh2q2zdxcx605w8vtx", "by": "", "about": "Mark leads a team of office workers whose memories have been surgically divided between their work and personal lives."},
+    {"key": "theory", "title": "[Theory] What the goats are actually for : r/SeveranceAppleTVPlus", "url": "https://www.reddit.com/r/SeveranceAppleTVPlus/comments/1i7xk2p/theory_what_the_goats_are_actually_for/", "by": "r/SeveranceAppleTVPlus", "about": ""},
+    {"key": "train", "title": "Deutsche Bahn: Berlin Hbf → München Hbf, Fri 20 Nov", "url": "https://www.bahn.de/buchung/fahrplan/suche", "by": "", "about": ""}
+   ],
+   "want": [{"keys": ["recap", "review", "watch", "theory"], "name_any": ["severance"]}]
+  },
+  {
+   "id": "one-channel",
+   "about": "three videos of one channel whose titles never name it, among two other videos",
+   "tabs": [
+    {"key": "entropy", "title": "The Most Misunderstood Concept in Physics - YouTube", "url": "https://www.youtube.com/watch?v=DxL2HoqLbyA", "by": "Veritasium", "about": "One of the most important, yet least understood, concepts in all of physics."},
+    {"key": "pizza", "title": "How to Make Neapolitan Pizza Dough at Home - YouTube", "url": "https://www.youtube.com/watch?v=1-SJGQ2HLp8", "by": "Vito Iacopelli", "about": ""},
+    {"key": "light", "title": "Why No One Has Measured The Speed Of Light - YouTube", "url": "https://www.youtube.com/watch?v=pTn6Ewhb27k", "by": "Veritasium", "about": "Physics students learn the speed of light, c, is the same for all inertial observers but no one has ever actually measured it in one direction."},
+    {"key": "song", "title": "Khruangbin - Maria También (Official Video) - YouTube", "url": "https://www.youtube.com/watch?v=R1c3BzQ7yLk", "by": "Khruangbin", "about": ""},
+    {"key": "math", "title": "The Man Who Almost Broke Math (And Himself...) - YouTube", "url": "https://www.youtube.com/watch?v=_cr46G2K5Fo", "by": "Veritasium", "about": "How do you make infinite choices? The axiom of choice."}
+   ],
+   "want": [{"keys": ["entropy", "light", "math"], "name_any": ["veritasium"]}]
+  },
+  {
+   "id": "stripe-integration",
+   "about": "one integration across a vendor's docs, its library and a question, beside unrelated documentation",
+   "tabs": [
+    {"key": "intent", "title": "Create a PaymentIntent | Stripe API Reference", "url": "https://docs.stripe.com/api/payment_intents/create", "by": "", "about": ""},
+    {"key": "mdn", "title": "Array.prototype.flatMap() - JavaScript | MDN", "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/flatMap", "by": "", "about": ""},
+    {"key": "webhooks", "title": "Receive Stripe events in your webhook endpoint | Stripe Documentation", "url": "https://docs.stripe.com/webhooks", "by": "", "about": ""},
+    {"key": "node", "title": "stripe/stripe-node: Node.js library for the Stripe API", "url": "https://github.com/stripe/stripe-node", "by": "stripe", "about": ""},
+    {"key": "question", "title": "node.js - Stripe webhook signature verification fails with express.json() - Stack Overflow", "url": "https://stackoverflow.com/questions/70159949/stripe-webhook-signature-verification-fails-with-express-json", "by": "", "about": ""},
+    {"key": "postgres", "title": "PostgreSQL: Documentation: 17: 8.14. JSON Types", "url": "https://www.postgresql.org/docs/17/datatype-json.html", "by": "", "about": ""}
+   ],
+   "want": [{"keys": ["intent", "webhooks", "node", "question"], "name_any": ["stripe"]}]
+  },
+  {
+   "id": "two-topics-interleaved",
+   "about": "two errands at once, opened in turns, with two tabs that belong to neither",
+   "tabs": [
+    {"key": "ramen-1", "title": "Homemade Tonkotsu Ramen Broth Recipe - Serious Eats", "url": "https://www.seriouseats.com/rich-and-creamy-tonkotsu-ramen-broth-from-scratch-recipe", "by": "J. Kenji López-Alt", "about": ""},
+    {"key": "flat-1", "title": "2-room flat, 58 m², Prenzlauer Berg, Berlin - ImmoScout24", "url": "https://www.immobilienscout24.de/expose/152334871", "by": "", "about": ""},
+    {"key": "ramen-2", "title": "How to Make Chashu Pork for Ramen - Just One Cookbook", "url": "https://www.justonecookbook.com/homemade-chashu-miso-ramen/", "by": "Namiko Hirasawa Chen", "about": ""},
+    {"key": "translate", "title": "DeepL Translate: The world's most accurate translator", "url": "https://www.deepl.com/translator", "by": "", "about": ""},
+    {"key": "flat-2", "title": "Bright 2.5-room apartment with balcony in Friedrichshain - WG-Gesucht", "url": "https://www.wg-gesucht.de/wohnungen-in-Berlin-Friedrichshain.10384421.html", "by": "", "about": ""},
+    {"key": "ramen-3", "title": "Ramen eggs (Ajitsuke Tamago) that never fail - YouTube", "url": "https://www.youtube.com/watch?v=y3sLw0nQ8dU", "by": "Way of Ramen", "about": ""},
+    {"key": "flat-3", "title": "Mietspiegel Berlin 2026: Was darf meine Wohnung kosten? - Berliner Mieterverein", "url": "https://www.berliner-mieterverein.de/mietspiegel", "by": "", "about": ""},
+    {"key": "podcast", "title": "99% Invisible - The Smell of Concrete After Rain", "url": "https://99percentinvisible.org/episode/the-smell-of-concrete-after-rain/", "by": "99% Invisible", "about": ""}
+   ],
+   "want": [
+    {"keys": ["ramen-1", "ramen-2", "ramen-3"], "name_any": ["ramen"]},
+    {"keys": ["flat-1", "flat-2", "flat-3"], "name_any": ["berlin", "flat", "apartment", "wohnung", "rent"]}
+   ],
+   "also": [[["ramen-1", "ramen-2", "ramen-3"], ["flat-1", "flat-2"]]]
+  },
+  {
+   "id": "one-shop-two-errands",
+   "about": "one shop, three espresso machines, two pairs of running shoes and a book",
+   "tabs": [
+    {"key": "bambino", "title": "Amazon.com: Breville Bambino Plus Espresso Machine BES500BSS, Brushed Stainless Steel", "url": "https://www.amazon.com/dp/B07JVD78TT", "by": "Breville", "about": ""},
+    {"key": "pegasus", "title": "Amazon.com | Nike Men's Pegasus 41 Road Running Shoes | Road Running", "url": "https://www.amazon.com/dp/B0CSFM42R9", "by": "Nike", "about": ""},
+    {"key": "gaggia", "title": "Amazon.com: Gaggia RI9380/46 Classic Evo Pro Espresso Machine, Brushed Stainless Steel", "url": "https://www.amazon.com/dp/B0C6R8Z2DD", "by": "Gaggia", "about": ""},
+    {"key": "book", "title": "Amazon.com: The Remains of the Day: 9780679731726: Ishiguro, Kazuo: Books", "url": "https://www.amazon.com/dp/0679731725", "by": "Kazuo Ishiguro", "about": ""},
+    {"key": "delonghi", "title": "Amazon.com: De'Longhi Dedica Arte Espresso Machine with Manual Milk Frother EC885M", "url": "https://www.amazon.com/dp/B0B5L7V9PH", "by": "De'Longhi", "about": ""},
+    {"key": "novablast", "title": "Amazon.com | ASICS Men's Novablast 5 Running Shoes | Road Running", "url": "https://www.amazon.com/dp/B0D7Q4K1XM", "by": "ASICS", "about": ""}
+   ],
+   "want": [
+    {"keys": ["bambino", "gaggia", "delonghi"], "name_any": ["espresso"]},
+    {"keys": ["pegasus", "novablast"], "name_any": ["running", "shoes"]}
+   ]
+  },
+  {
+   "id": "one-event-three-outlets",
+   "about": "one news event in three papers, beside other stories of one of them",
+   "tabs": [
+    {"key": "bbc-launch", "title": "Artemis III lifts off: first crewed Moon landing mission in 54 years begins - BBC News", "url": "https://www.bbc.com/news/articles/c4g7x2l9dqro", "by": "BBC News", "about": ""},
+    {"key": "bbc-budget", "title": "Budget 2026: what the chancellor's tax changes mean for you - BBC News", "url": "https://www.bbc.com/news/articles/cx2k8v0n3d1o", "by": "BBC News", "about": ""},
+    {"key": "guardian-launch", "title": "Artemis III launch: Nasa astronauts begin journey to the moon's south pole | The Guardian", "url": "https://www.theguardian.com/science/2026/nov/12/artemis-iii-launch-nasa-astronauts-moon-south-pole", "by": "The Guardian", "about": ""},
+    {"key": "bbc-football", "title": "Arsenal 2-1 Tottenham: late Saka winner settles north London derby - BBC Sport", "url": "https://www.bbc.com/sport/football/articles/c9d3m1k7z2yo", "by": "BBC Sport", "about": ""},
+    {"key": "nasa", "title": "Artemis III Launch to the Moon (Official NASA Broadcast) - YouTube", "url": "https://www.youtube.com/watch?v=Ar3mQ9xT2vK", "by": "NASA", "about": ""}
+   ],
+   "want": [{"keys": ["bbc-launch", "guardian-launch", "nasa"], "name_any": ["artemis"]}]
+  },
+  {
+   "id": "paper-and-its-trail",
+   "about": "a paper, its code and two discussions of it, beside another paper of the same archive",
+   "tabs": [
+    {"key": "paper", "title": "[2312.00752] Mamba: Linear-Time Sequence Modeling with Selective State Spaces", "url": "https://arxiv.org/abs/2312.00752", "by": "Albert Gu, Tri Dao", "about": ""},
+    {"key": "other", "title": "[2106.09685] LoRA: Low-Rank Adaptation of Large Language Models", "url": "https://arxiv.org/abs/2106.09685", "by": "Edward Hu et al.", "about": ""},
+    {"key": "code", "title": "state-spaces/mamba: Mamba SSM architecture", "url": "https://github.com/state-spaces/mamba", "by": "state-spaces", "about": ""},
+    {"key": "hn", "title": "Mamba: Linear-Time Sequence Modeling with Selective State Spaces | Hacker News", "url": "https://news.ycombinator.com/item?id=38522428", "by": "", "about": ""},
+    {"key": "explainer", "title": "Mamba Explained - The Gradient", "url": "https://thegradient.pub/mamba-explained/", "by": "Kola Ayonrinde", "about": "The state space model taking on transformers."},
+    {"key": "hn-other", "title": "Ask HN: What is your favourite mechanical keyboard? | Hacker News", "url": "https://news.ycombinator.com/item?id=41877512", "by": "", "about": ""}
+   ],
+   "want": [{"keys": ["paper", "code", "hn", "explainer"], "name_any": ["mamba"]}]
+  },
+  {
+   "id": "job-at-one-company",
+   "about": "one job application across three sites, beside the same sites' other pages",
+   "tabs": [
+    {"key": "posting", "title": "Senior iOS Engineer, Payments - Monzo | LinkedIn", "url": "https://www.linkedin.com/jobs/view/4051827734/", "by": "Monzo", "about": ""},
+    {"key": "feed", "title": "Feed | LinkedIn", "url": "https://www.linkedin.com/feed/", "by": "", "about": ""},
+    {"key": "reviews", "title": "Monzo Reviews: What Is It Like to Work At Monzo? | Glassdoor", "url": "https://www.glassdoor.com/Reviews/Monzo-Reviews-E1294334.htm", "by": "", "about": ""},
+    {"key": "pay", "title": "Monzo Software Engineer Salary | $98K-$214K+ | Levels.fyi", "url": "https://www.levels.fyi/companies/monzo/salaries/software-engineer", "by": "", "about": ""},
+    {"key": "careers", "title": "How we hire: the engineering interview process - Monzo Careers", "url": "https://monzo.com/careers/engineering-interview-process", "by": "Monzo", "about": ""},
+    {"key": "gym", "title": "Class timetable - Urban Sports Club", "url": "https://urbansportsclub.com/en/venues", "by": "", "about": ""}
+   ],
+   "want": [{"keys": ["posting", "reviews", "pay", "careers"], "name_any": ["monzo"]}]
+  },
+  {
+   "id": "x-posts-unrelated",
+   "about": "four posts by four people on four subjects, on one site",
+   "tabs": [
+    {"key": "riley", "title": "Riley Park on X: \"I forgot that I shipped this app two years ago and it still makes $3k a month\" / X", "url": "https://x.com/rileyparkdev/status/1988712204417531122", "by": "Riley Park", "about": ""},
+    {"key": "nasa", "title": "NASA on X: \"Tonight's full Moon is the last supermoon of the year\" / X", "url": "https://x.com/NASA/status/1988344102558211470", "by": "NASA", "about": ""},
+    {"key": "chef", "title": "Kenji López-Alt on X: \"The secret to crisp roast potatoes is baking soda in the water\" / X", "url": "https://x.com/kenjilopezalt/status/1987902216640815402", "by": "Kenji López-Alt", "about": ""},
+    {"key": "rail", "title": "Deutsche Bahn on X: \"Wegen einer Störung fallen heute Züge zwischen Hamburg und Berlin aus\" / X", "url": "https://x.com/DB_Bahn/status/1988590331127445822", "by": "Deutsche Bahn", "about": ""}
+   ],
+   "want": []
+  },
+  {
+   "id": "joins-a-folder",
+   "about": "an automatic folder already there: a tab that belongs joins it, a tab from the same site that does not stays out, and a folder made by hand is left alone",
+   "folders": [
+    {"name": "Porto Trip", "emoji": "🧳", "ai": true, "keys": ["porto-flights", "porto-hotel"]},
+    {"name": "Taxes", "ai": false, "keys": ["tax-form"]}
+   ],
+   "tabs": [
+    {"key": "porto-flights", "title": "Berlin to Porto | Google Flights", "url": "https://www.google.com/travel/flights/search?tfs=CBwQAhoeEgoyMDI3LTAzLTEyagcIARIDQkVScgcIARIDT1BP", "by": "", "about": ""},
+    {"key": "porto-hotel", "title": "The 10 best hotels in Porto, Portugal - Booking.com", "url": "https://www.booking.com/city/pt/porto.html", "by": "", "about": ""},
+    {"key": "tax-form", "title": "Mein ELSTER - Einkommensteuererklärung 2025", "url": "https://www.elster.de/eportal/formulare-leistungen/alleformulare/est", "by": "", "about": ""},
+    {"key": "porto-wine", "title": "Port wine cellars in Vila Nova de Gaia: which tours are worth it - Lonely Planet", "url": "https://www.lonelyplanet.com/articles/port-wine-cellars-porto", "by": "Lonely Planet", "about": ""},
+    {"key": "vienna-hotel", "title": "The 10 best hotels in Vienna, Austria - Booking.com", "url": "https://www.booking.com/city/at/vienna.html", "by": "", "about": ""},
+    {"key": "tax-help", "title": "Steuererklärung 2025: Diese Fristen gelten - Finanztip", "url": "https://www.finanztip.de/steuererklaerung/abgabefrist/", "by": "Finanztip", "about": ""},
+    {"key": "porto-metro", "title": "Porto Airport to city centre by metro: Line E timetable and tickets", "url": "https://en.metrodoporto.pt/pages/397", "by": "", "about": ""}
+   ],
+   "batches": {"together": [["porto-wine", "vienna-hotel", "tax-help", "porto-metro"]], "single": [["porto-wine"], ["vienna-hotel"], ["tax-help"], ["porto-metro"]], "reversed": [["porto-metro"], ["tax-help"], ["vienna-hotel"], ["porto-wine"]]},
+   "want": [
+    {"keys": ["porto-flights", "porto-hotel", "porto-wine", "porto-metro"], "name_any": ["porto"]},
+    {"keys": ["tax-form"], "hand": true}
+   ]
+  },
+  {
+   "id": "folder-outgrows-its-name",
+   "about": "an automatic folder named for one phone gains two other phones: the tabs join and the name has to widen",
+   "folders": [
+    {"name": "iPhone 17", "emoji": "📱", "ai": true, "keys": ["iphone-review", "iphone-store"]}
+   ],
+   "tabs": [
+    {"key": "iphone-review", "title": "iPhone 17 review: the one to buy - The Verge", "url": "https://www.theverge.com/reviews/778123/apple-iphone-17-review", "by": "The Verge", "about": ""},
+    {"key": "iphone-store", "title": "Buy iPhone 17 - Apple", "url": "https://www.apple.com/shop/buy-iphone/iphone-17", "by": "", "about": ""},
+    {"key": "pixel", "title": "Google Pixel 10 review: smarter, not flashier - The Verge", "url": "https://www.theverge.com/reviews/761204/google-pixel-10-review", "by": "The Verge", "about": ""},
+    {"key": "galaxy", "title": "Samsung Galaxy S26 review: camera, battery life and price - GSMArena", "url": "https://www.gsmarena.com/samsung_galaxy_s26-review-2811.php", "by": "GSMArena", "about": ""},
+    {"key": "versus", "title": "iPhone 17 vs Pixel 10 vs Galaxy S26: which flagship should you buy? - Tom's Guide", "url": "https://www.tomsguide.com/phones/iphone-17-vs-pixel-10-vs-galaxy-s26", "by": "Tom's Guide", "about": ""},
+    {"key": "tram", "title": "BVG Fahrinfo: M10 Warschauer Str. → Hauptbahnhof", "url": "https://www.bvg.de/de/verbindungen/verbindungssuche", "by": "", "about": ""}
+   ],
+   "batches": {"together": [["pixel", "galaxy", "versus", "tram"]], "single": [["pixel"], ["galaxy"], ["versus"], ["tram"]], "reversed": [["tram"], ["versus"], ["galaxy"], ["pixel"]]},
+   "want": [{"keys": ["iphone-review", "iphone-store", "pixel", "galaxy", "versus"], "name_any": ["phone", "flagship", "smartphone"], "name_none": ["iphone 17"]}]
+  },
+  {
+   "id": "atlas-project-pages",
+   "about": "three pages of one project in two tools, beside other pages of the same workspace",
+   "tabs": [
+    {"key": "plan", "title": "Atlas Launch Plan", "url": "https://www.notion.so/acme/Atlas-Launch-Plan-5d2c1e9b7a3f4c08b6e1d4a7f9c20b13", "by": "", "about": ""},
+    {"key": "notes", "title": "Weekly 1:1 notes", "url": "https://www.notion.so/acme/Weekly-1-1-notes-0b7e3a1c9d5f4e26a8c4b1f3d6e90a72", "by": "", "about": ""},
+    {"key": "checklist", "title": "Atlas Launch Checklist", "url": "https://www.notion.so/acme/Atlas-Launch-Checklist-9a4f2c6e1b8d4a03c7e5f0b2d1a68e94", "by": "", "about": ""},
+    {"key": "reading", "title": "Reading list", "url": "https://www.notion.so/acme/Reading-list-3c8d5f1a7e2b4960b1a4c7e9f0d3b582", "by": "", "about": ""},
+    {"key": "copy", "title": "Atlas pricing page copy - Google Docs", "url": "https://docs.google.com/document/d/1Zq7wLc3TnP5yRk9uGv2oXb4mJd8sHf6eA0iK1tYrE5d/edit", "by": "", "about": ""}
+   ],
+   "want": [{"keys": ["plan", "checklist", "copy"], "name_any": ["atlas"]}]
+  },
+  {
+   "id": "learning-rust",
+   "about": "one subject being learned from a book, exercises, a video and a forum, beside another language's docs",
+   "tabs": [
+    {"key": "book", "title": "What is Ownership? - The Rust Programming Language", "url": "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html", "by": "", "about": ""},
+    {"key": "python", "title": "itertools — Functions creating iterators for efficient looping — Python 3.14 documentation", "url": "https://docs.python.org/3/library/itertools.html", "by": "", "about": ""},
+    {"key": "rustlings", "title": "rust-lang/rustlings: Small exercises to get you used to reading and writing Rust code", "url": "https://github.com/rust-lang/rustlings", "by": "rust-lang", "about": ""},
+    {"key": "video", "title": "Rust ownership and borrowing in 15 minutes - YouTube", "url": "https://www.youtube.com/watch?v=Bw8Qk2nV7rA", "by": "Let's Get Rusty", "about": ""},
+    {"key": "forum", "title": "How do I stop fighting the borrow checker? : r/rust", "url": "https://www.reddit.com/r/rust/comments/1gq8z3d/how_do_i_stop_fighting_the_borrow_checker/", "by": "r/rust", "about": ""},
+    {"key": "mail", "title": "Inbox - Fastmail", "url": "https://app.fastmail.com/mail/Inbox/", "by": "", "about": ""}
+   ],
+   "want": [{"keys": ["book", "rustlings", "video", "forum"], "name_any": ["rust"]}]
+  },
+  {
+   "id": "same-word-different-things",
+   "about": "tabs that share a word and nothing else",
+   "tabs": [
+    {"key": "pie", "title": "Grandma's Apple Pie Recipe - King Arthur Baking", "url": "https://www.kingarthurbaking.com/recipes/apple-pie-recipe", "by": "", "about": ""},
+    {"key": "stock", "title": "Apple Inc. (AAPL) Stock Price, News, Quote & History - Yahoo Finance", "url": "https://finance.yahoo.com/quote/AAPL/", "by": "", "about": ""},
+    {"key": "snake", "title": "Ball python - Wikipedia", "url": "https://en.wikipedia.org/wiki/Ball_python", "by": "", "about": ""},
+    {"key": "docs", "title": "itertools — Functions creating iterators for efficient looping — Python 3.14 documentation", "url": "https://docs.python.org/3/library/itertools.html", "by": "", "about": ""},
+    {"key": "sketch", "title": "Monty Python - Dead Parrot Sketch - YouTube", "url": "https://www.youtube.com/watch?v=vZw35VUBdzo", "by": "Monty Python", "about": ""},
+    {"key": "records", "title": "Apple Records - Wikipedia", "url": "https://en.wikipedia.org/wiki/Apple_Records", "by": "", "about": ""}
+   ],
+   "want": []
+  },
+  {
+   "id": "dune-in-russian",
+   "about": "one film in Russian across three sites, with pages that offer to watch it online",
+   "tabs": [
+    {"key": "kinopoisk", "title": "Дюна: Часть вторая (2024) — Кинопоиск", "url": "https://www.kinopoisk.ru/film/4540126/", "by": "", "about": ""},
+    {"key": "weather", "title": "Погода в Минске на 10 дней — Яндекс Погода", "url": "https://yandex.by/pogoda/minsk", "by": "", "about": ""},
+    {"key": "watch", "title": "Дюна 2 (2024) смотреть онлайн бесплатно в хорошем качестве HD 1080", "url": "https://kinogo.media/filmy/5123-djuna-2-2024.html", "by": "", "about": ""},
+    {"key": "review", "title": "«Дюна: Часть вторая»: рецензия на главный блокбастер года — Афиша Daily", "url": "https://daily.afisha.ru/cinema/26712-dyuna-chast-vtoraya-recenziya/", "by": "Афиша Daily", "about": ""},
+    {"key": "book", "title": "Книга «Мессия Дюны» Фрэнк Герберт — купить на OZ.by", "url": "https://oz.by/books/more10124511.html", "by": "Фрэнк Герберт", "about": ""}
+   ],
+   "want": [{"keys": ["kinopoisk", "watch", "review"], "name_any": ["дюна"], "name_none": ["смотреть", "онлайн", "бесплатно"]}],
+   "also": [[["kinopoisk", "watch", "review", "book"]]]
+  },
+  {
+   "id": "a-pair-and-nothing-else",
+   "about": "two tabs only, and they belong together",
+   "tabs": [
+    {"key": "docs", "title": "Migrating to Tailwind CSS v4 - Upgrade guide - Tailwind CSS", "url": "https://tailwindcss.com/docs/upgrade-guide", "by": "", "about": ""},
+    {"key": "issue", "title": "v4 upgrade: @apply no longer works inside CSS modules · Issue #15712 · tailwindlabs/tailwindcss", "url": "https://github.com/tailwindlabs/tailwindcss/issues/15712", "by": "", "about": ""}
+   ],
+   "want": [{"keys": ["docs", "issue"], "name_any": ["tailwind"]}]
+  },
+  {
+   "id": "two-strangers",
+   "about": "two tabs only, and they share nothing",
+   "tabs": [
+    {"key": "tide", "title": "Tide times for Brighton Marina - BBC Weather", "url": "https://www.bbc.com/weather/coast-and-sea/tide-tables/10/82", "by": "", "about": ""},
+    {"key": "typeface", "title": "Söhne Collection - Klim Type Foundry", "url": "https://klim.co.nz/collections/soehne/", "by": "", "about": ""}
+   ],
+   "want": []
+  },
+  {
+   "id": "names-lantern-pages",
+   "about": "five pages about one notes app and its design, whose titles share only the app's name: a name says the subject, not a title's words",
+   "tabs": [
+    {"key": "popup", "title": "Lantern Popup Options – Figma", "url": "https://www.figma.com/design/k2Lw8/Lantern-Popup-Options", "by": "", "about": ""},
+    {"key": "landing", "title": "Lantern Landing Page – Figma", "url": "https://www.figma.com/design/q9Tz1/Lantern-Landing-Page", "by": "", "about": ""},
+    {"key": "site", "title": "Lantern, a notes app for the Mac", "url": "https://lantern.example/", "by": "", "about": ""},
+    {"key": "naming", "title": "App name: Lantern vs Lamp - Google Docs", "url": "https://docs.google.com/document/d/1bWq7/edit", "by": "", "about": ""},
+    {"key": "settings", "title": "Lantern Settings Options – Figma", "url": "https://www.figma.com/design/v3Rm5/Lantern-Settings-Options", "by": "", "about": ""}
+   ],
+   "want": [{"keys": ["popup", "landing", "site", "naming", "settings"], "name_any": ["lantern"], "name_none": ["vibes", "popup", "options", "landing", "settings", "lamp", "figma"]}]
+  },
+  {
+   "id": "names-bread-not-a-title",
+   "about": "four sourdough pages where one title has the loudest words: the name is the subject, not Tartine or Dutch Ovens",
+   "tabs": [
+    {"key": "tartine", "title": "Tartine Country Loaf Recipe | King Arthur Baking", "url": "https://www.kingarthurbaking.com/recipes/tartine-country-loaf-recipe", "by": "", "about": ""},
+    {"key": "starter", "title": "Sourdough starter not rising? 9 fixes - The Perfect Loaf", "url": "https://www.theperfectloaf.com/sourdough-starter-not-rising/", "by": "", "about": ""},
+    {"key": "oven", "title": "The Best Dutch Ovens for Bread, Tested - Serious Eats", "url": "https://www.seriouseats.com/best-dutch-ovens-for-bread", "by": "", "about": ""},
+    {"key": "crumb", "title": "My first loaf after 3 weeks, how is the crumb? : r/Sourdough", "url": "https://www.reddit.com/r/Sourdough/comments/1h2k9x/my_first_loaf/", "by": "r/Sourdough", "about": ""}
+   ],
+   "want": [{"keys": ["tartine", "starter", "oven", "crumb"], "name_any": ["sourdough", "bread", "baking", "loaf"], "name_none": ["tartine", "country", "dutch", "crumb", "fixes"]}]
+  },
+  {
+   "id": "names-kyoto-keeps",
+   "about": "a folder named Kyoto Trip gains a temple page: the name still fits and stays",
+   "tabs": [
+    {"key": "hotel", "title": "The 10 best hotels in Kyoto, Japan (from $62) - Booking.com", "url": "https://www.booking.com/city/jp/kyoto.html", "by": "", "about": ""},
+    {"key": "guide", "title": "Kyoto Travel Guide - What to do in Kyoto City - japan-guide.com", "url": "https://www.japan-guide.com/e/e2158.html", "by": "", "about": ""},
+    {"key": "rail", "title": "Kansai Area Pass: Osaka, Kyoto, Nara by train | JR-WEST", "url": "https://www.westjr.co.jp/global/en/ticket/pass/kansai/", "by": "", "about": ""},
+    {"key": "flights", "title": "Berlin to Osaka | Google Flights", "url": "https://www.google.com/travel/flights/search", "by": "", "about": ""},
+    {"key": "temple", "title": "Fushimi Inari Taisha: opening hours and tips - Inside Kyoto", "url": "https://www.insidekyoto.com/fushimi-inari-taisha-kyoto", "by": "", "about": ""}
+   ],
+   "want": [{"keys": ["hotel", "guide", "rail", "flights", "temple"], "current": "Kyoto Trip", "keep": true, "name_any": ["kyoto"]}]
+  },
+  {
+   "id": "names-espresso-keeps",
+   "about": "a folder named Espresso Machines gains a grinder review whose title lacks the word espresso: the name still fits and stays",
+   "tabs": [
+    {"key": "bambino", "title": "Amazon.com: Breville Bambino Plus Espresso Machine BES500BSS, Brushed Stainless Steel", "url": "https://www.amazon.com/dp/B07JVD78TT", "by": "Breville", "about": ""},
+    {"key": "gaggia", "title": "Amazon.com: Gaggia RI9380/46 Classic Evo Pro Espresso Machine, Brushed Stainless Steel", "url": "https://www.amazon.com/dp/B0C6R8Z2DD", "by": "Gaggia", "about": ""},
+    {"key": "delonghi", "title": "Amazon.com: De'Longhi Dedica Arte Espresso Machine with Manual Milk Frother EC885M", "url": "https://www.amazon.com/dp/B0B5L7V9PH", "by": "De'Longhi", "about": ""},
+    {"key": "grinder", "title": "Baratza Encore ESP review: the best grinder for beginners - Wirecutter", "url": "https://www.nytimes.com/wirecutter/reviews/baratza-encore-esp/", "by": "Wirecutter", "about": ""}
+   ],
+   "want": [{"keys": ["bambino", "gaggia", "delonghi", "grinder"], "current": "Espresso Machines", "keep": true, "name_any": ["espresso"]}]
+  },
+  {
+   "id": "names-phones-outgrown",
+   "about": "a folder named iPhone 17 now holds three phones: the name has stopped describing it and changes",
+   "tabs": [
+    {"key": "iphone-review", "title": "iPhone 17 review: the one to buy - The Verge", "url": "https://www.theverge.com/reviews/778123/apple-iphone-17-review", "by": "The Verge", "about": ""},
+    {"key": "iphone-store", "title": "Buy iPhone 17 - Apple", "url": "https://www.apple.com/shop/buy-iphone/iphone-17", "by": "", "about": ""},
+    {"key": "pixel", "title": "Google Pixel 10 review: smarter, not flashier - The Verge", "url": "https://www.theverge.com/reviews/761204/google-pixel-10-review", "by": "The Verge", "about": ""},
+    {"key": "galaxy", "title": "Samsung Galaxy S26 review: camera, battery life and price - GSMArena", "url": "https://www.gsmarena.com/samsung_galaxy_s26-review-2811.php", "by": "GSMArena", "about": ""},
+    {"key": "versus", "title": "iPhone 17 vs Pixel 10 vs Galaxy S26: which flagship should you buy? - Tom's Guide", "url": "https://www.tomsguide.com/phones/iphone-17-vs-pixel-10-vs-galaxy-s26", "by": "Tom's Guide", "about": ""}
+   ],
+   "want": [{"keys": ["iphone-review", "iphone-store", "pixel", "galaxy", "versus"], "current": "iPhone 17", "name_any": ["phone", "flagship", "smartphone"], "name_none": ["iphone 17"]}]
+  },
+  {
+   "id": "trip-no-shared-word",
+   "about": "one trip to Lisbon across an airline, a flat, a day trip and a flight search, with no title word in common, among unrelated tabs",
+   "tabs": [
+    {"key": "flights", "title": "Berlin to Lisbon | Google Flights", "url": "https://www.google.com/travel/flights/search?tfs=CBwQAhoeEgoyMDI3LTA1LTE0", "by": "", "about": ""},
+    {"key": "mail", "title": "Inbox (12) - Gmail", "url": "https://mail.google.com/mail/u/0/#inbox", "by": "", "about": ""},
+    {"key": "tap", "title": "TAP Air Portugal: manage your booking", "url": "https://www.flytap.com/en-de/manage-booking", "by": "", "about": ""},
+    {"key": "flat", "title": "Alfama loft with river view - Airbnb", "url": "https://www.airbnb.com/rooms/53118842", "by": "", "about": ""},
+    {"key": "pr", "title": "Fix flaky snapshot tests by mlee · Pull Request #881 · acme/ledger", "url": "https://github.com/acme/ledger/pull/881", "by": "", "about": ""},
+    {"key": "sintra", "title": "Pena Palace and Sintra day trip tickets - Parques de Sintra", "url": "https://www.parquesdesintra.pt/en/tickets/", "by": "", "about": ""}
+   ],
+   "want": [
+    {"keys": ["flights", "tap", "flat", "sintra"], "name_any": ["lisbon", "lisboa", "portugal"]}
+   ],
+   "also": [[["flights", "tap", "flat"]], [["flights", "tap"]], [["flights", "flat", "sintra"]], [["flights", "flat"]], [["flights", "tap", "sintra"]], [["tap", "flat", "sintra"]]]
+  },
+  {
+   "id": "purchase-no-shared-word",
+   "about": "choosing a robot vacuum across two shops, a German test and a forum thread, no title word in common, among unrelated tabs",
+   "tabs": [
+    {"key": "roborock", "title": "Roborock S8 MaxV Ultra - MediaMarkt", "url": "https://www.mediamarkt.de/de/product/_roborock-s8-maxv-ultra-2912877.html", "by": "", "about": ""},
+    {"key": "notion", "title": "Weekly meal plan - Notion", "url": "https://www.notion.so/Weekly-meal-plan-8c1f2e", "by": "", "about": ""},
+    {"key": "eufy", "title": "eufy X10 Pro Omni | eufy DE", "url": "https://www.eufy.com/de/x10-pro-omni", "by": "", "about": ""},
+    {"key": "test", "title": "Saugroboter im Test: welcher wischt am besten? - Stiftung Warentest", "url": "https://www.test.de/Saugroboter-im-Test-4791410-0/", "by": "", "about": ""},
+    {"key": "weather", "title": "Hamburg 14-Tage-Wetter - wetter.com", "url": "https://www.wetter.com/deutschland/hamburg/DE0004130.html", "by": "", "about": ""},
+    {"key": "reddit", "title": "Does a self-emptying vacuum cope with long dog hair? : r/RobotVacuums", "url": "https://www.reddit.com/r/RobotVacuums/comments/1j8kq2c/does_a_selfemptying_vacuum_cope_with_long_dog/", "by": "r/RobotVacuums", "about": ""}
+   ],
+   "want": [
+    {"keys": ["roborock", "eufy", "test", "reddit"], "name_any": ["vacuum", "robot", "saugrob", "cleaner"]}
+   ],
+   "also": [[["roborock", "eufy", "test"]], [["roborock", "eufy", "reddit"]], [["roborock", "eufy"]], [["roborock", "test", "reddit"]], [["eufy", "test", "reddit"]]]
+  },
+  {
+   "id": "bug-no-shared-word",
+   "about": "one sign-in bug across an issue, a documentation page and a forum answer, no title word in common, among unrelated tabs",
+   "tabs": [
+    {"key": "issue", "title": "Login loop after enabling SSO · Issue #1204 · outline/outline", "url": "https://github.com/outline/outline/issues/1204", "by": "", "about": ""},
+    {"key": "music", "title": "Discover Weekly - Spotify", "url": "https://open.spotify.com/playlist/37i9dQZEVXcQ9X2m", "by": "", "about": ""},
+    {"key": "docs", "title": "Configuring OpenID Connect clients - Keycloak Documentation", "url": "https://www.keycloak.org/docs/latest/server_admin/#_oidc_clients", "by": "", "about": ""},
+    {"key": "answer", "title": "Redirect URI mismatch keeps sending users back to the sign-in page - Stack Overflow", "url": "https://stackoverflow.com/questions/78812345/redirect-uri-mismatch-keeps-sending-users-back", "by": "", "about": ""},
+    {"key": "news", "title": "BBC News - Home", "url": "https://www.bbc.com/news", "by": "", "about": ""}
+   ],
+   "want": [
+    {"keys": ["issue", "docs", "answer"], "name_any": ["sso", "login", "sign", "keycloak", "oidc", "openid", "auth", "outline"]}
+   ],
+   "also": [[["issue", "docs"]], [["issue", "answer"]], [["docs", "answer"]]]
+  },
+  {
+   "id": "russian-trip-no-shared-word",
+   "about": "a trip to Kaliningrad in Russian: flights, a flat and a guide, no title word in common, among unrelated Russian tabs",
+   "tabs": [
+    {"key": "flights", "title": "Авиабилеты Москва — Калининград | Аэрофлот", "url": "https://www.aeroflot.ru/ru-ru/booking", "by": "", "about": ""},
+    {"key": "borsch", "title": "Классический борщ — рецепт | Едим Дома", "url": "https://www.edimdoma.ru/retsepty/56745-klassicheskiy-borsch", "by": "", "about": ""},
+    {"key": "flat", "title": "Апартаменты у моря в Зеленоградске — Суточно.ру", "url": "https://sutochno.ru/zelenogradsk/flat/88412", "by": "", "about": ""},
+    {"key": "spit", "title": "Куршская коса: что посмотреть за два дня — Туту журнал", "url": "https://journal.tutu.ru/kurshskaya-kosa/", "by": "", "about": ""},
+    {"key": "rate", "title": "Курс доллара ЦБ РФ на сегодня — Банки.ру", "url": "https://www.banki.ru/products/currency/usd/", "by": "", "about": ""}
+   ],
+   "want": [
+    {"keys": ["flights", "flat", "spit"], "name_any": ["калининград", "kaliningrad", "балти", "поездк", "путешеств", "куршск", "зеленоград"]}
+   ],
+   "also": [[["flat", "spit"]], [["flights", "flat"]], [["flights", "spit"]]]
+  },
+  {
+   "id": "two-subjects-no-shared-word",
+   "about": "a weekend in Edinburgh and choosing a pram, interleaved, neither sharing a title word inside, with two unrelated tabs",
+   "tabs": [
+    {"key": "train", "title": "London to Edinburgh trains | LNER", "url": "https://www.lner.co.uk/journey-planner/", "by": "", "about": ""},
+    {"key": "bugaboo", "title": "Bugaboo Fox 5 | Bugaboo", "url": "https://www.bugaboo.com/gb-en/strollers/bugaboo-fox-5/", "by": "", "about": ""},
+    {"key": "flat", "title": "Old Town flat near the Royal Mile - Airbnb", "url": "https://www.airbnb.co.uk/rooms/70224518", "by": "", "about": ""},
+    {"key": "cybex", "title": "Cybex Priam with carrycot - John Lewis", "url": "https://www.johnlewis.com/cybex-priam/p6124410", "by": "", "about": ""},
+    {"key": "chess", "title": "Play Chess Online - Chess.com", "url": "https://www.chess.com/play/online", "by": "", "about": ""},
+    {"key": "walk", "title": "Arthur's Seat walk: routes and parking - VisitScotland", "url": "https://www.visitscotland.com/places-to-go/arthurs-seat", "by": "", "about": ""},
+    {"key": "mumsnet", "title": "Which pram fits in a small car boot? | Mumsnet", "url": "https://www.mumsnet.com/talk/prams_and_pushchairs/5012345-small-car-boot", "by": "", "about": ""},
+    {"key": "bank", "title": "Accounts - Monzo", "url": "https://app.monzo.com/accounts", "by": "", "about": ""}
+   ],
+   "want": [
+    {"keys": ["train", "flat", "walk"], "name_any": ["edinburgh", "scotland"]},
+    {"keys": ["bugaboo", "cybex", "mumsnet"], "name_any": ["pram", "stroller", "pushchair", "buggy", "baby"]}
+   ],
+   "also": [[["train", "flat", "walk"], ["bugaboo", "cybex"]], [["train", "flat"], ["bugaboo", "cybex", "mumsnet"]], [["bugaboo", "cybex", "mumsnet"]], [["train", "flat", "walk"]], [["train", "flat"], ["bugaboo", "cybex"]]]
+  },
+  {
+   "id": "moving-no-shared-word",
+   "about": "moving flat in Berlin: a listing, removal quotes and the address registration, no title word in common, among unrelated tabs",
+   "tabs": [
+    {"key": "listing", "title": "2-room flat in Kreuzberg, 68 m² - ImmobilienScout24", "url": "https://www.immobilienscout24.de/expose/151234567", "by": "", "about": ""},
+    {"key": "film", "title": "Past Lives (2023) - IMDb", "url": "https://www.imdb.com/title/tt13238346/", "by": "", "about": ""},
+    {"key": "movers", "title": "Compare removal companies and get quotes - MyHammer", "url": "https://www.my-hammer.de/umzug", "by": "", "about": ""},
+    {"key": "anmeldung", "title": "Registering your address (Anmeldung) - Service Berlin", "url": "https://service.berlin.de/dienstleistung/120686/en/", "by": "", "about": ""},
+    {"key": "slack", "title": "general - Acme - Slack", "url": "https://app.slack.com/client/T01/C01", "by": "", "about": ""}
+   ],
+   "want": [
+    {"keys": ["listing", "movers", "anmeldung"], "name_any": ["move", "moving", "flat", "umzug", "kreuzberg", "berlin", "apartment", "relocation"]}
+   ],
+   "also": [[["listing", "movers"]], [["movers", "anmeldung"]], [["listing", "anmeldung"]]]
+  },
+  {
+   "id": "joins-by-meaning",
+   "about": "an automatic folder for a Lisbon trip: a tab of that trip with no word in common joins it, a different trip on the same airline site does not",
+   "folders": [
+    {"name": "Lisbon Trip", "emoji": "🧳", "ai": true, "keys": ["flights", "flat"]}
+   ],
+   "tabs": [
+    {"key": "flights", "title": "Berlin to Lisbon | Google Flights", "url": "https://www.google.com/travel/flights/search?tfs=CBwQAhoeEgoyMDI3LTA1LTE0", "by": "", "about": ""},
+    {"key": "flat", "title": "Alfama loft with river view - Airbnb", "url": "https://www.airbnb.com/rooms/53118842", "by": "", "about": ""},
+    {"key": "tram", "title": "Eléctrico 28: route, stops and tips for the famous yellow tramcar", "url": "https://www.visitlisboa.com/en/p/tram-28", "by": "", "about": ""},
+    {"key": "oslo", "title": "The 10 best hotels in Oslo, Norway - Booking.com", "url": "https://www.booking.com/city/no/oslo.html", "by": "", "about": ""},
+    {"key": "pastel", "title": "Pastéis de Belém: opening hours and how to skip the queue - Time Out", "url": "https://www.timeout.com/restaurants/pasteis-de-belem", "by": "", "about": ""}
+   ],
+   "batches": {"together": [["tram", "oslo", "pastel"]], "single": [["tram"], ["oslo"], ["pastel"]], "reversed": [["pastel"], ["oslo"], ["tram"]]},
+   "want": [
+    {"keys": ["flights", "flat", "tram", "pastel"], "name_any": ["lisbon", "lisboa", "portugal"]}
+   ],
+   "also": [[["flights", "flat", "tram"]], [["flights", "flat", "pastel"]], [["flights", "flat"]]]
+  },
+  {
+   "id": "different-trips",
+   "about": "four travel tabs for four different places: near in meaning, nothing to group",
+   "tabs": [
+    {"key": "rome", "title": "Hotel Artemide, Rome - Booking.com", "url": "https://www.booking.com/hotel/it/artemide.html", "by": "", "about": ""},
+    {"key": "tromso", "title": "Oslo to Tromsø flights | Norwegian", "url": "https://www.norwegian.com/en/booking/flight-tickets/oslo-tromso", "by": "", "about": ""},
+    {"key": "todo", "title": "Todoist: Today", "url": "https://app.todoist.com/app/today", "by": "", "about": ""},
+    {"key": "kyoto", "title": "Kyoto ryokan with private onsen - Japanican", "url": "https://www.japanican.com/en/hotel/detail/2611004/", "by": "", "about": ""},
+    {"key": "lisbon", "title": "Berlin to Lisbon | Google Flights", "url": "https://www.google.com/travel/flights/search?tfs=CBwQAhoeEgoyMDI3LTA1LTE0", "by": "", "about": ""}
+   ],
+   "want": []
+  },
+  {
+   "id": "different-products-one-kind",
+   "about": "two different novels in two bookshops and two different films: one kind of thing each, nothing to group",
+   "tabs": [
+    {"key": "zevin", "title": "Tomorrow, and Tomorrow, and Tomorrow by Gabrielle Zevin | Waterstones", "url": "https://www.waterstones.com/book/tomorrow-and-tomorrow-and-tomorrow/gabrielle-zevin/9781529115543", "by": "Gabrielle Zevin", "about": ""},
+    {"key": "weir", "title": "Project Hail Mary by Andy Weir | Goodreads", "url": "https://www.goodreads.com/book/show/54493401-project-hail-mary", "by": "Andy Weir", "about": ""},
+    {"key": "calendar", "title": "Google Calendar - Week of November 16, 2026", "url": "https://calendar.google.com/calendar/u/0/r/week", "by": "", "about": ""},
+    {"key": "oppenheimer", "title": "Oppenheimer (2023) - IMDb", "url": "https://www.imdb.com/title/tt15398776/", "by": "", "about": ""},
+    {"key": "aftersun", "title": "Aftersun | Letterboxd", "url": "https://letterboxd.com/film/aftersun/", "by": "", "about": ""}
+   ],
+   "want": []
+  },
+  {
+   "id": "articles-one-broad-topic",
+   "about": "three unrelated articles that all touch the climate: near in meaning, nothing to group",
+   "tabs": [
+    {"key": "ocean", "title": "The ocean is running out of breath - The Atlantic", "url": "https://www.theatlantic.com/science/archive/2026/10/ocean-deoxygenation/680211/", "by": "Ed Yong", "about": ""},
+    {"key": "floods", "title": "How a Dutch city learned to live with floods - BBC Future", "url": "https://www.bbc.com/future/article/20261012-rotterdam-water-squares", "by": "", "about": ""},
+    {"key": "carbon", "title": "Carbon removal start-ups face a reckoning - Financial Times", "url": "https://www.ft.com/content/4e1b2a77-9c3d-4f1e-a2b0-7d0c55e81a19", "by": "", "about": ""},
+    {"key": "maps", "title": "Google Maps", "url": "https://www.google.com/maps", "by": "", "about": ""}
+   ],
+   "want": []
+  },
+  {
+   "id": "shop-home-beside-product",
+   "about": "two shops' home pages each beside one product of that shop: same site, near in meaning, nothing to group",
+   "tabs": [
+    {"key": "ikea-home", "title": "IKEA Deutschland – Möbel, Deko & Inspiration", "url": "https://www.ikea.com/de/de/", "by": "", "about": ""},
+    {"key": "billy", "title": "BILLY Bücherregal, weiß, 80x28x202 cm - IKEA Deutschland", "url": "https://www.ikea.com/de/de/p/billy-buecherregal-weiss-00263850/", "by": "", "about": ""},
+    {"key": "zalando-home", "title": "Zalando – Schuhe und Mode online kaufen", "url": "https://www.zalando.de/", "by": "", "about": ""},
+    {"key": "sneaker", "title": "Nike Air Max 90 – Sneaker low – white - Zalando.de", "url": "https://www.zalando.de/nike-sportswear-air-max-90-sneaker-low-ni112o0bt-a11.html", "by": "", "about": ""},
+    {"key": "docs", "title": "Untitled document - Google Docs", "url": "https://docs.google.com/document/d/1x9/edit", "by": "", "about": ""}
+   ],
+   "want": []
+  },
+  {
+   "id": "russian-purchase-no-shared-word",
+   "about": "choosing a mountain bike in Russian across two shops and an article, no title word in common, among unrelated Russian tabs",
+   "tabs": [
+    {"key": "stels", "title": "Stels Navigator 700 MD 27.5 — купить в Спортмастере", "url": "https://www.sportmaster.ru/product/29345671/", "by": "", "about": ""},
+    {"key": "doctor", "title": "Госуслуги — запись к врачу", "url": "https://www.gosuslugi.ru/10700/1", "by": "", "about": ""},
+    {"key": "forward", "title": "Forward Sporting 29 2.0 Disc — Велострана", "url": "https://www.velostrana.ru/catalog/forward-sporting-29-2-0-disc/", "by": "", "about": ""},
+    {"key": "advice", "title": "Как выбрать горный велосипед новичку — Дзен", "url": "https://dzen.ru/a/Zx1kQ", "by": "", "about": ""},
+    {"key": "music", "title": "Моя волна — Яндекс Музыка", "url": "https://music.yandex.ru/", "by": "", "about": ""}
+   ],
+   "want": [
+    {"keys": ["stels", "forward", "advice"], "name_any": ["велосипед", "вело", "bike", "байк"]}
+   ],
+   "also": [[["stels", "forward"]], [["stels", "advice"]], [["forward", "advice"]]]
+  }
+ ]
+}
