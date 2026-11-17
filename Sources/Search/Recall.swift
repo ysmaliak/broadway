@@ -823,6 +823,7 @@ final class DownloadsPage: RecallPage {
     private let said = KitLabel("", font: KitPageRow.footFont, color: .secondaryLabelColor)
     private lazy var clear = KitBroadwayButton("Clear List") { [weak self] in self?.loot.forgetAll() }
     private var shown: ([UUID], [Keep])?
+    private var asking: AnyCancellable?
 
     init(browser: Browser, loot: Loot) {
         self.browser = browser
@@ -830,6 +831,19 @@ final class DownloadsPage: RecallPage {
         super.init("Downloads")
         content.addSubview(list)
         foot = RecallFootLine(left: said, right: clear)
+        asking = kitObserve(initial: false, { [weak browser] in browser?.prefs.asksWhereToSave ?? false }) { [weak self] _ in
+            guard let self else { return }
+            self.sayWhere(kept: self.shown?.1 ?? self.loot.kept)
+        }
+    }
+
+    var footWords: String { said.text }
+
+    private func sayWhere(kept: [Keep]) {
+        guard let browser else { return }
+        said.text = !kept.isEmpty ? "Clearing the list leaves the files where they are"
+            : browser.prefs.asksWhereToSave ? "Broadway asks where to save each file"
+            : "Files land in \(browser.downloadsFolder.lastPathComponent)"
     }
 
     @available(*, unavailable)
@@ -837,9 +851,7 @@ final class DownloadsPage: RecallPage {
 
     func show(entries: [FetchEntry], kept: [Keep]) {
         guard let browser else { return }
-        said.text = !kept.isEmpty ? "Clearing the list leaves the files where they are"
-            : browser.prefs.asksWhereToSave ? "Broadway asks where to save each file"
-            : "Files land in \(browser.downloadsFolder.lastPathComponent)"
+        sayWhere(kept: kept)
         let key = (entries.map(\.id), kept)
         if let shown, shown.0 == key.0, shown.1 == key.1 { return }
         shown = key

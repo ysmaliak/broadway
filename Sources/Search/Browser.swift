@@ -8353,7 +8353,8 @@ extension Browser: WKDownloadDelegate {
         let name = Browser.fileName(asked ?? suggestedFilename)
         let agent = AgentDownloadWatch.folder(for: download, in: self, type: response.mimeType)
         if chosen == nil, agent == nil, !AgentDownloadWatch.watches(download), prefs.asksWhereToSave {
-            SaveAsk.shared.ask(name, from: download.webView, in: self, download: download) { [weak self] file in
+            SaveAsk.shared.ask(name, from: download.webView, in: self, download: download,
+                               quiet: unlisted.contains(ObjectIdentifier(download))) { [weak self] file in
                 guard let self else { return completionHandler(nil) }
                 self.place(download, at: file, chosen: nil, name: name, held: false, asked: true, completionHandler)
             }

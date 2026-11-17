@@ -60,7 +60,7 @@ final class SaveAskTests {
 
     private func tearDown() async throws {
         SaveAsk.shared.cancelAll()
-        SaveAsk.shared.realNext = false
+        SaveAsk.shared.realNext = 0
         if let browser {
             for entry in browser.fetches.entries { browser.cancelDownload(entry) }
             try? await waitUntil { browser.fetches.entries.isEmpty && browser.downloading.isEmpty }
@@ -186,6 +186,31 @@ final class SaveAskTests {
         try await waitUntil { browser.fetches.entries.isEmpty && browser.downloading.isEmpty }
         #expect(browser.loot.kept.isEmpty)
         #expect(browser.tabs.contains { $0.id == tab.id })
+    }
+
+    @Test func theWindowClosingUnderAWaitingQuestionCancelsOnce() async throws {
+        let tab = try await openFixturePage()
+        var calls = 0
+        var answered: URL? = URL(fileURLWithPath: "/")
+        SaveAsk.shared.ask("held.bin", from: tab.web, in: browser) { file in
+            calls += 1
+            answered = file
+        }
+        #expect(SaveAsk.shared.questions.first?.window === window)
+        window.close()
+        #expect(calls == 1)
+        #expect(answered == nil)
+        #expect(SaveAsk.shared.questions.isEmpty)
+    }
+
+    @Test func aDownloadCancelledFromTheListWithdrawsItsQuestion() async throws {
+        let tab = try await openFixturePage()
+        let download = try await requestDownload("/withdrawn.bin", from: tab.web)
+        _ = try await waitForQuestion()
+        let entry = try #require(browser.fetches.entry(for: download))
+        browser.cancelDownload(entry)
+        try await waitUntil { SaveAsk.shared.questions.isEmpty && browser.fetches.entries.isEmpty && browser.downloading.isEmpty }
+        #expect(browser.loot.kept.isEmpty)
     }
 
     @Test func aPrivateWindowAsksAndRecordsNoLastFolder() async throws {

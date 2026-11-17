@@ -58,12 +58,12 @@ final class SaveAsk {
     }
 
     private(set) var questions: [Question] = []
-    var realNext = false
+    var realNext = 0
     private var watched: [ObjectIdentifier: Any] = [:]
 
     static var held: Bool { Store.testing }
 
-    func ask(_ name: String, from webView: WKWebView?, in browser: Browser, download: WKDownload? = nil,
+    func ask(_ name: String, from webView: WKWebView?, in browser: Browser, download: WKDownload? = nil, quiet: Bool = false,
              then completion: @escaping (URL?) -> Void) {
         let owners = [browser] + Browsers.all.filter { $0 !== browser }
         let found = webView.flatMap { web in
@@ -71,7 +71,7 @@ final class SaveAsk {
         }
         let owner = found?.0 ?? browser
         let tab = found?.1
-        let shy = owner.isPrivate || tab?.shy == true || webView?.configuration.websiteDataStore.isPersistent == false
+        let shy = quiet || owner.isPrivate || tab?.shy == true || webView?.configuration.websiteDataStore.isPersistent == false
         let spaceID = tab.map { tab in
             owner.tabs.contains { $0.id == tab.id } ? owner.spaceID
                 : owner.parked.first { $0.value.tabs.contains { $0.id == tab.id } }?.key ?? owner.spaceID
@@ -79,8 +79,8 @@ final class SaveAsk {
         let space = shy ? nil : spaceID.uuidString
         let start = Self.lastFolder(for: space) ?? (shy ? owner.downloadsFolder : owner.downloadsFolder(in: spaceID))
         let window = webView?.window ?? owner.window ?? browser.window
-        let real = !Self.held || realNext
-        realNext = false
+        let real = !Self.held || realNext > 0
+        realNext = max(0, realNext - 1)
         let question = Question(name: name, folder: start, tab: tab?.id, space: space, download: download.map(ObjectIdentifier.init),
                                 window: window, real: real, reply: SaveAskReply(completion))
         questions.append(question)
@@ -106,6 +106,19 @@ final class SaveAsk {
     func cancel(id: UUID? = nil) -> Bool {
         guard let question = pick(id) else { return false }
         finish(question, with: nil)
+        return true
+    }
+
+    func save(id: UUID? = nil) -> Bool {
+        guard let question = pick(id), question.up, let panel = question.panel,
+              let window = question.window, window.attachedSheet === panel else { return false }
+        panel.makeKeyAndOrderFront(nil)
+        for type in [NSEvent.EventType.keyDown, .keyUp] {
+            guard let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                               windowNumber: panel.windowNumber, context: nil, characters: "\r",
+                                               charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36) else { continue }
+            NSApp.postEvent(event, atStart: false)
+        }
         return true
     }
 
@@ -146,8 +159,9 @@ final class SaveAsk {
         next.panel = panel
         let done: (NSApplication.ModalResponse) -> Void = { [weak self, weak next, weak panel] response in
             guard let self, let next, !next.reply.finished else { return }
+            let file = response == .OK ? panel?.url : nil
             next.panel = nil
-            self.finish(next, with: response == .OK ? panel?.url : nil)
+            self.finish(next, with: file)
         }
         if let window = next.window {
             panel.beginSheetModal(for: window, completionHandler: done)
