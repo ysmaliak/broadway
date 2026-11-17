@@ -284,7 +284,40 @@ def fold_stack(name):
          st.get("label") == "Fold Stack" and all(i in rows for i in ids[1:4]), (st.get("label"), ids, sorted(rows)))
 
 
+def joined_after_relaunch(name):
+    time.sleep(1.5)
+    sv.quit()
+    time.sleep(1)
+    path = Path(sv.SUPPORT) / "live-folders.json"
+    saved = json.loads(path.read_text())
+    for entry in saved:
+        if entry.get("name") != "PRs":
+            continue
+        for row in entry.get("items", []):
+            if "pageRead" in row:
+                row["pageRead"] -= 660
+            if row["key"].endswith("/pull/46") and row.get("branch"):
+                row["branch"]["base"] = "audio-upload"
+    path.write_text(json.dumps(saved))
+    BRANCHES[46], STACK[46] = ("audio-upload", "acme", "nameless"), 4
+    HITS.clear()
+    try:
+        sv.launch()
+        prs = folder(live("update", "PRs"), "PRs")
+        bylines = [i["byline"] for i in prs["items"]]
+        print("    joined:", bylines, dict(HITS))
+        t.ok(f"{name}: after a relaunch, the row that joined the stack tops it and every chip says n/4",
+             bylines == ["dana", "4/4", "octo-sam 3/4 • Draft", "octo-sam 2/4 • Changes requested", "octo-sam 1/4 • Approved",
+                         "octo-sam", "lee • Approved", "dana • Changes requested"], bylines)
+        t.ok(f"{name}: only the joined row, the old top and the other members were read", set(HITS) == {36, 37, 38, 46}, dict(HITS))
+    finally:
+        BRANCHES[46] = ("main", "acme", "nameless")
+        STACK.pop(46, None)
+
+
 def world(name):
+    global talk
+    talk = lambda number: '<div id="discussion-timeline-actions"></div>'
     print(f"— {name}")
     sv.use(f"pr-rows-{name}")
     sv.guarded = lambda: {sv.FIRST_SPACE, sv.PERSONAL.lower()}
@@ -353,6 +386,7 @@ def world(name):
                         shoot(f"pr-rows-{look_name}-{theme}-folded")
                         live("stack"); time.sleep(0.6)
                         sv.sp("select", id=ids[2]); time.sleep(0.6)
+        joined_after_relaunch(name)
     finally:
         sv.finish()
     return report

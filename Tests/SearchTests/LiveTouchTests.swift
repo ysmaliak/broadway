@@ -115,6 +115,35 @@ final class LiveTouchTests {
         #expect(Set(asks.first?.map(\.key) ?? []) == [pull(1).key, pull(2).key])
     }
 
+    @Test func showingAPullRequestsPageAsksItsRowAgainAtMostOnceInTenMinutes() async throws {
+        let made = folder([pull(1), pull(2)])
+        let now = Date()
+        let identity = LiveIdentity.of(pull(1).key)
+        LiveRefs.known = [:]
+
+        live.pageShown(url(1), space: space, now: now)
+        try await settle()
+        let asked = live.rereads
+        let readThen = reads
+        LiveRefs.known[pull(1).key] = LiveRefs.Known(updated: nil, branch: nil, read: now.addingTimeInterval(1))
+        live.pagesRead()
+        let afterRead = live.rereads
+        live.pageShown(url(1), space: space, now: now.addingTimeInterval(120))
+        let tooSoon = live.rereads
+        live.pageShown(url(1), space: space, now: now.addingTimeInterval(601))
+        let later = live.rereads
+        live.pageShown(url(9), space: space, now: now)
+        LiveRefs.known = [:]
+
+        #expect(asked.contains(identity))
+        #expect(!asked.contains(LiveIdentity.of(pull(2).key)))
+        #expect(readThen == [made.id])
+        #expect(!afterRead.contains(identity))
+        #expect(!tooSoon.contains(identity))
+        #expect(later.contains(identity))
+        #expect(!live.rereads.contains(LiveIdentity.of(pull(9).key)))
+    }
+
     @Test func aPageOutsideEveryFolderAsksNothing() async throws {
         _ = folder([pull(1)], read: Date())
         _ = folder([pull(5)], read: Date(), in: UUID())

@@ -256,7 +256,8 @@ final class LiveReader: NSObject, WKNavigationDelegate {
         let fetch = await branchFetch(page, store: store, staging: root)
         let also = root == nil ? nil : (folder.source.pullLists?.first?.page ?? asked).host()
         let branched = await LiveRefs.filled(items, previous: folder.items, host: page.host(), also: also, limit: folder.source.cap,
-                                             again: LiveFolders.shared.claimed, fetch: fetch)
+                                             again: LiveFolders.shared.rereads, fetch: fetch)
+        LiveFolders.shared.pagesRead()
         return .items(LiveStacks.arranged(branched), moved)
     }
 

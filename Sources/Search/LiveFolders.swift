@@ -339,6 +339,7 @@ struct LiveItem: Codable, Equatable {
     var draft: Bool? = nil
     var unanswered: Int? = nil
     var signsRead: Bool? = nil
+    var pageRead: Date? = nil
     var status: String? = nil
 
     var fresh: Bool {
@@ -634,6 +635,10 @@ final class LiveFolders {
     @ObservationIgnored private var touched: [String: Date] = [:]
     @ObservationIgnored private var asked: [String: LiveTouch.Ask] = [:]
     @ObservationIgnored private var flushing: DispatchWorkItem?
+    @ObservationIgnored private var pageAsks: [String: Date] = [:]
+    @ObservationIgnored private var pageAsked: [String: Date] = [:]
+    @ObservationIgnored private var pageReads: [UUID: Date] = [:]
+    @ObservationIgnored private var pageSoon: [UUID: UUID] = [:]
     @ObservationIgnored private var watchers: [(NotificationCenter, NSObjectProtocol)] = []
     @ObservationIgnored private var monitor: NWPathMonitor?
 
@@ -905,6 +910,52 @@ final class LiveFolders {
     }
 
     var claimed: Set<String> { Set(claims.filter { !$0.value.confirmed }.keys) }
+
+    var rereads: Set<String> { claimed.union(pageAsks.keys) }
+
+    func pageShown(_ url: URL, space: UUID, now: Date = Date()) {
+        let identity = LiveIdentity.of(url.absoluteString)
+        guard identity != url.absoluteString, !LiveRefs.young(pageAsked[identity], at: now, within: LiveRefs.fresh) else { return }
+        let ids = folders.filter { folder in
+            folder.space == space && !folder.paused && (folder.source.kind == .pullRequests || folder.source.kind == .repository)
+                && folder.items.contains { LiveIdentity.of($0.key) == identity && LiveRefs.open($0) }
+        }.map(\.id)
+        guard !ids.isEmpty else { return }
+        pageAsked[identity] = now
+        pageAsks[identity] = now
+        for id in ids { readSoon(id, now: now) }
+    }
+
+    func pagesRead() {
+        guard !pageAsks.isEmpty else { return }
+        var read: [String: Date] = [:]
+        for (key, known) in LiveRefs.known {
+            let identity = LiveIdentity.of(key)
+            guard pageAsks[identity] != nil else { continue }
+            read[identity] = max(read[identity] ?? .distantPast, known.read)
+        }
+        pageAsks = pageAsks.filter { identity, asked in (read[identity] ?? .distantPast) < asked }
+    }
+
+    private func readSoon(_ id: UUID, now: Date) {
+        let wait = pageReads[id].map { LiveTouch.reread - now.timeIntervalSince($0) } ?? 0
+        guard wait > 0 else {
+            pageReads[id] = now
+            recheck(id, early: true)
+            return
+        }
+        guard pageSoon[id] == nil else { return }
+        let token = UUID()
+        pageSoon[id] = token
+        DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.pageSoon[id] == token else { return }
+                self.pageSoon[id] = nil
+                self.pageReads[id] = Date()
+                self.recheck(id, early: true)
+            }
+        }
+    }
 
     func claimedRow(_ key: String) -> Bool { claims[LiveIdentity.of(key)] != nil }
 
@@ -1286,6 +1337,10 @@ final class LiveFolders {
         asked = [:]
         touched = [:]
         actedReads = [:]
+        pageAsks = [:]
+        pageAsked = [:]
+        pageReads = [:]
+        pageSoon = [:]
         asleep = [:]
         online = true
         resigned = nil
@@ -1594,8 +1649,14 @@ extension Browser {
     func livePullShown(_ tab: Tab) {
         guard prefs.liveFolders, !tab.shy, !isPopup, let url = tab.address else { return }
         liveTouch(tab, at: url, .shown)
+        livePullAsk(tab, at: url)
         guard let web = tab.built, PullPageRelay.pull(url) else { return }
         web.evaluateInSearch(PullPageRelay.again)
+    }
+
+    func livePullAsk(_ tab: Tab, at url: URL) {
+        guard prefs.liveFolders, !tab.shy, !isPopup, !tab.agent, tab.id == activeID, PullPageRelay.pull(url) else { return }
+        LiveFolders.shared.pageShown(url, space: spaceID)
     }
 
     func liveTouch(_ tab: Tab, at url: URL, _ cause: LiveTouch.Cause) {
@@ -1607,6 +1668,7 @@ extension Browser {
         guard prefs.liveFolders, !tab.shy, !isPopup else { return }
         liveTouch(tab, at: url, .landed)
         liveSeen(tab, at: url)
+        livePullAsk(tab, at: url)
         guard !tab.bench else { return }
         let arrival = LiveFolders.shared.opened(tab.id) ? .signOnTab : tab.arrival
         LiveFolders.shared.signOnTab(tab.id, at: url)

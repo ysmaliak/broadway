@@ -142,6 +142,7 @@ struct PullStackTests {
         var kept = pull(36, updated: monday)
         kept.branch = LiveBranch(repository: "acme/rocket", base: "main", head: "audio-model", stackRead: true)
         kept.signsRead = true
+        kept.pageRead = Date()
         let counter = Counter()
 
         let filled = await LiveRefs.filled([pull(36, updated: monday)], previous: [kept], fetch: served([:], counter: counter))
