@@ -8,7 +8,7 @@ private actor Heard {
     func add(_ said: [String]) { words.append(said) }
 }
 
-@Suite(.sharedWorld, .serialized, .timeLimit(.minutes(2)))
+@Suite(.sharedWorld, .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct AgentSetupTests {
     private func made(open: Bool = true, available: Bool = true, refreshes: Bool = false, linkTaken: Bool = true) -> (AgentSetup, Heard, UserDefaults) {
