@@ -1336,6 +1336,8 @@ final class Tab: Identifiable {
     /// isn't the page itself: an offer is only made from the page's own site
     /// (ApplePasswordsOffer). Set before `fieldFocused` by FormRelay.
     @ObservationIgnored var fieldFrameHost: String?
+    @ObservationIgnored var freshField: Int?
+    @ObservationIgnored var strongTaken: StrongTaken?
 
     /// `wide`: clearly a sign-in's box, so accounts kept for the site's
     /// other hosts (its registrable domain) may come; otherwise only this

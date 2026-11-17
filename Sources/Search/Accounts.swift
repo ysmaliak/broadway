@@ -43,6 +43,12 @@ final class AccountCardView: NSView {
         rows = []
         guard let asked, let browser else { return }
         func letter(_ user: String) -> AccountRowView.Mark { .letter(user.first.map { String($0).uppercased() } ?? "•") }
+        if let strong = asked.strong {
+            rows.append(AccountRowView(mark: .symbol("key.fill"), name: "Use Strong Password", detail: strong,
+                                       detailFont: .monospacedSystemFont(ofSize: 11, weight: .regular)) { [weak browser] in
+                browser?.chooseStrongPassword()
+            })
+        }
         for code in asked.codes {
             rows.append(AccountRowView(mark: .symbol("number"), name: "Use \(code.code)", detail: code.detail) { [weak browser] in browser?.choose(code) })
         }
@@ -64,11 +70,11 @@ final class AccountCardView: NSView {
             rows.append(AccountRowView(mark: .symbol("key.icloud"), name: "Connect Apple Passwords…",
                                        detail: "Pair once with a code from your Mac") { [weak browser] in browser?.connectApplePasswords() })
         }
-        if asked.appleOffer != nil {
+        if asked.appleOffer != nil, asked.strong == nil {
             rows.append(AccountOfferRowView(use: { [weak browser] in browser?.useApplePasswords() },
                                             never: { [weak browser] in browser?.neverOfferApplePasswords() }))
         }
-        if let hint = asked.formHint {
+        if let hint = asked.formHint, asked.strong == nil {
             rows.append(AccountRowView(mark: .symbol("text.badge.checkmark"), name: "Fill Whole Form", detail: "\(hint) · ⌥↩") { [weak browser] in
                 browser?.chooseFormFill()
             })
@@ -83,7 +89,7 @@ final class AccountCardView: NSView {
     }
 
     static func offerOnly(_ asked: Browser.Suggesting) -> Bool {
-        (asked.appleOffer != nil || asked.formHint != nil || !asked.codes.isEmpty) && asked.logins.isEmpty && asked.passkeys.isEmpty
+        (asked.appleOffer != nil || asked.formHint != nil || !asked.codes.isEmpty || asked.strong != nil) && asked.logins.isEmpty && asked.passkeys.isEmpty
             && asked.apple.isEmpty && !asked.appleConnect
     }
 
@@ -115,7 +121,7 @@ final class AccountRowView: KitButton {
     private let detail: KitLabel
     private let ground = KitBox(fill: nil)
 
-    init(mark: Mark, name: String, detail: String, pick: @escaping () -> Void) {
+    init(mark: Mark, name: String, detail: String, detailFont: NSFont = .systemFont(ofSize: 11), pick: @escaping () -> Void) {
         switch mark {
         case .letter(let letter):
             let label = KitLabel(letter, font: .systemFont(ofSize: 11, weight: .medium))
@@ -126,7 +132,7 @@ final class AccountRowView: KitButton {
             glyph = KitSymbol(symbol, style: KitSymbol.Style(size: 10, weight: .medium))
         }
         self.name = KitLabel(name, font: .systemFont(ofSize: 13))
-        self.detail = KitLabel(detail, font: .systemFont(ofSize: 11), color: KitColor.muted)
+        self.detail = KitLabel(detail, font: detailFont, color: KitColor.muted)
         super.init(.plain(press: 1), label: name, action: pick)
         addSubview(ground, positioned: .below, relativeTo: nil)
         addSubview(tile)
@@ -281,6 +287,8 @@ extension AccountCardView {
         switch kind {
         case "offer":
             asked.appleOffer = "example.com"
+        case "strong":
+            asked.strong = StrongPassword.make()
         default:
             asked = Browser.Suggesting(tab: UUID(), spot: spot,
                                        logins: [Kept(host: "example.com", user: "ada@example.com"), Kept(host: "example.com", user: "")],

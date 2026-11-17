@@ -2451,7 +2451,8 @@ final class Bench {
             let users = all.map(\.user)
             let used = all.map { ["host": $0.host, "user": $0.user, "used": $0.used?.timeIntervalSince1970 ?? 0] as [String: Any] }
             guard let list = browser.suggesting else { answer(["shown": false, "offer": offer, "kept": users.count, "users": users, "used": used]); return }
-            let rows = list.passkeys.map { ["passkey": $0.name] } + list.logins.map { ["login": $0.user] }
+            let strong: [[String: Any]] = list.strong == nil ? [] : [["strong": true]]
+            let rows: [[String: Any]] = strong + list.passkeys.map { ["passkey": $0.name] } + list.logins.map { ["login": $0.user] }
             if let press = request["press"] as? [Double], press.count == 2 {
                 // A press and a release at a point of the window, from its
                 // top-left, handed to whatever the window says is there — the
@@ -2476,7 +2477,8 @@ final class Bench {
             }
             if let pick = request["pick"] as? Int {
                 guard rows.indices.contains(pick) else { answer(["error": "no row \(pick)"]); return }
-                if pick < list.passkeys.count { browser.choose(list.passkeys[pick]) } else { browser.choose(list.logins[pick - list.passkeys.count]) }
+                let at = pick - strong.count
+                if at < 0 { browser.chooseStrongPassword() } else if at < list.passkeys.count { browser.choose(list.passkeys[at]) } else { browser.choose(list.logins[at - list.passkeys.count]) }
             }
             var out: [String: Any] = ["shown": true, "rows": rows, "nameOnly": list.nameOnly, "wide": list.wide, "offer": offer, "kept": users.count,
                                       "users": users, "used": used, "spot": [list.spot.minX, list.spot.minY, list.spot.width, list.spot.height]]
@@ -2486,6 +2488,15 @@ final class Bench {
                 func box(_ r: CGRect) -> [Double] { [r.minX, r.minY, r.width, r.height].map { Double($0) } }
                 out["card"] = box(drawn.card)
                 out["host"] = box(drawn.host)
+            }
+            if let path = request["picture"] as? String, let host = AccountHost.shown, host.window != nil {
+                let area = host.card.insetBy(dx: -16, dy: -16).intersection(host.bounds)
+                host.layoutSubtreeIfNeeded()
+                if let picture = host.bitmapImageRepForCachingDisplay(in: area) {
+                    host.cacheDisplay(in: area, to: picture)
+                    out["picture"] = (try? picture.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))) != nil ? path : ""
+                    out["window"] = host.window?.windowNumber ?? 0
+                }
             }
             answer(out)
 

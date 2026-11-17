@@ -855,6 +855,7 @@ final class Browser: NSObject {
         var wide = true
         var formHint: String?
         var codes: [OneTimeCode] = []
+        var strong: String?
     }
     @ObservationIgnored lazy var codeWatch: CodeWatch = {
         let watch = CodeWatch()
@@ -881,7 +882,7 @@ final class Browser: NSObject {
     /// The page whose accounts were last looked up for the box the caret is
     /// in. The box reports where it is on every frame of a scroll so the
     /// list can follow it; the keychain is asked once per box, not per frame.
-    @ObservationIgnored private var looked: (tab: Tab.ID, host: String, clear: Bool, name: Bool, wide: Bool, hint: String?)?
+    @ObservationIgnored private var looked: (tab: Tab.ID, host: String, clear: Bool, name: Bool, wide: Bool, hint: String?, fresh: Int?)?
     /// The sign-in box the caret is in, for a list that changes while it is
     /// there: the page's passkeys arrive when they arrive.
     @ObservationIgnored private var field: (tab: Tab.ID, spot: CGRect, passwords: Bool, name: Bool)?
@@ -954,14 +955,14 @@ final class Browser: NSObject {
         // asked again until the caret leaves.
         let hint = forms.hint(for: tab, field: tab.focusedField)
         if let looked, looked.tab == tab.id, looked.host == host, looked.clear == inTheClear, looked.name == name,
-           looked.wide == wide, looked.hint == hint {
+           looked.wide == wide, looked.hint == hint, looked.fresh == tab.freshField {
             if var up = suggesting, up.tab == tab.id, up.spot != spot {
                 up.spot = spot
                 suggesting = up
             }
             return
         }
-        looked = (tab.id, host, inTheClear, name, wide, hint)
+        looked = (tab.id, host, inTheClear, name, wide, hint, tab.freshField)
         let wanted = prefs.fillsPasswords && passwords
         guard wanted, !Vault.rehearsing else {
             let found = wanted ? Vault.kept(matching: host, wide: wide) : []
@@ -1017,18 +1018,21 @@ final class Browser: NSObject {
             lookUpApple(appleHost, in: tab, host: host, name: name, wide: wide)
         }
         let codes = codeWatch.offers(on: tab)
-        guard !known.isEmpty || !passkeys.isEmpty || connect || offer != nil || hint != nil || !codes.isEmpty else {
+        let strong = strongPassword(for: tab, now: suggesting)
+        guard !known.isEmpty || !passkeys.isEmpty || connect || offer != nil || hint != nil || !codes.isEmpty || strong != nil else {
             suggesting = nil
             return
         }
         // What is under the pointer changed: the half second starts again.
         if let up = suggesting, up.tab == tab.id, up.logins == known, up.passkeys == passkeys, up.nameOnly == name,
-           up.appleConnect == connect, up.apple.isEmpty, up.wide == wide, up.appleOffer == offer, up.formHint == hint, up.codes == codes {
+           up.appleConnect == connect, up.apple.isEmpty, up.wide == wide, up.appleOffer == offer, up.formHint == hint, up.codes == codes,
+           up.strong == strong {
             suggesting?.spot = spot
             return
         }
         suggesting = Suggesting(tab: tab.id, spot: spot, logins: known, passkeys: passkeys, host: host, clear: inTheClear,
-                                nameOnly: name, appleHost: appleHost, appleConnect: connect, appleOffer: offer, wide: wide, formHint: hint, codes: codes)
+                                nameOnly: name, appleHost: appleHost, appleConnect: connect, appleOffer: offer, wide: wide, formHint: hint, codes: codes,
+                                strong: strong)
         if let offer { applePasswordsOffer.shown(on: offer) }
     }
 
@@ -1272,6 +1276,19 @@ final class Browser: NSObject {
         suggesting = nil
         pickedInto = tab.id
         codeWatch.use(code, in: tab)
+    }
+
+    func chooseStrongPassword() {
+        lowering?.cancel()
+        guard let list = suggesting, let password = list.strong, let tab = tabs.first(where: { $0.id == list.tab }),
+              Date().timeIntervalSince(list.shown) > 0.5
+        else { return }
+        suggesting = nil
+        guard curtain.host(of: tab.pageAddress) == list.host,
+              (tab.pageAddress?.scheme?.lowercased() == "http") == list.clear
+        else { return }
+        pickedInto = tab.id
+        takeStrongPassword(password, in: tab, host: list.host, clear: list.clear)
     }
 
     func chooseFormFill() {
@@ -6358,6 +6375,7 @@ extension Browser {
             // A password manager extension that asked Chrome's way to do the
             // saving itself.
             if Extensions.shared.passwordSavingTakenBy != nil { return }
+            if strongPasswordSent(tab, host: host, user: user, password: password) { return }
             let sent = SentSignIn(host: host, user: user, password: password)
             let marks = [tab.appleFill, tab.keptFill]
             Task { [weak self] in

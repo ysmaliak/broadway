@@ -44,6 +44,7 @@ final class FormRelay: NSObject, WKScriptMessageHandler {
                 // A box of a name and password, or one the page marks for
                 // passkeys alone ("webauthn"), which takes no password.
                 tab?.fieldFrameHost = message.frameInfo.isMainFrame ? nil : message.frameInfo.securityOrigin.host
+                tab?.freshField = message.frameInfo.isMainFrame ? (body["fresh"] as? Int) : nil
                 tab?.focusedField = (body["field"] as? [String: Any]).flatMap { FormField(page: $0) }
                 if let rect = body["rect"] as? [String: Double],
                    let x = rect["x"], let y = rect["y"], let w = rect["w"], let h = rect["h"] {
@@ -272,6 +273,40 @@ final class FormRelay: NSObject, WKScriptMessageHandler {
       }
       function nameBox(el) { return !!firstStep(el); }
       function newPassword(el) { return tokens(el).indexOf('new-password') >= 0; }
+      function secretBoxes(scope) {
+        return Array.prototype.filter.call(scope.querySelectorAll('input[type="password"]'), function (b) {
+          var r = b.getBoundingClientRect();
+          return r.width > 0 && r.height > 0 && !b.disabled && !b.readOnly;
+        });
+      }
+      function current(el) { return tokens(el).indexOf('current-password') >= 0; }
+      function fresh(el) {
+        if (!el || (el.tagName || '').toLowerCase() !== 'input' || (el.type || '').toLowerCase() !== 'password') return null;
+        if (el.disabled || el.readOnly || el.value || current(el)) return null;
+        var scope = el.form || (el.closest && el.closest('form')) || document;
+        var boxes = secretBoxes(scope);
+        if (boxes.indexOf(el) < 0) return null;
+        var shaped = boxes.length === 2 && !boxes.some(current);
+        if (!newPassword(el) && !shaped) return null;
+        return el.maxLength > 0 ? el.maxLength : 0;
+      }
+      function twin(el) {
+        var scope = el.form || (el.closest && el.closest('form')) || document;
+        var others = secretBoxes(scope).filter(function (b) { return b !== el && !current(b); });
+        if (others.length === 1) return others[0];
+        var marked = others.filter(newPassword);
+        return marked.length ? marked[0] : null;
+      }
+      function nameFor(el) {
+        var scope = el.form || (el.closest && el.closest('form')) || document;
+        var all = scope.querySelectorAll('input'), user = null;
+        for (var i = 0; i < all.length; i++) {
+          if ((all[i].type || '').toLowerCase() === 'password') break;
+          var kind = (all[i].type || 'text').toLowerCase();
+          if (kind === 'text' || kind === 'email' || kind === 'tel') user = all[i];
+        }
+        return user ? user.value.trim() : '';
+      }
       // What a box the caret is in is offered: null for nothing.
       function judge(el) {
         if (!el || (el.tagName || '').toLowerCase() !== 'input') return null;
@@ -362,6 +397,15 @@ final class FormRelay: NSObject, WKScriptMessageHandler {
         // Whether there is still a sign-in on the page. Asked after a
         // password went out, to tell a sign-in that took from one refused.
         hasPassword: function () { return !!pair(); },
+        strong: function (password) {
+          var el = offered && offered.isConnected ? offered : document.activeElement;
+          if (fresh(el) === null) return null;
+          var other = twin(el);
+          put(el, password);
+          if (other && !other.value) put(other, password);
+          return { user: nameFor(el), both: !!other };
+        },
+        fresh: function (el) { return fresh(el || document.activeElement); },
         // What a box would be offered, for the tests: null, or whether a
         // pick puts in the name alone and whether the site's other hosts'
         // accounts come too.
@@ -477,6 +521,7 @@ final class FormRelay: NSObject, WKScriptMessageHandler {
       // What the box the caret is in was judged to be: judged again when the
       // caret moves, not on every frame of a scroll, which only moves it.
       var judged = { el: null, verdict: null };
+      var offered = null;
       function caret(scrolled) {
         var el = document.activeElement;
         // The boxes are only looked for with the caret in one: this runs on
@@ -491,12 +536,14 @@ final class FormRelay: NSObject, WKScriptMessageHandler {
         var passwords = !!verdict;
         var name = !!(verdict && verdict.name);
         var wide = !verdict || verdict.wide;
-        if (passwords || forPasskeys(el) || described) {
+        var made = fresh(el);
+        if (made !== null) offered = el;
+        if (passwords || forPasskeys(el) || described || made !== null) {
           var r = el.getBoundingClientRect();
           if (r.width > 0 && r.height > 0) rect = { x: r.left, y: r.top, w: r.width, h: r.height };
         }
         var typing = editable(el);
-        var now = typing + (rect ? ' ' + passwords + ' ' + name + ' ' + wide + ' ' + rect.x + ' ' + rect.y + ' ' + rect.w + ' ' + rect.h : '');
+        var now = typing + (rect ? ' ' + passwords + ' ' + name + ' ' + wide + ' ' + made + ' ' + rect.x + ' ' + rect.y + ' ' + rect.w + ' ' + rect.h : '');
         if (scrolled === true && now === said) return;
         said = now;
         window.webkit.messageHandlers.officeForms.postMessage({
@@ -506,6 +553,7 @@ final class FormRelay: NSObject, WKScriptMessageHandler {
           passwords: passwords,
           name: name,
           wide: wide,
+          fresh: made,
           field: described
         });
       }
