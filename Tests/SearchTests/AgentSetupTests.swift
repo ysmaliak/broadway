@@ -11,7 +11,7 @@ private actor Heard {
 @Suite(.sharedWorld, .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct AgentSetupTests {
-    private func made(open: Bool = true, available: Bool = true, refreshes: Bool = false, linkTaken: Bool = true) -> (AgentSetup, Heard, UserDefaults) {
+    private func made(open: Bool = true, available: Bool = true, refreshes: Bool = false, linkTaken: Bool = true, staying: Bool = true) -> (AgentSetup, Heard, UserDefaults) {
         let name = "agent-setup-tests-\(UUID().uuidString)"
         let store = UserDefaults(suiteName: name)!
         addTeardownBlock { UserDefaults().removePersistentDomain(forName: name) }
@@ -25,6 +25,7 @@ struct AgentSetupTests {
         setup.available = { available }
         setup.refreshes = { refreshes }
         setup.linkTaken = { linkTaken }
+        setup.staying = { staying }
         return (setup, heard, store)
     }
 
@@ -56,8 +57,10 @@ struct AgentSetupTests {
     @Test func theWordsAreOnlyClaudeAndCodexAndTheCommandWhenNothingIsThere() {
         #expect(AgentCommand.setupWords == ["setup", "claude", "codex"])
         #expect(AgentCommand.setupAndLinkWords == ["setup", "command", "claude", "codex"])
-        #expect(AgentCommand.setupWords(somethingAtLink: true) == ["setup", "claude", "codex"])
-        #expect(AgentCommand.setupWords(somethingAtLink: false) == ["setup", "command", "claude", "codex"])
+        #expect(AgentCommand.setupWords(somethingAtLink: true, staying: true) == ["setup", "claude", "codex"])
+        #expect(AgentCommand.setupWords(somethingAtLink: false, staying: true) == ["setup", "command", "claude", "codex"])
+        #expect(AgentCommand.setupWords(somethingAtLink: false, staying: false) == ["setup", "claude", "codex"])
+        #expect(AgentCommand.setupWords(somethingAtLink: true, staying: false) == ["setup", "claude", "codex"])
         #expect(!AgentCommand.setsUpAgents)
         #expect(!AgentSetup.shared.open())
     }
@@ -76,6 +79,15 @@ struct AgentSetupTests {
         await setup.settled()
 
         #expect(await heard.words == [AgentCommand.setupAndLinkWords, AgentCommand.refreshWords])
+    }
+
+    @Test func fromADiskImageOrADownloadFolderTheRunLinksNothing() async {
+        let (setup, heard, _) = made(linkTaken: false, staying: false)
+
+        setup.turned(wasOn: false, isOn: true)
+        await setup.settled()
+
+        #expect(await heard.words == [AgentCommand.setupWords])
     }
 
     @Test func withSomethingAtTheLinkTheRunLeavesIt() async {

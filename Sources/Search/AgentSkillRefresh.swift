@@ -19,9 +19,11 @@ extension AgentCommand {
         return !(environment["BROADWAY_HOME"] ?? "").isEmpty
     }
 
-    static func setupWords(somethingAtLink: Bool) -> [String] {
-        somethingAtLink ? setupWords : setupAndLinkWords
+    static func setupWords(somethingAtLink: Bool, staying: Bool) -> [String] {
+        somethingAtLink || !staying ? setupWords : setupAndLinkWords
     }
+
+    static var staying: Bool { UpdatePlace.found(Bundle.main.bundleURL) == nil }
 
     static func home(_ environment: [String: String]) -> String {
         environment["BROADWAY_HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? NSHomeDirectory()
@@ -58,6 +60,7 @@ final class AgentSetup {
     @ObservationIgnored var open: () -> Bool = { AgentCommand.setsUpAgents }
     @ObservationIgnored var refreshes: () -> Bool = { AgentCommand.refreshesSkills }
     @ObservationIgnored var linkTaken: () -> Bool = { AgentCommand.somethingAtLink }
+    @ObservationIgnored var staying: () -> Bool = { AgentCommand.staying }
     @ObservationIgnored private let store: UserDefaults
     @ObservationIgnored private var last: Task<Void, Never>?
 
@@ -85,7 +88,8 @@ final class AgentSetup {
         guard available() else { return }
         store.set(true, forKey: AgentCommand.setUpKey)
         let linkTaken = linkTaken
-        queue({ AgentCommand.setupWords(somethingAtLink: linkTaken()) }, counts: true)
+        let staying = staying
+        queue({ AgentCommand.setupWords(somethingAtLink: linkTaken(), staying: staying()) }, counts: true)
     }
 
     private func queue(_ words: @escaping () -> [String], counts: Bool) {
