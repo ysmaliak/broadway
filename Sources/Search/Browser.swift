@@ -3276,6 +3276,7 @@ extension Browser {
     func closeAll() {
         fileChoice?.cancel()
         SaveAsk.shared.tabClosed(Set((tabs + parkedTabs).map(\.id)))
+        SiteFileAsk.shared.tabClosed(Set((tabs + parkedTabs).map(\.id)))
         privateFileDownloads = []
         cancelDisplay()
         cancelCapture()
@@ -3977,6 +3978,7 @@ extension Browser {
         heldDialogs.removeValue(forKey: tab.id)?.forEach { $0.dismiss() }
         dropQuestions(for: tab.id)
         SaveAsk.shared.tabClosed([tab.id])
+        SiteFileAsk.shared.tabClosed([tab.id])
 
         // A tab whose page is out in the little window takes the window with
         // it. Left alone, the window would go on holding a page belonging to a
@@ -7147,6 +7149,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         _ action: WKNavigationAction,
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
+        noteFileAction(action, in: webView)
         // "Download Image" from the page's own context menu and a link with
         // the `download` attribute arrive as an ordinary-looking action with
         // this one flag set. ("Download Linked File" doesn't come this way:
@@ -7761,6 +7764,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         navigationAction: WKNavigationAction,
         didBecome download: WKDownload
     ) {
+        noteFileBegan(download, from: webView, start: .page)
         keep(download, from: webView)
         dropEmpty(webView)
     }
@@ -7770,6 +7774,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         navigationResponse: WKNavigationResponse,
         didBecome download: WKDownload
     ) {
+        noteFileBegan(download, from: webView, start: .page)
         keep(download, from: webView)
         dropEmpty(webView)
     }
@@ -7921,6 +7926,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
     /// idempotence handles WebKit choosing either callback order.
     func relinquish(_ download: WKDownload) {
         SaveAsk.shared.downloadEnded(download)
+        SiteFileAsk.shared.downloadEnded(download)
         downloading.removeAll { $0 === download }
         unlisted.remove(ObjectIdentifier(download))
     }
@@ -8358,6 +8364,21 @@ extension Browser: WKDownloadDelegate {
             DownloadTrace.note("refused-file", ["url": guess.url.absoluteString])
             (tabs + parkedTabs).first { $0.id == guess.opener }?.blockedPopups.removeAll { $0.url == guess.url }
             keep(download, from: download.webView)
+        }
+        if fetches.destination(for: download) == nil,
+           gateSiteFile(download, response: response,
+                        name: Browser.fileName(response.url.flatMap { namedDownloads[$0] } ?? suggestedFilename),
+                        agent: AgentDownloadWatch.watches(download),
+                        then: { [weak self] in
+                            guard let self else { return completionHandler(nil) }
+                            self.download(download, decideDestinationUsing: response, suggestedFilename: suggestedFilename,
+                                          completionHandler: completionHandler)
+                        },
+                        drop: { [weak self] in
+                            self?.dropSiteFile(download)
+                            completionHandler(nil)
+                        }) {
+            return
         }
         let asked = response.url.flatMap { namedDownloads.removeValue(forKey: $0) }
         let chosen = fetches.destination(for: download)

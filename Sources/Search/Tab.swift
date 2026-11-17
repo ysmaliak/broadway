@@ -321,6 +321,8 @@ final class Tab: Identifiable {
 
     func didCommit() {
         retryCommitted()
+        fileClicks.committed()
+        fileTyped = false
         if stuck.asked != nil { StuckRules.committed(&stuck) }
         settle.committed(at: CACurrentMediaTime())
         scheduleSettle()
@@ -369,6 +371,8 @@ final class Tab: Identifiable {
     /// connection. Shown in place of the page rather than in a dialog.
     var failure: String?
     @ObservationIgnored var retry = LoadRetry()
+    @ObservationIgnored var fileClicks = FileClicks()
+    @ObservationIgnored var fileTyped = false
     /// The site's icon, for tabs set to wear one. From the cache the moment
     /// the tab has an address, and from the page a moment after it loads.
     private var siteIcon: NSImage?

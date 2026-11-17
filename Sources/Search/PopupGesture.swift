@@ -16,6 +16,7 @@ struct PopupGesture {
     private var serial = 0
     private var made: (serial: Int, tab: UUID)?
     private(set) var hits: [PopupHit] = []
+    var interaction: Int { serial }
     private(set) var spawn: PopupSpawn?
 
     mutating func record(origin: String?, kind: String, hit: PopupHit? = nil, now: TimeInterval = ProcessInfo.processInfo.systemUptime) {
@@ -331,6 +332,7 @@ final class PopupGestureRelay: NSObject, WKScriptMessageHandler {
         MainActor.assumeIsolated {
             guard let webView = message.webView, let tab = Self.tab(for: webView) else { return }
             tab.popupGesture.record(origin: PopupGesture.origin(message.frameInfo), kind: kind, hit: hit)
+            tab.fileClicks.clicked(tab.popupGesture.interaction, at: ProcessInfo.processInfo.systemUptime)
         }
     }
 }

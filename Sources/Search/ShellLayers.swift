@@ -367,6 +367,7 @@ final class ShellLowerLayer: ShellLayer {
     private var capture: CaptureQuestionView?
     private var screen: ScreenQuestionView?
     private var offer: PasswordOfferView?
+    private var siteFile: SiteFileQuestionView?
     private var store: (id: String, view: StoreOfferView)?
     private var fillCard: FormFillCard?
     private var fillDone: FormFillBar?
@@ -435,6 +436,13 @@ final class ShellLowerLayer: ShellLayer {
         } else {
             capture = nil
             screen = nil
+        }
+        if let card = SiteFileAsk.shared.card(for: browser.active?.id) {
+            let view = kept(&siteFile, true) { SiteFileQuestionView(browser: browser, card: card) }
+            view?.card = card
+            if let view { bars.append(.init(view: view, rises: true)) }
+        } else {
+            siteFile = nil
         }
         if let asked = browser.offering {
             let view = kept(&offer, true) { PasswordOfferView(browser: browser, offer: asked) }

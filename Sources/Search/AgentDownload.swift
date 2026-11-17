@@ -78,7 +78,13 @@ enum DownloadPlace {
 
     static func find(_ name: String, in folder: URL, numbered: Bool, seconds: Double) async -> (file: URL, held: Bool) {
         let key = folder.standardizedFileURL.path
-        if busy.take(key) {
+        let start = Date()
+        var mine = busy.take(key)
+        while !mine, Date().timeIntervalSince(start) < seconds {
+            try? await Task.sleep(for: .milliseconds(25))
+            mine = busy.take(key)
+        }
+        if mine {
             let found: URL? = await race(seconds: seconds) {
                 defer { busy.give(key) }
                 guard opens(folder) else { return nil }
@@ -112,6 +118,7 @@ enum AgentDownloadWatch {
         var type: String?
         var done = false
         var failed: String?
+        weak var download: WKDownload?
 
         var row: [String: Any] {
             let path = file?.path ?? ""
@@ -156,8 +163,9 @@ enum AgentDownloadWatch {
         let wish = expected[tab.id].flatMap { $0.until > Date() ? $0 : nil }
         guard tab.agent || wish != nil else { return nil }
         let id = ObjectIdentifier(download)
-        if records[id] == nil {
-            records[id] = Record(tab: tab.id, source: download.originalRequest?.url, type: type)
+        if mine(download) == nil {
+            order.removeAll { $0 == id }
+            records[id] = Record(tab: tab.id, source: download.originalRequest?.url, type: type, download: download)
             order.append(id)
             if order.count > 200 { records[order.removeFirst()] = nil }
         }
@@ -165,24 +173,28 @@ enum AgentDownloadWatch {
         return AgentDownloads.root.appendingPathComponent(folderName(wish?.name ?? agentName(tab)), isDirectory: true)
     }
 
+    private static func mine(_ download: WKDownload) -> ObjectIdentifier? {
+        let id = ObjectIdentifier(download)
+        return records[id]?.download === download ? id : nil
+    }
+
     static func watches(_ download: WKDownload) -> Bool {
-        records[ObjectIdentifier(download)] != nil
+        mine(download) != nil
     }
 
     static func placed(_ download: WKDownload, at file: URL) {
-        records[ObjectIdentifier(download)]?.file = file
+        guard let id = mine(download) else { return }
+        records[id]?.file = file
     }
 
     static func finished(_ download: WKDownload, at file: URL?) {
-        let id = ObjectIdentifier(download)
-        guard records[id] != nil else { return }
+        guard let id = mine(download) else { return }
         if let file { records[id]?.file = file }
         records[id]?.done = true
     }
 
     static func failed(_ download: WKDownload, _ why: String) {
-        let id = ObjectIdentifier(download)
-        guard records[id] != nil, records[id]?.done == false else { return }
+        guard let id = mine(download), records[id]?.done == false else { return }
         records[id]?.failed = why
     }
 

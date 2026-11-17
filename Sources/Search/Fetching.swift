@@ -407,6 +407,7 @@ final class Fetches {
               let item = running[ObjectIdentifier(download)], item.entry === entry else { return nil }
         let token = entry.preparingToStop(action)
         item.stopAction = action
+        tellDock()
         item.operationID = token
         return StopOperation(download: download, entry: entry, operationID: token)
     }
@@ -424,6 +425,7 @@ final class Fetches {
         }
         let token = UUID()
         item.stopAction = .cancel
+        tellDock()
         item.operationID = token
         return StopOperation(download: download, entry: nil, operationID: token)
     }
@@ -505,6 +507,7 @@ final class Fetches {
               let item = running[ObjectIdentifier(download)], item.entry === entry else { return false }
         entry.pendingStop = .cancel
         item.stopAction = .cancel
+        tellDock()
         return true
     }
 
@@ -570,7 +573,24 @@ final class Fetches {
         item.watch?.invalidate()
         item.shown?.unpublish()
         item.entry?.download = nil
+        tellDock()
         return item
+    }
+
+    var dockLoads: [DockLoad] {
+        running.values.map {
+            DockLoad(received: $0.download.progress.completedUnitCount, expected: $0.download.progress.totalUnitCount,
+                     underWay: $0.stopAction == nil && !SiteFileAsk.shared.holds($0.download))
+        }
+    }
+
+    func heldChanged() {
+        tellDock()
+    }
+
+    private func tellDock() {
+        guard self === Shared.fetches else { return }
+        DockBar.shared.update(dockLoads)
     }
 
     /// The last one in: the circle says so, then goes. One that failed with
@@ -618,6 +638,7 @@ final class Fetches {
             }
             item.entry?.record(progress)
         }
+        tellDock()
         guard !running.isEmpty else { return }
         let now: Double? = sized && total > 0 ? (Double(completed) / Double(total) * 100).rounded() / 100 : nil
         if now != fraction { fraction = now }

@@ -217,6 +217,16 @@ enum TearLook {
     static var room: CGFloat { shadow.radius * 2 + shadow.y }
 }
 
+enum DockBarLook {
+    static let tile: CGFloat = 128
+    static let width: CGFloat = 96
+    static let height: CGFloat = 10
+    static let lift: CGFloat = 14
+    static let inset: CGFloat = 1.5
+    static let track = NSColor(white: 0, alpha: 0.45)
+    static let fill = NSColor.white
+}
+
 struct KitShadow: Equatable {
     var light: Swift.Float
     var dark: Swift.Float

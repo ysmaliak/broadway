@@ -94,6 +94,7 @@ final class SaveAskTests {
 
     @Test func aLinkDownloadAsksAndTheAnsweredPathGetsTheFile() async throws {
         let tab = try await openFixturePage()
+        tab.fileClicks.clicked(tab.popupGesture.interaction + 1, at: ProcessInfo.processInfo.systemUptime)
         _ = try await tab.web.evaluateJavaScript("var a = document.createElement('a'); a.href = '/link.bin'; document.body.appendChild(a); a.click(); 1")
         let question = try await waitForQuestion()
         #expect(question.name == "fixture.bin")

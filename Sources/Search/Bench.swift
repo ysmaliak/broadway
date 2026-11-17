@@ -378,6 +378,10 @@ final class Bench {
 
         case _ where BenchNetwork.verbs.contains(verb):
             BenchNetwork.run(request, answer)
+        case _ where BenchDock.verbs.contains(verb):
+            BenchDock.run(request, answer)
+        case _ where BenchSiteFiles.verbs.contains(verb):
+            BenchSiteFiles.run(request, browser, answer)
 
         case "layouts":
             // Test runs only: every frame the pages on screen take, looked at
@@ -4729,6 +4733,9 @@ final class Bench {
         case "downloadtrace":
             guard Store.testing else { answer(["error": "downloadtrace is for test runs"]); return }
             if request["clear"] as? Bool == true { DownloadTrace.clear() }
+            if let name = request["cancel"] as? String, let entry = browser.fetches.entries.first(where: { $0.name == name }) {
+                browser.cancelDownload(entry)
+            }
             let entries = browser.fetches.entries.map { entry -> [String: Any] in
                 ["name": entry.name, "state": "\(entry.state)", "error": entry.errorDescription ?? "",
                  "destination": entry.destination?.path ?? ""]
@@ -4834,7 +4841,7 @@ final class Bench {
 
         default:
             answer(["error": "unknown command “\(verb)”", "commands": [
-                "tabs", "network", "quick", "open", "adopt", "go", "openmark", "close", "wait", "sleep", "select", "text", "nowplaying", "eval", "click", "type", "submit", "shot", "probe", "key", "textcheck", "resize", "hit", "pointer", "film", "float", "window", "pages", "picture", "pdf", "place", "group", "tospace", "field", "bookmark", "marks", "menu", "keyeq", "fill", "pin", "middle", "windows", "alive", "updates", "quit", "towindow", "pull", "magnify", "wheel", "refresh", "discs", "space", "split", "column", "fold", "consent", "site", "ui", "import", "import-preview", "import-file", "import-panel", "import-file-start", "import-file-status", "import-file-cancel", "remove-folder", "passwords", "accounts", "find", "answer", "visible", "ai", "notifications", "popups", "suggest", "translate", "settings", "fieldrows", "autofill", "agent", "agents", "codes", "folders", "searchfolder", "live", "route", "card", "icon", "aigroups", "ctxmenu", "downloadslist", "pageclick",
+                "tabs", "network", "dock", "sitefiles", "quick", "open", "adopt", "go", "openmark", "close", "wait", "sleep", "select", "text", "nowplaying", "eval", "click", "type", "submit", "shot", "probe", "key", "textcheck", "resize", "hit", "pointer", "film", "float", "window", "pages", "picture", "pdf", "place", "group", "tospace", "field", "bookmark", "marks", "menu", "keyeq", "fill", "pin", "middle", "windows", "alive", "updates", "quit", "towindow", "pull", "magnify", "wheel", "refresh", "discs", "space", "split", "column", "fold", "consent", "site", "ui", "import", "import-preview", "import-file", "import-panel", "import-file-start", "import-file-status", "import-file-cancel", "remove-folder", "passwords", "accounts", "find", "answer", "visible", "ai", "notifications", "popups", "suggest", "translate", "settings", "fieldrows", "autofill", "agent", "agents", "codes", "folders", "searchfolder", "live", "route", "card", "icon", "aigroups", "ctxmenu", "downloadslist", "pageclick",
             ]])
         }
     }
