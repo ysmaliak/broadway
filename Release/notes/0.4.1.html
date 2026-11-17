@@ -1,0 +1,6 @@
+<h2>Broadway 0.4.1</h2>
+<h3>New in this version</h3>
+<ul>
+  <li><strong>Claude Code and Codex are set up when you turn agents on.</strong> Turning on Let agents use Broadway now adds Broadway's skill and its small hook to Claude Code and Codex, so a finished agent reads Finished the moment its turn ends. You no longer run <code>broadway setup claude codex</code> yourself. If agents were already on, this happens once when 0.4.1 first opens. It also puts the <code>broadway</code> command in <code>~/.local/bin</code> when none is there, and never moves one that is. <code>broadway remove</code> takes it all out again, and Broadway does not put it back until you turn agents off and on. Codex may ask you to approve the new hook once in <code>/hooks</code>.</li>
+</ul>
+<p>Requires macOS 27 on a Mac with Apple silicon.</p>
