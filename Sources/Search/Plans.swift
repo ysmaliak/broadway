@@ -48,7 +48,7 @@ final class Plans {
     }
 
     func refresh() async {
-        guard !looking else { return }
+        while looking { try? await Task.sleep(for: .milliseconds(10)) }
         looking = true
         defer { looking = false }
         for plan in Plan.allCases {
@@ -93,12 +93,21 @@ final class Plans {
         return others.first.map { ModelChoice(plan: choice.plan, model: $0.id, effort: $0.defaultEffort) }
     }
 
+    var agents: [Plan] { Plan.allCases.filter(connected) }
+
+    func agent(_ prefs: Preferences) -> Plan? {
+        if let chosen = prefs.aiPlan, connected(chosen) || !looked { return chosen }
+        return Plan.cloud.first(where: connected) ?? (connected(.thisMac) ? .thisMac : nil)
+    }
+
     func commandChoice(_ command: TextCommand, blind: Bool, _ prefs: Preferences) -> ModelChoice? {
         let mac = ModelChoice(plan: .thisMac, model: "", effort: nil)
-        if blind { return connected(.thisMac) ? mac : nil }
+        let macCan = command.mine || TextCommand.onDevice.contains(command.id)
+        if blind { return macCan && connected(.thisMac) ? mac : nil }
         if let model = command.model { return model }
-        if TextCommand.onDevice.contains(command.id), connected(.thisMac) { return mac }
-        return choice(.commands, prefs)
+        guard let plan = agent(prefs) else { return nil }
+        if plan == .thisMac { return macCan ? mac : nil }
+        return defaultChoice(plan)
     }
 
     func start(_ request: ProviderRequest, on choice: ModelChoice) -> ProviderSession {

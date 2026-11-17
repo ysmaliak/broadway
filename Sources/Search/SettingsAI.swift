@@ -60,6 +60,10 @@ extension SettingsPageView {
                          })
             }
         }
+        section("In Broadway") {
+            settingRow("ai.actions")
+            settingRow("ai.plan")
+        }
         let connected = links.live.filter { !$0.task && $0.codex == nil }
         shape { links.live.filter { !$0.task && $0.codex == nil }.map(\.id) }
         if !connected.isEmpty {

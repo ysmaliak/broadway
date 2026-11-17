@@ -109,6 +109,12 @@ enum PersonSettings {
         "agents.mode": SettingAccess(bar: .always, read: { $0.agentMode.rawValue }),
         "agents.sites": SettingAccess(bar: .always, instead: "broadway agents status reads them"),
         "ai.agents": held(\.agentsOn),
+        "ai.actions": SettingAccess(bar: .turningOn, takes: "true or false", read: { $0.textActions }, write: { prefs, text in
+            guard let on = yes(text) else { return false }
+            TextActions.set(on, prefs)
+            return true
+        }),
+        "ai.plan": SettingAccess(bar: .always, read: { Plans.shared.agent($0)?.rawValue ?? "" }),
         "ai.command": row("The broadway command", instead: "broadway setup"),
         "ai.groups": shared({ AIGroups.shared.on }, { AIGroups.shared.on = $0 }),
         "groups.meetings": flag(\.meetingFolders),

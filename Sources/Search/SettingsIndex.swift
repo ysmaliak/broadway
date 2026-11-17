@@ -65,6 +65,7 @@ enum SettingsIndex {
         .init(id: "keys", page: .shortcuts, title: "Keyboard shortcuts", icon: "command"),
 
         .init(id: "agents", page: .agents, title: "Agents", icon: "person.2"),
+        .init(id: "agents.broadway", page: .agents, title: "In Broadway", icon: "wand.and.stars"),
 
         .init(id: "live", page: .liveFolders, title: "Your live folders", icon: MenuSymbol.liveFolder),
         .init(id: "live.history", page: .liveFolders, title: "Add a live folder", icon: "folder.badge.plus"),
@@ -95,6 +96,13 @@ enum SettingsIndex {
               detail: "What an agent needs your yes for: Ask, Auto or Bypass", keys: ["agents.mode"],
               words: ["approval", "permission", "ask", "auto", "bypass", "confirm", "pay", "send", "delete", "your mac", "mac access",
                       "files", "terminal", "gate"]),
+        .init(id: "ai.actions", group: "agents.broadway", icon: "wand.and.stars", title: "Text actions",
+              detail: "Improve Writing, Translate and more, from a right-click on selected text", keys: [Preferences.textActionsKey],
+              words: ["improve writing", "fix spelling", "grammar", "translate", "summarize", "explain", "rewrite", "right-click",
+                      "context menu", "selected text", "selection", "commands", "ai"]),
+        .init(id: "ai.plan", group: "agents.broadway", icon: "brain", title: "Agent",
+              detail: "Runs them on your own plan", keys: ["ai.plan"],
+              words: ["claude code", "codex", "this mac", "apple intelligence", "model", "plan", "ai", "which agent"]),
         .init(id: "agents.connected", group: "agents", icon: "person.2.wave.2", title: "Connected agents",
               detail: "Claude Code, Codex and scripts using Broadway, each with a card at the foot of the sidebar",
               words: ["agent mode", "connected", "disconnect", "claude code", "codex", "session", "agents area"], kind: .note, findOnly: true),
@@ -456,6 +464,7 @@ enum SettingsIndex {
         case "passwords.never": return !Vault.never.isEmpty
         case "spaces.stacked": return prefs.usesSpaces
         case "ai.groups": return AIGroups.shared.deciding != nil
+        case "ai.plan": return !Plans.shared.looked || !Plans.shared.agents.isEmpty
         case "groups.openrouter": return AIGroups.shared.remoteDecides || AIGroups.shared.available(.thisMac)
         case "passwords.apple": return AppleHelper.available
         case "updates.check": return Updates.runs
@@ -470,6 +479,7 @@ enum SettingsIndex {
         case "passwords.never": return "No site has been told to stop offering"
         case "spaces.stacked": return "Only while you use spaces"
         case "ai.groups": return AIGroupWords.needs
+        case "ai.plan": return TextActions.nothingConnected
         case "groups.openrouter": return "Needs Apple Intelligence on this Mac"
         case "passwords.apple": return item.detail
         case "updates.check": return UpdateWords.none
@@ -583,6 +593,9 @@ extension SettingsIndex {
         case "ai.agents":
             guard let on = value as? Bool else { return false }
             prefs.agentsOn = on
+        case "ai.actions":
+            guard let on = value as? Bool else { return false }
+            TextActions.set(on, prefs)
         default:
             return false
         }

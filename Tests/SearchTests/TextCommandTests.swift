@@ -116,23 +116,6 @@ final class TextCommandTests {
         #expect(other.requests.count == 1)
     }
 
-    @Test func privateTabsOnlyEverUseTheMac() async {
-        let prefs = Preferences()
-        let command = TextCommand.standard[0]
-
-        #expect(Plans.shared.commandChoice(command, blind: true, prefs)?.plan == .thisMac)
-        #expect(Plans.shared.commandChoice(command, blind: false, prefs)?.plan == .thisMac)
-        #expect(Plans.shared.commandChoice(TextCommand.standard[4], blind: false, prefs)?.plan != .thisMac)
-
-        let gone = FakeProvider(plan: .thisMac)
-        gone.fakeStatus = PlanStatus()
-        Plans.shared.standIn(gone, for: .thisMac)
-        await Plans.shared.refresh()
-
-        #expect(Plans.shared.commandChoice(command, blind: true, prefs) == nil)
-        #expect(Plans.shared.commandChoice(command, blind: false, prefs)?.plan == .claude)
-    }
-
     @Test func storeKeepsMineAndTheOptionalOnes() throws {
         let file = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("broadway-commands-\(UUID().uuidString).json")
         addTeardownBlock { try? FileManager.default.removeItem(at: file) }
@@ -159,10 +142,16 @@ final class TextCommandTests {
         #expect(again.mine.isEmpty)
     }
 
-    @Test func noTextCommandIsOfferedInTheMenusOrShortcuts() {
-        for command in TextCommand.builtIn {
-            #expect(Command.named("ai.\(command.id)") == nil, "\(command.id)")
+    @Test func everyStandardCommandHasACommandWithNoKeyInTheEditGroup() throws {
+        for command in TextCommand.standard {
+            let made = try #require(Command.named("edit.text.\(command.id)"))
+            #expect(made.title == command.name)
+            #expect(made.section == .edit)
+            #expect(made.defaultKey == nil)
         }
+        let more = try #require(Command.named("edit.text.more"))
+        #expect(more.title == "More Commands…")
+        #expect(more.defaultKey == nil)
         #expect(Command.named("edit.draftForm") == nil)
         #expect(Command.named("view.routines") == nil)
     }

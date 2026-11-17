@@ -148,6 +148,14 @@ enum BenchSurfaces {
         windows.append(window)
         var said: [String: Any] = ["number": window.windowNumber, "size": [size.width, size.height], "dark": dark]
         if request["controls"] as? Bool == true { said["controls"] = controls(in: view) }
+        if let path = request["path"] as? String {
+            stage.layoutSubtreeIfNeeded()
+            stage.displayIfNeeded()
+            if let picture = stage.bitmapImageRepForCachingDisplay(in: stage.bounds) {
+                stage.cacheDisplay(in: stage.bounds, to: picture)
+                if (try? picture.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))) != nil { said["path"] = path }
+            }
+        }
         return said
     }
 

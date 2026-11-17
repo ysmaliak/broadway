@@ -56,7 +56,7 @@ struct SettingsIndexTests {
         #expect(SettingsPage.named("ai") == .agents)
         #expect(SettingsDetail.allCases == [.linkRule, .liveFolder, .languages])
         #expect(!SettingsIndex.groups.contains { $0.title == "AI" })
-        #expect(SettingsIndex.groups(of: .agents).map(\.id) == ["agents"])
+        #expect(SettingsIndex.groups(of: .agents).map(\.id) == ["agents", "agents.broadway"])
     }
 
     @Test func whatLeftTheAgentsPageIsNotInTheIndex() {

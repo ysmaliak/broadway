@@ -2,7 +2,7 @@ import AppKit
 
 @MainActor
 enum BenchPages {
-    static let names = ["passwords-page", "import-page", "pairing-card", "settings-routes"]
+    static let names = ["passwords-page", "import-page", "pairing-card", "settings-routes", "settings-agents"]
     static let verbs: Set<String> = ["ownpage"]
 
     static func run(_ request: [String: Any], browser: Browser, _ answer: @escaping ([String: Any]) -> Void) {
@@ -97,6 +97,8 @@ enum BenchPages {
             return PairingCardSurface(browser: browser, apple: apple, pairing: pairing)
         case "settings-routes":
             return routes(browser)
+        case "settings-agents":
+            return settings(browser, .agents)
         default:
             return nil
         }
@@ -154,8 +156,12 @@ enum BenchPages {
             LinkRule(match: .site("figma.com"), from: .otherApps, target: .window(nil)),
             LinkRule(match: .site("linear.app"), target: .space(browser.spaceID, folder: nil)),
         ])
+        return settings(browser, .links)
+    }
+
+    private static func settings(_ browser: Browser, _ wanted: SettingsPage) -> NSView {
         let shell = SettingsShell()
-        shell.go(to: .links)
+        shell.go(to: wanted)
         let page = SettingsPageView(browser: browser, shell: shell)
         page.translatesAutoresizingMaskIntoConstraints = false
         page.widthAnchor.constraint(equalToConstant: 620).isActive = true

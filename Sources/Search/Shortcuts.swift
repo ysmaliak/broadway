@@ -165,7 +165,7 @@ struct Command: Identifiable {
         Command("edit.copyForAgent", "Copy for Agent", .edit, KeyCombo("c", control: true)) { $0.copyForAgent() },
         Command("edit.copyPageMarkdown", "Copy Page as Markdown", .edit, nil) { $0.copyPageAsMarkdown() },
         Command("edit.snippets", "Insert Snippet…", .edit, KeyCombo(";")) { $0.enterPlace(.snippets) },
-
+    ] + TextActions.shortcuts + [
         Command("view.fold", "Hide Sidebar", .view, KeyCombo("s")) { $0.toggleFold() },
         // Every tab group of the space at once, as Arc's folders (⌥⌘[ and ⌥⌘],
         // beside ⌘[ and ⌘], which go back and forward).

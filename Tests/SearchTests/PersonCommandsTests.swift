@@ -109,7 +109,7 @@ final class PersonCommandsTests {
         let refused: [(String, String)] = [
             ("ai.agents", "true"), ("ai.agents", "false"), ("agents.mode", "bypass"), ("agents.sites", "x"),
             ("agents.mode", "ask"), ("passwords.fill", "false"), ("passwords.open", "x"), ("autofill.cards", "x"), ("groups.openrouter", "sk-or-typed"),
-            ("codes.gmail", "true"), ("history.pageText", "true"),
+            ("codes.gmail", "true"), ("history.pageText", "true"), ("ai.actions", "true"), ("ai.plan", "thisMac"),
             ("downloads.folder", "/tmp"),
             ("shield", "false"), ("sites.keep", "no"),
             ("notifications.ask", "true"), ("search.suggest", "on"),

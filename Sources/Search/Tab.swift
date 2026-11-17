@@ -31,7 +31,7 @@ enum Web {
         for name in [ScrollRelay.name, VeilRelay.name, FormRelay.name, ImageRelay.name, MediaKeys.name,
                      StoreRelay.name, PasskeyRelay.name, MiddleRelay.name, IconRelay.name, PopupGestureRelay.name, DuskRelay.name,
                      TranslateRelay.name, FormFieldScript.relay, DevRelay.name, JSONRelay.name, PullPageRelay.name, Resume.name,
-                     VideoDefaults.name] {
+                     VideoDefaults.name, TextActionRelay.name] {
             controller.removeScriptMessageHandler(forName: name, contentWorld: world)
             controller.removeScriptMessageHandler(forName: name, contentWorld: .page)
         }
@@ -611,6 +611,7 @@ final class Tab: Identifiable {
     @ObservationIgnored var onSnippetFocus: (() -> Void)?
     var formPage: WebFormPage? { built.map { WebFormPage(web: $0, relay: fieldRelay) } }
     private let images = ImageRelay()
+    private let textActions = TextActionRelay()
     private let media = MediaKeys()
     /// Counting down once the page's sound stops, to give the media keys
     /// back (see MediaKeys.swift). One at most.
@@ -1032,6 +1033,7 @@ final class Tab: Identifiable {
         controller.add(relay, contentWorld: Web.world, name: ScrollRelay.name)
         controller.add(veils_, contentWorld: Web.world, name: VeilRelay.name)
         controller.add(images, contentWorld: Web.world, name: ImageRelay.name)
+        controller.add(textActions, contentWorld: Web.world, name: TextActionRelay.name)
         controller.add(media, contentWorld: Web.world, name: MediaKeys.name)
         controller.add(shop, contentWorld: Web.world, name: StoreRelay.name)
         controller.add(iconChanges, contentWorld: Web.world, name: IconRelay.name)
@@ -1130,6 +1132,7 @@ final class Tab: Identifiable {
         forms.tab = self
         fieldRelay.tab = self
         images.tab = self
+        textActions.tab = self
         media.tab = self
         resume.tab = self
         video.tab = self
@@ -1217,6 +1220,9 @@ final class Tab: Identifiable {
         )
         controller.addUserScript(
             WKUserScript(source: ImageRelay.watch, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: Web.world)
+        )
+        controller.addUserScript(
+            WKUserScript(source: TextActionRelay.watch, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: Web.world)
         )
         // Every frame, in Search's world: a paused video gives the media keys
         // back (see MediaKeys.swift).
@@ -2500,9 +2506,15 @@ final class PageView: WKWebView {
         // comes up, the way a hand would choose it, and the menu goes.
         if Store.testing, let title = PageView.picking {
             PageView.picking = nil
+            let hold = PageView.pickHold
+            PageView.pickHold = 0
             RunLoop.main.perform(inModes: [.eventTracking, .default]) {
                 if let index = menu.items.firstIndex(where: { $0.title == title }) { menu.performActionForItem(at: index) }
-                menu.cancelTracking()
+                if hold > 0 {
+                    menu.perform(#selector(NSMenu.cancelTracking), with: nil, afterDelay: hold, inModes: [.eventTracking, .default])
+                } else {
+                    menu.cancelTracking()
+                }
             }
         }
         let ids = Set(menu.items.compactMap { $0.identifier?.rawValue })
@@ -2520,7 +2532,9 @@ final class PageView: WKWebView {
             } else {
                 menu.addItem(markdown)
             }
-        } else if webKit, !onLink, !onImage {
+        }
+        addTextActions(to: menu, picked: picked)
+        if !picked, webKit, !onLink, !onImage {
             let markdown = NSMenuItem(title: "Copy Page as Markdown", action: #selector(copyPageAsMarkdown(_:)), keyEquivalent: "")
             markdown.target = self
             let rows = [NSMenuItem.separator()] + [translateItem(), markdown].compactMap { $0 }
@@ -2538,6 +2552,7 @@ final class PageView: WKWebView {
         while let last = menu.items.last(where: { !$0.isHidden }), last.isSeparatorItem {
             last.isHidden = true
         }
+        if Store.testing { PageView.seen = menu.items.filter { !$0.isHidden }.map { $0.isSeparatorItem ? "---" : $0.title } }
         if let item = menu.items.first(where: { $0.identifier?.rawValue == "WKMenuItemIdentifierSearchWeb" }),
            let name = searchName?() {
             webSearch = (item.target, item.action)
@@ -2647,6 +2662,9 @@ final class PageView: WKWebView {
     /// The picture under the right-click, when this menu is WebKit's over
     /// one (see ImageRelay), or nil.
     var keptImage: URL?
+    var textOffered: Bool?
+    static var seen: [String] = []
+    static var pickHold: Double = 0
     /// Copy Image (true) or Download Image (false), this app's own.
     var onImage: ((URL, Bool) -> Void)?
     var onImageText: ((URL) -> Void)?

@@ -806,6 +806,9 @@ final class Bench {
             let inView = NSPoint(x: x, y: web.isFlipped ? y : web.bounds.height - y)
             let point = web.convert(inView, to: nil)
             PageView.picking = pick
+            PageView.seen = []
+            let hold = request["hold"] as? Double ?? 0
+            PageView.pickHold = hold
             for type in [NSEvent.EventType.rightMouseDown, .rightMouseUp] {
                 guard let event = NSEvent.mouseEvent(
                     with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
@@ -814,9 +817,10 @@ final class Bench {
                 ) else { continue }
                 if type == .rightMouseDown { web.rightMouseDown(with: event) } else { web.rightMouseUp(with: event) }
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2 + hold) {
                 PageView.picking = nil
                 answer([
+                    "menu": PageView.seen,
                     "tabs": browser.tabs.map { Bench.short($0) },
                     "urls": browser.tabs.map { $0.address?.absoluteString ?? "" },
                     "active": browser.activeID.flatMap { id in browser.tabs.first { $0.id == id } }.map { Bench.short($0) } ?? "",
@@ -1981,6 +1985,7 @@ final class Bench {
             guard Store.testing else { answer(["error": "menus only works on a --test run"]); return }
             var menus: [String: [String]] = [:]
             var keys: [[String: Any]] = []
+            var shown: [String: [String: Bool]] = [:]
             func walk(_ menu: NSMenu, path: String) {
                 for entry in menu.items where !entry.isSeparatorItem && !entry.isHidden {
                     if !entry.keyEquivalent.isEmpty {
@@ -1996,9 +2001,11 @@ final class Bench {
                 guard let menu = item.submenu else { continue }
                 menu.delegate?.menuNeedsUpdate?(menu)
                 menus[item.title] = menu.items.filter { !$0.isSeparatorItem && !$0.isHidden }.map(\.title)
+                shown[item.title] = Dictionary(menu.items.filter { !$0.isSeparatorItem && !$0.isHidden }.map { ($0.title, $0.isEnabled) },
+                                               uniquingKeysWith: { first, _ in first })
                 walk(menu, path: item.title)
             }
-            answer(["menus": menus, "keys": keys, "ai": browser.prefs.ai,
+            answer(["menus": menus, "keys": keys, "enabled": shown, "ai": browser.prefs.ai, "textActions": browser.prefs.textActions,
                     "settingsPages": SettingsPage.allCases.map(\.rawValue),
                     "settingsPage": browser.settingsPage.rawValue])
 
@@ -2326,10 +2333,18 @@ final class Bench {
                     Plans.shared.standIn(FakeProvider(plan: plan, script: [.emit(.started(model: nil)), .emit(.text("Working ")),
                                                                            .emit(.toolStarted(id: "1", name: "snapshot", summary: "Reading")),
                                                                            .emit(.toolFinished(id: "1", failed: false)), .hang]), for: plan)
+                } else if let words = request["answer"] as? String {
+                    Plans.shared.standIn(FakeProvider(plan: plan, script: [.emit(.started(model: nil)), .emit(.text(words)),
+                                                                           .emit(.finished(ProviderUsage()))]), for: plan)
                 } else {
                     Plans.shared.standIn(FakeProvider(plan: plan, echoes: true), for: plan)
                 }
                 Plans.shared.standIn(FakeProvider(plan: plan.other, echoes: true), for: plan.other)
+                if let mac = request["mac"] as? Bool {
+                    let fake = FakeProvider(plan: .thisMac, echoes: true)
+                    if !mac { fake.fakeStatus = PlanStatus() }
+                    Plans.shared.standIn(fake, for: .thisMac)
+                }
                 Task { @MainActor in
                     await Plans.shared.refresh()
                     answer(["plan": plan.rawValue, "choice": Plans.shared.choice(.tasks, browser.prefs)?.label ?? ""])
@@ -2344,6 +2359,14 @@ final class Bench {
                 answer(["ok": true])
             case "state":
                 answer(browser.aiState())
+            case "sent":
+                var out: [String: Any] = [:]
+                for plan in Plan.allCases {
+                    guard let fake = Plans.shared.provider(plan) as? FakeProvider else { continue }
+                    out[plan.rawValue] = ["count": fake.requests.count, "tools": fake.requests.map { $0.tools == .none ? "none" : "some" },
+                                          "prompts": fake.requests.map(\.prompt)]
+                }
+                answer(["sent": out, "announced": browser.announcement ?? ""])
             case "select":
                 guard let tab = find(request, in: browser) else { answer(missing(request)); return }
                 browser.select(tab)

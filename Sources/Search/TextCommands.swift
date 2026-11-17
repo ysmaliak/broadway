@@ -251,8 +251,12 @@ final class CommandList {
     var rows: [TextCommand] {
         let wanted = typed.trimmingCharacters(in: .whitespaces).lowercased()
         return CommandStore.shared.active.filter { command in
-            command.fits(picked, host: host) && (wanted.isEmpty || command.name.lowercased().contains(wanted))
+            command.fits(picked, host: host) && (wanted.isEmpty || command.name.lowercased().contains(wanted)) && runs(command)
         }
+    }
+
+    private func runs(_ command: TextCommand) -> Bool {
+        !Plans.shared.looked || Plans.shared.commandChoice(command, blind: tab.neverSent, Shared.prefs) != nil
     }
 
     var asking: Bool { !typed.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -355,9 +359,14 @@ final class SelectionRun: Identifiable {
 
     func stop() { session?.cancel() }
 
+    var staysOnMac: Bool { tab.neverSent || choice.plan == .thisMac }
+
     func retry(on other: ModelChoice? = nil) {
         guard !running else { return }
-        if let other { choice = other }
+        if let other {
+            guard !staysOnMac || other.plan == .thisMac else { return }
+            choice = other
+        }
         start()
     }
 
@@ -388,7 +397,7 @@ final class SelectionRun: Identifiable {
             return true
         }
         if flags == [.command, .shift], key == "r" {
-            if let other = Plans.shared.otherChoice(than: choice, browser.prefs) { retry(on: other) }
+            if !staysOnMac, let other = Plans.shared.otherChoice(than: choice, browser.prefs) { retry(on: other) }
             return true
         }
         if flags == .command, key == "k" {
@@ -421,9 +430,10 @@ extension Browser {
     }
 
     func runCommand(_ command: TextCommand, picked: PickedText, tab: Tab, asked: String? = nil) {
+        guard textActionsAllowed(on: tab) else { return closeSelection() }
         guard let choice = choice(for: command, tab: tab) else {
             ai.commands = nil
-            return announce(tab.neverSent ? "In a private window, the page isn't sent" : Plans.shared.trouble(prefs) ?? "Sign in to Claude Code or Codex first")
+            return announce(textRefusal(tab))
         }
         let language = Locale.current.localizedString(forLanguageCode: Locale.current.language.languageCode?.identifier ?? "en") ?? "English"
         let run = SelectionRun(command: command, asked: asked ?? command.prompt(language: language), picked: picked, tab: tab, choice: choice)
@@ -450,8 +460,8 @@ extension Browser {
         runCommand(command, picked: picked, tab: tab, asked: "\(question)\n\nThis is about the selected text.")
     }
 
-    func textCommand(_ id: String) {
-        guard prefs.ai, let tab = active, let command = CommandStore.shared.command(id) else { return }
+    func textCommand(_ id: String, in given: Tab? = nil) {
+        guard let tab = given ?? active, textActionsAllowed(on: tab), let command = CommandStore.shared.command(id) else { return }
         Task { @MainActor in
             guard let picked = await PageSelection.read(tab) else { return announce("Select some text first") }
             if !Plans.shared.looked { await Plans.shared.refresh() }
@@ -459,11 +469,12 @@ extension Browser {
         }
     }
 
-    func moreCommands() {
-        guard prefs.ai, let tab = active else { return }
+    func moreCommands(in given: Tab? = nil) {
+        guard let tab = given ?? active, textActionsAllowed(on: tab) else { return }
         Task { @MainActor in
             guard let picked = await PageSelection.read(tab) else { return }
             if !Plans.shared.looked { await Plans.shared.refresh() }
+            guard canRunAny(on: tab) else { return announce(textRefusal(tab)) }
             openCommands(picked, tab: tab)
         }
     }

@@ -389,6 +389,15 @@ enum MenuBar {
             act("Fill Whole Form", key: "edit.fillForm", enabled: web) { $0.forms.begin() },
             act("Insert Snippet…", key: "edit.snippets") { $0.enterPlace(.snippets) },
             .separator(),
+        ] + TextCommand.standard.map { command in
+            act(command.name, key: TextActions.commandID(command.id), enabled: browser.canRun(command, on: browser.active)) {
+                $0.textCommand(command.id)
+            }
+        } + [
+            act(TextActions.moreTitle, key: TextActions.commandID(TextActions.more), enabled: browser.canRunAny(on: browser.active)) {
+                $0.moreCommands()
+            },
+            .separator(),
             act("Find on Page…", key: "edit.find", enabled: web || browser.active?.page?.kind == .settings) { $0.openFind() },
             act("Find Next", key: "edit.findNext", enabled: browser.finding) { $0.look(forward: true) },
             act("Find Previous", key: "edit.findPrevious", enabled: browser.finding) { $0.look(forward: false) },
