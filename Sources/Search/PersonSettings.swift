@@ -155,6 +155,7 @@ enum PersonSettings {
         "spaces.languages": row("In the space's menu"),
         "general.default": row("In Broadway"),
         "general.import": row("In Broadway"),
+        Preferences.hintsKey: flag(\.hints),
         "history.pageText": held(\.remembersPageText),
         IntegrationNow.key: SettingAccess(takes: "true or false", read: { _ in IntegrationNow.on }, write: { _, text in
             guard let on = yes(text) else { return false }

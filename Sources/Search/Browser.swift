@@ -2203,6 +2203,7 @@ final class Browser: NSObject {
     /// Downloads while they happen (see Fetching.swift).
     let fetches = Shared.fetches
     @ObservationIgnored lazy var mini = MiniPlayer(self)
+    @ObservationIgnored lazy var hints = HintWatch(self)
     @ObservationIgnored var floatMiss: FloatMiss?
 
     /// ⌘⇧C. The address, in the clipboard, and a line that says as much.
@@ -2226,7 +2227,7 @@ final class Browser: NSObject {
         LinkCopy.markdown(title, url)
     }
 
-    func announce(_ text: String, file: URL? = nil, undo: (@MainActor () -> Void)? = nil) {
+    func announce(_ text: String, file: URL? = nil, undo: (@MainActor () -> Void)? = nil, seconds: TimeInterval? = nil) {
         announcement = text
         announcedFile = file
         announcedUndo = undo
@@ -2237,7 +2238,14 @@ final class Browser: NSObject {
             self?.announcedUndo = nil
         }
         hush = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + (file == nil && undo == nil ? 1.7 : 4), execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + (seconds ?? (file == nil && undo == nil ? 1.7 : 4)), execute: work)
+    }
+
+    func dismissAnnounced() {
+        hush?.cancel()
+        announcement = nil
+        announcedFile = nil
+        announcedUndo = nil
     }
 
     func undoAnnounced() {
@@ -6999,6 +7007,7 @@ extension Browser {
             return
         }
         let url = typedAddress(asked, picked: picked, typed: ending != nil ? completed : typed)
+        hints.typed(url)
         if let page = InternalPage(url: url) {
             show(page)
             picked = nil

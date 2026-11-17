@@ -9,6 +9,7 @@ extension SettingsPageView {
         switch id {
         case "general.default": defaultBrowserRow()
         case "general.import": row(id, control: button("Bring Things Over") { browser.lead(to: InternalPage(.importing)) })
+        case Preferences.hintsKey: flag(id, \.hints)
         case "downloads.folder":
             let folder = SettingsFolderPopUp(prefs: prefs)
             update { [weak folder] in folder?.show() }

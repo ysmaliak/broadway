@@ -266,6 +266,7 @@ extension ContentView {
                 if Command.split.contains(command.id), !browser.prefs.splitView { return false }
                 if Command.dusk.contains(command.id), !browser.prefs.darkensPages { return false }
                 if Command.asking.contains(command.id), !browser.prefs.askAndChat { return false }
+                browser.hints.used(command.id)
                 command.run(browser)
                 return true
             }
@@ -317,12 +318,17 @@ extension ContentView {
             return true
         }
 
+        if key == "c", !shifted, let window, event.window === window, ContentView.inAddressField(window) {
+            browser.hints.copiedFromField(in: window)
+        }
+
         if pageFirst(event, key: key, shifted: shifted) { return false }
 
         switch key {
         case "t" where !shifted:
             browser.launch()
         case "t" where shifted:
+            browser.hints.used("file.reopen")
             browser.reopen()
         case "c" where shifted:
             browser.copyAddress()
@@ -349,6 +355,7 @@ extension ContentView {
         case "f" where !shifted:
             browser.openFind()
         case "g":
+            if !shifted { browser.hints.used("edit.findNext") }
             browser.look(forward: !shifted)
         case "m" where shifted:
             browser.pauseMedia()
@@ -376,6 +383,7 @@ extension ContentView {
         case "0":
             browser.resetZoom()
         case "w" where !shifted:
+            browser.hints.used("file.closeTab")
             browser.closeFront()
         case "w" where shifted:
             browser.closeWindow()

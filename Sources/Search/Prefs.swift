@@ -163,6 +163,10 @@ final class Preferences {
     var sideButton: Bool {
         didSet { store.set(sideButton, forKey: "sidebar.button") }
     }
+    var hints: Bool {
+        didSet { store.set(hints, forKey: Preferences.hintsKey) }
+    }
+    nonisolated static let hintsKey = "general.hints"
     var columnWidth: CGFloat { sideWidth }
     var sideRow: CGFloat { Metrics.sideRowHeight }
     let sideTitle: CGFloat = 13
@@ -759,6 +763,7 @@ final class Preferences {
         sidePosition = store.string(forKey: "sidebar.position").flatMap(SidebarPosition.init) ?? .left
         sideHides = false
         sideButton = store.object(forKey: "sidebar.button") as? Bool ?? true
+        hints = store.object(forKey: Preferences.hintsKey) as? Bool ?? true
         addressBar = true
         fullAddress = false
         let width = store.object(forKey: "sidebar.width") as? Double ?? Double(Metrics.side)

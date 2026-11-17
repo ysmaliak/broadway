@@ -33,6 +33,7 @@ struct SettingsLookTests {
     @Test("every group and every row lands on the page the split gave it", arguments: [
         ("general.default", SettingsPage.general),
         ("general.import", .general),
+        ("general.hints", .general),
         ("quit.confirm", .general),
         ("downloads.folder", .general),
         ("calendars", .general),

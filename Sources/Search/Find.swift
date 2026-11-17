@@ -72,7 +72,10 @@ final class FindBarView: NSView, NSTextFieldDelegate {
         options.setAccessibilityHelp("Choose whether to match case or whole words")
         options.content = optionsMark
         previous.action = { [weak self] in self?.browser?.look(forward: false) }
-        next.action = { [weak self] in self?.browser?.look(forward: true) }
+        next.action = { [weak self] in
+            self?.browser?.hints.findNextPressed()
+            self?.browser?.look(forward: true)
+        }
         close.action = { [weak self] in self?.browser?.closeFind() }
         options.action = { [weak self] in self?.popOptions() }
 
@@ -164,6 +167,7 @@ final class FindBarView: NSView, NSTextFieldDelegate {
 
     private func apply(_ old: Shown?) {
         if field.stringValue != shown.needle { field.stringValue = shown.needle }
+        if let old, old.needle != shown.needle { browser?.hints.searchChanged() }
         count.status = shown.status
         count.missed = shown.missed
         if old?.missed != shown.missed {

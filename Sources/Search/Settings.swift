@@ -496,6 +496,7 @@ extension SettingsPageView {
             settingRow("general.default")
             settingRow("general.import")
             languagesRow()
+            settingRow(Preferences.hintsKey)
         }
         section("Downloads") {
             settingRow("downloads.folder")

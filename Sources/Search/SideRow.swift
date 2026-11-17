@@ -484,7 +484,7 @@ final class TabRowView: KitHoverView {
         ring.isHidden = true
         unseenDot.isHidden = true
         closeZone.act = { [weak self] in self?.closeTapped() }
-        closeSpot.act = { [weak self] in self?.close() }
+        closeSpot.act = { [weak self] in self?.pointerClose() }
         speakerSpot.act = { [weak self] in self?.tab?.toggleMute() }
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
@@ -1247,7 +1247,12 @@ final class TabRowView: KitHoverView {
     }
 
     private func closeTapped() {
-        if isHovering { close() }
+        if isHovering { pointerClose() }
+    }
+
+    func pointerClose() {
+        browser?.hints.closedByPointer()
+        close()
     }
 
     private func shake() {
@@ -1341,7 +1346,7 @@ final class TabRowView: KitHoverView {
         guard event.buttonNumber == 2, state.interactive, bounds.contains(convert(event.locationInWindow, from: nil)) else {
             return super.otherMouseUp(with: event)
         }
-        close()
+        pointerClose()
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {

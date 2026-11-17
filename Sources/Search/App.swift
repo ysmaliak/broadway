@@ -241,7 +241,10 @@ enum MenuBar {
                                 _ run: @escaping () -> Void) -> NSMenuItem {
         let item = MenuCommand(title: title, action: #selector(MenuCommand.fire(_:)), keyEquivalent: "")
         item.target = item
-        item.run = run
+        item.run = {
+            if let id { current.hints.used(id) }
+            run()
+        }
         item.allowed = enabled
         item.state = on ? .on : .off
         if let id, let key = ShortcutStore.shared.key(for: id)?.menuKey {

@@ -323,8 +323,11 @@ final class AnnouncementView {
                 browser.undoAnnounced()
             } else if let file = browser.announcedFile {
                 NSWorkspace.shared.activateFileViewerSelecting([file])
+            } else {
+                browser.hints.pressed()
             }
         }
+        _ = browser.hints
         note.setAccessibilityElement(true)
         note.setAccessibilityRole(.button)
     }

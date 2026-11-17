@@ -560,6 +560,7 @@ final class PinSquareView: KitHoverView {
             return super.otherMouseUp(with: event)
         }
         guard let tab, let browser else { return }
+        browser.hints.closedByPointer()
         browser.close(tab)
     }
 

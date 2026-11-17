@@ -52,7 +52,10 @@ final class SideAddressView: KitHoverView {
         addSubview(anchors)
         addSubview(ride)
         lane.ground = { [weak self] index in self?.ground(index) ?? RowGround() }
-        doors.copy.act = { [weak browser] in browser?.copyAddress() }
+        doors.copy.act = { [weak browser] in
+            browser?.hints.copied(browser?.active?.address)
+            browser?.copyAddress()
+        }
         doors.site.act = { [weak browser] in if let browser { SiteCardPanel.toggle(browser) } }
         setAccessibilityElement(true)
         setAccessibilityRole(.button)

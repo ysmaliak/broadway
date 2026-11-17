@@ -138,6 +138,9 @@ enum SettingsIndex {
               title: "Bring your things over", detail: "Bookmarks, history, passwords and extensions from another browser",
               more: "Broadway reads it on this Mac, or from a file it exported. Nothing leaves your Mac.",
               words: ["import", "chrome", "safari", "arc", "migrate", "bring things over"]),
+        .init(id: Preferences.hintsKey, group: "browser", icon: "text.bubble",
+              title: "Hints", detail: "A line now and then when there is a faster way",
+              keys: [Preferences.hintsKey], words: ["hints", "tips", "faster way", "learn"]),
         .init(id: "languages", group: "browser", icon: "character.bubble",
               title: "Languages", detail: "The language sites pick for you, in every space and private windows",
               keys: ["languages"],
@@ -527,6 +530,7 @@ extension SettingsIndex {
             "calendars": prefs.usesCalendars,
             "newtab.floating": prefs.floatingNewTab,
             "sidebar.button": prefs.sideButton,
+            Preferences.hintsKey: prefs.hints,
             "video.quality": prefs.videoQuality.raw,
             "video.speed": prefs.remembersSpeed,
             Preferences.miniKey: prefs.miniPlayer,
@@ -554,6 +558,9 @@ extension SettingsIndex {
         case "sidebar.button":
             guard let on = value as? Bool else { return false }
             prefs.sideButton = on
+        case Preferences.hintsKey:
+            guard let on = value as? Bool else { return false }
+            prefs.hints = on
         case AppIcon.key:
             guard let icon = (value as? String).flatMap(AppIcon.init(rawValue:)) else { return false }
             prefs.appIcon = icon

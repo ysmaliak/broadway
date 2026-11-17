@@ -261,6 +261,7 @@ final class SplitChipView: KitHoverView {
         dot.kitAccess(label: "Asking a question")
         middle.act = { [weak self] in
             guard let self, state.interactive else { return }
+            browser.hints.closedByPointer()
             browser.closeTab(self.tab)
         }
         setAccessibilityElement(true)
