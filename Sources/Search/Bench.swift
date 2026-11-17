@@ -2490,11 +2490,17 @@ final class Bench {
                 Vault.all().filter { $0.user == user }.forEach { Vault.forget(host: $0.host, user: $0.user) }
             }
             let offer: [String: Any] = browser.offering.map { ["user": $0.login.user, "host": $0.login.host, "changed": $0.changed] } ?? [:]
+            var holds: [String: Any] = [:]
+            if let check = request["check"] as? [String: String], let user = check["user"], let password = check["password"] {
+                holds["holds"] = Vault.all().contains { $0.user == user && Vault.secret(of: $0) == password }
+            }
             // Every account this world keeps, by name, without a secret.
             let all = Vault.all()
             let users = all.map(\.user)
             let used = all.map { ["host": $0.host, "user": $0.user, "used": $0.used?.timeIntervalSince1970 ?? 0] as [String: Any] }
-            guard let list = browser.suggesting else { answer(["shown": false, "offer": offer, "kept": users.count, "users": users, "used": used]); return }
+            guard let list = browser.suggesting else {
+                answer(["shown": false, "offer": offer, "kept": users.count, "users": users, "used": used].merging(holds) { $1 }); return
+            }
             let strong: [[String: Any]] = list.strong == nil ? [] : [["strong": true]]
             let rows: [[String: Any]] = strong + list.passkeys.map { ["passkey": $0.name] } + list.logins.map { ["login": $0.user] }
             if let press = request["press"] as? [Double], press.count == 2 {
@@ -2526,6 +2532,7 @@ final class Bench {
             }
             var out: [String: Any] = ["shown": true, "rows": rows, "nameOnly": list.nameOnly, "wide": list.wide, "offer": offer, "kept": users.count,
                                       "users": users, "used": used, "spot": [list.spot.minX, list.spot.minY, list.spot.width, list.spot.height]]
+            out.merge(holds) { $1 }
             // With Split View's stage, the card as drawn, in the window from
             // its top-left, and the page-sized box it hangs in.
             if let drawn = PaneStage.accountCard() {

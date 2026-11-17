@@ -1,14 +1,4 @@
 #!/usr/bin/env python3
-"""Use Strong Password under a new password box, in a hidden test world.
-
-Build first (`./build.sh`), then `python3 Tests/strong_password.py`. A local
-sign-up page on an invented host: the caret in its new password box brings
-the row, taking it fills both boxes with one value and keeps the login in
-this world's own keeping, and sending the form brings no save bar and gives
-the login the name from the form. A sign-in page, a private window and an
-agent's tab bring no row, and an agent's snapshot never carries the value.
-With a folder argument, stills of the card in light and dark go there.
-"""
 import os
 import re
 import subprocess
@@ -26,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BROADWAY = str(ROOT / "build" / "Broadway.app" / "Contents" / "Helpers" / "broadway")
 HOST = "join.localhost"
 NAME = "pat@example.test"
+OLD = "sp-made-up-old-1"
 SHAPE = re.compile(r"^[A-Za-z2-9]{6}-[A-Za-z2-9]{6}-[A-Za-z2-9]{6}$")
 
 JOIN = """<!doctype html><title>Make an account</title>
@@ -61,8 +52,16 @@ LOGIN = """<!doctype html><title>Sign in</title>
 <input id="p" name="password" type="password" autocomplete="current-password">
 <button type="submit">Sign In</button></form>"""
 
+CHANGE = """<!doctype html><title>Change your password</title>
+<form action="/welcome" method="post">
+<input id="e" name="email" type="email" autocomplete="username" value="sam@example.test">
+<input id="o" name="old" type="password" autocomplete="current-password">
+<input id="p" name="password" type="password" autocomplete="new-password">
+<input id="c" name="again" type="password" autocomplete="new-password">
+<button type="submit">Change Password</button></form>"""
+
 DONE = "<!doctype html><title>Welcome</title><h1>Welcome</h1>"
-PAGES = {"/join": JOIN, "/pair": PAIR, "/short": SHORT, "/tiny": TINY, "/login": LOGIN}
+PAGES = {"/change": CHANGE, "/join": JOIN, "/pair": PAIR, "/short": SHORT, "/tiny": TINY, "/login": LOGIN}
 
 
 class H(BaseHTTPRequestHandler):
@@ -165,6 +164,38 @@ def main():
         t.ok("sending the form brings no save bar", not r.get("offer"), r)
         t.ok("the kept login has the name from the form", r.get("kept") == 1 and r.get("users") == [NAME], r)
         sv.sp("close", id=a)
+
+        k = open_page(f"{base}/join")
+        focus(k, "p")
+        t.ok("the row is up before typing", bool(strong_rows(acc())), acc())
+        sv.cmd({"do": "key", "id": k, "text": "x"}); time.sleep(1.0)
+        t.ok("a key typed in the box takes the row down", not strong_rows(acc()), acc())
+        sv.sp("close", id=k)
+
+        csv = f"{sv.SUPPORT}-strong.csv"
+        with open(csv, "w") as fh:
+            fh.write(f"url,username,password\n{base}/,sam@example.test,{OLD}\n")
+        r = sv.cmd({"do": "import-file", "path": csv})
+        os.remove(csv)
+        t.ok("a made-up login for sam is kept", r.get("kept") == 1, r)
+        h = open_page(f"{base}/change")
+        sv.ev(h, """var o = document.getElementById('o');
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(o, '%s');
+          o.dispatchEvent(new Event('input', {bubbles: true})); true""" % OLD)
+        focus(h, "p")
+        t.ok("a change-password page brings the row", bool(strong_rows(acc())), acc())
+        time.sleep(0.6)
+        acc(pick=0); time.sleep(1.5)
+        new = sv.ev(h, "document.getElementById('p').value") or ""
+        t.ok("taking it fills both new boxes", SHAPE.match(new) is not None and sv.ev(h, "document.getElementById('c').value") == new, new)
+        r = acc(check={"user": "sam@example.test", "password": OLD})
+        t.ok("before sending, sam's kept password is still the old one", r.get("holds") is True, r)
+        sv.ev(h, "document.activeElement.blur(); document.querySelector('button').click(); true"); time.sleep(4)
+        t.ok("the page moved on", sv.ev(h, "location.pathname") == "/welcome")
+        r = acc(check={"user": "sam@example.test", "password": new})
+        t.ok("after sending, sam's kept password is the new one", r.get("holds") is True, r)
+        t.ok("and no save bar came up", not r.get("offer"), r)
+        sv.sp("close", id=h)
 
         b = open_page(f"{base}/pair")
         focus(b, "p")

@@ -403,6 +403,7 @@ final class FormRelay: NSObject, WKScriptMessageHandler {
           var other = twin(el);
           put(el, password);
           if (other && !other.value) put(other, password);
+          taken = el;
           return { user: nameFor(el), both: !!other };
         },
         fresh: function (el) { return fresh(el || document.activeElement); },
@@ -425,6 +426,10 @@ final class FormRelay: NSObject, WKScriptMessageHandler {
           var box = named();
           var name = box ? box.value.trim() : '';
           if (name) window.webkit.messageHandlers.officeForms.postMessage({ kind: 'name', user: name });
+          return;
+        }
+        if (taken && taken.isConnected && taken.value) {
+          window.webkit.messageHandlers.officeForms.postMessage({ kind: 'submit', user: nameFor(taken), password: taken.value });
           return;
         }
         if (!both.pass.value) return;
@@ -521,7 +526,10 @@ final class FormRelay: NSObject, WKScriptMessageHandler {
       // What the box the caret is in was judged to be: judged again when the
       // caret moves, not on every frame of a scroll, which only moves it.
       var judged = { el: null, verdict: null };
-      var offered = null;
+      var offered = null, offeredFresh = null, taken = null;
+      document.addEventListener('input', function (e) {
+        if (e.isTrusted && offered && e.target === offered && fresh(offered) !== offeredFresh) caret();
+      }, true);
       function caret(scrolled) {
         var el = document.activeElement;
         // The boxes are only looked for with the caret in one: this runs on
@@ -538,6 +546,7 @@ final class FormRelay: NSObject, WKScriptMessageHandler {
         var wide = !verdict || verdict.wide;
         var made = fresh(el);
         if (made !== null) offered = el;
+        if (el === offered) offeredFresh = made;
         if (passwords || forPasskeys(el) || described || made !== null) {
           var r = el.getBoundingClientRect();
           if (r.width > 0 && r.height > 0) rect = { x: r.left, y: r.top, w: r.width, h: r.height };

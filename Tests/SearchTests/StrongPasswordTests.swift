@@ -163,55 +163,140 @@ struct StrongPasswordRuleTests {
 }
 
 @Suite
-struct StrongPasswordNameTests {
-    private func taken(_ user: String) -> StrongTaken {
-        StrongTaken(host: "join.example.test", user: user, password: "Abcdef-ghijk2-mnopq3", clear: false)
+struct StrongPasswordKeepTests {
+    private let host = "join.example.test"
+    private let strong = "Abcdef-ghjk23-Mnpqr4"
+
+    private final class Keychain {
+        var secrets: [String: String] = [:]
+        var refuses = false
+
+        func save(_ host: String, _ user: String, _ password: String, _ clear: Bool) -> Bool {
+            guard !refuses else { return false }
+            secrets[host + "/" + user] = password
+            return true
+        }
+
+        func forget(_ host: String, _ user: String) { secrets[host + "/" + user] = nil }
+
+        var kept: [Kept] {
+            secrets.keys.map { key in
+                let parts = key.split(separator: "/", maxSplits: 1, omittingEmptySubsequences: false)
+                return Kept(host: String(parts[0]), user: String(parts[1]))
+            }
+        }
+    }
+
+    private func site(_ host: String) -> String { host.split(separator: ".").suffix(2).joined(separator: ".") }
+
+    private func take(_ keychain: Keychain, user: String) -> StrongPasswordKeep.Take {
+        StrongPasswordKeep.take(host: host, user: user, password: strong, clear: false, kept: keychain.kept, registrable: site, save: keychain.save)
+    }
+
+    private func sent(_ keychain: Keychain, keptUser: String, saved: Bool, sentUser: String, password: String? = nil) -> String? {
+        StrongPasswordKeep.sent(host: host, keptUser: keptUser, saved: saved, sentUser: sentUser, password: password ?? strong, clear: false,
+                                save: keychain.save, forget: keychain.forget)
+    }
+
+    private func taken(saved: Bool) -> StrongTaken {
+        StrongTaken(host: host, user: "pat", password: strong, clear: false, saved: saved)
+    }
+
+    @Test func aNewNameIsKeptAtOnceWhenTaken() {
+        let keychain = Keychain()
+        #expect(take(keychain, user: "pat") == .kept)
+        #expect(keychain.secrets["\(host)/pat"] == strong)
+    }
+
+    @Test func aLoginKeptUnderTheSameNameIsNotReplacedWhenTaken() {
+        let keychain = Keychain()
+        _ = keychain.save(host, "pat", "old-one", false)
+        #expect(take(keychain, user: "pat") == .waits)
+        #expect(keychain.secrets["\(host)/pat"] == "old-one")
+    }
+
+    @Test func aLoginKeptUnderTheSameNameOnAnotherHostOfTheSiteIsNotReplacedWhenTaken() {
+        let keychain = Keychain()
+        _ = keychain.save("www.example.test", "pat", "old-one", false)
+        #expect(take(keychain, user: "pat") == .waits)
+        #expect(keychain.secrets["\(host)/pat"] == nil)
+    }
+
+    @Test func aLoginKeptUnderAnotherNameDoesNotStopKeepingAtOnce() {
+        let keychain = Keychain()
+        _ = keychain.save(host, "sam", "old-one", false)
+        #expect(take(keychain, user: "pat") == .kept)
+        #expect(keychain.secrets["\(host)/sam"] == "old-one")
+    }
+
+    @Test func aKeychainThatRefusesIsSaidSo() {
+        let keychain = Keychain()
+        keychain.refuses = true
+        #expect(take(keychain, user: "pat") == .refused)
+    }
+
+    @Test func theKeptLoginIsReplacedWhenTheFormIsSentWithTheTakenPassword() {
+        let keychain = Keychain()
+        _ = keychain.save(host, "pat", "old-one", false)
+        #expect(take(keychain, user: "pat") == .waits)
+        #expect(taken(saved: false).sent(host: host, password: strong))
+        #expect(sent(keychain, keptUser: "pat", saved: false, sentUser: "pat") == "pat")
+        #expect(keychain.secrets["\(host)/pat"] == strong)
+    }
+
+    @Test func theKeptLoginIsUntouchedWhenTheFormIsSentWithAnotherPassword() {
+        let keychain = Keychain()
+        _ = keychain.save(host, "pat", "old-one", false)
+        #expect(take(keychain, user: "pat") == .waits)
+        #expect(!taken(saved: false).sent(host: host, password: "typed-by-hand"))
+        #expect(keychain.secrets["\(host)/pat"] == "old-one")
+    }
+
+    @Test func theKeptLoginIsUntouchedWhenTheFormIsNeverSent() {
+        let keychain = Keychain()
+        _ = keychain.save(host, "pat", "old-one", false)
+        _ = take(keychain, user: "pat")
+        #expect(keychain.secrets == ["\(host)/pat": "old-one"])
     }
 
     @Test func theLoginTakesTheNameSentWithTheForm() {
-        #expect(taken("").settle(sentUser: "pat@example.test") == .renamed(from: "", to: "pat@example.test"))
-    }
-
-    @Test func aNameKnownWhenTakenStaysWhenTheSameNameIsSent() {
-        #expect(taken("pat").settle(sentUser: "pat") == .kept)
+        let keychain = Keychain()
+        #expect(take(keychain, user: "") == .kept)
+        #expect(sent(keychain, keptUser: "", saved: true, sentUser: "pat@example.test") == "pat@example.test")
+        #expect(keychain.secrets == ["\(host)/pat@example.test": strong])
     }
 
     @Test func aFormSentWithNoNameKeepsTheNameItWasKeptUnder() {
-        #expect(taken("pat").settle(sentUser: "") == .kept)
-        #expect(taken("").settle(sentUser: "  ") == .kept)
+        let keychain = Keychain()
+        _ = take(keychain, user: "pat")
+        #expect(sent(keychain, keptUser: "pat", saved: true, sentUser: "  ") == nil)
+        #expect(keychain.secrets == ["\(host)/pat": strong])
     }
 
-    @Test func aNameChangedBeforeSendingRenamesTheLogin() {
-        #expect(taken("pat").settle(sentUser: "sam") == .renamed(from: "pat", to: "sam"))
+    @Test func aSendWithTheSameNameChangesNothingMore() {
+        let keychain = Keychain()
+        _ = take(keychain, user: "pat")
+        #expect(sent(keychain, keptUser: "pat", saved: true, sentUser: "pat") == nil)
+        #expect(keychain.secrets == ["\(host)/pat": strong])
     }
 
-    @Test func theTakenPasswordIsKnownWhenSent() {
-        #expect(taken("").sent(host: "join.example.test", password: "Abcdef-ghijk2-mnopq3"))
-    }
-
-    @Test func anotherPasswordSentIsNotTheTakenOne() {
-        #expect(!taken("").sent(host: "join.example.test", password: "something-else"))
-    }
-
-    @Test func theTakenPasswordSentToAnotherSiteIsNotTheTakenOne() {
-        #expect(!taken("").sent(host: "elsewhere.test", password: "Abcdef-ghijk2-mnopq3"))
-    }
-
-    @Test func aRenameKeepsTheNewNameAndForgetsTheOld() {
-        var saved: [String] = []
-        var forgotten: [String] = []
-        let name = StrongPasswordKeep.rename(host: "join.example.test", from: "", to: "pat", password: "x", clear: false,
-                                             save: { _, user, _, _ in saved.append(user); return true }, forget: { _, user in forgotten.append(user) })
-        #expect(name == "pat")
-        #expect(saved == ["pat"])
-        #expect(forgotten == [""])
+    @Test func aWaitingPasswordSentWithAnotherNameIsKeptUnderThatName() {
+        let keychain = Keychain()
+        _ = keychain.save(host, "pat", "old-one", false)
+        _ = take(keychain, user: "pat")
+        #expect(sent(keychain, keptUser: "pat", saved: false, sentUser: "sam") == "sam")
+        #expect(keychain.secrets == ["\(host)/pat": "old-one", "\(host)/sam": strong])
     }
 
     @Test func aRenameTheKeychainRefusesKeepsTheOldLogin() {
-        var forgotten: [String] = []
-        let name = StrongPasswordKeep.rename(host: "join.example.test", from: "", to: "pat", password: "x", clear: false,
-                                             save: { _, _, _, _ in false }, forget: { _, user in forgotten.append(user) })
-        #expect(name == "")
-        #expect(forgotten.isEmpty)
+        let keychain = Keychain()
+        _ = take(keychain, user: "")
+        keychain.refuses = true
+        #expect(sent(keychain, keptUser: "", saved: true, sentUser: "pat") == nil)
+        #expect(keychain.secrets == ["\(host)/": strong])
+    }
+
+    @Test func theTakenPasswordSentToAnotherSiteIsNotTheTakenOne() {
+        #expect(!taken(saved: true).sent(host: "elsewhere.test", password: strong))
     }
 }

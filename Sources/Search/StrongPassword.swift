@@ -57,48 +57,58 @@ enum StrongPasswordRule {
         let limit = fresh > 0 ? fresh : StrongPassword.length
         return limit < StrongPassword.shortest ? nil : limit
     }
-
-    static func password(for limit: Int?, random: (Int) -> Int = StrongPassword.secure(below:)) -> String? {
-        limit.flatMap { StrongPassword.make(maxLength: $0, random: random) }
-    }
 }
 
 struct StrongTaken {
     let host: String
     let user: String
     let clear: Bool
+    let saved: Bool
     let mark: FillMark
 
-    init(host: String, user: String, password: String, clear: Bool) {
+    init(host: String, user: String, password: String, clear: Bool, saved: Bool) {
         self.host = host
         self.user = user
         self.clear = clear
+        self.saved = saved
         mark = FillMark(host: host, user: user, password: password)
     }
 
     func sent(host: String, password: String) -> Bool {
         mark.matches(host: host, user: "", password: password)
     }
-
-    enum Settle: Equatable {
-        case kept
-        case renamed(from: String, to: String)
-    }
-
-    func settle(sentUser: String) -> Settle {
-        let named = sentUser.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !named.isEmpty, named != user else { return .kept }
-        return .renamed(from: user, to: named)
-    }
 }
 
 enum StrongPasswordKeep {
-    static func rename(host: String, from: String, to: String, password: String, clear: Bool,
-                       save: (String, String, String, Bool) -> Bool = { Vault.save(host: $0, user: $1, password: $2, used: Date(), clear: $3) },
-                       forget: (String, String) -> Void = { Vault.forget(host: $0, user: $1) }) -> String {
-        guard save(host, to, password, clear) else { return from }
-        forget(host, from)
-        return to
+    typealias Save = (String, String, String, Bool) -> Bool
+    typealias Forget = (String, String) -> Void
+
+    enum Take: Equatable {
+        case kept
+        case waits
+        case refused
+    }
+
+    static func inVault(_ host: String, _ user: String, _ password: String, _ clear: Bool) -> Bool {
+        Vault.save(host: host, user: user, password: password, used: Date(), clear: clear)
+    }
+
+    static func outOfVault(_ host: String, _ user: String) { Vault.forget(host: host, user: user) }
+
+    static func take(host: String, user: String, password: String, clear: Bool, kept: [Kept],
+                     registrable: (String) -> String = Vault.registrable, save: Save = inVault) -> Take {
+        if kept.contains(where: { $0.user == user && SavedAlready.sameSite($0.host, host, registrable: registrable) }) { return .waits }
+        return save(host, user, password, clear) ? .kept : .refused
+    }
+
+    static func sent(host: String, keptUser: String, saved: Bool, sentUser: String, password: String, clear: Bool,
+                     save: Save = inVault, forget: Forget = outOfVault) -> String? {
+        let named = sentUser.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = named.isEmpty ? keptUser : named
+        guard saved else { return save(host, name, password, clear) ? name : nil }
+        guard name != keptUser, save(host, name, password, clear) else { return nil }
+        forget(host, keptUser)
+        return name
     }
 }
 
@@ -121,7 +131,7 @@ extension Tab {
 extension Browser {
     func strongPassword(for tab: Tab, now: Suggesting?) -> String? {
         let host = tab.pageAddress?.host()?.lowercased() ?? ""
-        let ask = StrongPasswordAsk(fresh: tab.freshField, mainFrame: tab.fieldFrameHost == nil, shy: tab.shy, agent: tab.agent,
+        let ask = StrongPasswordAsk(fresh: tab.freshField, mainFrame: tab.fieldFrameHost == nil, shy: tab.shy, agent: tab.agent || tab.agentHere,
                                     extensionPage: tab.address.flatMap(Browser.extensionHost(of:)) != nil,
                                     never: host.isEmpty || Vault.isNever(host))
         let keeping = StrongPasswordKeeping(saves: prefs.savesPasswords, applePasswords: prefs.applePasswords,
@@ -135,16 +145,21 @@ extension Browser {
         tab.fillStrong(password, onlyOn: tab.pageAddress) { [weak self, weak tab] user in
             guard let self, let tab else { return }
             guard let user else { return announce("The sign-in fields are gone") }
-            tab.strongTaken = StrongTaken(host: host, user: user, password: password, clear: clear)
             Task { [weak self, weak tab] in
-                let saved = await Vault.off { Vault.save(host: host, user: user, password: password, used: Date(), clear: clear) }
-                guard let self else { return }
-                guard saved else {
-                    tab?.strongTaken = nil
-                    return announce("The keychain refused it")
+                let took = await Vault.off {
+                    StrongPasswordKeep.take(host: host, user: user, password: password, clear: clear, kept: Vault.kept(matching: host, wide: true))
                 }
-                relist()
-                announce("Password saved for \(host)")
+                guard let self, let tab else { return }
+                switch took {
+                case .refused:
+                    announce("The keychain refused it")
+                case .waits:
+                    tab.strongTaken = StrongTaken(host: host, user: user, password: password, clear: clear, saved: false)
+                case .kept:
+                    tab.strongTaken = StrongTaken(host: host, user: user, password: password, clear: clear, saved: true)
+                    relist()
+                    announce("Password saved for \(host)")
+                }
             }
         }
     }
@@ -152,13 +167,14 @@ extension Browser {
     func strongPasswordSent(_ tab: Tab, host: String, user: String, password: String) -> Bool {
         guard let taken = tab.strongTaken, taken.sent(host: host, password: password) else { return false }
         tab.strongTaken = nil
-        guard case .renamed(let from, let to) = taken.settle(sentUser: user) else { return true }
-        let keptHost = taken.host, clear = taken.clear
+        let keptHost = taken.host, keptUser = taken.user, saved = taken.saved, clear = taken.clear
         Task { [weak self] in
-            await Vault.off {
-                _ = StrongPasswordKeep.rename(host: keptHost, from: from, to: to, password: password, clear: clear)
+            let named = await Vault.off {
+                StrongPasswordKeep.sent(host: keptHost, keptUser: keptUser, saved: saved, sentUser: user, password: password, clear: clear)
             }
-            self?.relist()
+            guard let self, named != nil else { return }
+            relist()
+            if !saved { announce("Password saved for \(keptHost)") }
         }
         return true
     }
