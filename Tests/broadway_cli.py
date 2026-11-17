@@ -738,7 +738,7 @@ SETTINGS_REFUSED = [
     ("downloads.folder", "/tmp"),
     ("shield", "false"), ("sites.keep", "false"),
     ("notifications.ask", "true"), ("search.suggest", "true"),
-    ("ai.actions", "true"), ("ai.plan", "claude"),
+    ("ai.actions", "true"), ("ai.ask", "true"), ("ai.plan", "claude"),
 ]
 
 covered = set()

@@ -158,6 +158,11 @@ def main():
         t.ok("the line sits at the page's foot", bool(frames) and frames[1] + frames[3] > SIZE[1] - 120, frames)
         state = ai("state")
         t.ok("the page is the line's source", state.get("onPage") is True and state.get("sources") == ["Leaf and Cup"], state)
+        frames = ai("frames").get("frames", {})
+        t.ok("Sum it up is offered before a question", "ask.line.action" in frames, frames)
+        bars = (bench({"do": "agents", "action": "state"}).get("chrome") or {}).get("bars") or []
+        field = frames.get("ask.line.field") or [0, 0, 0, 0]
+        t.ok("a page's offer bar rises above the line", all(bar[1] + bar[3] <= field[1] - 20 for bar in bars), (bars, field))
         for dark in (False, True):
             stage(dark)
             shoot(f"line-{'dark' if dark else 'light'}")
@@ -170,6 +175,10 @@ def main():
         card, field = frames.get("ask.line.answer"), frames.get("ask.line.field")
         t.ok("the answer card sits above the line", bool(card) and bool(field) and card[1] + card[3] < field[1], frames)
         t.ok("the card names the agent", "ask.line.footer" in frames, frames)
+        t.ok("Sum it up is gone once there is an answer", "ask.line.action" not in frames, frames)
+        ai("question", id=tab, text="And when does it close?")
+        state = wait_for(answered, 10)
+        t.ok("a follow-up is answered in the same line", bool(state) and len(state["turns"]) == 4, ai("state"))
         time.sleep(0.5)
         for dark in (False, True):
             stage(dark)

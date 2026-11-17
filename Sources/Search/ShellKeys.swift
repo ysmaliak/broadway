@@ -265,7 +265,7 @@ extension ContentView {
                 if command.section == .spaces, !browser.showsSpaces { return false }
                 if Command.split.contains(command.id), !browser.prefs.splitView { return false }
                 if Command.dusk.contains(command.id), !browser.prefs.darkensPages { return false }
-                if Command.asking.contains(command.id), !browser.prefs.ai { return false }
+                if Command.asking.contains(command.id), !browser.prefs.askAndChat { return false }
                 command.run(browser)
                 return true
             }

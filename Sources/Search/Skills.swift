@@ -128,6 +128,16 @@ final class SkillStore {
         all.filter { $0.serves(url) }
     }
 
+    func actions(for url: URL?) -> [SiteAction] {
+        guard let url else { return [] }
+        let path = url.path.lowercased()
+        var seen = Set<String>()
+        return skills(for: url).flatMap(\.actions)
+            .filter { action in action.path.map { path.contains($0.lowercased()) } ?? true }
+            .filter { seen.insert($0.title).inserted }
+            .map { SiteAction(title: $0.title, prompt: $0.prompt, drafts: $0.title == "Draft a reply") }
+    }
+
     func file(_ skill: Skill) -> URL { folder.appendingPathComponent(skill.id + ".md") }
 
     @discardableResult

@@ -100,8 +100,11 @@ enum SettingsIndex {
               detail: "Improve Writing, Translate and more, from a right-click on selected text", keys: [Preferences.textActionsKey],
               words: ["improve writing", "fix spelling", "grammar", "translate", "summarize", "explain", "rewrite", "right-click",
                       "context menu", "selected text", "selection", "commands", "ai"]),
+        .init(id: Preferences.askKey, group: "agents.broadway", icon: "questionmark.bubble", title: "Ask and chat",
+              detail: "Ask about a page with ⌘J, and chat beside it", keys: [Preferences.askKey],
+              words: ["ask", "question", "chat", "command j", "page", "answer", "summarize", "sum it up", "ai"]),
         .init(id: "ai.plan", group: "agents.broadway", icon: "brain", title: "Agent",
-              detail: "Runs them on your own plan", keys: ["ai.plan"],
+              detail: "Does these on your own plan", keys: ["ai.plan"],
               words: ["claude code", "codex", "this mac", "apple intelligence", "model", "plan", "ai", "which agent"]),
         .init(id: "agents.connected", group: "agents", icon: "person.2.wave.2", title: "Connected agents",
               detail: "Claude Code, Codex and scripts using Broadway, each with a card at the foot of the sidebar",
@@ -596,6 +599,9 @@ extension SettingsIndex {
         case "ai.actions":
             guard let on = value as? Bool else { return false }
             TextActions.set(on, prefs)
+        case Preferences.askKey:
+            guard let on = value as? Bool else { return false }
+            PageAsk.set(on, prefs)
         default:
             return false
         }

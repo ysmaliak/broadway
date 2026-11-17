@@ -12,7 +12,7 @@ final class PageAskView: NSView {
     init(browser: Browser, line: PageAsk) {
         self.browser = browser
         self.line = line
-        card = AskAnswerCard(line: line)
+        card = AskAnswerCard(browser: browser, line: line)
         field = AskFieldPanel(browser: browser, line: line)
         super.init(frame: NSRect(x: 0, y: 0, width: 600, height: 60))
         addSubview(card)
@@ -58,18 +58,23 @@ final class AskFieldPanel: NSView, NSTextFieldDelegate {
     private let stage = KitFlippedView()
     private let input: SelectionField
     private let refused = KitLabel("", font: .systemFont(ofSize: 13), color: KitColor.muted)
+    private let add: KitGlassKey
     private var chips: [AskChip] = []
+    private var actions: [KitGlassKey] = []
+    private var shownActions: [String] = []
     private var hint: CommandHintView?
     private var focused = -1
     private weak var before: NSResponder?
 
     private static let pad: CGFloat = 12
     private static let chipHeight: CGFloat = 20
+    private static let actionHeight: CGFloat = 24
 
     init(browser: Browser, line: PageAsk) {
         self.browser = browser
         self.line = line
         input = SelectionField.make(placeholder: line.placeholder, size: 13)
+        add = KitGlassKey(symbol: "plus", circle: 20, symbolSize: 10, quiet: true, label: "Add")
         super.init(frame: NSRect(x: 0, y: 0, width: 600, height: 44))
         glass.hold(stage)
         addSubview(glass)
@@ -79,8 +84,11 @@ final class AskFieldPanel: NSView, NSTextFieldDelegate {
         input.kitAccess(id: "ask.line.field", label: "Ask")
         refused.text = line.refusal ?? ""
         refused.setAccessibilityIdentifier("ask.line.refused")
+        add.setAccessibilityIdentifier("ask.line.add")
+        add.action = { [weak self] in self?.showAdd() }
         stage.addSubview(input)
         stage.addSubview(refused)
+        stage.addSubview(add)
     }
 
     @available(*, unavailable)
@@ -109,20 +117,33 @@ final class AskFieldPanel: NSView, NSTextFieldDelegate {
         line.run()
     }
 
+    private func showAdd() {
+        let menu = browser.addMenu(for: line)
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: add.bounds.maxY + 4), in: add)
+    }
+
     func controlTextDidChange(_ notification: Notification) {
         line.draft = input.stringValue
     }
 
-    private var chipWords: [(String, String)] {
-        var out: [(String, String)] = []
-        if line.blind, line.takes { out.append(("lock", "Private window, answered on this Mac")) }
-        for item in line.conversation.attachments { out.append(("doc.text", item.label)) }
+    private var chipWords: [(String, String, Int?)] {
+        var out: [(String, String, Int?)] = []
+        if line.takes, line.agent == .thisMac {
+            out.append(("lock", line.blind ? "Private window, answered on this Mac" : "Answered on this Mac", nil))
+        }
+        for (index, item) in line.conversation.attachments.enumerated() {
+            let symbol = if case .image = item.kind { "photo" } else { "doc.text" }
+            out.append((symbol, item.label, index))
+        }
         return out
     }
 
+    private var actionWords: [SiteAction] { browser.siteActions(for: line) }
+
     func height(for width: CGFloat) -> CGFloat {
         var height = Self.pad * 2 + 18
-        if line.takes, !chipWords.isEmpty { height += Self.chipHeight + 8 }
+        if line.takes { height += Self.chipHeight + 8 }
+        if !actionWords.isEmpty { height += Self.actionHeight + 10 }
         return height
     }
 
@@ -138,13 +159,20 @@ final class AskFieldPanel: NSView, NSTextFieldDelegate {
         let inner = bounds.width - Self.pad * 2
         var y = Self.pad
         let wanted = line.takes ? chipWords : []
-        if chips.map({ [$0.symbol, $0.text] }) != wanted.map({ [$0.0, $0.1] }) {
+        if chips.map({ "\($0.symbol)|\($0.text)|\($0.index ?? -1)" }) != wanted.map({ "\($0.0)|\($0.1)|\($0.2 ?? -1)" }) {
             for chip in chips { chip.removeFromSuperview() }
-            chips = wanted.map { AskChip(symbol: $0.0, text: $0.1) }
+            chips = wanted.map { word in
+                AskChip(symbol: word.0, text: word.1, index: word.2) { [weak self] in
+                    guard let self, let index = word.2, self.line.conversation.attachments.indices.contains(index) else { return }
+                    self.line.conversation.attachments.remove(at: index)
+                }
+            }
             for chip in chips { stage.addSubview(chip) }
         }
-        if !chips.isEmpty {
-            var x = Self.pad
+        add.isHidden = !line.takes
+        if line.takes {
+            add.frame = kitSnap(NSRect(x: Self.pad - 2, y: y, width: 20, height: 20))
+            var x = Self.pad + 24
             for chip in chips {
                 let width = min(chip.intrinsicContentSize.width, 260, max(0, Self.pad + inner - x))
                 chip.frame = kitSnap(NSRect(x: x, y: y, width: width, height: Self.chipHeight))
@@ -183,29 +211,55 @@ final class AskFieldPanel: NSView, NSTextFieldDelegate {
         } else {
             refused.frame = NSRect(x: Self.pad, y: y, width: room, height: 18)
         }
+        y += 18 + 10
+        let offered = actionWords
+        if offered.map(\.title) != shownActions {
+            for key in actions { key.removeFromSuperview() }
+            actions = offered.map { action in
+                let key = KitGlassKey(title: action.title, quiet: true) { [weak self] in self?.line.run(action.prompt) }
+                key.setAccessibilityIdentifier("ask.line.action")
+                return key
+            }
+            shownActions = offered.map(\.title)
+            for key in actions { stage.addSubview(key) }
+        }
+        var x = Self.pad - 2
+        for key in actions {
+            let width = min(ceil(key.intrinsicContentSize.width), max(0, bounds.width - Self.pad - x))
+            key.frame = kitSnap(NSRect(x: x, y: y, width: width, height: Self.actionHeight))
+            x += width + 6
+        }
     }
 }
 
 final class AskChip: NSView {
     let symbol: String
     let text: String
+    let index: Int?
+    private let remove: () -> Void
     private let plate = KitBox(fill: Palette.NS.wash.withAlphaComponent(0.7), corners: .capsule)
     private let icon: KitSymbol
     private let label: KitLabel
+    private let cross = KitSymbol("xmark", style: KitSymbol.Style(size: 8, weight: .semibold), tint: KitColor.muted)
 
-    init(symbol: String, text: String) {
+    init(symbol: String, text: String, index: Int?, remove: @escaping () -> Void) {
         self.symbol = symbol
         self.text = text
+        self.index = index
+        self.remove = remove
         icon = KitSymbol(symbol, style: KitSymbol.Style(size: 10, weight: .regular), tint: KitColor.muted)
         label = KitLabel(text, font: .systemFont(ofSize: 11), color: KitColor.muted)
         super.init(frame: .zero)
         addSubview(plate)
         addSubview(icon)
         addSubview(label)
-        icon.setAccessibilityElement(false)
+        addSubview(cross)
+        cross.isHidden = index == nil
+        for view in [icon, cross] as [NSView] { view.setAccessibilityElement(false) }
         setAccessibilityElement(true)
-        setAccessibilityRole(.staticText)
-        setAccessibilityLabel(text)
+        setAccessibilityRole(index == nil ? .staticText : .button)
+        setAccessibilityLabel(index == nil ? text : "Remove \(text)")
+        setAccessibilityIdentifier("ask.line.chip")
     }
 
     @available(*, unavailable)
@@ -213,8 +267,22 @@ final class AskChip: NSView {
 
     override var isFlipped: Bool { true }
 
+    private var tail: CGFloat { index == nil ? 9 : 22 }
+
     override var intrinsicContentSize: NSSize {
-        NSSize(width: 7 + 12 + 4 + ceil(label.intrinsicContentSize.width) + 2 + 9, height: 20)
+        NSSize(width: 7 + 12 + 4 + ceil(label.intrinsicContentSize.width) + 2 + tail, height: 20)
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        guard index != nil else { return false }
+        remove()
+        return true
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        guard index != nil, point.x >= bounds.width - tail - 2 else { return super.mouseDown(with: event) }
+        remove()
     }
 
     override func layout() {
@@ -222,24 +290,27 @@ final class AskChip: NSView {
         plate.frame = bounds
         icon.frame = kitSnap(NSRect(x: 7, y: (bounds.height - 12) / 2, width: 12, height: 12))
         let height = label.intrinsicContentSize.height
-        label.frame = kitSnap(NSRect(x: 23, y: (bounds.height - height) / 2, width: max(0, bounds.width - 23 - 9), height: height))
+        label.frame = kitSnap(NSRect(x: 23, y: (bounds.height - height) / 2, width: max(0, bounds.width - 23 - tail), height: height))
+        cross.frame = kitSnap(NSRect(x: bounds.width - 17, y: (bounds.height - 10) / 2, width: 10, height: 10))
     }
 }
 
 final class AskAnswerCard: NSView {
+    let browser: Browser
     let line: PageAsk
     private let glass = KitGlass.floating(radius: 14)
     private let stage = KitFlippedView()
     private let scroll = NSScrollView()
     private let words = NSTextView()
-    private let footer = KitLabel("", font: .systemFont(ofSize: 10.5), color: KitColor.faint)
+    private let footer = KitLabel("", font: .systemFont(ofSize: 10.5), color: KitColor.muted)
     private var hints: [CommandHintView] = []
     private var shown = ""
 
     private static let pad: CGFloat = 14
     private static let most: CGFloat = 340
 
-    init(line: PageAsk) {
+    init(browser: Browser, line: PageAsk) {
+        self.browser = browser
         self.line = line
         super.init(frame: NSRect(x: 0, y: 0, width: 600, height: 80))
         glass.hold(stage)
@@ -303,7 +374,11 @@ final class AskAnswerCard: NSView {
         if answer.addressed { caution("This page has text written for an AI to follow. The answer may have been steered by it.") }
         if answer.text.isEmpty, !answer.done { add(line.conversation.status ?? "…", size: 13, color: KitColor.faint) }
         if !answer.text.isEmpty { add(answer.text, size: 13, color: KitColor.ink) }
-        if let failed = answer.failed { add(failed, size: 12, color: KitColor.muted) }
+        if let failed = answer.failed {
+            let problem = AskProblem.of(failed, plan: answer.model?.plan ?? line.agent, other: browser.otherAgent(for: line)?.plan)
+            add(problem.title, size: 12.5, color: KitColor.ink)
+            if let detail = problem.detail { add(detail, size: 12, color: KitColor.muted, gap: 2) }
+        }
         if answer.stopped { add("Stopped", size: 11.5, color: KitColor.faint) }
         if !answer.strays.isEmpty { caution("Not on the page: " + answer.strays.joined(separator: ", ")) }
         return out
@@ -320,8 +395,11 @@ final class AskAnswerCard: NSView {
     }
 
     private var hintWords: [(String, String)] {
-        guard !line.conversation.running, line.conversation.lastAnswer?.text.isEmpty == false else { return [] }
-        return [("⌘C", "Copy"), ("⌘↩", "Done")]
+        guard !line.conversation.running, let answer = line.conversation.lastAnswer else { return [] }
+        var out: [(String, String)] = [("⌘J", "Follow up")]
+        if !answer.text.isEmpty { out += [("⇧⌘V", "Put in page"), ("⌘C", "Copy")] }
+        if let other = browser.otherAgent(for: line) { out.append(("⇧⌘R", "Ask \(other.plan.tool)")) }
+        return out
     }
 
     override func layout() {

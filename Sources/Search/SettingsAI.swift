@@ -62,6 +62,7 @@ extension SettingsPageView {
         }
         section("In Broadway") {
             settingRow("ai.actions")
+            settingRow(Preferences.askKey)
             settingRow("ai.plan")
         }
         let connected = links.live.filter { !$0.task && $0.codex == nil }

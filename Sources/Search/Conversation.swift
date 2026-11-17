@@ -206,6 +206,24 @@ final class Conversation: Identifiable {
         session?.cancel()
     }
 
+    func askAgain() {
+        guard !running, let last = chat.messages.lastIndex(where: { $0.role == .user }) else { return }
+        let asked = chat.messages[last].text
+        chat.messages.removeSubrange((last + 1)...)
+        begin(asked: asked, attachments: attachments)
+    }
+
+    func rewrite(_ id: ChatMessage.ID, as text: String) {
+        guard !running, let index = chat.messages.firstIndex(where: { $0.id == id && $0.role == .user }) else { return }
+        chat.messages.removeSubrange(index...)
+        send(text)
+    }
+
+    func use(_ choice: ModelChoice?) {
+        chat.model = choice
+        if saved, !chat.messages.isEmpty { ChatStore.shared.save(chat) }
+    }
+
     private func begin(asked: String, attachments: [Attachment]) {
         guard let choice else {
             var failed = ChatMessage(role: .assistant, text: "")

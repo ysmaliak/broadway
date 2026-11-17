@@ -658,6 +658,9 @@ final class Preferences {
     var textActions: Bool {
         didSet { store.set(textActions, forKey: Preferences.textActionsKey) }
     }
+    var askAndChat: Bool {
+        didSet { store.set(askAndChat, forKey: Preferences.askKey) }
+    }
     var agentMode: AgentMode {
         didSet {
             if agentMode == .bypass, !AgentConsent.grantBypass() { agentMode = .auto }
@@ -826,6 +829,7 @@ final class Preferences {
         pinsGoHome = keepsSite
         ai = store.object(forKey: "ai") as? Bool ?? true
         textActions = store.object(forKey: Preferences.textActionsKey) as? Bool ?? true
+        askAndChat = store.object(forKey: Preferences.askKey) as? Bool ?? true
         agentMode = AgentMode.read(store.string(forKey: "agents.mode"), bypassConsent: AgentConsent.bypassGiven)
         agentTabsClose = 60
         agentsOn = store.bool(forKey: "agents.on") && AgentConsent.given

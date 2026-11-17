@@ -98,6 +98,7 @@ extension SettingsPageView {
             row(id, control: toggle(id, get: { IntegrationNow.on }, set: { Store.settings.set($0, forKey: IntegrationNow.key) }))
         case "ai.agents", "agents.mode": agentRow(id)
         case "ai.actions", "ai.plan": textActionRow(id)
+        case Preferences.askKey: row(id, control: toggle(id, get: { prefs.askAndChat }, set: { PageAsk.set($0, prefs) }))
         case let id where Browser.Clearing(rawValue: id) != nil: dangerRow(id)
         default: return linkRow(id)
         }

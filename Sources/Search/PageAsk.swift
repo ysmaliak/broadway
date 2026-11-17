@@ -45,6 +45,17 @@ extension Command {
     static let asking: Set<String> = ["view.ask"]
 }
 
+extension Preferences {
+    nonisolated static let askKey = "ai.ask"
+}
+
+extension PageAsk {
+    static func set(_ on: Bool, _ prefs: Preferences, in browsers: [Browser]? = nil) {
+        prefs.askAndChat = on
+        if !on { (browsers ?? Browsers.all).forEach { $0.closeLine() } }
+    }
+}
+
 extension Tab {
     var asksAgent: Bool { agent || driving }
 
@@ -60,8 +71,8 @@ extension Browser {
         let plans = Plans.shared
         let mac = plans.connected(.thisMac) ? ModelChoice(plan: .thisMac, model: "", effort: nil) : nil
         if tab.neverSent { return mac }
-        if let plan = plans.defaultPlan(prefs), plans.connected(plan) { return plans.defaultChoice(plan) }
-        return mac
+        guard let plan = plans.agent(prefs), plans.connected(plan) else { return nil }
+        return plan == .thisMac ? mac : plans.defaultChoice(plan)
     }
 
     func askRefusal(for tab: Tab) -> String? {
@@ -70,7 +81,7 @@ extension Browser {
     }
 
     func askKey() {
-        guard prefs.ai, let tab = active else { return }
+        guard prefs.askAndChat, let tab = active else { return }
         if let line = ai.line, line.tab == tab.id {
             if line.answering, !line.conversation.running { line.focus += 1 } else { closeLine() }
             return
@@ -79,7 +90,7 @@ extension Browser {
     }
 
     func openLine(_ tab: Tab) async {
-        guard prefs.ai, !tab.asksAgent else { return }
+        guard prefs.askAndChat, !tab.asksAgent else { return }
         if !Plans.shared.looked { await Plans.shared.refresh() }
         guard active === tab, !tab.asksAgent else { return }
         closeSelection()
@@ -115,6 +126,14 @@ extension Browser {
         }
         if plain == .command, event.keyCode == 36 || event.keyCode == 76 {
             closeLine()
+            return true
+        }
+        if plain == [.command, .shift], key == "v" {
+            putAnswerInPage(line)
+            return true
+        }
+        if plain == [.command, .shift], key == "r" {
+            askOtherAgent(line)
             return true
         }
         return false

@@ -112,6 +112,23 @@ enum PageSelection {
     return false;
     """
 
+    static let hideScript = """
+    if (document.getElementById('__ave_secret_style')) return true;
+    var style = document.createElement('style');
+    style.id = '__ave_secret_style';
+    style.textContent = 'input[type=password],input[autocomplete*="cc-"],input[autocomplete*="password"],input[autocomplete*="one-time-code"],' +
+      'input[name*="card" i],input[id*="card" i],input[name*="cvv" i],input[id*="cvv" i],input[name*="cvc" i],input[id*="cvc" i]' +
+      '{color:transparent!important;-webkit-text-fill-color:transparent!important;text-shadow:none!important;-webkit-text-security:disc!important;}';
+    (document.head || document.documentElement).appendChild(style);
+    return true;
+    """
+
+    static let showScript = """
+    var style = document.getElementById('__ave_secret_style');
+    if (style) style.remove();
+    return true;
+    """
+
     @MainActor
     static func run(_ tab: Tab, _ script: String, _ arguments: [String: Any] = [:], in frame: WKFrameInfo? = nil) async -> Any? {
         guard let web = tab.built else { return nil }
@@ -163,5 +180,15 @@ enum PageSelection {
     @MainActor
     static func putInBox(_ text: String, tab: Tab) async -> Bool {
         await run(tab, boxScript, ["text": text]) as? Bool ?? false
+    }
+
+    @MainActor
+    static func hideSecrets(_ tab: Tab) async -> Bool {
+        await run(tab, hideScript) as? Bool ?? false
+    }
+
+    @MainActor
+    static func showSecrets(_ tab: Tab) async {
+        _ = await run(tab, showScript)
     }
 }

@@ -114,6 +114,11 @@ enum PersonSettings {
             TextActions.set(on, prefs)
             return true
         }),
+        "ai.ask": SettingAccess(bar: .turningOn, takes: "true or false", read: { $0.askAndChat }, write: { prefs, text in
+            guard let on = yes(text) else { return false }
+            PageAsk.set(on, prefs)
+            return true
+        }),
         "ai.plan": SettingAccess(bar: .always, read: { Plans.shared.agent($0)?.rawValue ?? "" }),
         "ai.command": row("The broadway command", instead: "broadway setup"),
         "ai.groups": shared({ AIGroups.shared.on }, { AIGroups.shared.on = $0 }),
