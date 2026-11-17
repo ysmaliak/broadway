@@ -9,12 +9,14 @@ final class LocalPageServer {
         var status = "200 OK"
         var type: String
         var body: String
+        var headers: [String: String] = [:]
     }
 
     private let socket: Int32
     private let source: DispatchSourceRead
     private let lock = NSLock()
     private var asked: [String] = []
+    private var lines: [String] = []
     private var languages: [String: String] = [:]
     private var cookieHeaders: [String: String] = [:]
     private var stopped = false
@@ -77,6 +79,12 @@ final class LocalPageServer {
         return asked
     }
 
+    var methods: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return lines
+    }
+
     func language(asked path: String) -> String? {
         lock.lock()
         defer { lock.unlock() }
@@ -133,8 +141,10 @@ final class LocalPageServer {
         let cookie = header.components(separatedBy: "\r\n")
             .first { $0.lowercased().hasPrefix("cookie:") }
             .map { String($0.dropFirst("cookie:".count)).trimmingCharacters(in: .whitespaces) }
+        let method = header.components(separatedBy: "\r\n").first?.split(separator: " ").first.map(String.init) ?? ""
         lock.lock()
         asked.append(path)
+        lines.append("\(method) \(path)")
         if let language { languages[path] = language }
         if cookieHeaders[path] == nil { cookieHeaders[path] = cookie ?? "" }
         lock.unlock()
@@ -145,6 +155,7 @@ final class LocalPageServer {
         let head = "HTTP/1.1 \(page.status)\r\n"
             + "Content-Type: \(page.type)\r\n"
             + "Content-Length: \(body.count)\r\n"
+            + page.headers.map { "\($0.key): \($0.value)\r\n" }.joined()
             + "Connection: close\r\n\r\n"
         _ = send(client, Data(head.utf8) + body)
     }

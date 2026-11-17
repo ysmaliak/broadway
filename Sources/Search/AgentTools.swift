@@ -772,7 +772,11 @@ final class BrowserToolbox: AgentToolbox {
                 return .failure("The person drove that tab and handed it back. Nothing was done. Look at it again before you go on.", code: .handedBack)
             }
         }
+        let reached = find(arguments)?.tab
+        if let owed = reached?.takeStuckFailure() { return owed }
+        let restarts = reached?.stuck.restarts
         var said = await act(name, arguments, task: task)
+        if let reached, reached.stuck.restarts != restarts, let owed = reached.takeStuckFailure() { said = owed }
         if let data = said.data, let tab = toldTab(arguments, data), let doc = AgentRefBook.latest(tab) {
             AgentRefBook.tell(task, tab, doc: doc, refs: AgentRefBook.refs(in: data))
         }

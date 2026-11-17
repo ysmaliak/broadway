@@ -320,6 +320,7 @@ final class Tab: Identifiable {
     var restAddress: URL? { built == nil ? address : committed }
 
     func didCommit() {
+        if stuck.asked != nil { StuckRules.committed(&stuck) }
         settle.committed(at: CACurrentMediaTime())
         scheduleSettle()
         devLog.clear()
@@ -504,6 +505,9 @@ final class Tab: Identifiable {
     }
 
     var kicks = Kicks()
+    var stuck = StuckState()
+    @ObservationIgnored var stuckEnd: StuckEnd?
+    @ObservationIgnored var stuckRedoing = false
     /// An extension is recording from this tab's page (see RecordingIndicator).
     var recording = false
 
@@ -902,6 +906,7 @@ final class Tab: Identifiable {
     }
 
     private func loadEnded() {
+        if stuck.asked != nil { StuckRules.committed(&stuck) }
         if let shown = settle.loadEnded(at: CACurrentMediaTime()) { settled(shown) } else { scheduleSettle() }
     }
 
@@ -1478,6 +1483,7 @@ final class Tab: Identifiable {
     func pickingFailed(_ reason: String) { onPickTrouble?(self, reason) }
 
     func go(to url: URL, known: String? = nil) {
+        if InternalPage(url: url) == nil, reach(.address(url)) { return }
         agentDialog?.answer(ok: false)
         agentDialog = nil
         goingBack = false
@@ -1788,6 +1794,7 @@ final class Tab: Identifiable {
     /// Asked anything at all, the page answers with one particular error, and
     /// the answer to that is to load it again.
     func revive() {
+        cameForward()
         if stale {
             stale = false
             recoverFromCrash()
@@ -1873,6 +1880,7 @@ final class Tab: Identifiable {
     /// A view that has lost its document is given the address back instead:
     /// there is nothing else for it to reload.
     func reload(fromOrigin: Bool = false) {
+        if reach(.reload(fromOrigin: fromOrigin)) { return }
         kicks.reload += 1
         // Search's own pages are drawn from what is there now, always.
         guard page == nil else { return }
@@ -1905,6 +1913,7 @@ final class Tab: Identifiable {
     }
 
     func stop() {
+        if reach(.stop) { return }
         kicks.stop += 1
         web.stopLoading()
     }
@@ -1949,6 +1958,7 @@ final class Tab: Identifiable {
     /// Straight through, every time. A page that has to be fetched again is
     /// fetched again — nothing is kept behind to make that look otherwise.
     func back() {
+        if page == nil, reach(.back) { return }
         kicks.back += 1
         goingBack = true
         if let page {
@@ -1968,6 +1978,7 @@ final class Tab: Identifiable {
         web.goBack()
     }
     func forward() {
+        if page == nil, reach(.forward) { return }
         kicks.forward += 1
         goingBack = false
         if let page {
@@ -1990,7 +2001,13 @@ final class Tab: Identifiable {
         return back ? built.backForwardList.backList.reversed() : built.backForwardList.forwardList
     }
     /// Straight to a page several steps away, as one step.
-    func go(to item: WKBackForwardListItem) { web.go(to: item) }
+    func go(to item: WKBackForwardListItem) {
+        guard isStuck else {
+            web.go(to: item)
+            return
+        }
+        restart { [weak self] in self?.web.go(to: item) }
+    }
 
     /// Called when the tab is thrown away. Without it the view keeps running
     /// whatever the page left behind — timers, video, sockets.
@@ -2070,6 +2087,7 @@ final class Tab: Identifiable {
     /// back-forward cache. The tab keeps its address; `web` builds again the
     /// next time anyone asks for it.
     private func discard() {
+        reachToEnd()
         stopSettling()
         cancelImageText()
         device = nil

@@ -18,6 +18,12 @@
     ./bench go ID URL                  send a bench tab somewhere else
     ./bench wait ID [SECONDS]          until the page has loaded
     ./bench sleep ID                   put a tab to sleep now, or say what keeps it awake
+    ./bench stuck [state]              test run: each tab's page stuck or not, since when, its card, its process id
+    ./bench stuck said ID stuck|answering  test run: stand in for WebKit saying the page stopped answering, or answers again
+    ./bench stuck answer ID wait|reload    test run: answer the card on a stuck page
+    ./bench stuck do ID reload|stop|back|forward|close|sleep|home|go URL
+                                       test run: the person's own command on a tab, through Broadway's path
+    ./bench stuck waits QUESTION AGENT QUIET|standard  test run: shorten the waits, in seconds, or put them back
     ./bench select ID                  bring a tab to the front — --test runs only
     ./bench adopt ID                   a bench tab becomes an ordinary one — --test runs only
     ./bench resize W H [STEPS]         take the window to W×H in steps, like a drag — --test runs only
@@ -640,6 +646,21 @@ def main(argv):
             if args[2:] == ["failed"]: request["failed"] = True
         elif args[0] == "sweep" and len(args) in (1, 2):
             if len(args) == 2: request["after"] = float(args[1])
+        else: sys.exit(usage)
+    elif verb == "stuck":
+        usage = "usage: bench stuck [state] | said ID stuck|answering | answer ID wait|reload | do ID reload|stop|back|forward|close|sleep|home|go URL | waits QUESTION AGENT QUIET|standard"
+        request["action"] = args[0] if args else "state"
+        if request["action"] == "state" and len(args) <= 1: pass
+        elif request["action"] == "waits" and args[1:] == ["standard"]: pass
+        elif request["action"] == "waits" and len(args) == 4:
+            try: request["times"] = [float(a) for a in args[1:]]
+            except ValueError: sys.exit(usage)
+        elif request["action"] in ("said", "answer") and len(args) == 3:
+            request["id"], request["value"] = args[1], args[2]
+        elif request["action"] == "do" and len(args) == 3 and args[2] != "go":
+            request["id"], request["value"] = args[1], args[2]
+        elif request["action"] == "do" and len(args) == 4 and args[2] == "go":
+            request["id"], request["value"], request["url"] = args[1], args[2], args[3]
         else: sys.exit(usage)
     elif verb == "autofill":
         if len(args) != 1 or args[0] not in ("state", "seed", "clear", "preview", "fill", "undo", "cancel"):

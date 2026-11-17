@@ -235,6 +235,11 @@ extension Browser {
             done?(reason)
             return
         }
+        if tab.isStuck {
+            tab.sleep(picture: nil)
+            done?("asleep")
+            return
+        }
         tab.unsaved { [weak self, weak tab] typed in
             guard let self, let tab else { return }
             if typed {

@@ -179,6 +179,7 @@ Each code is set where the failure happens. `retry_safe` true means nothing land
 | `secret_field`, `refused` | a password, card or code field, any other refusal | yes |
 | `timeout` | a wait ran out | yes |
 | `unmet`, `moved` | in `batch`: an expectation not met, a ref from before the page moved | no, yes |
+| `page_reloaded` | the page stopped answering, so Broadway ended its process and loaded its address again | no |
 | `no_answer`, `failed` | the page didn't answer, anything else | no for actions |
 
 Every error carries a `hint` with the next command to run. Messages are one sentence.
