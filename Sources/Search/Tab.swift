@@ -320,6 +320,7 @@ final class Tab: Identifiable {
     var restAddress: URL? { built == nil ? address : committed }
 
     func didCommit() {
+        retryCommitted()
         if stuck.asked != nil { StuckRules.committed(&stuck) }
         settle.committed(at: CACurrentMediaTime())
         scheduleSettle()
@@ -367,6 +368,7 @@ final class Tab: Identifiable {
     /// Set when the page never arrived — no host, no network, a refused
     /// connection. Shown in place of the page rather than in a dialog.
     var failure: String?
+    @ObservationIgnored var retry = LoadRetry()
     /// The site's icon, for tabs set to wear one. From the cache the moment
     /// the tab has an address, and from the page a moment after it loads.
     private var siteIcon: NSImage?
@@ -1895,9 +1897,14 @@ final class Tab: Identifiable {
         kicks.reload += 1
         // Search's own pages are drawn from what is there now, always.
         guard page == nil else { return }
+        let again = retry.tryAgain()
         // A pin put down with ⌘W has no view left to reload; waking it is
         // the reload.
         guard !wake() else { return }
+        if let again {
+            web.open(again)
+            return
+        }
         armResume(for: address)
         // A file is read again with the folder it may read (see open).
         if let address, hollow || address.isFileURL {
@@ -1942,6 +1949,7 @@ final class Tab: Identifiable {
     }
 
     func heads(_ action: WKNavigationAction, in web: WKWebView) {
+        headsForRetry(action)
         headed = (committed, action.navigationType)
         switch action.navigationType {
         case .reload: armResume(for: action.request.url)

@@ -84,6 +84,7 @@ final class Browser: NSObject {
                 DispatchQueue.main.async { held.forEach { $0.present() } }
             }
             guard oldValue != activeID else { return }
+            loadOwedOnScreen()
             if let id = activeID, let shown = tabs.first(where: { $0.id == id }), shown.unread { shown.unread = false }
             // Going to another tab ends a page's run of links (see placeForLink).
             linkRun = nil
@@ -1711,6 +1712,7 @@ final class Browser: NSObject {
         // are the searches learned from sites visited (SiteSearch.swift).
         Favicons.shared.forgetAll()
         SiteSearch.forget()
+        SiteNameBook.forget()
         forms.answers.forgetAll()
         forgetVideoTraces()
         announce("History cleared")
@@ -2139,7 +2141,7 @@ final class Browser: NSObject {
         editingTab = nil
         tabOffers = []
         tabPicked = nil
-        tab.go(to: url)
+        tab.go(to: typedAddress(url, picked: nil, typed: tabDraft))
     }
 
     func cancelTabEdit() {
@@ -6962,10 +6964,11 @@ extension Browser {
             target = destination(for: typed)
         }
 
-        guard let url = target else {
+        guard let asked = target else {
             refusals += 1
             return
         }
+        let url = typedAddress(asked, picked: picked, typed: ending != nil ? completed : typed)
         if let page = InternalPage(url: url) {
             show(page)
             picked = nil
@@ -8167,6 +8170,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
     ) {
         tab(for: webView)?.extensionReturn.finished(navigation)
         fail(webView, error)
+        loadFailedBeforeCommit(webView, error)
     }
 
     /// A page asking to close itself.

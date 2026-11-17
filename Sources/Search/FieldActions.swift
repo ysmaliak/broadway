@@ -350,6 +350,7 @@ extension Browser {
         guard let host = offer.url.host() else { return }
         history.forget(site: host)
         forgetVideoTraces(of: host)
+        SiteNameBook.forget(site: host)
         announce("Forgot \(Address.withoutWWW(host))")
         retype()
     }
@@ -357,6 +358,7 @@ extension Browser {
     func forgetSince(_ date: Date, said: String) {
         history.forget(since: date)
         forgetVideoTraces(since: date)
+        SiteNameBook.forget(since: date)
         announce(said)
         retype()
     }

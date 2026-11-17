@@ -67,6 +67,8 @@
                                        world's own account — whether it is there, before and after
     ./bench fold PATH [WIDTH]          test run: the folded strip or column out over the page (ui folded on,
                                        ui peek on), drawn off screen over red — red shows where the page would
+    ./bench network [away|back|state]  test run: say the network went away or came back, in place of macOS's
+                                       word; state lists the tabs waiting for the network
     ./bench sitesearch [state|tab|delete|esc|go|learn PAGE DESCRIPTION|forget]
                                        test run only: search a site from the address field
     ./bench split state|start|pair|focus|select|detach|fraction|close|new-tab|move|drop|open|private|bench|sleep|reopen|insert|save|space|mouse
@@ -287,6 +289,9 @@ def main(argv):
     elif verb == "pdf":
         if len(args) != 1: sys.exit("usage: bench pdf PATH")
         request["path"] = os.path.abspath(args[0])
+    elif verb == "network":
+        if len(args) > 1 or (args and args[0] not in ("away", "back", "state")): sys.exit("usage: bench network [away|back|state]")
+        request["action"] = args[0] if args else "state"
     elif verb == "sitesearch":
         request["action"] = args[0] if args else "state"
         if len(args) == 3 and args[0] == "learn":

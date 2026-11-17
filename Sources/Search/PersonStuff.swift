@@ -244,10 +244,12 @@ enum PersonStuff {
                 }
                 history.forget(site: host)
                 call.browser.forgetVideoTraces(of: host)
+                SiteNameBook.forget(site: host)
             } else if let since = call.string("since") {
                 let date = try moment(since)
                 history.forget(since: date)
                 call.browser.forgetVideoTraces(since: date)
+                SiteNameBook.forget(since: date)
             }
             return ["deleted": before - history.everything().count, "message": "Deleted \(before - history.everything().count)"]
         },

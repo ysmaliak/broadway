@@ -279,9 +279,12 @@ extension Browser {
             completionHandler(.performDefaultHandling, nil)
             return
         }
-        let trusted = SecTrustEvaluateWithError(trust, nil)
+        var problem: CFError?
+        let trusted = SecTrustEvaluateWithError(trust, &problem)
         let host = space.host.lowercased()
-        let page = tab(for: webView).map { ($0.address?.host() ?? $0.pending?.host())?.lowercased() == host } ?? false
+        let pageTab = tab(for: webView).flatMap { ($0.address?.host() ?? $0.pending?.host())?.lowercased() == host ? $0 : nil }
+        let page = pageTab != nil
+        let otherName = OtherName.countsTrust(problem.map { CFErrorGetCode($0) }) && pageTab?.retry.otherNameDue(for: host) == true
         CertificateTrust.answer(
             store: webView.configuration.websiteDataStore,
             host: host,
@@ -289,6 +292,7 @@ extension Browser {
             chain: trusted ? [] : CertificateTrust.chain(of: trust),
             trusted: trusted,
             isPage: page,
+            otherNameDue: otherName,
             ask: { [weak self] reply in
                 guard let self else {
                     reply(false)

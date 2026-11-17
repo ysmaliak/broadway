@@ -3,7 +3,6 @@ import Observation
 import AppKit
 import Combine
 import WebKit
-import Network
 
 enum LiveRange: String, Codable, CaseIterable, Identifiable {
     case today, week, month, open
@@ -640,7 +639,7 @@ final class LiveFolders {
     @ObservationIgnored private var pageReads: [UUID: Date] = [:]
     @ObservationIgnored private var pageSoon: [UUID: UUID] = [:]
     @ObservationIgnored private var watchers: [(NotificationCenter, NSObjectProtocol)] = []
-    @ObservationIgnored private var monitor: NWPathMonitor?
+    @ObservationIgnored private var path: UUID?
 
     private static var file: URL { Store.file("live-folders.json") }
 
@@ -1586,13 +1585,7 @@ final class LiveFolders {
         locks = LiveLockWatch { [weak self] locked in
             if locked { self?.wentAway("lock") } else { self?.cameBack(from: "lock") }
         }
-        let monitor = NWPathMonitor()
-        monitor.pathUpdateHandler = { [weak self] path in
-            let up = path.status == .satisfied
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.network(up) } }
-        }
-        monitor.start(queue: .global(qos: .utility))
-        self.monitor = monitor
+        path = NetworkPath.shared.listen { [weak self] up, _ in self?.network(up) }
     }
 
     private func unwatch() {
@@ -1600,8 +1593,8 @@ final class LiveFolders {
         watchers = []
         locks?.stop()
         locks = nil
-        monitor?.cancel()
-        monitor = nil
+        NetworkPath.shared.stopListening(path)
+        path = nil
     }
 }
 

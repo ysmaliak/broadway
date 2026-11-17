@@ -374,6 +374,9 @@ final class Bench {
         case _ where BenchLayout.verbs.contains(verb):
             BenchLayout.run(verb, request, answer)
 
+        case _ where BenchNetwork.verbs.contains(verb):
+            BenchNetwork.run(request, answer)
+
         case "layouts":
             // Test runs only: every frame the pages on screen take, looked at
             // every few milliseconds and after each pass of the run loop, for
@@ -4777,7 +4780,7 @@ final class Bench {
 
         default:
             answer(["error": "unknown command “\(verb)”", "commands": [
-                "tabs", "quick", "open", "adopt", "go", "openmark", "close", "wait", "sleep", "select", "text", "nowplaying", "eval", "click", "type", "submit", "shot", "probe", "key", "textcheck", "resize", "hit", "pointer", "film", "float", "window", "pages", "picture", "pdf", "place", "group", "tospace", "field", "bookmark", "marks", "menu", "keyeq", "fill", "pin", "middle", "windows", "alive", "updates", "quit", "towindow", "pull", "magnify", "wheel", "refresh", "discs", "space", "split", "column", "fold", "consent", "site", "ui", "import", "import-preview", "import-file", "import-panel", "import-file-start", "import-file-status", "import-file-cancel", "remove-folder", "passwords", "accounts", "find", "answer", "visible", "ai", "notifications", "popups", "suggest", "translate", "settings", "fieldrows", "autofill", "agent", "agents", "codes", "folders", "searchfolder", "live", "route", "card", "icon", "aigroups", "ctxmenu", "downloadslist", "pageclick",
+                "tabs", "network", "quick", "open", "adopt", "go", "openmark", "close", "wait", "sleep", "select", "text", "nowplaying", "eval", "click", "type", "submit", "shot", "probe", "key", "textcheck", "resize", "hit", "pointer", "film", "float", "window", "pages", "picture", "pdf", "place", "group", "tospace", "field", "bookmark", "marks", "menu", "keyeq", "fill", "pin", "middle", "windows", "alive", "updates", "quit", "towindow", "pull", "magnify", "wheel", "refresh", "discs", "space", "split", "column", "fold", "consent", "site", "ui", "import", "import-preview", "import-file", "import-panel", "import-file-start", "import-file-status", "import-file-cancel", "remove-folder", "passwords", "accounts", "find", "answer", "visible", "ai", "notifications", "popups", "suggest", "translate", "settings", "fieldrows", "autofill", "agent", "agents", "codes", "folders", "searchfolder", "live", "route", "card", "icon", "aigroups", "ctxmenu", "downloadslist", "pageclick",
             ]])
         }
     }

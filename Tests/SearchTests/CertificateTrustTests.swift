@@ -28,11 +28,13 @@ final class CertificateTrustTests {
         chain: [String]? = nil,
         trusted: Bool = false,
         isPage: Bool = true,
+        otherNameDue: Bool = false,
         reply: Bool = true
     ) -> CertificateTrust.Outcome? {
         var outcome: CertificateTrust.Outcome?
         CertificateTrust.answer(
             store: store, host: host, port: port, chain: chain ?? self.chain, trusted: trusted, isPage: isPage,
+            otherNameDue: otherNameDue,
             ask: { [self] respond in
                 asked += 1
                 respond(reply)
@@ -47,6 +49,31 @@ final class CertificateTrustTests {
 
         #expect(answer(store, trusted: true) == .system)
         #expect(asked == 0)
+    }
+
+    @Test func aTypedNameWhoseOtherNameIsDueFailsWithoutAQuestion() {
+        let store = WKWebsiteDataStore.nonPersistent()
+
+        let outcome = answer(store, host: "example.com", otherNameDue: true)
+
+        #expect(outcome == .system)
+        #expect(asked == 0)
+    }
+
+    @Test func aKeptExceptionPassesEvenWhileTheOtherNameIsDue() {
+        let store = WKWebsiteDataStore.nonPersistent()
+        _ = answer(store, host: "example.com")
+        var retry = LoadRetry()
+        let typed = URL(string: "https://example.com/")!
+        retry.heads(URLRequest(url: typed), redirect: false, returns: 0, sent: SentAddress(url: typed, at: Date()))
+
+        let outcome = answer(store, host: "example.com", otherNameDue: retry.otherNameDue(for: "example.com"), reply: false)
+        let detour = retry.committed()
+
+        #expect(outcome == .pass)
+        #expect(asked == 1)
+        #expect(detour == nil)
+        #expect(retry.typed == nil)
     }
 
     @Test func thisMacGoesThroughWithoutAQuestion() {

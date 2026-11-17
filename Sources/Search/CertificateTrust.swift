@@ -51,6 +51,7 @@ enum CertificateTrust {
         chain: [String],
         trusted: Bool,
         isPage: Bool,
+        otherNameDue: Bool = false,
         ask: (@escaping (Bool) -> Void) -> Void,
         done: @escaping (Outcome) -> Void
     ) {
@@ -68,7 +69,7 @@ enum CertificateTrust {
             done(.pass)
             return
         }
-        guard isPage, !chain.isEmpty else {
+        guard isPage, !chain.isEmpty, !otherNameDue else {
             done(.system)
             return
         }

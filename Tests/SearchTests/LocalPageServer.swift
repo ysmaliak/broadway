@@ -26,7 +26,7 @@ final class LocalPageServer {
     private let acceptQueue = DispatchQueue(label: "search.page-fixture.accept")
     private let clientsQueue = DispatchQueue(label: "search.page-fixture.clients", attributes: .concurrent)
 
-    init(_ pages: [String: Page]) throws {
+    init(_ pages: [String: Page], port wanted: UInt16 = 0) throws {
         self.pages = pages
         let server = Darwin.socket(AF_INET, SOCK_STREAM, 0)
         guard server >= 0 else { throw Self.failure("socket") }
@@ -39,7 +39,7 @@ final class LocalPageServer {
         var address = sockaddr_in()
         address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
         address.sin_family = sa_family_t(AF_INET)
-        address.sin_port = 0
+        address.sin_port = wanted.bigEndian
         address.sin_addr = in_addr(s_addr: inet_addr("127.0.0.1"))
         let bound = withUnsafePointer(to: &address) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
