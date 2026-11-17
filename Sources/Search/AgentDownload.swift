@@ -165,6 +165,10 @@ enum AgentDownloadWatch {
         return AgentDownloads.root.appendingPathComponent(folderName(wish?.name ?? agentName(tab)), isDirectory: true)
     }
 
+    static func watches(_ download: WKDownload) -> Bool {
+        records[ObjectIdentifier(download)] != nil
+    }
+
     static func placed(_ download: WKDownload, at file: URL) {
         records[ObjectIdentifier(download)]?.file = file
     }

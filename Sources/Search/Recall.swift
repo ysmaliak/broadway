@@ -837,10 +837,12 @@ final class DownloadsPage: RecallPage {
 
     func show(entries: [FetchEntry], kept: [Keep]) {
         guard let browser else { return }
+        said.text = !kept.isEmpty ? "Clearing the list leaves the files where they are"
+            : browser.prefs.asksWhereToSave ? "Broadway asks where to save each file"
+            : "Files land in \(browser.downloadsFolder.lastPathComponent)"
         let key = (entries.map(\.id), kept)
         if let shown, shown.0 == key.0, shown.1 == key.1 { return }
         shown = key
-        said.text = kept.isEmpty ? "Files land in \(browser.downloadsFolder.lastPathComponent)" : "Clearing the list leaves the files where they are"
         clear.isHidden = kept.isEmpty
         var lines: [(id: String, line: RecallTable.Line)] = []
         let had = Dictionary(list.lines.map { ($0.id, $0.line) }, uniquingKeysWith: { first, _ in first })

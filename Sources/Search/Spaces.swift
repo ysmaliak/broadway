@@ -343,6 +343,11 @@ extension Browser {
         return URL(fileURLWithPath: path)
     }
 
+    func downloadsFolder(in id: UUID) -> URL {
+        guard prefs.usesSpaces, !isPrivate, let path = spaces.first(where: { $0.id == id })?.downloads else { return prefs.downloads }
+        return URL(fileURLWithPath: path)
+    }
+
     func switchSpace(to id: UUID) {
         guard showsSpaces else { return }
         enter(id)

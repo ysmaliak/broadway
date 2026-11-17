@@ -3252,6 +3252,7 @@ extension Browser {
     /// Its window closed for good, with others open: every page let go.
     func closeAll() {
         fileChoice?.cancel()
+        SaveAsk.shared.tabClosed(Set((tabs + parkedTabs).map(\.id)))
         privateFileDownloads = []
         cancelDisplay()
         cancelCapture()
@@ -3952,6 +3953,7 @@ extension Browser {
         detachSplit(tab)
         heldDialogs.removeValue(forKey: tab.id)?.forEach { $0.dismiss() }
         dropQuestions(for: tab.id)
+        SaveAsk.shared.tabClosed([tab.id])
 
         // A tab whose page is out in the little window takes the window with
         // it. Left alone, the window would go on holding a page belonging to a
@@ -7909,6 +7911,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
     /// Called for both delegate completion and WKDownload.cancel completion;
     /// idempotence handles WebKit choosing either callback order.
     func relinquish(_ download: WKDownload) {
+        SaveAsk.shared.downloadEnded(download)
         downloading.removeAll { $0 === download }
         unlisted.remove(ObjectIdentifier(download))
     }
@@ -8349,8 +8352,11 @@ extension Browser: WKDownloadDelegate {
         let chosen = fetches.destination(for: download)
         let name = Browser.fileName(asked ?? suggestedFilename)
         let agent = AgentDownloadWatch.folder(for: download, in: self, type: response.mimeType)
-        if chosen == nil, agent == nil, prefs.asksWhereToSave {
-            place(download, at: whereToSave(name), chosen: nil, name: name, held: false, completionHandler)
+        if chosen == nil, !AgentDownloadWatch.watches(download), prefs.asksWhereToSave {
+            SaveAsk.shared.ask(name, from: download.webView, in: self, download: download) { [weak self] file in
+                guard let self else { return completionHandler(nil) }
+                self.place(download, at: file, chosen: nil, name: name, held: false, asked: true, completionHandler)
+            }
             return
         }
         let folder = chosen?.deletingLastPathComponent() ?? agent ?? downloadsFolder
@@ -8362,7 +8368,7 @@ extension Browser: WKDownloadDelegate {
         }
     }
 
-    private func place(_ download: WKDownload, at file: URL?, chosen: URL?, name: String, held: Bool, _ completionHandler: @escaping (URL?) -> Void) {
+    private func place(_ download: WKDownload, at file: URL?, chosen: URL?, name: String, held: Bool, asked: Bool = false, _ completionHandler: @escaping (URL?) -> Void) {
         DownloadTrace.note("placed", ["file": file?.path ?? "", "held": String(held)])
         guard let file else {
             if let ended = fetches.destinationCancelled(download) {
@@ -8375,7 +8381,7 @@ extension Browser: WKDownloadDelegate {
             return
         }
         fetches.going(download, to: file, cancel: finderCancellation(for: download))
-        if chosen == nil { fetches.entry(for: download)?.retryName = prefs.asksWhereToSave ? file.lastPathComponent : name }
+        if chosen == nil { fetches.entry(for: download)?.retryName = asked ? file.lastPathComponent : name }
         AgentDownloadWatch.placed(download, at: file)
         completionHandler(file)
         announce(held ? "macOS hasn't let Broadway into that folder yet, so \(file.lastPathComponent) went to Broadway's own folder" : "Downloading \(file.lastPathComponent)")
@@ -8426,9 +8432,11 @@ extension Browser: WKDownloadDelegate {
     ) {
         guard let data else { return }
         let name = Browser.fileName(suggestedFilename ?? "")
-        if prefs.asksWhereToSave {
-            guard let file = whereToSave(name) else { return }
-            keepData(data, at: file, webView: webView, originatingURL: originatingURL)
+        if prefs.asksWhereToSave, anyTab(for: webView).map({ $0.agentHere && !$0.driving }) != true {
+            SaveAsk.shared.ask(name, from: webView, in: self) { [weak self, weak webView] file in
+                guard let self, let webView, let file else { return }
+                self.keepData(data, at: file, webView: webView, originatingURL: originatingURL)
+            }
             return
         }
         let folder = downloadsFolder
@@ -8494,21 +8502,6 @@ extension Browser: WKDownloadDelegate {
             didRun: #selector(PrintSheet.printOperationDidRun(_:success:contextInfo:)),
             contextInfo: Unmanaged.passRetained(sheet).toOpaque()
         )
-    }
-
-    /// Where a file goes: the downloads folder, or wherever you say when
-    /// Settings says to ask. Nil when the question was cancelled. The name
-    /// comes from the page, so only its last part is taken: never a path
-    /// out of the folder.
-    private func whereToSave(_ name: String) -> URL? {
-        let name = Browser.fileName(name)
-        guard prefs.asksWhereToSave else { return Browser.free(name, in: downloadsFolder) }
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = name
-        panel.directoryURL = downloadsFolder
-        panel.canCreateDirectories = true
-        guard panel.runModal() == .OK else { return nil }
-        return panel.url
     }
 
     private static func fileName(_ name: String) -> String {

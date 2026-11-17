@@ -3,7 +3,7 @@ import WebKit
 
 @MainActor
 enum BenchPage {
-    static let verbs: Set<String> = ["shield", "controls", "mini", "call", "dev", "device", "agent", "uploads", "json", "filebox"]
+    static let verbs: Set<String> = ["shield", "controls", "mini", "call", "dev", "device", "agent", "uploads", "json", "filebox", "saveask"]
 
     static func run(_ verb: String, _ request: [String: Any], browser: Browser, _ answer: @escaping ([String: Any]) -> Void) {
         let action = request["action"] as? String ?? "state"
@@ -26,6 +26,7 @@ enum BenchPage {
             if action == "forget" { JSONView.copied = nil }
             answer(["copied": JSONView.copied ?? "", "mode": JSONView.mode.rawValue])
         case "filebox": BenchFileChoice.run(action, values, browser, answer)
+        case "saveask": BenchSaveAsk.run(action, values, browser, answer)
         case "agent":
             if action == "copy" { browser.copyForAgent() }
             if action == "markdown" { browser.copyPageAsMarkdown() }
