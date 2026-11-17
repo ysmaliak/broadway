@@ -67,6 +67,11 @@ enum SavedAlready {
         return Array((first + rest).prefix(namelessReads))
     }
 
+    static func touched(_ kept: Kept, by sent: SentSignIn, clear: Bool) -> Login {
+        let same = kept.host == sent.host && kept.user == sent.user
+        return Login(host: kept.host, user: kept.user, password: sent.password, used: kept.used, clear: same ? clear : kept.clear)
+    }
+
     static func verdict(_ sent: SentSignIn, marks: [FillMark?], registrable: (String) -> String = Vault.registrable,
                         kept: () -> [Kept], read: (Kept) -> String?) -> Verdict {
         if marked(sent, by: marks, registrable: registrable) { return .marked }

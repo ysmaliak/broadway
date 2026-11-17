@@ -7,7 +7,7 @@ extension SavedAlready {
             case .marked:
                 return nil
             case .kept(let one):
-                Vault.touch(Login(host: one.host, user: one.user, password: sent.password, used: one.used, clear: clear))
+                Vault.touch(touched(one, by: sent, clear: clear))
                 return nil
             case .offer(let changed):
                 return Browser.Offer(

@@ -183,4 +183,32 @@ struct SavedAlreadyTests {
         #expect(!mark.covers("id.other.test", registrable: site))
         #expect(mark.covers("www.example.test", registrable: site))
     }
+
+    @Test func aLoginKeptFromHttpsStaysSoWhenSentOverHttpFromAnotherHostOfTheSite() {
+        let pat = Kept(host: "example.test", user: "pat", used: nil, clear: false)
+        let sent = SentSignIn(host: "id.example.test", user: "pat", password: "sa-made-up-1")
+        let touched = SavedAlready.touched(pat, by: sent, clear: true)
+        #expect(touched.clear == false)
+        #expect(touched.host == "example.test" && touched.user == "pat")
+    }
+
+    @Test func aLoginKeptFromHttpsStaysSoWhenSentOverHttpWithNoName() {
+        let pat = Kept(host: "id.example.test", user: "pat", used: nil, clear: false)
+        let sent = SentSignIn(host: "id.example.test", user: "", password: "sa-made-up-1")
+        let touched = SavedAlready.touched(pat, by: sent, clear: true)
+        #expect(touched.clear == false)
+        #expect(touched.user == "pat")
+    }
+
+    @Test func aLoginSentFromItsOwnHostWithItsOwnNameIsWrittenAsSent() {
+        let pat = Kept(host: "id.example.test", user: "pat", used: nil, clear: false)
+        let sent = SentSignIn(host: "id.example.test", user: "pat", password: "sa-made-up-1")
+        #expect(SavedAlready.touched(pat, by: sent, clear: true).clear == true)
+    }
+
+    @Test func aLoginKeptFromHttpStaysSoWhenSentOverHttpsFromAnotherHostOfTheSite() {
+        let pat = Kept(host: "example.test", user: "pat", used: nil, clear: true)
+        let sent = SentSignIn(host: "id.example.test", user: "pat", password: "sa-made-up-1")
+        #expect(SavedAlready.touched(pat, by: sent, clear: false).clear == true)
+    }
 }
