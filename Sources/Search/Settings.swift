@@ -1020,15 +1020,18 @@ final class SettingsFolderPopUp: NSPopUpButton {
         panel.canCreateDirectories = true
         panel.directoryURL = prefs.downloads
         panel.prompt = "Use This Folder"
-        let done: (NSApplication.ModalResponse) -> Void = { [weak self, weak panel] response in
-            guard let self else { return }
-            if response == .OK, let url = panel?.url {
-                self.prefs.downloads = url
-                self.prefs.asksWhereToSave = false
-            }
-            self.show()
+        let done: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            self?.chose(response == .OK ? panel.url : nil)
         }
         if let window { panel.beginSheetModal(for: window, completionHandler: done) } else { panel.begin(completionHandler: done) }
+    }
+
+    func chose(_ folder: URL?) {
+        if let folder {
+            prefs.downloads = folder
+            prefs.asksWhereToSave = false
+        }
+        show()
     }
 }
 

@@ -175,7 +175,11 @@ final class SaveAsk {
     private static func clear(_ file: URL) {
         guard let values = try? file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]),
               values.isRegularFile == true || values.isSymbolicLink == true else { return }
-        try? FileManager.default.removeItem(at: file)
+        do {
+            try FileManager.default.trashItem(at: file, resultingItemURL: nil)
+        } catch {
+            try? FileManager.default.removeItem(at: file)
+        }
     }
 
     static func lastFolder(for space: String?) -> URL? {

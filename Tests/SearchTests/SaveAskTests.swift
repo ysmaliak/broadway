@@ -244,6 +244,30 @@ final class SaveAskTests {
         #expect(SaveAsk.shared.questions.isEmpty)
     }
 
+    @Test func aDownloadFromAnAgentsTabNeverAsks() async throws {
+        let tab = try await openFixturePage()
+        tab.agent = true
+        defer { tab.agent = false }
+        let download = try await requestDownload("/own.bin", from: tab.web)
+        let entry = try #require(browser.fetches.entry(for: download))
+        try await waitUntil { entry.destination != nil }
+        #expect(SaveAsk.shared.questions.isEmpty)
+        #expect(entry.destination?.path.contains("Agent Downloads") == true)
+    }
+
+    @Test func aFolderChosenInSettingsBecomesTheDownloadsFolderAndStopsTheAsking() throws {
+        let control = SettingsFolderPopUp(prefs: browser.prefs)
+        #expect(control.indexOfSelectedItem == 2)
+        control.chose(picked)
+        #expect(browser.prefs.downloads.standardizedFileURL == picked.standardizedFileURL)
+        #expect(!browser.prefs.asksWhereToSave)
+        #expect(control.indexOfSelectedItem == 0)
+        #expect(control.titleOfSelectedItem == "Picked")
+        control.chose(nil)
+        #expect(browser.prefs.downloads.standardizedFileURL == picked.standardizedFileURL)
+        #expect(control.indexOfSelectedItem == 0)
+    }
+
     @Test func retryGoesWhereTheFirstAttemptWentWithoutAsking() async throws {
         let tab = try await openFixturePage()
         let download = try await requestDownload("/retry.bin", from: tab.web)
