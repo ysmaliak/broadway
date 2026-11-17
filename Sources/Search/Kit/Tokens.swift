@@ -214,7 +214,7 @@ enum TearLook {
     static let titleSize: CGFloat = 12
     static var shadow: KitShadow { PopupLook.shadow }
     static var edge: NSColor { PopupLook.edge }
-    static var room: CGFloat { PopupLook.room }
+    static var room: CGFloat { shadow.radius * 2 + shadow.y }
 }
 
 struct KitShadow: Equatable {

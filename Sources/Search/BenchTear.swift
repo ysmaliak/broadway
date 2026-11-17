@@ -65,6 +65,9 @@ enum BenchTear {
             let frame = tear.ghost.frame.insetBy(dx: TearLook.room, dy: TearLook.room)
             said["pictureFrame"] = [frame.minX, frame.minY, frame.width, frame.height].map { Double($0) }
         }
+        said["pictureNumber"] = tear.ghost.number
+        said["pictureShown"] = tear.ghost.shown
+        said["moving"] = tear.ghost.moving
         guard tear.out else { return said }
         guard let target = tear.target else {
             said["takes"] = "new"

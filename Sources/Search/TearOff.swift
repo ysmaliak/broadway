@@ -172,6 +172,9 @@ final class TearGhost {
     private var asked: UUID?
 
     var frame: NSRect { panel?.frame ?? .zero }
+    var number: Int { panel?.windowNumber ?? 0 }
+    var shown: Bool { panel?.isVisible ?? false }
+    var moving: [String] { ([plate.layer] + (plate.layer?.sublayers ?? [])).compactMap { $0?.animationKeys() }.flatMap { $0 } }
 
     func show(_ tab: Tab, in browser: Browser, ground: RowGround, at point: NSPoint) {
         let panel = self.panel ?? make()
@@ -247,6 +250,7 @@ final class TearGhostView: NSView {
     private let clip = CALayer()
     private let image = CALayer()
     private let icon = CALayer()
+    private let iconShape = CALayer()
     private let title = CATextLayer()
     private(set) var size = NSSize(width: TearLook.width, height: TearLook.cardHeight)
     private var ground = NSColor.windowBackgroundColor
@@ -269,6 +273,7 @@ final class TearGhostView: NSView {
         clip.addSublayer(title)
         image.contentsGravity = .resizeAspectFill
         icon.contentsGravity = .resizeAspect
+        iconShape.contentsGravity = .resizeAspect
         title.truncationMode = .end
         title.isWrapped = false
         title.fontSize = TearLook.titleSize
@@ -302,7 +307,10 @@ final class TearGhostView: NSView {
             image.isHidden = true
             icon.isHidden = false
             title.isHidden = false
-            icon.contents = tab.icon
+            let shape = tab.icon?.isTemplate == true
+            icon.contents = shape ? nil : tab.icon
+            iconShape.contents = shape ? tab.icon : nil
+            icon.mask = shape ? iconShape : nil
             title.string = tab.label
         }
         needsLayout = true
@@ -325,6 +333,7 @@ final class TearGhostView: NSView {
         clip.borderColor = edge
         clip.borderWidth = 1 / max(1, window?.backingScaleFactor ?? 2)
         title.foregroundColor = text
+        icon.backgroundColor = icon.mask == nil ? nil : text
         title.contentsScale = window?.backingScaleFactor ?? 2
         let shadow = TearLook.shadow
         shadowLayer.shadowColor = NSColor.black.cgColor
@@ -345,6 +354,7 @@ final class TearGhostView: NSView {
         image.frame = CGRect(origin: .zero, size: card.size)
         let pad = TearLook.pad
         icon.frame = CGRect(x: pad, y: pad, width: TearLook.icon, height: TearLook.icon)
+        iconShape.frame = icon.bounds
         title.frame = CGRect(x: pad, y: pad + TearLook.icon + 8, width: card.width - 2 * pad, height: TearLook.titleSize + 4)
         let grab = CGPoint(x: room + TearLook.grab.width, y: room + TearLook.grab.height)
         for part in [shadowLayer, clip] {
