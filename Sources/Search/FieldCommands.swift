@@ -68,6 +68,7 @@ enum FieldCommands {
         }
         if Command.split.contains(command.id), !browser.prefs.splitView { return false }
         if Command.dusk.contains(command.id), !browser.prefs.darkensPages { return false }
+        if Command.asking.contains(command.id), !browser.prefs.ai { return false }
         if Command.meeting.contains(command.id), !browser.prefs.nextMeeting { return false }
         if Command.folders.contains(command.id), !browser.prefs.usesTabGroups { return false }
         if TextActions.commandIDs.contains(command.id) { return browser.textActionsAllowed(on: browser.active) }

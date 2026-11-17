@@ -2357,6 +2357,21 @@ final class Bench {
                 guard let id = AgentSessions.shared.live.keys.first else { answer(["error": "no task is running"]); return }
                 AgentSessions.shared.clear(id)
                 answer(["ok": true])
+            case "line", "question":
+                guard let tab = find(request, in: browser) else { answer(missing(request)); return }
+                browser.select(tab)
+                Task { @MainActor in
+                    if browser.ai.line == nil { await browser.openLine(tab) }
+                    if let text = request["text"] as? String {
+                        browser.ai.line?.draft = text
+                        browser.ai.line?.run()
+                    }
+                    answer(browser.aiState())
+                }
+            case "escape":
+                answer(["used": browser.benchEscape()])
+            case "frames":
+                answer(["frames": browser.lineFrames()])
             case "state":
                 answer(browser.aiState())
             case "sent":

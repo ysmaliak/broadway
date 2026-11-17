@@ -226,14 +226,14 @@ final class Conversation: Identifiable {
         }
     }
 
-    private func gather(_ attachments: [Attachment]) async -> (sources: [AIPrompt.Source], images: [ProviderImage], reads: [AIPage.Read]) {
+    private func gather(_ attachments: [Attachment], on choice: ModelChoice) async -> (sources: [AIPrompt.Source], images: [ProviderImage], reads: [AIPage.Read]) {
         var sources: [AIPrompt.Source] = []
         var images: [ProviderImage] = []
         var reads: [AIPage.Read] = []
         for attachment in attachments {
             switch attachment.kind {
             case .tab(let id):
-                guard let tab = pageFinder?(id), !tab.neverSent, let read = await AIPage.read(tab) else { continue }
+                guard let tab = pageFinder?(id), !tab.neverSent || choice.plan == .thisMac, let read = await AIPage.read(tab) else { continue }
                 reads.append(read)
                 sources.append(AIPrompt.Source(read))
             case .text(let text):
@@ -258,7 +258,7 @@ final class Conversation: Identifiable {
     }
 
     private func run(asked: String, attachments: [Attachment], choice: ModelChoice) async {
-        let gathered = await gather(attachments)
+        let gathered = await gather(attachments, on: choice)
         let browsing = tools != .none
         var request = ProviderRequest(system: AIPrompt.system(fence: fence, browsing: browsing),
                                       prompt: AIPrompt.compose(fence: fence, sources: gathered.sources + carried, history: history(), request: asked))

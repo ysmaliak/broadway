@@ -448,6 +448,12 @@ enum MenuBar {
                 act("Pause Darkening", key: "view.duskPause", on: Dusk.shared.paused) { $0.pauseDusk() },
             ]
         }
+        if browser.prefs.ai {
+            items += [
+                .separator(),
+                act("Ask About This Page…", key: "view.ask", enabled: !(active?.asksAgent ?? true)) { $0.askKey() },
+            ]
+        }
         items += [
             .separator(),
             act("Hide Elements…", key: "view.hide") { $0.toggleHiding() },

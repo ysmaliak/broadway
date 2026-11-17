@@ -183,6 +183,7 @@ struct Command: Identifiable {
         Command("view.developerPanel", "Errors and Network", .view, KeyCombo("k", option: true)) { $0.toggleDeveloperPanel() },
         Command("view.dusk", "Darken This Site", .view, KeyCombo("d", shift: true)) { $0.toggleDusk() },
         Command("view.duskPause", "Pause Darkening", .view, KeyCombo("d", shift: true, option: true)) { $0.pauseDusk() },
+        Command("view.ask", "Ask About This Page…", .view, KeyCombo("j")) { $0.askKey() },
         Command("view.hide", "Hide Elements…", .view, KeyCombo("h", shift: true)) { $0.toggleHiding() },
         Command("view.hidden", "Hidden on This Site", .view, KeyCombo("u", shift: true)) { $0.reviewing.toggle() },
         Command("view.zoomIn", "Zoom In", .view, KeyCombo("+")) { $0.zoom(by: 1.1) },
