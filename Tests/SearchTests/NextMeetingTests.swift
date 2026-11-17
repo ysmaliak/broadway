@@ -165,19 +165,58 @@ struct NextMeetingTests {
         #expect(badge.hitTest(middle) === badge)
     }
 
-    @Test func everyTimeSinceTheStartFitsTheSmallestTile() {
-        let labels = (0..<60).map { Meeting.PinLabel.started(minutes: $0) } + (1...23).map { .started(minutes: $0 * 60) }
+    @Test func everyStateOfTheCapsuleWritesInOneCondensedFont() {
         let badge = PinMeetingBadgeView(browser: nil)
 
-        let widths = labels.map { label in
+        let fonts = [Meeting.PinLabel.join, .countdown("30m"), .started(minutes: 29)].map { label in
             badge.show(label, title: "Design sync")
-            return (label.text, badge.intrinsicContentSize.width)
+            return (badge.content as? KitLabel)?.font
         }
 
-        let widest = widths.max { $0.1 < $1.1 }
-        #expect(widths.allSatisfy { $0.1 <= PinMeetingPlaces.narrowest }, "\(widths)")
-        #expect((widest?.1 ?? 0) > 30, "\(String(describing: widest))")
-        #expect(badge.intrinsicContentSize.height == PinMeetingPlaces.capsule)
+        #expect(fonts.allSatisfy { $0 == PinMeetingPlaces.font }, "\(fonts)")
+        #expect(PinMeetingPlaces.font.pointSize == 9)
+    }
+
+    @Test func everyTimeSinceTheStartKeepsThreePointsASideOnTheSmallestTile() {
+        let labels = (0..<60).map { Meeting.PinLabel.started(minutes: $0) } + (1...23).map { .started(minutes: $0 * 60) }
+        let badge = PinMeetingBadgeView(browser: nil)
+        badge.tile = PinMeetingPlaces.narrowest
+
+        let sizes = labels.map { label in
+            badge.show(label, title: "Design sync")
+            return (label.text, badge.padding, badge.intrinsicContentSize)
+        }
+
+        #expect(sizes.allSatisfy { $0.1 >= 3 && ($0.2.width <= PinMeetingPlaces.narrowest || $0.1 == 3) }, "\(sizes)")
+        #expect(sizes.allSatisfy { $0.2.height == PinMeetingPlaces.capsule }, "\(sizes)")
+    }
+
+    @Test func theCapsuleHasFivePointsASideOnAWideTileAndThreeOnTheNarrowest() {
+        let badge = PinMeetingBadgeView(browser: nil)
+        badge.show(.started(minutes: 59), title: "Design sync")
+        let word = badge.content?.intrinsicContentSize.width ?? 0
+
+        let sizes = [36, 44, 60].map { (tile: CGFloat) -> (CGFloat, CGFloat) in
+            badge.tile = tile
+            return (badge.padding, badge.intrinsicContentSize.width)
+        }
+
+        #expect(word == 34)
+        #expect(sizes.map(\.0) == [3, 5, 5], "\(sizes)")
+        #expect(sizes.map(\.1) == [40, 44, 44], "\(sizes)")
+    }
+
+    @Test func joinKeepsSixPointsASideAndTheCountdownFiveOnTheNarrowestTile() {
+        let badge = PinMeetingBadgeView(browser: nil)
+        badge.tile = PinMeetingPlaces.narrowest
+
+        badge.show(.join, title: "Design sync")
+        let join = badge.padding
+        badge.show(.countdown("30m"), title: "Design sync")
+        let countdown = badge.padding
+
+        #expect(join == 6)
+        #expect(countdown == 5)
     }
 
     @Test func pinCountsTheTimeSinceTheStartWhenThisWindowIsOnTheCall() async {

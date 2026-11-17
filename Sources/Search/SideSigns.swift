@@ -351,9 +351,11 @@ final class PinMeetingView: NSView {
 
     override func layout() {
         super.layout()
+        badge.tile = bounds.width
         let size = badge.intrinsicContentSize
         let margin = PinMeetingPlaces.margin(in: bounds.height)
-        badge.frame = NSRect(x: ((bounds.width - size.width) / 2).rounded(), y: bounds.height - margin - size.height,
+        let scale = window?.backingScaleFactor ?? 2
+        badge.frame = NSRect(x: ((bounds.width - size.width) / 2 * scale).rounded() / scale, y: bounds.height - margin - size.height,
                              width: size.width, height: size.height)
         guard Store.testing, let content = window?.contentView else { return }
         Bench.meetingTile = global(bounds, in: content)

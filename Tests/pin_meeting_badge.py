@@ -6,9 +6,9 @@ sidebar width runs a test copy in a world of its own, its window under the
 desktop. The calendar is the bench's fixed one, never the Mac's; the calendar
 pin is a local page on localhost that the bench counts as a calendar. For each
 look (dark, light), each tile state (resting, live, live with a peek) and each
-badge (none: the meeting is 2 hours off; 25m; Join; 48m ago, a meeting with no
-link that started 48 minutes ago, the widest the time since the start gets), one
-still. Last, a meeting whose call this window already has open shows the time
+badge (none: the meeting is 2 hours off; 25m; Join; 29m ago, a meeting with no
+link that started 29 minutes ago), one still. On the narrowest tile 29m ago is
+wider than the tile, so it overhangs evenly and the still shows it whole. Last, a meeting whose call this window already has open shows the time
 since the start in place of Join. The capsule is
 measured twice: the frame SwiftUI gives it, and in the still, as the pixels
 that differ from the same tile with no badge. Stills and contact sheets go to
@@ -36,7 +36,7 @@ WORK = ROOT / ".context" / "pin-badge"
 SHOT = WORK / "shot"
 SCALE = [2]
 LINK = "https://meet.google.com/abc-defg-hij"
-BADGES = {"none": (120, LINK), "25m": (25, LINK), "join": (0.5, LINK), "48m ago": (-48.5, "")}
+BADGES = {"none": (120, LINK), "25m": (25, LINK), "join": (0.5, LINK), "29m ago": (-29.5, "")}
 ICONS = {"calendar": (0.15, 0.42, 0.95), "red": (0.9, 0.16, 0.14), "teal": (0.08, 0.68, 0.7),
          "grey": (0.52, 0.52, 0.52), "orange": (0.98, 0.55, 0.1)}
 
@@ -132,8 +132,9 @@ def crop(still, tile, out):
 
 def measure(base, badged, tile):
     """The capsule in the still: pixels that differ from the same tile with no
-    badge, below where the centred mark ends. Points from the tile's own top
-    left; also how many differing pixels lie outside the tile."""
+    badge, below where the centred mark ends, overhang at the sides included.
+    Points from the tile's own top left; also how many differing pixels lie
+    above or below the tile."""
     one, two = read_png(base), read_png(badged)
     width, height = min(one[0], two[0]), min(one[1], two[1])
     _, _, w, h = tile
@@ -146,7 +147,7 @@ def measure(base, badged, tile):
             if max(abs(a[i] - b[i]) for i in range(3)) <= 24:
                 continue
             px, py = x / scale - PAD, y / scale - PAD
-            if px < 0 or py < 0 or px >= w or py >= h:
+            if py < 0 or py >= h:
                 outside += 1
             elif y >= below:
                 xs.append(px)
@@ -154,6 +155,18 @@ def measure(base, badged, tile):
     if not ys:
         return None
     return {"left": min(xs), "right": max(xs) + 1 / scale, "bottom": max(ys) + 1 / scale, "outside": outside}
+
+
+def span(base, badged, frame, tile):
+    """Where the capsule's middle row differs at all from the same tile with no
+    badge, overhang included. The wash ground is only a few levels off the
+    tile, so the threshold is low."""
+    one, two = read_png(base), read_png(badged)
+    scale = SCALE[0]
+    y = round((frame[1] - tile[1] + frame[3] / 2 + PAD) * scale)
+    xs = [x / scale - PAD for x in range(min(one[0], two[0]))
+          if max(abs(a - b) for a, b in zip(pixel(one, x, y), pixel(two, x, y))) > 3]
+    return (min(xs), max(xs) + 1 / scale) if xs else None
 
 
 def shoot(pid, number, path):
@@ -252,12 +265,22 @@ def run(t, side, counts, results):
                                 fx, fy, fw, fh = frame
                                 entry["swift"] = {"top": fy - y, "bottom": y + h - (fy + fh), "left": fx - x,
                                                   "right": x + w - (fx + fw), "height": fh, "width": fw}
-                                t.ok(f"{name}: SwiftUI puts the capsule inside the tile",
-                                     fy >= y and fy + fh <= y + h and fx >= x and fx + fw <= x + w, (frame, tile))
+                                left, right = fx - x, x + w - (fx + fw)
+                                t.ok(f"{name}: the capsule sits inside the tile from top to bottom",
+                                     fy >= y and fy + fh <= y + h, (frame, tile))
+                                t.ok(f"{name}: the capsule is centred and overhangs no more than 3 points a side",
+                                     abs(left - right) <= 0.5 and min(left, right) >= -3, (left, right, fw))
                             seen = measure(base, cut, tile)
                             entry["pixels"] = seen
                             ok = seen is not None and seen["bottom"] <= tile[3] - 2
                             t.ok(f"{name}: in the still the capsule ends inside the tile", ok, seen)
+                            if frame:
+                                drawn = span(base, cut, frame, tile)
+                                entry["span"] = drawn
+                                want = (fx - x, fx - x + fw)
+                                t.ok(f"{name}: the still shows the capsule whole, nothing clips it",
+                                     drawn is not None and abs(drawn[0] - want[0]) <= 1 and abs(drawn[1] - want[1]) <= 1,
+                                     (drawn, want))
                         results.append(entry)
                     if state == "peek":
                         sv.cmd({"do": "peek", "url": "close"})
@@ -274,8 +297,10 @@ def run(t, side, counts, results):
         time.sleep(1.5)
         after = sv.cmd({"do": "meetalert", "action": "state"})
         wide = [(before.get("badge") or [0, 0, 0])[2], (after.get("badge") or [0, 0, 0])[2]]
-        t.ok(f"{side}: the drawn capsule turns from Join (34) to 3m ago (35) once a tab is on the call",
-             wide == [34, 35], wide)
+        room = (after.get("tile") or [0, 0, 0])[2]
+        sides = min(5, max(3, (room - 29) // 2))
+        t.ok(f"{side}: the drawn capsule turns from Join (29) to 3m ago (29 and {sides} a side) once a tab is on the call",
+             wide == [29, 29 + 2 * sides], (wide, room))
         t.ok(f"{side}: the time since the start once a tab is on the call", after.get("pinLabel") == "3m ago",
              after.get("pinLabel"))
         t.ok(f"{side}: VoiceOver reads it in full", after.get("pinSaid") == "Started 3 minutes ago, Design sync",
@@ -311,7 +336,9 @@ def main():
             if r.get("pixels"):
                 p = r["pixels"]
                 line += (f"; still: bottom {h - p['bottom']:.1f} above the tile's bottom, "
-                         f"{p['left']:.1f}..{p['right']:.1f} across, {p['outside']} changed pixels outside")
+                         f"{p['left']:.1f}..{p['right']:.1f} across, {p['outside']} changed pixels above or below")
+            if r.get("span"):
+                line += f", middle row drawn {r['span'][0]:.1f}..{r['span'][1]:.1f}"
             lines.append(line)
         (WORK / "measures.txt").write_text("\n".join(lines) + "\n")
         print("\n".join(lines))

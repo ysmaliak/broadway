@@ -407,6 +407,14 @@ enum PinMeetingPlaces {
     static let capsule: CGFloat = 14
     static let gap: CGFloat = 2
     static let narrowest: CGFloat = 36
+    static let joinSide: CGFloat = 6
+    static let side: CGFloat = 5
+    static let tightest: CGFloat = 3
+    static var font: NSFont { .systemFont(ofSize: 9, weight: .semibold, width: .condensed) }
+
+    static func padding(word: CGFloat, tile: CGFloat) -> CGFloat {
+        min(side, max(tightest, ((tile - word) / 2).rounded(.down)))
+    }
 
     static func margin(in height: CGFloat) -> CGFloat {
         max(0, (height - PinPlaces.mark - gap - capsule) / 2)
@@ -421,8 +429,9 @@ enum PinMeetingPlaces {
 final class PinMeetingBadgeView: KitButton {
     weak var browser: Browser?
     private let ground = KitBox(fill: nil, corners: .capsule)
-    private let word = KitLabel("", font: .systemFont(ofSize: 10, weight: .semibold), color: .white)
+    private let word = KitLabel("", font: PinMeetingPlaces.font, color: .white)
     private var label: Meeting.PinLabel = .join
+    var tile: CGFloat = .greatestFiniteMagnitude { didSet { if tile != oldValue { pad() } } }
 
     init(browser: Browser?) {
         self.browser = browser
@@ -442,36 +451,37 @@ final class PinMeetingBadgeView: KitButton {
         switch label {
         case .join:
             word.text = "Join"
-            word.font = .systemFont(ofSize: 10, weight: .semibold)
             word.color = .white
             ground.fill = .systemGreen
-            padding = 6
             toolTip = title
             setAccessibilityElement(true)
             setAccessibilityRole(.button)
             setAccessibilityLabel("Join")
         case .countdown(let text):
             word.text = text
-            word.font = .monospacedDigitSystemFont(ofSize: 10, weight: .medium)
             word.color = KitColor.ink
             ground.fill = Palette.NS.wash
-            padding = 5
             toolTip = nil
             setAccessibilityRole(.staticText)
             setAccessibilityLabel(text)
         case .started:
             word.text = label.text
-            word.font = .systemFont(ofSize: 9, weight: .semibold, width: .condensed)
             word.color = KitColor.ink
             ground.fill = Palette.NS.wash
-            padding = min(5, max(1, ((PinMeetingPlaces.narrowest - word.intrinsicContentSize.width) / 2).rounded(.down)))
             toolTip = nil
             setAccessibilityRole(.staticText)
             setAccessibilityLabel(label.said(title: title))
         }
+        pad()
         height = PinMeetingPlaces.capsule
         invalidateIntrinsicContentSize()
         needsLayout = true
+    }
+
+    private func pad() {
+        let side = label == .join ? PinMeetingPlaces.joinSide
+            : PinMeetingPlaces.padding(word: word.intrinsicContentSize.width, tile: tile)
+        if padding != side { padding = side }
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
