@@ -261,6 +261,23 @@ struct PullStackRefreshTests {
         #expect(asked.prefix(4).contains(709), "\(asked)")
     }
 
+    @Test func whenAPassHasNoTimeForAllTheOldestReadingGoesFirstSoNoRowIsLeftOut() async {
+        LiveRefs.known = [:]
+        let hub = Hub()
+        for number in 801...809 { await hub.set(number, base: "main", head: "cove-\(number)") }
+        let numbers = Array(801...809)
+        var rows = await fill(numbers, previous: [], at: 0, hub: hub)
+        await hub.slow(.milliseconds(400))
+
+        for minutes in [31.0, 51, 71] {
+            rows = await fill(numbers, previous: rows, at: minutes, hub: hub, budget: 0.7)
+        }
+
+        for row in rows {
+            #expect((row.pageRead ?? .distantPast) >= at(31), "\(row.key)")
+        }
+    }
+
     @Test func aFailedFetchKeepsTheOldReadingAndIsTriedAgain() async {
         LiveRefs.known = [:]
         let hub = Hub()

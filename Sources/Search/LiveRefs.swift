@@ -231,7 +231,10 @@ enum LiveRefs {
         let called = Set(hard.filter { again.contains(LiveIdentity.of(items[$0].key)) })
         let suspect = hard.filter { !called.contains($0) && chained.contains($0) }
         let plain = hard.filter { !called.contains($0) && !chained.contains($0) }
-        let order = hard.filter { called.contains($0) } + suspect + plain + chain + aged
+        func oldestFirst(_ indices: [Int]) -> [Int] {
+            indices.sorted { (held[$0]?.read ?? .distantPast, $0) < (held[$1]?.read ?? .distantPast, $1) }
+        }
+        let order = hard.filter { called.contains($0) } + suspect + plain + oldestFirst(chain) + oldestFirst(aged)
         let asked = Set(order)
         for want in listed where !asked.contains(want.index) {
             guard let reused = held[want.index] else { continue }
