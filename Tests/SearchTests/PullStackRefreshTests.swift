@@ -219,6 +219,48 @@ struct PullStackRefreshTests {
         #expect(await hub.asked.count == settled)
     }
 
+    @Test func aRowThatLooksWrongIsReadBeforeTheRestWhenTheBudgetIsShort() async {
+        LiveRefs.known = [:]
+        let hub = Hub()
+        for number in 601...606 { await hub.set(number, base: "main", head: "lone-\(number)") }
+        await hub.set(607, base: "main", head: "tide-1", stack: (51, 1))
+        await hub.set(608, base: "tide-1", head: "tide-2", stack: (51, 2))
+        await hub.set(609, base: "tide-2", head: "tide-3")
+        let numbers = Array(601...609)
+        var kept = await fill(numbers, previous: [], at: 0, hub: hub)
+        for index in kept.indices { kept[index].pageRead = nil }
+        LiveRefs.known = [:]
+        await hub.set(609, base: "tide-2", head: "tide-3", stack: (51, 3))
+        await hub.slow(.milliseconds(400))
+        let before = await hub.asked.count
+
+        let rushed = await fill(numbers, previous: kept, at: 1, hub: hub, budget: 0.7)
+
+        let asked = Array(await hub.asked.dropFirst(before))
+        #expect(Set(asked.prefix(4)).isSuperset(of: [608, 609]), "\(asked)")
+        #expect(chips(rushed)["609"] == "3/3")
+        #expect(chips(rushed)["608"] == "2/3")
+        #expect(chips(rushed)["607"] == "1/3")
+        #expect(rushed.contains { $0.pageRead == nil })
+    }
+
+    @Test func aRowWhosePageWasShownIsReadFirst() async {
+        LiveRefs.known = [:]
+        let hub = Hub()
+        for number in 701...709 { await hub.set(number, base: "main", head: "isle-\(number)") }
+        let numbers = Array(701...709)
+        var kept = await fill(numbers, previous: [], at: 0, hub: hub)
+        for index in kept.indices { kept[index].pageRead = nil }
+        LiveRefs.known = [:]
+        await hub.slow(.milliseconds(400))
+        let before = await hub.asked.count
+
+        _ = await fill(numbers, previous: kept, at: 1, hub: hub, again: [LiveIdentity.of(pull(709).key)], budget: 0.7)
+
+        let asked = Array(await hub.asked.dropFirst(before))
+        #expect(asked.prefix(4).contains(709), "\(asked)")
+    }
+
     @Test func aFailedFetchKeepsTheOldReadingAndIsTriedAgain() async {
         LiveRefs.known = [:]
         let hub = Hub()

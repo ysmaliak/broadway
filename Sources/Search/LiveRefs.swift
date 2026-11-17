@@ -228,7 +228,10 @@ enum LiveRefs {
                 chain.append(want.index)
             }
         }
-        let order = hard + chain + aged
+        let called = Set(hard.filter { again.contains(LiveIdentity.of(items[$0].key)) })
+        let suspect = hard.filter { !called.contains($0) && chained.contains($0) }
+        let plain = hard.filter { !called.contains($0) && !chained.contains($0) }
+        let order = hard.filter { called.contains($0) } + suspect + plain + chain + aged
         let asked = Set(order)
         for want in listed where !asked.contains(want.index) {
             guard let reused = held[want.index] else { continue }
