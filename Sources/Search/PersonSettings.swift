@@ -111,6 +111,7 @@ enum PersonSettings {
         "ai.agents": held(\.agentsOn),
         "ai.command": row("The broadway command", instead: "broadway setup"),
         "ai.groups": shared({ AIGroups.shared.on }, { AIGroups.shared.on = $0 }),
+        "groups.meetings": flag(\.meetingFolders),
         "groups.openrouter": SettingAccess(bar: .always, takes: "A key only you can add or remove", read: { _ in OpenRouterKey.shared.present }),
         "ai.replies": row("From the page", instead: "broadway replies"),
         "autocorrect": row("In Edit › Spelling and Grammar"),

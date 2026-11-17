@@ -21,12 +21,13 @@ struct TabGroup: Codable, Identifiable, Equatable {
     var pinned = true
     var leads = false
     var foldedStacks: [String] = []
+    var meeting: String? = nil
 
     var isPinned: Bool { live || pinned }
 }
 
 extension TabGroup {
-    private enum Keys: String, CodingKey { case id, name, collapsed, parent, held, query, live, icon, ai, userNamed, madeName, userIcon, userFilled, aiEmoji, aiRefused, pinned, leads, foldedStacks }
+    private enum Keys: String, CodingKey { case id, name, collapsed, parent, held, query, live, icon, ai, userNamed, madeName, userIcon, userFilled, aiEmoji, aiRefused, pinned, leads, foldedStacks, meeting }
 
     /// A group saved without its folded state is an open one.
     init(from decoder: Decoder) throws {
@@ -49,6 +50,7 @@ extension TabGroup {
         pinned = (try? c.decodeIfPresent(Bool.self, forKey: .pinned)) ?? !ai
         leads = (try? c.decodeIfPresent(Bool.self, forKey: .leads)) ?? false
         foldedStacks = (try? c.decodeIfPresent([String].self, forKey: .foldedStacks)) ?? []
+        meeting = try? c.decodeIfPresent(String.self, forKey: .meeting)
     }
 }
 

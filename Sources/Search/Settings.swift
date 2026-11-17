@@ -646,6 +646,7 @@ extension SettingsPageView {
         section("Folders") {
             groupTabsRow()
             openRouterRow()
+            settingRow(Preferences.meetingFoldersKey)
         }
         section("Old tabs") {
             settingRow("tabs.close.after")

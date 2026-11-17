@@ -127,6 +127,7 @@ extension Browser {
     func joinMeeting(_ link: URL, event: CalendarEvent? = nil) {
         let event = event ?? meetingEvent(for: link)
         let landed = landMeeting(link, event: event)
+        landed.browser.meetingJoined(link, event: event)
         MeetingSpaceMemory.shared.opened(link, calendar: event?.calendar ?? "", in: landed.space)
         guard !Store.testing else { return }
         Browsers.show(landed.browser)

@@ -4305,6 +4305,9 @@ final class Bench {
         case "meetalert":
             meetingAlertCommand(request, browser: browser, answer)
 
+        case "meetfolder":
+            meetingFolderCommand(request, browser: browser, answer)
+
         case "idle":
             BenchIdle.run(request, browser: browser, answer)
 

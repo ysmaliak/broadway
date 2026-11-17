@@ -93,6 +93,7 @@ extension SettingsPageView {
         case "sites.keep": row(id, control: toggle(id, get: { !prefs.keepsSignIns }, set: { prefs.keepsSignIns = !$0 }))
         case "history.pageText": flag(id, \.remembersPageText)
         case "live.offers": flag(id, \.suggestsLiveFolders)
+        case Preferences.meetingFoldersKey: flag(id, \.meetingFolders)
         case IntegrationNow.key:
             row(id, control: toggle(id, get: { IntegrationNow.on }, set: { Store.settings.set($0, forKey: IntegrationNow.key) }))
         case "ai.agents", "agents.mode": agentRow(id)

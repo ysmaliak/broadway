@@ -235,10 +235,11 @@ final class SiteCard: NSObject, NSMenuDelegate {
 
     private func moreItems() -> [NSMenuItem] {
         var out: [NSMenuItem] = []
-        if !tab.shy, !Store.settings.bool(forKey: Preferences.waitsKey), web, let host = tab.pageAddress?.host() {
-            let on = Autoplay.allowed(host)
-            let item = action("Play Sound by Itself", on: on) { Autoplay.set(!on, for: host) }
-            item.toolTip = "Takes effect from the next page"
+        if !tab.shy, !Store.settings.bool(forKey: Preferences.waitsKey), web, let url = tab.pageAddress, let host = url.host() {
+            let call = CallSound.plays(url, agent: tab.agent)
+            let on = call || Autoplay.allowed(host)
+            let item = action("Play Sound by Itself", on: on, enabled: !call) { Autoplay.set(!on, for: host) }
+            item.toolTip = call ? CallSound.always : "Takes effect from the next page"
             out.append(item)
         }
         if !tab.shy, browser.prefs.floatsOnLeave || browser.prefs.floatsAway, web,

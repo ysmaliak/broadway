@@ -39,6 +39,7 @@ final class Browser: NSObject {
     static var hasActiveFileImports: Bool { !activeFileImports.isEmpty }
     private(set) var tabs: [Tab] = [] {
         didSet {
+            meetingRowChanged(from: oldValue)
             arrangeGroupedTabs()
             if !selectedTabIDs.isEmpty {
                 let valid = selectedTabIDs.intersection(Set(tabs.map(\.id)))
@@ -5329,7 +5330,7 @@ extension Browser {
         prepare(tab)
         // A link opened from a grouped tab joins its group, only while groups
         // are on: turned off, they sleep, and nothing new goes into one.
-        if prefs.usesTabGroups, let source, !tab.shy, !tab.bench { tab.groupID = source.groupID }
+        if prefs.usesTabGroups, let source, !tab.shy, !tab.bench { tab.groupID = meetingKeepsLoose(from: source, link: link) ? nil : source.groupID }
         if link, let source { tab.linkedFrom = source.id }
         tabs.insert(tab, at: atEnd ? tabs.count : front ? placeForFront() : link ? placeForLink(from: source) : placeForNew())
         if link, !atEnd, !foreground { noteLink(tab, from: source) }
@@ -7131,7 +7132,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
             }
             if policy == .allow, action.targetFrame?.isMainFrame ?? true, let url = action.request.url {
                 let shy = self?.tab(for: webView)?.shy == true || !webView.configuration.websiteDataStore.isPersistent
-                Autoplay.apply(to: preferences, for: url, shy: shy,
+                Autoplay.apply(to: preferences, for: url, shy: shy, agent: self?.anyTab(for: webView)?.agent == true,
                                made: webView.configuration.mediaTypesRequiringUserActionForPlayback)
                 PrivacySignal.apply(to: preferences, shy: shy)
             }

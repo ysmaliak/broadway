@@ -220,23 +220,23 @@ enum Autoplay {
     /// copy of its configuration — kept the old answer until it slept: with
     /// the switch off again, its videos still waited for a click. The page's
     /// own policy says what the switch says instead, from its next load.
-    static func apply(to preferences: WKWebpagePreferences, for url: URL, shy: Bool,
+    static func apply(to preferences: WKWebpagePreferences, for url: URL, shy: Bool, agent: Bool = false,
                       made: WKAudiovisualMediaTypes) {
         let waits = Store.settings.bool(forKey: Preferences.waitsKey)
-        let policy: Int
-        if !waits, !shy, let host = url.host(), allowed(host) {
-            policy = 1
-        } else if waits, !made.contains(.video) {
-            policy = 3
-        } else if !waits, made.contains(.video) {
-            policy = 2
-        } else {
-            return
-        }
+        guard let policy = policy(for: url, shy: shy, agent: agent, waits: waits, made: made, allowed: allowed) else { return }
         let set = NSSelectorFromString("_setAutoplayPolicy:")
         guard preferences.responds(to: set) else { return }
         typealias Setter = @convention(c) (AnyObject, Selector, Int) -> Void
         unsafeBitCast(preferences.method(for: set), to: Setter.self)(preferences, set, policy)
+    }
+
+    static func policy(for url: URL, shy: Bool, agent: Bool, waits: Bool, made: WKAudiovisualMediaTypes,
+                       allowed: (String) -> Bool) -> Int? {
+        if CallSound.plays(url, agent: agent) { return 1 }
+        if !waits, !shy, let host = url.host(), allowed(host) { return 1 }
+        if waits, !made.contains(.video) { return 3 }
+        if !waits, made.contains(.video) { return 2 }
+        return nil
     }
 }
 

@@ -616,6 +616,13 @@ final class Preferences {
         didSet { store.set(suggestsLiveFolders, forKey: Preferences.suggestsLiveKey) }
     }
     nonisolated static let suggestsLiveKey = "live.suggest"
+    var meetingFolders: Bool {
+        didSet { store.set(meetingFolders, forKey: Preferences.meetingFoldersKey) }
+    }
+    nonisolated static let meetingFoldersKey = "groups.meetings"
+    nonisolated static func meetingFoldersOn(_ store: UserDefaults) -> Bool {
+        store.object(forKey: meetingFoldersKey) as? Bool ?? true
+    }
     /// Named, collapsible sections in the sidebar.
     /// Always on since the Settings rework (Drice, 24 Oct 2026): it only
     /// adds a command, so there is no switch. Still a property, for the
@@ -811,6 +818,7 @@ final class Preferences {
         liveFolders = Store.testing ? store.bool(forKey: "live.on") : true
         suggestsLiveFolders = Store.testing ? store.bool(forKey: Preferences.suggestsLiveKey)
             : store.object(forKey: Preferences.suggestsLiveKey) as? Bool ?? true
+        meetingFolders = Preferences.meetingFoldersOn(store)
         let keepsSite = true
         pinsGoHome = keepsSite
         ai = store.object(forKey: "ai") as? Bool ?? true

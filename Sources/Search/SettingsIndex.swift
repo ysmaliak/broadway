@@ -112,6 +112,10 @@ enum SettingsIndex {
               detail: "Related tabs find each other as you open them. Runs on this Mac. Nothing leaves it.",
               keys: [AIGroups.onKey],
               words: ["tab groups", "organize", "folders", "emoji", "apple intelligence", "sort tabs", "automatic folders"]),
+        .init(id: Preferences.meetingFoldersKey, group: "tabs", icon: "video", title: "A folder for each meeting",
+              detail: "Pages opened from a call gather in a folder named after the meeting",
+              keys: [Preferences.meetingFoldersKey],
+              words: ["meeting", "meetings", "call", "calls", "zoom", "meet", "teams", "folder", "folders", "group", "calendar"]),
         .init(id: "groups.openrouter", group: "tabs", icon: "key", title: AIGroupWords.keyTitle,
               detail: AIGroupWords.offer(remoteDecides: false),
               words: ["openrouter", "api key", "key", "folder names", "name folders", "group tabs", "keychain"]),
@@ -573,6 +577,9 @@ extension SettingsIndex {
         case "live.offers":
             guard let on = value as? Bool else { return false }
             prefs.suggestsLiveFolders = on
+        case Preferences.meetingFoldersKey:
+            guard let on = value as? Bool else { return false }
+            prefs.meetingFolders = on
         case "ai.agents":
             guard let on = value as? Bool else { return false }
             prefs.agentsOn = on

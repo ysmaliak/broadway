@@ -52,6 +52,7 @@ enum SettingsStageMap {
 
         "ai.groups": .spot(.tabs),
         "groups.openrouter": .spot(.tabs),
+        "groups.meetings": .spot(.tabs),
 
         "ai.agents": .spot(.agents),
         "agents.mode": .spot(.agents),
