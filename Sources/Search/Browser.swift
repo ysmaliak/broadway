@@ -1223,6 +1223,7 @@ final class Browser: NSObject {
             guard let self else { return }
             guard let read else { return announce("The keychain refused it") }
             guard tabs.contains(where: { $0 === tab }), tab.pageAddress == page else { return }
+            tab.keptFill = FillMark(host: list.host, user: read.user, password: read.password)
             tab.fill(user: read.user, password: read.password, onlyOn: page) { [weak self] worked in
                 if !worked { self?.announce("The sign-in fields are gone") }
             }
@@ -6355,25 +6356,12 @@ extension Browser {
             // A password manager extension that asked Chrome's way to do the
             // saving itself.
             if Extensions.shared.passwordSavingTakenBy != nil { return }
-            // Just filled from the Passwords app: it is kept there already.
-            if tab.appleFill?.matches(host: host, user: user, password: password) == true { return }
+            let sent = SentSignIn(host: host, user: user, password: password)
+            let marks = [tab.appleFill, tab.keptFill]
             Task { [weak self] in
-                let (known, same): ([Kept], Login?) = await Vault.off {
-                    let known = Vault.kept(for: host)
-                    return (known, known.first { $0.user == user }.flatMap(Vault.login))
-                }
-                guard let self else { return }
-                if var same, same.password == password {
-                    same.clear = clear
-                    let used = same
-                    await Vault.off { Vault.touch(used) }
-                    return
-                }
-                let offer = Offer(
-                    login: Login(host: host, user: user, password: password, used: nil, clear: clear),
-                    changed: known.contains { $0.user == user }
-                )
-                guard offering != offer else { return }
+                guard let offer = await SavedAlready.offer(for: sent, marks: marks, clear: clear),
+                      let self, offering != offer
+                else { return }
                 offering = offer
             }
         }

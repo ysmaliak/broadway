@@ -452,23 +452,4 @@ final class ApplePasswords {
     }
 }
 
-/// What a page was filled with from the Passwords app, remembered only well
-/// enough to recognise it being sent: the site, the name, and the password's
-/// HMAC under a key made for this one fill and kept in memory.
-struct AppleFill {
-    let host: String
-    let user: String
-    private let key = SymmetricKey(size: .bits256)
-    private let mark: Data
-
-    init(host: String, user: String, password: String) {
-        self.host = host
-        self.user = user
-        mark = Data(HMAC<SHA256>.authenticationCode(for: Data(password.utf8), using: key))
-    }
-
-    func matches(host: String, user: String, password: String) -> Bool {
-        guard user == self.user, ApplePasswords.belongs([host], to: self.host) else { return false }
-        return HMAC<SHA256>.isValidAuthenticationCode(mark, authenticating: Data(password.utf8), using: key)
-    }
-}
+typealias AppleFill = FillMark

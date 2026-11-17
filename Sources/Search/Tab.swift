@@ -337,6 +337,7 @@ final class Tab: Identifiable {
         // sending its window there, then writing) is that page's, not the
         // one before it, and is offered nothing that belonged to it.
         if let url = built?.url { committed = url }
+        dropFillMarks()
         // A page arrived after all: the address is its own again.
         if held != nil, let url = built?.url, url.absoluteString != "about:blank" {
             held = nil
@@ -668,6 +669,7 @@ final class Tab: Identifiable {
     /// it isn't offered a second place in Search's keychain. A keyed hash of
     /// the password, never the password.
     @ObservationIgnored var appleFill: AppleFill?
+    @ObservationIgnored var keptFill: FillMark?
 
     /// A tab a script opened through the bench, beside yours. Signed in as
     /// you, so it sees what you see — but never selected for you, never in
@@ -1403,6 +1405,7 @@ final class Tab: Identifiable {
         guard let sent else { return }
         guard Date().timeIntervalSince(sent.at) < 45 else {
             self.sent = nil
+            dropFillMarks()
             return
         }
         guard navigated else {
@@ -1424,8 +1427,16 @@ final class Tab: Identifiable {
                 self.sent = nil
                 self.named = nil
                 self.onCredentials?(self, sent.host, sent.user, sent.password, sent.clear)
+                self.dropFillMarks()
             }
         }
+    }
+
+    private func dropFillMarks() {
+        guard sent == nil else { return }
+        let host = pageAddress?.host()?.lowercased() ?? ""
+        if appleFill?.covers(host) == false { appleFill = nil }
+        if keptFill?.covers(host) == false { keptFill = nil }
     }
 
     /// Puts a remembered name and password where a person would have typed

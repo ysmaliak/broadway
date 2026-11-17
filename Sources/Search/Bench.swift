@@ -2444,8 +2444,10 @@ final class Bench {
             }
             let offer: [String: Any] = browser.offering.map { ["user": $0.login.user, "host": $0.login.host, "changed": $0.changed] } ?? [:]
             // Every account this world keeps, by name, without a secret.
-            let users = Vault.all().map(\.user)
-            guard let list = browser.suggesting else { answer(["shown": false, "offer": offer, "kept": users.count, "users": users]); return }
+            let all = Vault.all()
+            let users = all.map(\.user)
+            let used = all.map { ["host": $0.host, "user": $0.user, "used": $0.used?.timeIntervalSince1970 ?? 0] as [String: Any] }
+            guard let list = browser.suggesting else { answer(["shown": false, "offer": offer, "kept": users.count, "users": users, "used": used]); return }
             let rows = list.passkeys.map { ["passkey": $0.name] } + list.logins.map { ["login": $0.user] }
             if let press = request["press"] as? [Double], press.count == 2 {
                 // A press and a release at a point of the window, from its
@@ -2474,7 +2476,7 @@ final class Bench {
                 if pick < list.passkeys.count { browser.choose(list.passkeys[pick]) } else { browser.choose(list.logins[pick - list.passkeys.count]) }
             }
             var out: [String: Any] = ["shown": true, "rows": rows, "nameOnly": list.nameOnly, "wide": list.wide, "offer": offer, "kept": users.count,
-                                      "users": users, "spot": [list.spot.minX, list.spot.minY, list.spot.width, list.spot.height]]
+                                      "users": users, "used": used, "spot": [list.spot.minX, list.spot.minY, list.spot.width, list.spot.height]]
             // With Split View's stage, the card as drawn, in the window from
             // its top-left, and the page-sized box it hangs in.
             if let drawn = PaneStage.accountCard() {
