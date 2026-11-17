@@ -53,16 +53,15 @@ enum TroubleKind: String, CaseIterable {
         }
     }
 
-    func line(host: String?) -> String {
-        let site = host.map { "\u{201C}\($0)\u{201D}" } ?? "this site"
+    func line(waiting: Bool = false) -> String {
         switch self {
-        case .notFound: return "Broadway couldn't find \(site). Check the spelling, or search for it instead."
-        case .offline: return "Your Mac isn't connected to the internet. Reconnect, then try again."
-        case .slow: return "\(site.prefix(1).uppercased() + site.dropFirst()) is taking its time. It might be busy, so try again in a moment."
-        case .refused: return "\(site.prefix(1).uppercased() + site.dropFirst()) is there, but isn't taking visitors right now"
-        case .insecure: return "Broadway couldn't confirm \(site) is who it says it is, so it stopped before anything was sent"
+        case .notFound: return "Check the spelling, or search for it instead"
+        case .offline: return waiting ? "This page will load when your Mac is back online" : "Reconnect, then try again"
+        case .slow: return "It might be busy. Try again in a moment."
+        case .refused: return "It's there, but it isn't answering right now"
+        case .insecure: return "The site couldn't be confirmed, so nothing was sent"
         case .tooLarge: return MemoryWords.line
-        case .other: return "Something got in the way. Trying again often fixes it."
+        case .other: return "Trying again often fixes it"
         }
     }
 
@@ -86,145 +85,71 @@ extension Tab {
 final class TroubleView: KitFlippedView {
     var onRetry: () -> Void
     var onSearch: (() -> Void)? { didSet { searchButton.isHidden = !(kind == .notFound && onSearch != nil) } }
-    var look: SpaceLook { didSet { if look != oldValue { restyle() } } }
 
     private(set) var message: String
     private(set) var host: String?
+    private(set) var waiting: Bool
     private var kind: TroubleKind { TroubleKind(message: message) }
 
-    private let ground = PageGroundView()
-    private let glow = TroubleGlow()
-    private let disc = KitBox(fill: nil, corners: .capsule)
-    private let glyph = KitSymbol("exclamationmark.triangle", style: .init(size: 38, weight: .semibold))
-    private let title = KitParagraph("", font: .systemFont(ofSize: 26, weight: .bold), color: KitColor.ink, alignment: .center)
-    private let line = KitParagraph("", font: .systemFont(ofSize: 15), color: KitColor.muted, alignment: .center, maxWidth: 400)
-    private let retryPill = TroublePill("Try Again")
-    private let searchPill = TroublePill("Search Instead")
-    private lazy var retryButton = KitButton(.plain(press: 0.94), label: "Try Again") { [weak self] in self?.onRetry() }
-    private lazy var searchButton = KitButton(.plain(press: 0.94), label: "Search Instead") { [weak self] in self?.onSearch?() }
-    private let stack = NSStackView.kit(.vertical, spacing: 14, alignment: .centerX, [])
+    private let ground = KitBox(fill: KitColor.ground)
+    private let glyph = KitSymbol("exclamationmark.triangle", style: .init(size: 22, weight: .regular), tint: KitColor.muted)
+    private let title = KitParagraph("", font: SettingsMetrics.headingFont, color: KitColor.ink, alignment: .center)
+    private let line = KitParagraph("", font: SettingsMetrics.titleFont, color: KitColor.muted, alignment: .center, maxWidth: 400)
+    private let site = KitLabel("", font: .systemFont(ofSize: 11), color: KitColor.muted)
+    private lazy var retryButton = KitBroadwayButton("Try Again", kind: .primary) { [weak self] in self?.onRetry() }
+    private lazy var searchButton = KitBroadwayButton("Search Instead") { [weak self] in self?.onSearch?() }
+    private let stack = NSStackView.kit(.vertical, spacing: 6, alignment: .centerX, [])
 
-    init(message: String, host: String? = nil, look: SpaceLook = SpaceLook(),
+    init(message: String, host: String? = nil, waiting: Bool = false,
          search: (() -> Void)? = nil, retry: @escaping () -> Void) {
         self.message = message
         self.host = host
-        self.look = look
+        self.waiting = waiting
         self.onRetry = retry
         super.init(frame: .zero)
         wantsLayer = true
         addSubview(ground)
-        addSubview(glow)
-        disc.kitSize(width: 92, height: 92)
-        glyph.translatesAutoresizingMaskIntoConstraints = false
-        disc.addSubview(glyph)
-        NSLayoutConstraint.activate([glyph.centerXAnchor.constraint(equalTo: disc.centerXAnchor),
-                                     glyph.centerYAnchor.constraint(equalTo: disc.centerYAnchor)])
-        disc.setAccessibilityElement(false)
-        retryButton.content = retryPill
-        searchButton.content = searchPill
-        searchPill.fill = KitColor.ink.withAlphaComponent(0.07)
-        searchPill.label.color = KitColor.ink
-        let buttons = NSStackView.kit(.horizontal, spacing: 10, [retryButton, searchButton])
-        for view in [disc, title, line, buttons] { stack.addArrangedSubview(view) }
-        stack.setCustomSpacing(20, after: disc)
-        stack.setCustomSpacing(24, after: line)
+        site.overflow = .head
+        site.alignment = .center
+        let buttons = NSStackView.kit(.horizontal, spacing: 8, [searchButton, retryButton])
+        for view in [glyph, title, line, site, buttons] { stack.addArrangedSubview(view) }
+        stack.setCustomSpacing(12, after: glyph)
+        stack.setCustomSpacing(20, after: line)
+        stack.setCustomSpacing(20, after: site)
         stack.setHuggingPriority(.defaultLow, for: .horizontal)
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
-        let wide = stack.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, constant: -64)
         NSLayoutConstraint.activate([
             stack.centerXAnchor.constraint(equalTo: centerXAnchor),
             stack.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -20),
-            wide,
+            stack.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, constant: -64),
             title.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor),
             line.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor),
+            site.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor),
         ])
         self.onSearch = search
-        show(message: message, host: host)
-        restyle()
+        show(message: message, host: host, waiting: waiting)
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    func show(message: String, host: String?) {
+    func show(message: String, host: String?, waiting: Bool = false) {
         self.message = message
         self.host = host
+        self.waiting = waiting
         glyph.name = kind.symbol
         title.text = message
-        line.text = kind.line(host: host)
+        line.text = kind.line(waiting: waiting)
+        site.text = host ?? ""
+        site.isHidden = host?.isEmpty ?? true
+        stack.setCustomSpacing(site.isHidden ? 20 : 4, after: line)
         searchButton.isHidden = !(kind == .notFound && onSearch != nil)
     }
 
     override func layout() {
         super.layout()
         ground.frame = bounds
-        glow.frame = bounds
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        restyle()
-    }
-
-    private(set) var page: PageGround?
-
-    private func restyle() {
-        let page = look.page(dark: kitDark)
-        self.page = page
-        ground.show(page)
-        stack.appearance = page.appearance
-        let accent = page.accentColour
-        glow.tint = accent
-        disc.fill = accent.withAlphaComponent(0.14)
-        glyph.tint = accent
-        retryPill.fill = accent
-        retryPill.label.color = page.accentInk
-    }
-}
-
-final class TroubleGlow: KitFlippedView {
-    var tint: NSColor = KitBrand.blue { didSet { needsDisplay = true } }
-
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        needsDisplay = true
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        NSBezierPath(rect: bounds).addClip()
-        let base = tint.kitResolved(dark: kitDark)
-        let gradient = NSGradient(colors: [base.withAlphaComponent(0.22 * base.alphaComponent), base.withAlphaComponent(0)])
-        let top = NSPoint(x: bounds.midX, y: 0)
-        gradient?.draw(fromCenter: top, radius: 0, toCenter: top, radius: 520, options: [])
-    }
-}
-
-final class TroublePill: KitBox {
-    let label: KitLabel
-
-    init(_ title: String) {
-        label = KitLabel(title, font: .systemFont(ofSize: 13, weight: .semibold))
-        super.init(frame: .zero)
-        corners = .capsule
-        label.setAccessibilityElement(false)
-        addSubview(label)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError() }
-
-    override var intrinsicContentSize: NSSize {
-        NSSize(width: label.intrinsicContentSize.width + 36, height: 32)
-    }
-
-    override func layout() {
-        super.layout()
-        let size = label.intrinsicContentSize
-        label.frame = kitSnap(NSRect(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2,
-                                     width: size.width, height: size.height))
     }
 }
 
@@ -232,9 +157,8 @@ final class TroublePill: KitBox {
 enum TroubleSurface {
     static func make(_ request: [String: Any]) -> NSView {
         let kind = TroubleKind(rawValue: request["kind"] as? String ?? "") ?? .notFound
-        let look = (request["space"] as? String).flatMap { SpaceLook.named($0) }
-            ?? (request["tint"] as? String).map { SpaceLook(colours: [$0], intensity: SpaceLook.bold) } ?? SpaceLook()
-        let view = TroubleView(message: kind.message, host: "example.test", look: look, search: {}, retry: {})
+        let view = TroubleView(message: kind.message, host: request["host"] as? String,
+                               waiting: request["waiting"] as? Bool ?? false, search: {}, retry: {})
         return NSView.kitFixed(view, width: CGFloat(request["width"] as? Double ?? 720),
                                height: CGFloat(request["height"] as? Double ?? 520))
     }

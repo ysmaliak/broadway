@@ -31,15 +31,42 @@ import Testing
         let messages = TroubleKind.allCases.map(\.message)
 
         #expect(Set(messages).count == messages.count)
-        #expect(messages.allSatisfy { $0.count <= 40 && !$0.hasSuffix(".") })
+        #expect(messages.allSatisfy { $0.count <= 48 && !$0.hasSuffix(".") })
     }
 
-    @Test func theLineNamesTheSite() {
-        let named = TroubleKind.notFound.line(host: "example.test")
-        let unnamed = TroubleKind.refused.line(host: nil)
+    @Test(arguments: [
+        (TroubleKind.notFound, "Check the spelling, or search for it instead"),
+        (.offline, "Reconnect, then try again"),
+        (.slow, "It might be busy. Try again in a moment."),
+        (.refused, "It's there, but it isn't answering right now"),
+        (.insecure, "The site couldn't be confirmed, so nothing was sent"),
+        (.tooLarge, "It was stopped so your Mac could keep going. Trying again may do the same."),
+        (.other, "Trying again often fixes it"),
+    ])
+    func eachKindHasItsLine(kind: TroubleKind, line: String) {
+        let said = kind.line()
 
-        #expect(named.contains("\u{201C}example.test\u{201D}"))
-        #expect(unnamed.hasPrefix("This site"))
+        #expect(said == line)
+    }
+
+    @Test func anOfflinePageThatWaitsSaysItWillLoadByItself() {
+        let said = TroubleKind.offline.line(waiting: true)
+
+        #expect(said == "This page will load when your Mac is back online")
+    }
+
+    @Test(arguments: TroubleKind.allCases.filter { $0 != .offline })
+    func onlyTheOfflineLineChangesWhenThePageWaits(_ kind: TroubleKind) {
+        let waiting = kind.line(waiting: true)
+
+        #expect(waiting == kind.line())
+    }
+
+    @Test(arguments: TroubleKind.allCases)
+    func noWordOnThePageNamesTheBrowser(_ kind: TroubleKind) {
+        let words = [kind.message, kind.line(), kind.line(waiting: true)]
+
+        #expect(words.allSatisfy { !$0.contains("Broadway") })
     }
 
     @Test func anUnknownMessageIsTheGeneralKind() {

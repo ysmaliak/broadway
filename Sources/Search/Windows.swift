@@ -656,14 +656,18 @@ final class PopupTroubleView: KitFlippedView {
             trouble = nil
             return
         }
+        let host = tab.popupTroubleHost
+        let waiting = tab.troubleWaits(before: trouble?.waiting ?? false)
         let view = trouble ?? {
-            let made = TroubleView(message: failure, retry: { [weak tab] in tab?.reload() })
+            let made = TroubleView(message: failure, host: host, waiting: waiting, retry: { [weak tab] in tab?.reload() })
             addSubview(made)
             trouble = made
             return made
         }()
         view.onRetry = { [weak tab] in tab?.reload() }
-        if view.message != failure || view.host != nil { view.show(message: failure, host: nil) }
+        if view.message != failure || view.host != host || view.waiting != waiting {
+            view.show(message: failure, host: host, waiting: waiting)
+        }
         view.frame = bounds
     }
 }

@@ -14,7 +14,7 @@ enum MemoryCeiling {
 
 enum MemoryWords {
     static let title = "This page used too much memory and was stopped"
-    static let line = "Broadway stopped it so your Mac could keep going. Trying again may do the same."
+    static let line = "It was stopped so your Mac could keep going. Trying again may do the same."
     static let agent = "The page used too much memory and was stopped. Loading it again may do the same."
 }
 

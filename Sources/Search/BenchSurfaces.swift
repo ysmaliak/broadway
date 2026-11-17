@@ -28,7 +28,16 @@ enum BenchSurfaces {
                 answer(["error": "no surface named \(request["name"] as? String ?? "")", "surfaces": names])
                 return
             }
-            answer(show(view, request))
+            let said = show(view, request)
+            guard let path = request["path"] as? String, let window = windows.last else { answer(said); return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                var said = said
+                if BenchSurfacePicture.save(window, to: path) {
+                    said["saved"] = path
+                    said["path"] = path
+                }
+                answer(said)
+            }
         }
     }
 
@@ -148,14 +157,6 @@ enum BenchSurfaces {
         windows.append(window)
         var said: [String: Any] = ["number": window.windowNumber, "size": [size.width, size.height], "dark": dark]
         if request["controls"] as? Bool == true { said["controls"] = controls(in: view) }
-        if let path = request["path"] as? String {
-            stage.layoutSubtreeIfNeeded()
-            stage.displayIfNeeded()
-            if let picture = stage.bitmapImageRepForCachingDisplay(in: stage.bounds) {
-                stage.cacheDisplay(in: stage.bounds, to: picture)
-                if (try? picture.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))) != nil { said["path"] = path }
-            }
-        }
         return said
     }
 

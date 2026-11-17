@@ -113,7 +113,6 @@ final class TabPageView: NSView {
             troubleFor = ObjectIdentifier(tab)
             trouble.show(tab, browser: browser)
         }
-        trouble?.look = look
         trouble?.needsLayout = true
         showStuck()
         swipe.pull = tab.pull
@@ -1071,8 +1070,6 @@ final class PageTroubleView: KitFlippedView {
         return hit === self ? nil : hit
     }
 
-    var look: SpaceLook? { didSet { if look != oldValue { needsLayout = true } } }
-
     private var search: (() -> Void)? {
         guard let browser, let host = tab.address?.host() ?? tab.pending?.host(),
               let url = browser.searchURL(for: host) else { return nil }
@@ -1087,19 +1084,20 @@ final class PageTroubleView: KitFlippedView {
             trouble = nil
             return
         }
-        let host = tab.address?.host() ?? tab.pending?.host()
-        let look = look ?? browser?.space.look ?? SpaceLook()
+        let host = browser?.troubleHost(for: tab)
+        let waiting = tab.troubleWaits(before: trouble?.waiting ?? false)
         let tab = tab
         let view = trouble ?? {
-            let made = TroubleView(message: failure, host: host, look: look, search: search, retry: { tab.reload() })
+            let made = TroubleView(message: failure, host: host, waiting: waiting, search: search, retry: { tab.reload() })
             addSubview(made)
             trouble = made
             return made
         }()
-        view.look = look
         view.onRetry = { tab.reload() }
         view.onSearch = search
-        if view.message != failure || view.host != host { view.show(message: failure, host: host) }
+        if view.message != failure || view.host != host || view.waiting != waiting {
+            view.show(message: failure, host: host, waiting: waiting)
+        }
         view.frame = bounds
     }
 }

@@ -74,9 +74,10 @@ SURFACES = {
     "shield-offer": {"surface": {"name": "shield-offer"}},
 
     "trouble": {"surface": {"name": "trouble", "kind": "notFound"}},
-    "trouble-pale": {"surface": {"name": "trouble", "kind": "offline", "tint": "F2E6A7", "pale": True}},
-    "trouble-vivid": {"surface": {"name": "trouble", "kind": "refused", "tint": "FB3A4D"}},
-    "trouble-black": {"surface": {"name": "trouble", "kind": "insecure", "tint": "000000"}},
+    "trouble-waiting": {"surface": {"name": "trouble", "kind": "offline", "waiting": True}},
+    "trouble-host": {"surface": {"name": "trouble", "kind": "refused", "host": "example.test"}},
+    "trouble-narrow": {"surface": {"name": "trouble", "kind": "insecure", "width": 320}},
+    "trouble-memory": {"surface": {"name": "trouble", "kind": "tooLarge"}},
     "get-to-know": {"surface": {"name": "get-to-know", "height": 140}},
     "get-to-know-done": {"surface": {"name": "get-to-know", "height": 140, "stage": "done"}},
     "developer-servers": {"surface": {"name": "developer-servers", "height": 160}},
