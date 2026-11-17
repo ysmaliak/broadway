@@ -143,13 +143,14 @@ struct CallAway: Equatable {
 }
 
 enum CallTiles {
-    static func style(_ room: NSEdgeInsets) -> String {
+    static func style(_ room: NSEdgeInsets, corner: CGFloat) -> String {
         """
         html[data-broadway-tiles], html[data-broadway-tiles] body { background: #000 !important; overflow: hidden !important; }
         [data-broadway-tiles-path] { visibility: visible !important; background: transparent !important; box-shadow: none !important; \
         transform: none !important; filter: none !important; \
         backdrop-filter: none !important; perspective: none !important; contain: none !important; will-change: auto !important; }
-        [data-broadway-tiles-path] > :not([data-broadway-tiles-path]):not([data-broadway-tiles-grid]) { visibility: hidden !important; }
+        [data-broadway-tiles-path] > :not([data-broadway-tiles-path]):not([data-broadway-tiles-grid]):not([data-broadway-tiles-screen]) \
+        { visibility: hidden !important; }
         [data-broadway-tiles-grid] { position: fixed !important; top: \(px(room.top)) !important; right: \(px(room.right)) !important; \
         bottom: \(px(room.bottom)) !important; left: \(px(room.left)) !important; width: auto !important; height: auto !important; \
         min-width: 0 !important; min-height: 0 !important; max-width: none !important; max-height: none !important; \
@@ -158,6 +159,16 @@ enum CallTiles {
         transform-origin: 0 0 !important; }
         [data-broadway-tiles-chrome], [data-broadway-tiles-grid] [data-participant-id] button, [data-broadway-tiles-grid] [role=toolbar], \
         [data-broadway-tiles-grid] [role=alert], [data-broadway-tiles-grid] [role=dialog] { visibility: hidden !important; }
+        html[data-broadway-tiles=screen] body, html[data-broadway-tiles=screen] body *:not([data-broadway-tiles-screen]) \
+        { visibility: hidden !important; }
+        html[data-broadway-tiles=screen] [data-broadway-tiles-path] { opacity: 1 !important; clip-path: none !important; \
+        mask: none !important; container-type: normal !important; content-visibility: visible !important; }
+        html[data-broadway-tiles=screen] [data-broadway-tiles-screen] { position: fixed !important; transform: none !important; \
+        filter: none !important; clip-path: none !important; mask: none !important; opacity: 1 !important; \
+        min-width: 0 !important; min-height: 0 !important; max-width: none !important; max-height: none !important; \
+        margin: 0 !important; padding: 0 !important; border: 0 !important; border-radius: \(px(corner)) !important; \
+        box-shadow: none !important; background: #000 !important; z-index: 2147483647 !important; visibility: visible !important; }
+        html[data-broadway-tiles=screen] video[data-broadway-tiles-screen] { object-fit: contain !important; }
         """
     }
 
@@ -168,9 +179,9 @@ enum CallTiles {
         "[" + selectors.map { "\"\($0)\"" }.joined(separator: ",") + "]"
     }
 
-    private static let marks = "['data-broadway-tiles-grid', 'data-broadway-tiles-path', 'data-broadway-tiles-chrome']"
+    private static let marks = "['data-broadway-tiles-grid', 'data-broadway-tiles-path', 'data-broadway-tiles-chrome', 'data-broadway-tiles-screen']"
 
-    static func enter(room: NSEdgeInsets) -> String {
+    static func enter(room: NSEdgeInsets, corner: CGFloat = 0) -> String {
         """
         (function () {
           var root = document.documentElement;
@@ -192,47 +203,90 @@ enum CallTiles {
             \(marks).forEach(function (name) {
               [].forEach.call(document.querySelectorAll('[' + name + ']'), function (el) { el.removeAttribute(name); });
             });
+            window.__broadwayCallScreen = null;
           }
           function drop(id) { var el = document.getElementById(id); if (el) el.remove(); }
-          var grid = tiles[0] || null;
+          \(CallScreen.finding)
+          function dress(mode) {
+            var style = document.getElementById('broadway-call-tiles');
+            if (!style) {
+              style = document.createElement('style');
+              style.id = 'broadway-call-tiles';
+              (document.head || root).appendChild(style);
+            }
+            var text = \(jsString(style(room, corner: corner)));
+            if (style.textContent !== text) style.textContent = text;
+            if (root.getAttribute('data-broadway-tiles') !== mode) root.setAttribute('data-broadway-tiles', mode);
+            window.__broadwayCallRoom = \(roomObject(room));
+          }
+          function write(text) {
+            var fit = document.getElementById('broadway-call-fit');
+            if (!fit) {
+              fit = document.createElement('style');
+              fit.id = 'broadway-call-fit';
+              (document.head || root).appendChild(fit);
+            }
+            if (fit.textContent !== text) fit.textContent = text;
+          }
+          var lone = shared();
+          var grid = lone ? null : tiles[0] || null;
           while (grid && !tiles.every(function (t) { return grid.contains(t); })) grid = grid.parentElement;
           if (grid && tiles.length === 1 && grid.parentElement && !chromeIn(grid.parentElement)) grid = grid.parentElement;
-          if (!grid || grid === document.body || grid === root) {
+          if (!lone && (!grid || grid === document.body || grid === root)) {
             clear();
             root.removeAttribute('data-broadway-tiles');
             drop('broadway-call-tiles');
             drop('broadway-call-fit');
             return 'none';
           }
-          if (!grid.hasAttribute('data-broadway-tiles-grid')) {
-            clear();
-            drop('broadway-call-fit');
-            grid.setAttribute('data-broadway-tiles-grid', '');
-            for (var p = grid.parentElement; p; p = p.parentElement) p.setAttribute('data-broadway-tiles-path', '');
-            setTimeout(function () { window.dispatchEvent(new Event('resize')); }, 0);
+          if (lone) {
+            if (!lone.hasAttribute('data-broadway-tiles-screen')) {
+              var shape = lone.offsetHeight > 0 ? lone.offsetWidth / lone.offsetHeight : 0;
+              clear();
+              drop('broadway-call-fit');
+              lone.setAttribute('data-broadway-tiles-screen', '');
+              for (var up = lone.parentElement; up; up = up.parentElement) up.setAttribute('data-broadway-tiles-path', '');
+              window.__broadwayCallScreen = { el: lone, stream: lone.srcObject || null, src: lone.currentSrc || '', shape: shape };
+              setTimeout(function () { window.dispatchEvent(new Event('resize')); }, 0);
+            }
+            dress('screen');
+          } else {
+            if (!grid.hasAttribute('data-broadway-tiles-grid')) {
+              clear();
+              drop('broadway-call-fit');
+              grid.setAttribute('data-broadway-tiles-grid', '');
+              for (var p = grid.parentElement; p; p = p.parentElement) p.setAttribute('data-broadway-tiles-path', '');
+              setTimeout(function () { window.dispatchEvent(new Event('resize')); }, 0);
+            }
+            found.forEach(function (a) {
+              if (!grid.contains(a)) return;
+              var top = a;
+              while (top.parentElement && top.parentElement !== grid && !tiles.some(function (t) { return top.parentElement.contains(t); })) top = top.parentElement;
+              if (!tiles.some(function (t) { return top.contains(t); })) top.setAttribute('data-broadway-tiles-chrome', '');
+            });
+            dress('');
           }
-          found.forEach(function (a) {
-            if (!grid.contains(a)) return;
-            var top = a;
-            while (top.parentElement && top.parentElement !== grid && !tiles.some(function (t) { return top.parentElement.contains(t); })) top = top.parentElement;
-            if (!tiles.some(function (t) { return top.contains(t); })) top.setAttribute('data-broadway-tiles-chrome', '');
-          });
-          var style = document.getElementById('broadway-call-tiles');
-          if (!style) {
-            style = document.createElement('style');
-            style.id = 'broadway-call-tiles';
-            (document.head || root).appendChild(style);
-          }
-          var text = \(jsString(style(room)));
-          if (style.textContent !== text) style.textContent = text;
-          root.setAttribute('data-broadway-tiles', '');
-          window.__broadwayCallRoom = \(roomObject(room));
           window.__broadwayCallFitNow = function () {
-            var grid = document.querySelector('[data-broadway-tiles-grid]');
             var room = window.__broadwayCallRoom;
-            if (!grid || !room) return;
+            if (!room) return;
             var X = room.left, Y = room.top, W = innerWidth - room.left - room.right, H = innerHeight - room.top - room.bottom;
             if (W <= 0 || H <= 0) return;
+            var one = document.querySelector('[data-broadway-tiles-screen]');
+            if (one) {
+              var kept = window.__broadwayCallScreen || {};
+              var iw = one.videoWidth || 0, ih = one.videoHeight || 0;
+              if (one.tagName === 'CANVAS') {
+                if (getComputedStyle(one).objectFit === 'fill' && kept.shape > 0) { iw = kept.shape; ih = 1; } else { iw = one.width; ih = one.height; }
+              }
+              var k = iw > 0 && ih > 0 ? Math.min(W / iw, H / ih) : 0;
+              var w = k ? iw * k : W, h = k ? ih * k : H;
+              write('html[data-broadway-tiles=screen] [data-broadway-tiles-screen] { left: ' + (X + (W - w) / 2).toFixed(2) + 'px !important; top: '
+                + (Y + (H - h) / 2).toFixed(2) + 'px !important; right: auto !important; bottom: auto !important; width: ' + w.toFixed(2)
+                + 'px !important; height: ' + h.toFixed(2) + 'px !important; }');
+              return;
+            }
+            var grid = document.querySelector('[data-broadway-tiles-grid]');
+            if (!grid) return;
             var shown = getComputedStyle(grid).transform;
             var m = shown && shown !== 'none' ? new DOMMatrixReadOnly(shown) : new DOMMatrixReadOnly();
             var s = m.a || 1, tx = m.e, ty = m.f;
@@ -265,6 +319,22 @@ enum CallTiles {
                 if (area >= least * 0.5 && area <= most * 1.5) boxes.push(r);
               });
             });
+            if (people.length > 1) people.forEach(function (tile) {
+              var top = tile;
+              while (top.parentElement && top.parentElement !== grid
+                && !people.some(function (o) { return o !== tile && top.parentElement.contains(o); })) top = top.parentElement;
+              if (top === tile || !top.parentElement || top.parentElement === grid.parentElement) return;
+              var own = seen(top);
+              if (!own) return;
+              var size = (own.r - own.l) * (own.b - own.t);
+              [].forEach.call(top.parentElement.children, function (el) {
+                if (el === top || people.some(function (t) { return el.contains(t) || t.contains(el); })) return;
+                var r = seen(el);
+                if (!r) return;
+                var area = (r.r - r.l) * (r.b - r.t);
+                if (area >= size * 0.5 && area <= size * 1.5) boxes.push(r);
+              });
+            });
             var u = boxes.reduce(function (a, b) {
               return { l: Math.min(a.l, b.l), t: Math.min(a.t, b.t), r: Math.max(a.r, b.r), b: Math.max(a.b, b.b) };
             });
@@ -273,13 +343,7 @@ enum CallTiles {
             var nx = X + (W - uw * ns) / 2 - gx - ns * (u.l - gx);
             var ny = Y + (H - uh * ns) / 2 - gy - ns * (u.t - gy);
             if (Math.abs(ns - s) < 0.001 && Math.abs(nx - tx) < 0.25 && Math.abs(ny - ty) < 0.25) return;
-            var fit = document.getElementById('broadway-call-fit');
-            if (!fit) {
-              fit = document.createElement('style');
-              fit.id = 'broadway-call-fit';
-              (document.head || root).appendChild(fit);
-            }
-            fit.textContent = '[data-broadway-tiles-grid] { transform: translate(' + nx.toFixed(2) + 'px, ' + ny.toFixed(2) + 'px) scale(' + ns.toFixed(4) + ') !important; }';
+            write('[data-broadway-tiles-grid] { transform: translate(' + nx.toFixed(2) + 'px, ' + ny.toFixed(2) + 'px) scale(' + ns.toFixed(4) + ') !important; }');
           };
           window.__broadwayCallFitNow();
           if (!window.__broadwayCallFitting) {
@@ -291,7 +355,7 @@ enum CallTiles {
               requestAnimationFrame(step);
             })();
           }
-          return tiles.length;
+          return lone ? 'screen' : tiles.length;
         })()
         """
     }
@@ -305,6 +369,7 @@ enum CallTiles {
       ['broadway-call-tiles', 'broadway-call-fit'].forEach(function (id) { var el = document.getElementById(id); if (el) el.remove(); });
       window.__broadwayCallFitNow = null;
       window.__broadwayCallRoom = null;
+      window.__broadwayCallScreen = null;
       window.dispatchEvent(new Event('resize'));
       return true;
     })()
@@ -327,6 +392,7 @@ final class CallFloat {
     static let shared = CallFloat()
     static let size = NSSize(width: 340, height: 214)
     static let stage = NSEdgeInsets(top: 8, left: 8, bottom: 58, right: 8)
+    static let radius: CGFloat = 14
     private static let shrunk: CGFloat = 0.5
     private static let spotKey = "call.spot"
 
@@ -373,7 +439,7 @@ final class CallFloat {
         let ground = NSView(frame: NSRect(origin: .zero, size: size))
         ground.autoresizingMask = [.width, .height]
         ground.wantsLayer = true
-        ground.layer?.cornerRadius = 14
+        ground.layer?.cornerRadius = Self.radius
         ground.layer?.cornerCurve = .continuous
         ground.layer?.masksToBounds = true
         ground.layer?.backgroundColor = NSColor.black.cgColor
@@ -483,9 +549,14 @@ final class CallFloat {
         return NSEdgeInsets(top: stage.top / zoom, left: stage.left / zoom, bottom: stage.bottom / zoom, right: stage.right / zoom)
     }
 
+    static func corner(zoom: CGFloat) -> CGFloat {
+        max(0, radius - stage.top) / max(zoom, 0.01)
+    }
+
     private func tiles() {
         guard let web = tab?.built, web.superview === ground else { return }
-        web.evaluateInSearch(tilesOnly ? CallTiles.enter(room: Self.room(zoom: web.pageZoom)) : CallTiles.leave)
+        let zoom = web.pageZoom
+        web.evaluateInSearch(tilesOnly ? CallTiles.enter(room: Self.room(zoom: zoom), corner: Self.corner(zoom: zoom)) : CallTiles.leave)
     }
 
     private func end() {
@@ -746,7 +817,7 @@ private final class CallBar: KitFlippedView {
         style.palette = alert ? [NSColor.systemRed.kitResolved(dark: kitDark)] : []
         image.style = style
         tool.toolTip = help
-        tool.setAccessibilityLabel(help)
+        tool.setAccessibilityLabel(help.components(separatedBy: "   ").first ?? help)
         tool.setAccessibilityHelp(help)
     }
 }

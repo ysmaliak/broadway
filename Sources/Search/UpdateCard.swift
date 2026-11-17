@@ -5,6 +5,7 @@ final class UpdateCardView: KitHoverView {
     static let height: CGFloat = 44
     static let closeSize: CGFloat = 18
     static let closeOut: CGFloat = closeSize / 3
+    static let closeReach: CGFloat = 24
     static let foot: CGFloat = height + 8
     static let room: CGFloat = closeOut + foot
     static let title = "Update Ready"
@@ -99,7 +100,8 @@ final class UpdateCardView: KitHoverView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard !isHidden else { return nil }
         let local = convert(point, from: superview)
-        if closeOut, close.frame.offsetBy(dx: card.frame.minX, dy: card.frame.minY).contains(local) {
+        let grow = (Self.closeReach - Self.closeSize) / 2
+        if closeOut, close.frame.insetBy(dx: -grow, dy: -grow).offsetBy(dx: card.frame.minX, dy: card.frame.minY).contains(local) {
             return close.hitTest(NSPoint(x: local.x - card.frame.minX, y: local.y - card.frame.minY)) ?? close
         }
         guard card.frame.contains(local) else { return nil }

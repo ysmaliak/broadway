@@ -106,7 +106,7 @@ final class FieldAnswerRowView: NSView {
     override func layout() {
         super.layout()
         let cap = copyCap.intrinsicContentSize
-        FieldLine.place([.box(icon, 18, 18), .text(value, priority: 1), .text(aside), .spacer(0), .box(copy, cap.width, cap.height)],
+        FieldLine.place([.box(icon, 18, 18), .text(value, priority: 1), .text(aside), .spacer(0), .box(copy, cap.width, max(24, cap.height))],
                         in: self, padding: 10, spacing: 12)
     }
 }

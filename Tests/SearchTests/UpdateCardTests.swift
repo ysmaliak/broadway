@@ -285,6 +285,7 @@ struct UpdateCardTests {
         let shown = update.benchState["closeShown"] as? Bool
         let hit = view.hitTest(cross)
         let passed = view.hitTest(beside)
+        let rim = view.hitTest(NSPoint(x: closeBox[0] + closeBox[2] + 2, y: closeBox[1] + 4))
         let landed = hit.map { $0 === hide || $0.isDescendant(of: hide) } ?? false
         if landed { hide.action?() }
         settle(view)
@@ -296,6 +297,7 @@ struct UpdateCardTests {
         #expect(shown == true)
         #expect(landed)
         #expect(passed.map { !$0.isDescendant(of: update) } ?? true)
+        #expect(rim === hide)
         #expect(hide.acceptsFirstResponder && restart.acceptsFirstResponder)
         #expect(!updates.wait.card)
         #expect(card(in: view) == nil)

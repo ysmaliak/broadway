@@ -1179,7 +1179,10 @@ final class MeetingFaceView: KitBox {
 @MainActor
 private final class MeetingInvitedView: NSView {
     private let ground = KitBox(fill: NSColor.systemOrange.withAlphaComponent(0.15), corners: .capsule)
-    private let word = KitLabel("Invited", font: .systemFont(ofSize: 11, weight: .medium), color: .systemOrange)
+    static let ink = NSColor(name: nil) { look in
+        look.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .systemOrange : NSColor(srgbRed: 0x9A / 255.0, green: 0x4D / 255.0, blue: 0, alpha: 1)
+    }
+    private let word = KitLabel("Invited", font: .systemFont(ofSize: 11, weight: .medium), color: MeetingInvitedView.ink)
 
     init() {
         super.init(frame: .zero)
@@ -1213,6 +1216,18 @@ extension MeetingAlerts {
         let sync = CalendarEvent(id: "sync", title: "Design sync with the whole platform team", start: now.addingTimeInterval(270), end: now.addingTimeInterval(2070),
                                  location: "Room 4", url: URL(string: "https://meet.google.com/abc-defg-hij"), people: people, pending: true,
                                  external: "sync-external")
+        if kind == "long" {
+            let crowd = people + [MeetingPerson(name: "Bartholomew Featherstonehaugh-Winterbourne", email: "bartholomew@example.test"),
+                                  MeetingPerson(name: "Ines Okonkwo", email: "ines@example.test"),
+                                  MeetingPerson(name: "Jun Castellanos", email: "jun@example.test"),
+                                  MeetingPerson(name: "", email: "a.very.long.address.for.a.shared.mailbox@example.test")]
+            let long = CalendarEvent(id: "long", title: "Quarterly planning review for every product area with the leadership team and the guests from finance and operations",
+                                     start: now.addingTimeInterval(270), end: now.addingTimeInterval(2070),
+                                     location: "Building 12, fourth floor, the large corner room beside the kitchen and the lifts",
+                                     url: URL(string: "https://meet.google.com/abc-defg-hij"), people: Array(crowd.reversed()), pending: true,
+                                     external: "long-external")
+            return [Meeting(event: long)]
+        }
         guard kind == "two" else { return [Meeting(event: sync)] }
         let zoom = CalendarEvent(id: "zoom", title: "Weekly check-in", start: now.addingTimeInterval(-90), end: now.addingTimeInterval(1710),
                                  notes: "https://zoom.us/j/123456789?pwd=abc")

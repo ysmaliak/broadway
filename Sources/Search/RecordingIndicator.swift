@@ -183,7 +183,25 @@ private final class PillPanel: NSPanel {
         let area = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let frame = NSRect(x: area.midX - size.width / 2, y: area.minY + 24, width: size.width, height: size.height)
         content.frame = NSRect(origin: .zero, size: size)
-        if isVisible { setFrame(NSRect(origin: self.frame.origin, size: size), display: true) } else { setFrame(frame, display: false) }
+        if isVisible {
+            setFrame(RecordingPlace.kept(self.frame, size: size, in: self.screen?.visibleFrame ?? area), display: true)
+        } else {
+            setFrame(frame, display: false)
+        }
+    }
+}
+
+enum RecordingPlace {
+    static let nameMost = 30
+
+    static func kept(_ old: NSRect, size: NSSize, in area: NSRect) -> NSRect {
+        let x = min(max(old.midX - size.width / 2, area.minX), max(area.minX, area.maxX - size.width))
+        let y = min(max(old.minY, area.minY), max(area.minY, area.maxY - size.height))
+        return NSRect(x: x, y: y, width: size.width, height: size.height)
+    }
+
+    static func short(_ name: String) -> String {
+        name.count > nameMost ? name.prefix(nameMost - 1).trimmingCharacters(in: .whitespaces) + "…" : name
     }
 }
 
@@ -204,8 +222,11 @@ final class RecordingPillView: KitBox {
         init(_ line: RecordingLine, indicator: RecordingIndicator) {
             stop = KitPushButton("Stop", prominent: true, size: .small) { [weak indicator] in indicator?.stop(line.id) }
             stop.setAccessibilityLabel("Stop \(line.name)")
-            words.runs = [KitLabel.Run(text: line.name, font: RecordingPillView.bold),
+            let name = RecordingPlace.short(line.name)
+            words.runs = [KitLabel.Run(text: name, font: RecordingPillView.bold),
                           KitLabel.Run(text: " \(line.what)", font: RecordingPillView.font)]
+            if name != line.name { words.toolTip = "\(line.name) \(line.what)" }
+            words.setAccessibilityLabel("\(line.name) \(line.what)")
         }
 
         var views: [NSView] { [dot, words, stop] }

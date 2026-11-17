@@ -225,10 +225,11 @@ final class AccountOfferRowView: KitHoverView {
         super.layout()
         ground.frame = bounds
         let crossX = bounds.width - 8 - 16
-        never.frame = NSRect(x: crossX, y: (bounds.height - 16) / 2, width: 16, height: 16)
-        crossGround.frame = never.bounds
+        never.frame = NSRect(x: crossX - 4, y: 0, width: 24, height: bounds.height)
+        crossGround.frame = NSRect(x: 4, y: (bounds.height - 16) / 2, width: 16, height: 16)
         let crossSize = cross.intrinsicContentSize
-        cross.frame = NSRect(x: (16 - crossSize.width) / 2, y: (16 - crossSize.height) / 2, width: crossSize.width, height: crossSize.height)
+        cross.frame = NSRect(x: crossGround.frame.midX - crossSize.width / 2, y: crossGround.frame.midY - crossSize.height / 2,
+                             width: crossSize.width, height: crossSize.height)
         use.frame = NSRect(x: 10, y: 0, width: max(0, crossX - 8 - 10), height: bounds.height)
         let keySize = key.intrinsicContentSize
         key.frame = kitSnap(NSRect(x: (22 - keySize.width) / 2, y: (bounds.height - keySize.height) / 2, width: keySize.width, height: keySize.height))

@@ -9,7 +9,7 @@ enum BenchSurfaces {
         + ["newtab", "onboarding", "about"]
         + ["marks", "provider-marks", "hover-tab-card", "account-list", "device-bar", "hover-folder-list", "tab-offers"]
         + ["find-bar", "find-bar-empty", "find-bar-narrow", "find-count", "form-fill-card", "form-fill-done", "form-fill-offer", "form-drafts-working", "form-drafts-card", "form-drafts-warned"]
-        + ["meeting-alert", "meeting-alert-two", "pin-meeting-badges", "history-panel", "downloads-panel", "hidden-panel"]
+        + ["meeting-alert", "meeting-alert-two", "meeting-alert-faces", "meeting-alert-long", "pin-meeting-badges", "history-panel", "downloads-panel", "hidden-panel"]
         + BookmarksSurface.names + SettingsPieceSurfaces.names + BenchFloating.names + BenchPages.names + SiteSurfaces.names
         + BenchFieldFixtures.names + SideSurfaces.names
     private static var windows: [NSWindow] = []
@@ -101,6 +101,7 @@ enum BenchSurfaces {
         case "meeting-alert": return MeetingAlerts.surface("one")
         case "meeting-alert-two": return MeetingAlerts.surface("two")
         case "meeting-alert-faces": return MeetingAlerts.surface("faces")
+        case "meeting-alert-long": return MeetingAlerts.surface("long")
         case "pin-meeting-badges": return PinMeetingSurface.make()
         case "history-panel": return RecallSurface.history()
         case "downloads-panel": return RecallSurface.downloads()
@@ -145,7 +146,53 @@ enum BenchSurfaces {
                                width: size.width + pad * 2, height: size.height + pad * 2), display: true)
         window.orderFrontRegardless()
         windows.append(window)
-        return ["number": window.windowNumber, "size": [size.width, size.height], "dark": dark]
+        var said: [String: Any] = ["number": window.windowNumber, "size": [size.width, size.height], "dark": dark]
+        if request["controls"] as? Bool == true { said["controls"] = controls(in: view) }
+        return said
+    }
+
+    private static func control(of view: NSView?, under top: NSView) -> NSView? {
+        var at = view
+        while let here = at, here !== top.superview {
+            if here is KitButton || here is NSButton || here is NSSlider || here is NSSegmentedControl { return here }
+            if let field = here as? NSTextField, field.isEditable { return here }
+            if here.isAccessibilityElement(), here.accessibilityRole() == .button || here.accessibilityRole() == .slider { return here }
+            at = here.superview
+        }
+        return nil
+    }
+
+    private static func controls(in view: NSView) -> [[String: Any]] {
+        view.layoutSubtreeIfNeeded()
+        var found: [NSView] = []
+        var reach: [ObjectIdentifier: NSRect] = [:]
+        func walk(_ here: NSView) {
+            if here.isHidden { return }
+            if control(of: here, under: here) === here { found.append(here); return }
+            here.subviews.forEach(walk)
+        }
+        walk(view)
+        let frame = view.frame
+        var y = frame.minY + 0.5
+        while y < frame.maxY {
+            var x = frame.minX + 0.5
+            while x < frame.maxX {
+                if let hit = control(of: view.hitTest(NSPoint(x: x, y: y)), under: view) {
+                    let dot = NSRect(x: x - 0.5, y: y - 0.5, width: 1, height: 1)
+                    reach[ObjectIdentifier(hit)] = reach[ObjectIdentifier(hit)].map { $0.union(dot) } ?? dot
+                }
+                x += 1
+            }
+            y += 1
+        }
+        return found.map { made in
+            let box = made.convert(made.bounds, to: view)
+            let hit = reach[ObjectIdentifier(made)] ?? .zero
+            let title = (made as? NSButton)?.title ?? made.kitSubviews(of: KitLabel.self).map(\.text).joined(separator: " ")
+            return ["kind": String(describing: type(of: made)), "size": [box.width, box.height], "hit": [hit.width, hit.height],
+                    "label": made.accessibilityLabel() ?? "", "title": title, "help": made.toolTip ?? "",
+                    "enabled": (made as? NSControl)?.isEnabled ?? (made as? KitButton)?.isEnabled ?? true]
+        }
     }
 
     private static func ground(_ name: String?) -> NSColor {

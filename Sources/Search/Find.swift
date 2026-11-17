@@ -116,7 +116,10 @@ final class FindBarView: NSView, NSTextFieldDelegate {
         let local = convert(point, from: superview)
         let radius = bounds.height / 2
         guard NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).contains(local) else { return nil }
-        return super.hitTest(point)
+        let hit = super.hitTest(point)
+        let onField = hit.map { $0 === field || $0.isDescendant(of: field) } ?? false
+        guard local.x < field.frame.maxX, !onField else { return hit }
+        return (field.currentEditor() as? NSView) ?? field
     }
 
     var fieldWidth: CGFloat {

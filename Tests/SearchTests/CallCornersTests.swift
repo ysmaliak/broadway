@@ -71,6 +71,32 @@ struct CallCornersTests {
         #expect(CallTiles.leave.contains("broadway-call-fit"))
     }
 
+    @Test func aSharedScreenIsPinnedAloneAndTheRestOfThePageIsHidden() {
+        let room = NSEdgeInsets(top: 16, left: 16, bottom: 116, right: 16)
+
+        let script = CallTiles.enter(room: room, corner: 12)
+
+        #expect(script.contains("function shared()") && script.contains("data-broadway-tiles-screen"))
+        #expect(script.contains("body *:not([data-broadway-tiles-screen])"))
+        #expect(script.contains("border-radius: 12.00px !important"))
+    }
+
+    @Test func landingForgetsTheSharedScreen() {
+        let script = CallTiles.leave
+
+        #expect(script.contains("data-broadway-tiles-screen"))
+        #expect(script.contains("__broadwayCallScreen = null"))
+    }
+
+    @Test func theSharedScreensCornerNestsInsideTheWindows() {
+        let zoom: CGFloat = 0.5
+
+        let corner = CallFloat.corner(zoom: zoom)
+
+        #expect(corner == (CallFloat.radius - CallFloat.stage.top) / zoom)
+        #expect(corner > 0)
+    }
+
     @Test func theCornersAreNamedButtons() {
         let view = corners()
 
@@ -83,6 +109,16 @@ struct CallCornersTests {
         #expect(back.accessibilityRole() == .button)
         #expect(close.symbol?.name == "xmark")
         #expect(back.symbol?.name == "pip.exit")
+    }
+
+    @Test func theBarsKeysAreNamedWithoutTheirShortcutAndKeepItInTheTooltip() {
+        let bar = CallFloat.surface(mic: true, camera: false, leaves: true)
+        bar.layoutSubtreeIfNeeded()
+
+        let keys = bar.kitSubviews(of: KitButton.self)
+
+        #expect(keys.map { $0.accessibilityLabel() } == ["Mute", "Start Camera", "Leave Call"])
+        #expect(keys.map(\.toolTip) == ["Mute   ⌘D", "Start Camera   ⌘E", "Leave Call"])
     }
 
     @Test func theCornersStayAwayAndLetClicksThroughUntilThePointerComes() {

@@ -45,6 +45,43 @@ struct RecordingPillTests {
         indicator.update([])
     }
 
+    @Test func aLongExtensionNameIsCutSoThePillStaysShort() {
+        let indicator = RecordingIndicator()
+        let name = String(repeating: "Recorder ", count: 8) + "Pro"
+        indicator.update([RecordingLine(id: "long", name: name, what: "is recording your screen")])
+        let pill = RecordingPillView(indicator: indicator)
+        pill.frame = NSRect(origin: .zero, size: pill.intrinsicContentSize)
+        pill.layoutSubtreeIfNeeded()
+
+        let shown = words(pill).first ?? ""
+
+        #expect(shown.hasSuffix("… is recording your screen"))
+        #expect(shown.count <= RecordingPlace.nameMost + " is recording your screen".count)
+        #expect(pill.intrinsicContentSize.width < 480)
+        indicator.update([])
+    }
+
+    @Test func aShortExtensionNameIsShownWhole() {
+        let name = "Loom"
+
+        let shown = RecordingPlace.short(name)
+
+        #expect(shown == name)
+    }
+
+    @Test func aPillThatGrowsKeepsItsMiddleAndStaysOnTheScreen() {
+        let area = NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let old = NSRect(x: 600, y: 24, width: 240, height: 34)
+        let cornered = NSRect(x: 1300, y: 880, width: 140, height: 34)
+
+        let grown = RecordingPlace.kept(old, size: NSSize(width: 400, height: 72), in: area)
+        let held = RecordingPlace.kept(cornered, size: NSSize(width: 400, height: 72), in: area)
+
+        #expect(grown.midX == old.midX && grown.minY == old.minY)
+        #expect(grown.size == NSSize(width: 400, height: 72))
+        #expect(held.maxX == area.maxX && held.maxY == area.maxY)
+    }
+
     @Test func thePictureIsDrawnOffScreen() throws {
         let indicator = RecordingIndicator()
         indicator.update([RecordingLine(id: "loom", name: "Loom", what: "is recording your screen")])
