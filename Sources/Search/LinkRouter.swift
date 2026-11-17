@@ -27,6 +27,7 @@ struct IncomingLink: Equatable {
     var chooses = false
     var behind = false
     var seats: [Seat] = []
+    var hooked: HookLinkAnswer?
 }
 
 struct LinkWorld: Equatable {
@@ -86,6 +87,7 @@ struct LinkDecision: Equatable {
     var rule: UUID?
     var steps: [String]
     var background: Bool
+    var defaulted = false
 }
 
 enum LinkRouter {
@@ -167,7 +169,7 @@ enum LinkRouter {
                 place = .ask
             }
         }
-        return finish(LinkDecision(url: url, place: place, rule: nil, steps: steps, background: link.behind),
+        return finish(LinkDecision(url: url, place: place, rule: nil, steps: steps, background: link.behind, defaulted: outside),
                       link: link, here: here, settings: settings, world: world)
     }
 
@@ -186,6 +188,7 @@ enum LinkRouter {
             decision.steps.append(said)
             decision.place = .row(row.key, folder: row.folder, space: row.space)
             decision.rule = nil
+            decision.defaulted = false
             decision.steps.append(decision.background ? "Its row goes there in the background" : "Shown there")
             return decision
         }
@@ -197,6 +200,7 @@ enum LinkRouter {
             }
             if let space, let tab = world.tabs[space]?[key(of: decision.url)] {
                 decision.place = .tab(tab, space: space)
+                decision.defaulted = false
                 decision.steps.append("That page is already open there")
             }
         }

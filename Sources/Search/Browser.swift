@@ -8008,18 +8008,17 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
             decisionHandler(remembered ? .grant : .deny)
             return
         }
-        // Asked over its own page only, as a page's other questions are (see
-        // ask): a tab behind, or the other page of a pair, waits until you go
-        // to it, and is asked then — never over the page you are on.
-        ask(from: webView, show: { [weak self] in
-            guard let self else { return decisionHandler(.deny) }
-            // One question at a time. A second page asking while the first is
-            // still waiting is refused rather than queued behind it.
-            guard !permissionBusy else { return decisionHandler(.deny) }
-            decide = decisionHandler
-            askedAbout = shy ? "" : key
-            asking = CaptureAsk(host: host, wants: Browser.name(for: type))
-        }, drop: { decisionHandler(.deny) })
+        HookAsk.permission(site: site, wants: HookAsk.wants(type), tab: tab(for: webView), in: self, asker: asker.protocol) { [weak self, weak webView] hooked in
+            if let hooked { return decisionHandler(hooked ? .grant : .deny) }
+            guard let self, let webView else { return decisionHandler(.deny) }
+            ask(from: webView, show: { [weak self] in
+                guard let self else { return decisionHandler(.deny) }
+                guard !permissionBusy else { return decisionHandler(.deny) }
+                decide = decisionHandler
+                askedAbout = shy ? "" : key
+                asking = CaptureAsk(host: host, wants: Browser.name(for: type))
+            }, drop: { decisionHandler(.deny) })
+        }
     }
 
     /// WebKit's private delegate lets Search ask before opening the system picker.
@@ -8094,12 +8093,15 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         if !tab.shy, let remembered = Store.settings.object(forKey: "capture." + key) as? Bool {
             return give(remembered ? .grant : .deny)
         }
-        // One question at a time, as for the camera.
-        guard !permissionBusy else { return give(.deny) }
-        decide = give
-        askedAbout = tab.shy ? "" : key
-        let named = Browser.extensionScheme(origin.protocol) ? Browser.extensionName(origin.host) : origin.host
-        asking = CaptureAsk(host: named, wants: "location", once: true, keeps: !tab.shy)
+        HookAsk.permission(site: site, wants: ["location"], tab: tab, in: self, asker: origin.protocol) { [weak self] hooked in
+            if let hooked { return give(hooked ? .grant : .deny) }
+            guard let self, tab.id == activeID else { return give(.deny) }
+            guard !permissionBusy else { return give(.deny) }
+            decide = give
+            askedAbout = tab.shy ? "" : key
+            let named = Browser.extensionScheme(origin.protocol) ? Browser.extensionName(origin.host) : origin.host
+            asking = CaptureAsk(host: named, wants: "location", once: true, keeps: !tab.shy)
+        }
     }
 
     /// A page asking to send notifications. Asked over its own page, as the
@@ -8115,17 +8117,24 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
               Browser.origin(scheme, host, page.port ?? 0) == site
         else { return decisionHandler(false) }
         if let remembered = SiteNotifications.choices[site] { return decisionHandler(remembered) }
-        ask(from: webView, show: { [weak self] in
-            guard let self else { return decisionHandler(false) }
-            guard !permissionBusy else { return decisionHandler(false) }
-            decide = { decision in
-                if decision == .grant { SiteNotifications.shared.authorize() }
-                decisionHandler(decision == .grant)
-                SiteNotifications.shared.changed()
+        HookAsk.permission(site: site, wants: ["notifications"], tab: tab, in: self, asker: origin.protocol) { [weak self, weak webView] hooked in
+            if let hooked {
+                if hooked { SiteNotifications.shared.authorize() }
+                return decisionHandler(hooked)
             }
-            askedAbout = "\(site)|notifications"
-            asking = CaptureAsk(host: origin.host, wants: "notifications")
-        }, drop: { decisionHandler(false) })
+            guard let self, let webView else { return decisionHandler(false) }
+            ask(from: webView, show: { [weak self] in
+                guard let self else { return decisionHandler(false) }
+                guard !permissionBusy else { return decisionHandler(false) }
+                decide = { decision in
+                    if decision == .grant { SiteNotifications.shared.authorize() }
+                    decisionHandler(decision == .grant)
+                    SiteNotifications.shared.changed()
+                }
+                askedAbout = "\(site)|notifications"
+                asking = CaptureAsk(host: origin.host, wants: "notifications")
+            }, drop: { decisionHandler(false) })
+        }
     }
 
     func localNetworkStep(_ action: WKNavigationAction, to url: URL, in webView: WKWebView) -> LocalNetwork.Step {
@@ -8472,6 +8481,7 @@ extension Browser: WKDownloadDelegate {
             ExtensionShims.ownDownloads[id, default: []].insert(file.path)
         }
         saved(file, from: source)
+        HookDownloads.finished(download, file: file, source: source, in: self)
     }
 
     /// The download button in the bar WebKit draws over a PDF. WebKit has the

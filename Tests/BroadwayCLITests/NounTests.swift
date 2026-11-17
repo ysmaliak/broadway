@@ -165,6 +165,15 @@ struct NounTests {
         #expect((error as? Failure)?.code == "usage")
     }
 
+    @Test func limit1TheHooksNounCanOnlyList() throws {
+        let noun = try #require(Nouns.noun("hooks"))
+
+        #expect(noun.verb("list") != nil)
+        for verb in ["add", "on", "off", "approve", "remove", "set"] {
+            #expect(noun.verb(verb) == nil, "\(verb)")
+        }
+    }
+
     @Test func aHelpPageNamesEveryShownVerb() throws {
         let noun = try #require(Nouns.noun("shields"))
 

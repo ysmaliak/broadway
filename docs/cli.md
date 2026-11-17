@@ -365,6 +365,7 @@ Each works on the tab chosen as above and is gated on its site.
 | `shields on HOST`, `shields update` | A | |
 | `permissions list [SITE]` | R | camera, microphone, location, notifications, local network |
 | `permissions reset SITE [--kind KIND]` | A | forget an answer, so the site has to ask again |
+| `hooks list` | R | each hook's event, program, on or off, and last result. Hooks are added and switched on only in Settings › Agents › Hooks (see [hooks.md](hooks.md)) |
 
 Some things only the person can do, in Broadway. `extensions private`, `shields off` and `permissions allow` exist only to say so.
 

@@ -385,6 +385,9 @@ final class Bench {
         case _ where BenchSiteFiles.verbs.contains(verb):
             BenchSiteFiles.run(request, browser, answer)
 
+        case _ where BenchHooks.verbs.contains(verb):
+            BenchHooks.run(request, browser: browser, answer)
+
         case "layouts":
             // Test runs only: every frame the pages on screen take, looked at
             // every few milliseconds and after each pass of the run loop, for

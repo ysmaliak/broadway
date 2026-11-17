@@ -108,6 +108,7 @@ enum PersonSettings {
         "agents.connected": SettingAccess(bar: .always, instead: "broadway agents list reads them"),
         "agents.mode": SettingAccess(bar: .always, read: { $0.agentMode.rawValue }),
         "agents.sites": SettingAccess(bar: .always, instead: "broadway agents status reads them"),
+        "agents.hooks": SettingAccess(bar: .always, instead: "broadway hooks list reads them"),
         "ai.agents": held(\.agentsOn),
         "ai.actions": SettingAccess(bar: .turningOn, takes: "true or false", read: { $0.textActions }, write: { prefs, text in
             guard let on = yes(text) else { return false }
@@ -489,6 +490,13 @@ enum PersonSettings {
         },
         PersonVerb("permissions", "allow", .open) { _ in
             throw PersonRefusal.person("A site asks and the person answers", where: "the question on the page")
+        },
+        PersonVerb("hooks", "list", .look) { _ in
+            let book = HookBook.shared
+            return ["hooks": book.hooks.map { hook in
+                ["id": PersonCommands.short(hook.id), "event": hook.event.rawValue, "program": hook.path, "on": hook.on,
+                 "result": book.line(hook), "said": book.results[hook.id]?.said ?? ""] as [String: Any]
+            }]
         },
     ]
 }

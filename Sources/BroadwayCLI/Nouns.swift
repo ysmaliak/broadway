@@ -283,6 +283,9 @@ enum Nouns {
             Verb("permissions reset <site> [--kind KIND]", "Forget an answer, so the site has to ask again"),
             Verb("permissions allow <site>", "Only the person can allow a site", hidden: true),
         ]),
+        Noun("hooks", "Programs of the person's own that decide links, downloads and site requests", group: "Settings", [
+            Verb("hooks list", "List hooks: each one's event, program, switch and last result", columns: ["id", "event", "program", "on", "result"]),
+        ]),
         Noun("skills", "What Broadway knows about working on sites", group: "AI", [
             Verb("skills list [--url URL]", "List skills", columns: ["name", "yours", "about"]),
             Verb("skills show <name>", "Read a skill"),

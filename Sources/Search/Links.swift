@@ -139,6 +139,7 @@ final class Links: NSObject, NSApplicationDelegate {
         MenuIcons.start()
         AgentSetup.shared.launched(agentsOn: Shared.prefs.agentsOn)
         AppIconShown.apply(Shared.prefs.appIcon)
+        MainActor.assumeIsolated { HookClock.start() }
         let plain = notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool ?? true
         guard !plain else { return }
         DispatchQueue.main.async {
@@ -327,7 +328,7 @@ final class Links: NSObject, NSApplicationDelegate {
 
     private static func take(_ link: IncomingLink) {
         if let deliver {
-            deliver(link)
+            MainActor.assumeIsolated { HookLinks.consider(link, deliver: deliver) }
         } else {
             waiting.append(link)
             DispatchQueue.main.async { summon() }

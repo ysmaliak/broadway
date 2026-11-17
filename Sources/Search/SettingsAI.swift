@@ -96,6 +96,7 @@ extension SettingsPageView {
             self?.lookAtSetup()
         }
         if drafts.setup.isEmpty { lookAtSetup() }
+        hooks()
     }
 
     private func lookAtSetup() {

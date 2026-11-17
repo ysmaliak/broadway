@@ -177,7 +177,8 @@ extension Browsers {
             browser.arrive(link.url)
             return LinkLanding(browser: browser, tab: browser.active, forward: true)
         }
-        let (decision, world) = decide(link, from: browser)
+        let (decided, world) = decide(link, from: browser)
+        let decision = link.hooked.map { HookLinks.decision($0, over: decided, world: world) } ?? decided
         return apply(decision, link: link, from: browser, world: world)
     }
 
