@@ -269,56 +269,51 @@ extension Browser {
         }
     }
 
-    /// Every https connection comes through here, not only the broken ones,
-    /// so the certificate is checked first and the system is left to it when
-    /// it holds up. When it doesn't: this Mac itself — localhost and its
-    /// loopback addresses, which nothing on the network can stand in for —
-    /// is taken on trust; anything else, a .local name or a private address
-    /// on the same Wi-Fi included, is asked about, once per site per launch,
-    /// and only for the page itself, never for something a page pulled in.
     private func trust(
         _ webView: WKWebView,
         _ challenge: URLAuthenticationChallenge,
         _ completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
     ) {
-        guard let trust = challenge.protectionSpace.serverTrust else {
+        let space = challenge.protectionSpace
+        guard let trust = space.serverTrust else {
             completionHandler(.performDefaultHandling, nil)
             return
         }
-        if SecTrustEvaluateWithError(trust, nil) {
-            completionHandler(.performDefaultHandling, nil)
-            return
-        }
-        let host = challenge.protectionSpace.host.lowercased()
-        if Dialogs.isLoopback(host) || Dialogs.excused.contains(host) {
-            completionHandler(.useCredential, URLCredential(trust: trust))
-            return
-        }
-        // A picture, a script, a font from a site with a bad certificate is
-        // simply not loaded. Only the page you asked for is worth a question.
-        guard let tab = tab(for: webView),
-              (tab.address?.host() ?? tab.pending?.host())?.lowercased() == host
-        else {
-            completionHandler(.performDefaultHandling, nil)
-            return
-        }
-        // Over its own tab only, as a page's own questions are (see ask).
-        ask(from: webView, show: {
-            let alert = NSAlert()
-            alert.messageText = "This connection isn't private"
-            alert.informativeText = "Broadway couldn't confirm \u{201C}\(host)\u{201D} is who it says it is, so someone could see what you send. Only continue if you know why."
-            alert.alertStyle = .warning
-            alert.addButton(withTitle: "Go Back")
-            alert.addButton(withTitle: "Continue Anyway")
-            Dialogs.show(alert, over: webView) { answer in
-                guard answer == .alertSecondButtonReturn else {
-                    completionHandler(.cancelAuthenticationChallenge, nil)
+        let trusted = SecTrustEvaluateWithError(trust, nil)
+        let host = space.host.lowercased()
+        let page = tab(for: webView).map { ($0.address?.host() ?? $0.pending?.host())?.lowercased() == host } ?? false
+        CertificateTrust.answer(
+            store: webView.configuration.websiteDataStore,
+            host: host,
+            port: space.port,
+            chain: trusted ? [] : CertificateTrust.chain(of: trust),
+            trusted: trusted,
+            isPage: page,
+            ask: { [weak self] reply in
+                guard let self else {
+                    reply(false)
                     return
                 }
-                Dialogs.excused.insert(host)
-                completionHandler(.useCredential, URLCredential(trust: trust))
+                self.ask(from: webView, show: {
+                    let alert = NSAlert()
+                    alert.messageText = "This connection isn't private"
+                    alert.informativeText = "Broadway couldn't confirm \u{201C}\(host)\u{201D} is who it says it is, so someone could see what you send. Only continue if you know why."
+                    alert.alertStyle = .warning
+                    alert.addButton(withTitle: "Go Back")
+                    alert.addButton(withTitle: "Continue Anyway")
+                    Dialogs.show(alert, over: webView) { answer in
+                        reply(answer == .alertSecondButtonReturn || (Store.testing && Dialogs.continuesInTest))
+                    }
+                }, drop: { reply(false) })
+            },
+            done: { outcome in
+                switch outcome {
+                case .system: completionHandler(.performDefaultHandling, nil)
+                case .pass: completionHandler(.useCredential, URLCredential(trust: trust))
+                case .refuse: completionHandler(.cancelAuthenticationChallenge, nil)
+                }
             }
-        }, drop: { completionHandler(.cancelAuthenticationChallenge, nil) })
+        )
     }
 
     /// A site behind a name and a password — a staging server, a router. One
@@ -400,9 +395,6 @@ extension Browser {
 }
 
 enum Dialogs {
-    /// Sites with bad certificates that were accepted, for this launch only.
-    static var excused = Set<String>()
-
     static func alert(from frame: WKFrameInfo, saying message: String) -> NSAlert {
         let alert = NSAlert()
         // The site's name as the title, so a page can't dress its message up
@@ -422,6 +414,8 @@ enum Dialogs {
 
     /// A test run's questions, in the order they would have been shown.
     static var askedInTest: [String] = []
+
+    static var continuesInTest = false
 
     static func show(
         _ alert: NSAlert,

@@ -31,6 +31,7 @@ enum SiteClearing {
     }
 
     @MainActor static func clear(_ site: String, in store: WKWebsiteDataStore) async {
+        CertificateTrust.clear(site, in: store)
         SignInKeeper.shared.clearing(store)
         let records = await store.dataRecords(ofTypes: types)
         let mine = records.filter { belongs($0.displayName, to: site) }

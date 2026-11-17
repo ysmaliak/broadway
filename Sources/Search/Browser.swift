@@ -1631,6 +1631,7 @@ final class Browser: NSObject {
     /// the point.
     func clearSites() {
         let types = WKWebsiteDataStore.allWebsiteDataTypes()
+        CertificateTrust.clearEverything()
         for store in Spaces.spaceStores() {
             SignInKeeper.shared.clearing(store)
             store.removeData(ofTypes: types, modifiedSince: .distantPast) { SignInKeeper.shared.cleared(store) }

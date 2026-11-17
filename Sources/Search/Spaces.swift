@@ -188,6 +188,7 @@ enum Spaces {
         // its cookies again: they go with it.
         stores[id] = nil
         SignInKeeper.shared.forget(id)
+        CertificateTrust.forget(space: id)
         eraseStore(store, id: id)
     }
 
