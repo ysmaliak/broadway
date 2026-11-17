@@ -78,7 +78,7 @@ final class HelmView: NSView {
             reload.allowed = false
             return
         }
-        let backOn = !tab.isBlank && tab.canGoBack
+        let backOn = !tab.isBlank && browser.backGoes(tab)
         let forwardOn = !tab.isBlank && tab.canGoForward
         set(back, on: backOn, animated: animated)
         set(forward, on: forwardOn, animated: animated)

@@ -8,8 +8,24 @@ struct PinDef: Codable, Equatable {
     var title: String
     var name: String?
     var icon: TabIcon? = nil
+    var split: PinSplit? = nil
 
     var lasting: Bool { URL(string: home).map { !InternalPage.retired($0) } ?? true }
+}
+
+extension PinDef {
+    private enum Keys: String, CodingKey { case id, letter, home, title, name, icon, split }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        letter = try c.decode(String.self, forKey: .letter)
+        home = try c.decode(String.self, forKey: .home)
+        title = try c.decode(String.self, forKey: .title)
+        name = try c.decodeIfPresent(String.self, forKey: .name)
+        icon = try c.decodeIfPresent(TabIcon.self, forKey: .icon)
+        split = try? c.decodeIfPresent(PinSplit.self, forKey: .split)
+    }
 }
 
 @MainActor
@@ -44,10 +60,10 @@ enum Pins {
         loaded = true
         if let data = try? Data(contentsOf: file), let saved = decode(data) {
             bySpace = saved.bySpace.compactMapValues { defs in
-                let kept = defs.filter(\.lasting)
+                let kept = PinSplit.whole(defs.filter(\.lasting))
                 return kept.isEmpty ? nil : kept
             }
-            sharedPins = saved.shared.filter(\.lasting)
+            sharedPins = PinSplit.whole(saved.shared.filter(\.lasting))
             if bySpace != saved.bySpace || sharedPins != saved.shared { save() }
             return
         }

@@ -483,7 +483,7 @@ enum MenuBar {
         let active = browser.active
         let split = browser.activeSplit != nil
         var items: [NSMenuItem] = [
-            act("Back", key: "tabs.back", enabled: active?.canGoBack == true) { $0.back() },
+            act("Back", key: "tabs.back", enabled: browser.backGoes(active)) { $0.back() },
             act("Forward", key: "tabs.forward", enabled: active?.canGoForward == true) { $0.forward() },
             .separator(),
             act("Next Tab", key: "tabs.next") { $0.step(1) },
@@ -529,6 +529,10 @@ enum MenuBar {
                 items.append(act(tab.pin == nil ? "Pin \(chosen.count) Tabs" : "Unpin \(chosen.count) Tabs") { browser in
                     if let tab = browser.active { browser.togglePin(browser.keyTabs, like: tab) }
                 })
+            } else if browser.shownPinnedSplit(of: tab) != nil {
+                items.append(act("Unpin Split View") { $0.togglePinFront() })
+            } else if let pair = browser.activeSplit {
+                items.append(act("Pin Split View", enabled: browser.canPinSplit(pair)) { $0.togglePinFront() })
             } else if tab.pin == nil {
                 items.append(act("Pin Tab", enabled: tab.isWeb && !tab.shy) { browser in
                     if let tab = browser.active { browser.pin(tab) }

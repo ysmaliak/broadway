@@ -432,11 +432,7 @@ final class Tab: Identifiable {
     /// A sideways swipe in progress, for the disc that shows it.
     var pull: Pull?
 
-    /// What going back from the first page does, for a tab where it does
-    /// anything (see PageView.leave).
-    @ObservationIgnored var leave: (() -> Void)? {
-        didSet { built?.leave = leave }
-    }
+    @ObservationIgnored var leave: ((Bool) -> Bool)?
 
     /// What a site opens at until you zoom it yourself: Settings › General ›
     /// Page zoom. Read from the file, not from the one object the window holds.
@@ -994,6 +990,11 @@ final class Tab: Identifiable {
         web.onTouch = { [weak self] in self?.uncover() }
         web.onMenuClosed = { [weak self] in self?.popupGesture.menuClosed() }
         web.onStep = { [weak self] back in self?.goingBack = back }
+        web.leave = { [weak self] act in
+            guard let self, self.leave?(false) == true else { return false }
+            if act { DispatchQueue.main.async { [weak self] in _ = self?.leave?(true) } }
+            return true
+        }
         web.onKeys = { [weak self] in if let self { self.onKeys?(self) } }
         web.searchName = { [weak self] in self?.searchName?() }
         web.translating = { [weak self] in self.map { $0.translator != nil && $0.translation?.failed != true } ?? false }
@@ -2154,6 +2155,7 @@ final class Tab: Identifiable {
         }
         web.onMenuClosed = nil
         web.onStep = nil
+        web.leave = nil
         web.onPull = nil
         web.refresh.onRefresh = nil
         web.refresh.allowed = nil
@@ -2714,13 +2716,7 @@ final class PageView: WKWebView {
     /// Told where a sideways swipe has got to, and nil when there is none.
     var onPull: ((Pull?) -> Void)?
     lazy var refresh = PullRefresher(self)
-    /// What a swipe back means with nothing to go back to, where it means
-    /// anything: a small window's first page was, a step back, no window at
-    /// all (see Little.swift). Nil everywhere else, where back there does
-    /// nothing. Only the swipe: it shows the disc and can be drawn back
-    /// before letting go, and a mouse's back button can't, so a stray press
-    /// would lose the page with no way to reopen it.
-    var leave: (() -> Void)?
+    var leave: ((Bool) -> Bool)?
     /// Told the moment the page is reached for — a click, a scroll — so the
     /// picture of a tab waking up never stands between you and the page.
     var onTouch: (() -> Void)?
@@ -2897,6 +2893,7 @@ final class PageView: WKWebView {
         if underCover(event) { return }
         switch event.buttonNumber {
         case 3 where canGoBack: goBack()
+        case 3 where leave?(false) == true: _ = leave?(true)
         case 4 where canGoForward: goForward()
         default: super.otherMouseDown(with: event)
         }
@@ -2906,6 +2903,7 @@ final class PageView: WKWebView {
     /// 3 and 4 — deltaX 1 for back, -1 for forward, as Safari reads it.
     override func swipe(with event: NSEvent) {
         if event.deltaX > 0, canGoBack { goBack() }
+        else if event.deltaX > 0, leave?(false) == true { _ = leave?(true) }
         else if event.deltaX < 0, canGoForward { goForward() }
         else { super.swipe(with: event) }
     }
@@ -3213,7 +3211,7 @@ final class PageView: WKWebView {
                 }
                 // Nowhere to go that way: nothing to show, and nothing more
                 // to read from this gesture.
-                if back ? !canGoBack && leave == nil : !canGoForward {
+                if back ? !canGoBack && leave?(false) != true : !canGoForward {
                     spent = true
                     return
                 }
@@ -3347,7 +3345,7 @@ final class PageView: WKWebView {
         if stops != nil, items.indices.contains(picked) {
             go(to: items[picked])
         } else if back {
-            goBack()
+            if canGoBack || leave?(true) != true { goBack() }
         } else {
             goForward()
         }

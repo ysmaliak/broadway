@@ -71,7 +71,7 @@ struct SideScene {
                                       group: { tab in tab.groupID.flatMap { ids.contains($0) ? $0 : nil } }, in: kept) { .tab($0.id) }
         return SideScene(
             live: false,
-            pins: tabs.filter { $0.pin != nil },
+            pins: tabs.filter { $0.pin != nil && stands($0) },
             tabs: tabs,
             groups: kept,
             tops: kept.filter { $0.parent == nil && $0.isPinned },

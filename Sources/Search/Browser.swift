@@ -169,7 +169,7 @@ final class Browser: NSObject {
               places == Array(first..<first + places.count) else { return false }
         let members = places.map { row[$0] }
         return members.allSatisfy { tab in
-            tab.pin == nil && !tab.bench && tab.shy == members[0].shy && tab.groupID == members[0].groupID
+            (tab.pin == nil) == (members[0].pin == nil) && !tab.bench && tab.shy == members[0].shy && tab.groupID == members[0].groupID
         }
     }
 
@@ -1872,7 +1872,7 @@ final class Browser: NSObject {
 
     var pinnedCount: Int { tabs.filter { $0.pin != nil }.count }
 
-    var squarePins: [Tab] { tabs.filter { $0.pin != nil } }
+    var squarePins: [Tab] { tabs.filter { $0.pin != nil && standsInRow($0) } }
 
     func pin(_ tab: Tab) {
         let mark = beginStep("Pin Tab")
@@ -1881,7 +1881,7 @@ final class Browser: NSObject {
         revision &+= 1
         // Pins are the space's, kept on disk and shown in every window: a
         // private tab can't be one, or its page would outlive it there.
-        guard !tab.shy, tab.page == nil else { return }
+        guard !tab.shy, tab.page == nil, pinnedSplit(of: tab) == nil else { return }
         detachSplit(tab)
         if tab.pin == nil {
             moving(tab) {
@@ -1969,6 +1969,7 @@ final class Browser: NSObject {
         let mark = beginStep("Unpin Tab")
         defer { endStep(mark) }
         if editingPin == tab.id { editingPin = nil }
+        unpinningLeaves(tab)
         // The row is drawn again whether or not the tab moves. Unpinning the
         // only tab, or the last pin, leaves it where it is; `tabs` didn't
         // change, only the tab did, and the column went on drawing it as a
@@ -2907,7 +2908,7 @@ extension Browser {
             if tab.pinID == nil { tab.pinID = UUID() }
             return PinDef(id: tab.pinID ?? UUID(), letter: letter,
                           home: (tab.home ?? tab.pending ?? tab.address)?.absoluteString ?? "",
-                          title: tab.savedTitle, name: tab.name, icon: tab.customIcon)
+                          title: tab.savedTitle, name: tab.name, icon: tab.customIcon, split: pinSplitDef(for: tab))
         }
     }
 
@@ -2966,12 +2967,14 @@ extension Browser {
             splits.removeAll { pair in
                 !pair.tabs.allSatisfy { id in tabs.contains { $0.id == id } }
             }
+            splits = pinSplits(tabs, keeping: splits, space: space)
             writeRow(spaceID, session(tabs, active: activeID, groups: tabGroups, splits: splits), now: false)
         } else if var row = parked[space] {
             row.tabs = reconcilePins(row.tabs, space: space)
             row.splits.removeAll { pair in
                 !pair.tabs.allSatisfy { id in row.tabs.contains { $0.id == id } }
             }
+            row.splits = pinSplits(row.tabs, keeping: row.splits, space: space)
             if let active = row.active, !row.tabs.contains(where: { $0.id == active }) {
                 row.active = row.tabs.first { $0.pin == nil }?.id ?? row.tabs.first?.id
             }
@@ -3329,7 +3332,7 @@ extension Browser {
         let keptGroups = groups.map { FolderTree.lasting($0, holding: Set(entries.compactMap(\.groupID))) }
         // Only a pair that is whole in the file: one with an empty page, or
         // a private one, isn't written, and its other page comes back alone.
-        let savedSplits = splits.compactMap { pair -> Session.Split? in
+        let savedSplits = splits.filter { !Browser.wholePinned($0, in: tabs) }.compactMap { pair -> Session.Split? in
             let places = pair.tabs.compactMap { indices[$0] }
             guard places.count == pair.tabs.count, places.count >= 2,
                   places == Array(places[0]..<places[0] + places.count) else { return nil }
@@ -3435,6 +3438,7 @@ extension Browser {
     func replacePage(_ target: Tab, with source: Tab) {
         guard canSplit(source, with: target) else { return }
         guard split(for: target) != nil else { return select(source) }
+        if pinnedSplit(of: target) != nil { return pair(source, with: target, onLeft: false) }
         if floating == source.id || floating == target.id { land() }
         let source = splittable(source)
         detachSplit(source)
@@ -3485,7 +3489,8 @@ extension Browser {
 
     func detachSplit(_ tab: Tab) {
         guard let index = splits.firstIndex(where: { $0.contains(tab.id) }) else { return }
-        splits.remove(at: index)
+        let pair = splits.remove(at: index)
+        leftSplit(pair, page: tab)
         rememberSession()
     }
 
@@ -3960,9 +3965,11 @@ extension Browser {
     /// ⌘W, or the cross on the tab. Closing the last one leaves a blank tab
     /// behind; closing that blank tab closes the window.
     func replaceRow(_ row: [Tab]) { tabs = row }
+    func replaceSplits(_ list: [TabSplit]) { splits = list }
 
     func close(_ tab: Tab) {
         guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
+        if putsDownPinnedSplit(tab) { return }
         LiveFolders.shared.signOnTabClosed(tab.id)
         var live: LiveDismissal?
         if let key = tab.liveKey, !LiveFolders.shared.syncing {
@@ -5743,6 +5750,7 @@ extension Browser {
             restoredSplits.append(pair)
             taken.formUnion(pair.tabs)
         }
+        restoredSplits = pinSplits(row, keeping: restoredSplits, space: space)
         let active = said.flatMap { id in row.contains { $0.id == id } ? id : nil }
         return Parked(tabs: row, active: active, splits: restoredSplits)
     }
@@ -6302,6 +6310,7 @@ extension Browser {
 
     func prepare(_ tab: Tab) {
         tab.delegate = self
+        wireBack(tab)
         tab.knowsTitle = { [weak self] url in self?.knownTitle(for: url) }
         // With two pages up, the keys going to the other one — Tab walked
         // past the last field of this one — make it the focused page, so the
@@ -7109,7 +7118,10 @@ extension Browser {
         guard picked.count > 1 else { return reload() }
         for tab in picked where !tab.asleep { tab.reload() }
     }
-    func back() { active?.back() }
+    func back() {
+        if let tab = active, leaveBack(tab) { return }
+        active?.back()
+    }
     func forward() { active?.forward() }
 }
 

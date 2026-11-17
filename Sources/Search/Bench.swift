@@ -483,6 +483,18 @@ final class Bench {
             browser.openBookmark(url)
             answer(["active": browser.active?.id.uuidString ?? ""])
 
+        case "windowbehind":
+            guard Store.testing, let window = browser.window else { answer(["error": "windowbehind needs a window on a --test run"]); return }
+            window.level = NSWindow.Level(rawValue: NSWindow.Level.normal.rawValue - 1)
+            window.orderBack(nil)
+            NSApp.unhideWithoutActivation()
+            window.orderBack(nil)
+            answer(["number": window.windowNumber, "level": window.level.rawValue, "key": window.isKeyWindow, "active": NSApp.isActive])
+
+        case "windowpicture":
+            guard Store.testing, let path = request["path"] as? String else { answer(["error": "windowpicture needs a path on a --test run"]); return }
+            answer(["shot": Browser.picture(of: browser.window?.contentView, to: path) ? path : ""])
+
         case "pin":
             // Pin a tab, or unpin it with "off". Only on a SEARCH_PROBE run.
             guard Store.testing else { answer(["error": "pin only works on a --test run"]); return }
@@ -495,6 +507,9 @@ final class Bench {
                     taken = browser.pinDropped(tab, at: at)
                 }
             }
+            else if request["split"] as? Bool == true, let pair = browser.split(for: tab) {
+                if browser.pinnedSplit(of: tab) != nil { browser.unpinSplit(pair) } else { browser.pinSplit(pair) }
+            }
             else if request["off"] as? Bool == true { browser.unpin(tab) }
             else if request["home"] as? Bool == true { browser.goHome(tab) }
             // "everywhere": Keep in Every Space (true) or Only in This Space
@@ -505,6 +520,7 @@ final class Bench {
             else { browser.pin(tab) }
             answer(["pin": tab.pin ?? "", "everywhere": tab.everywhere, "pinned": browser.pinnedCount, "home": tab.home?.absoluteString ?? "",
                     "address": tab.address?.absoluteString ?? "", "editingLetter": browser.editingPin == tab.id,
+                    "pinnedSplit": browser.pinnedSplit(of: tab) != nil,
                     "taken": taken.map { $0 as Any } ?? NSNull()])
 
         case "select":

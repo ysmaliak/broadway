@@ -240,10 +240,7 @@ struct Command: Identifiable {
         Command("tabs.rename", "Rename Tab", .tabs, nil) { browser in
             if let tab = browser.active { browser.beginTabRename(tab) }
         },
-        Command("tabs.pin", "Pin Tab", .tabs, nil) { browser in
-            guard let tab = browser.active else { return }
-            if tab.pin == nil { browser.pin(tab) } else { browser.unpin(tab) }
-        },
+        Command("tabs.pin", "Pin Tab", .tabs, nil) { $0.togglePinFront() },
         Command("meeting.join", "Join Next Meeting", .tabs, KeyCombo("j", control: true)) { browser in
             if browser.prefs.nextMeeting { browser.joinNextMeeting() }
         },

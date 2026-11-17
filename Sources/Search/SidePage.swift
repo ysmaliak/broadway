@@ -572,7 +572,8 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
     private func pinState(_ tab: Tab, lit: Set<UUID>, numbers: [UUID: Int]) -> RowState {
         var state = RowState()
         let real = preview == nil
-        state.live = tab.id == scene.active
+        state.live = tab.id == scene.active || (prefs.splitView && tab.pin != nil
+            && scene.splits.contains { $0.left == tab.id && scene.active.map($0.contains) == true })
         state.interactive = real
         state.editing = real && browser.editingPin == tab.id
         state.peek = real && browser.peekFrom == tab.id ? browser.peekTab.map(ObjectIdentifier.init) : nil
@@ -1725,7 +1726,7 @@ extension SidePageView {
         case .loose:
             if browser.prefs.usesTabGroups { browser.move(tab, within: nil, to: index) } else { browser.moveDisplayedTab(tab, to: index + browser.pinnedCount) }
         case .folder(let group): browser.move(tab, within: group, to: index)
-        case .pins: browser.move(tab, to: index)
+        case .pins: browser.moveDisplayedTab(tab, to: index)
         case .task: break
         }
     }

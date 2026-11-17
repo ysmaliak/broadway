@@ -303,6 +303,10 @@ enum TabMenuItems {
         if chosen.count > 1 {
             items.append(action(tab.pin == nil ? "Pin \(chosen.count) Tabs" : "Unpin \(chosen.count) Tabs",
                                 symbol: tab.pin == nil ? MenuSymbol.pin : MenuSymbol.unpin) { browser.togglePin(chosen, like: tab) })
+        } else if let pair = browser.shownPinnedSplit(of: tab) {
+            items.append(action("Unpin Split View", symbol: MenuSymbol.unpin) { browser.unpinSplit(pair) })
+        } else if let pair = browser.split(for: tab), browser.canPinSplit(pair) {
+            items.append(action("Pin Split View", symbol: MenuSymbol.pin) { browser.pinSplit(pair) })
         } else if tab.pin != nil {
             items.append(action("Unpin", symbol: MenuSymbol.unpin) { browser.unpin(tab) })
             if browser.pinMovedOff(tab) {
@@ -392,7 +396,13 @@ enum TabMenuItems {
         }
         if shared {
             items.append(action(tab.everywhere ? "Only in This Space" : "Keep in Every Space") {
-                if tab.everywhere { browser.keepHere(tab) } else { browser.shareEverywhere(tab) }
+                if let pair = browser.pinnedSplit(of: tab) {
+                    browser.shareSplit(pair, everywhere: !tab.everywhere)
+                } else if tab.everywhere {
+                    browser.keepHere(tab)
+                } else {
+                    browser.shareEverywhere(tab)
+                }
             })
         }
         if let route {

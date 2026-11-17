@@ -181,6 +181,9 @@ final class PinSquareView: KitHoverView {
     private let face = PinFaceView()
     let liveFace = PinFaceView()
     private let mark = RowMarkView()
+    private let second = RowMarkView()
+    private var partner: (tab: Tab, axis: TabSplit.Axis)?
+    private weak var shownSecond: NSImage?
     private var shortcut: ShortcutNumberView?
     private var field: NSView?
     private var peekBadge: NSView?
@@ -207,6 +210,11 @@ final class PinSquareView: KitHoverView {
         mark.size = PinPlaces.mark
         mark.letterSize = 12
         mark.tiled = false
+        addSubview(second)
+        second.size = PinPlaces.pairMark
+        second.letterSize = 11
+        second.tiled = false
+        second.isHidden = true
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
     }
@@ -231,7 +239,9 @@ final class PinSquareView: KitHoverView {
         }
         self.state = state
         let icon = tab.icon
-        if changed || icon !== shownIcon { refresh(animated: false) }
+        let other = browser.pinPartner(of: tab)
+        let moved = other?.tab !== partner?.tab || other?.axis != partner?.axis || other?.tab.icon !== shownSecond
+        if changed || moved || icon !== shownIcon { refresh(animated: false) }
         registerBench()
     }
 
@@ -389,6 +399,19 @@ final class PinSquareView: KitHoverView {
         mark.letter = tab.pin ?? ""
         mark.letterTone = state.live ? .ink : .muted
         mark.glyph = glyph
+        partner = browser.pinPartner(of: tab)
+        mark.size = partner == nil ? PinPlaces.mark : PinPlaces.pairMark
+        mark.letterSize = partner == nil ? 12 : 11
+        second.isHidden = partner == nil || mark.isHidden
+        if let other = partner?.tab {
+            shownSecond = other.icon
+            second.icon = state.icons || other.customIcon != nil ? other.icon : nil
+            second.letter = other.pin ?? ""
+            second.letterTone = mark.letterTone
+            second.glyph = glyph
+        } else {
+            shownSecond = nil
+        }
 
         if let number {
             let made = shortcut ?? ShortcutNumberView(number: number)
@@ -430,8 +453,9 @@ final class PinSquareView: KitHoverView {
             lift = 0
         }
 
-        setAccessibilityLabel(tab.label)
-        toolTip = state.hoverCards ? nil : tab.label
+        let label = partner.map { "\(tab.label) and \($0.tab.label)" } ?? tab.label
+        setAccessibilityLabel(label)
+        toolTip = state.hoverCards ? nil : label
         place()
         if Store.testing, let frame = benchFrame() { Bench.rowFrames[tab.id] = frame }
     }
@@ -449,7 +473,13 @@ final class PinSquareView: KitHoverView {
         liveFace.kitSetFrame(box)
         let side = PinPlaces.mark
         let middle = NSRect(x: (box.width - side) / 2, y: (box.height - side) / 2 - lift, width: side, height: side)
-        mark.kitSetFrame(middle)
+        if let partner {
+            let pair = PinPlaces.pair(in: box, axis: partner.axis, lift: lift)
+            mark.kitSetFrame(pair.first)
+            second.kitSetFrame(pair.second)
+        } else {
+            mark.kitSetFrame(middle)
+        }
         if let shortcut {
             let s = ShortcutNumberView.side
             shortcut.kitSetFrame(NSRect(x: (box.width - s) / 2, y: (box.height - s) / 2, width: s, height: s))
@@ -471,7 +501,7 @@ final class PinSquareView: KitHoverView {
     private func give(_ down: Bool) {
         let sink = RowRun.sink(pressed: down, gives: state.tabsGive, calm: Motion.calm)
         let curve = sink < 1 ? Motion.kitQuick : Motion.kitSettle
-        for view in [shadowHolder, liveFace, mark] as [NSView] {
+        for view in [shadowHolder, liveFace, mark, second] as [NSView] {
             view.kitScale(sink, curve: curve, around: CGPoint(x: bounds.midX - view.frame.minX, y: bounds.midY - view.frame.minY))
         }
     }
@@ -488,7 +518,7 @@ final class PinSquareView: KitHoverView {
         TabPress.brought = !state.live
         if selectedOnPress {
             browser.clearTabSelection()
-            browser.select(tab)
+            browser.select(browser.pinTarget(tab))
         }
     }
 
@@ -518,10 +548,10 @@ final class PinSquareView: KitHoverView {
         if state.live {
             guard event.clickCount >= 2 else { return }
             browser.clearTabSelection()
-            browser.goHome(tab)
+            browser.goHome(browser.pinTarget(tab))
         } else {
             browser.clearTabSelection()
-            browser.select(tab)
+            browser.select(browser.pinTarget(tab))
         }
     }
 
@@ -544,7 +574,7 @@ final class PinSquareView: KitHoverView {
 
     override func accessibilityPerformPress() -> Bool {
         guard let tab, let browser else { return false }
-        browser.select(tab)
+        browser.select(browser.pinTarget(tab))
         return true
     }
 }
