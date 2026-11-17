@@ -264,6 +264,8 @@ extension Browser {
              NSURLAuthenticationMethodHTTPDigest,
              NSURLAuthenticationMethodNTLM:
             signIn(webView, challenge, completionHandler)
+        case NSURLAuthenticationMethodClientCertificate:
+            ClientCertificateAsk.handle(self, webView, challenge, completionHandler)
         default:
             completionHandler(.performDefaultHandling, nil)
         }

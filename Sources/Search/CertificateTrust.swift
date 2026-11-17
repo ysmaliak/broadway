@@ -21,7 +21,12 @@ enum CertificateTrust {
 
         deinit {
             let id = id
-            DispatchQueue.main.async { MainActor.assumeIsolated { CertificateTrust.book.drop(passing: id) } }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    CertificateTrust.book.drop(passing: id)
+                    ClientCertificateAsk.answers.forget(.passing(id))
+                }
+            }
         }
     }
 
@@ -85,13 +90,21 @@ enum CertificateTrust {
 
     static func clearEverything() {
         book.clearEverything()
+        ClientCertificateAsk.answers.clearEverything()
     }
 
     static func clear(_ site: String, in store: WKWebsiteDataStore) {
-        book.clear(holder(for: store)) { SiteClearing.belongs($0, to: site) }
+        clear(in: store) { SiteClearing.belongs($0, to: site) }
+    }
+
+    static func clear(in store: WKWebsiteDataStore, where belongs: (String) -> Bool) {
+        let holder = holder(for: store)
+        book.clear(holder, where: belongs)
+        ClientCertificateAsk.answers.clear(holder, where: belongs)
     }
 
     static func forget(space: UUID) {
         book.forget(space: space)
+        ClientCertificateAsk.answers.forget(.space(space))
     }
 }

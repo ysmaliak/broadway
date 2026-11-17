@@ -3,7 +3,7 @@ import WebKit
 
 @MainActor
 enum BenchPage {
-    static let verbs: Set<String> = ["shield", "controls", "mini", "call", "dev", "device", "agent", "uploads", "json", "filebox", "saveask", "trust"]
+    static let verbs: Set<String> = ["shield", "controls", "mini", "call", "dev", "device", "agent", "uploads", "json", "filebox", "saveask", "trust", "clientcert"]
 
     static func run(_ verb: String, _ request: [String: Any], browser: Browser, _ answer: @escaping ([String: Any]) -> Void) {
         let action = request["action"] as? String ?? "state"
@@ -27,6 +27,17 @@ enum BenchPage {
             answer(["copied": JSONView.copied ?? "", "mode": JSONView.mode.rawValue])
         case "filebox": BenchFileChoice.run(action, values, browser, answer)
         case "saveask": BenchSaveAsk.run(action, values, browser, answer)
+        case "clientcert":
+            switch action {
+            case "first": ClientCertificateAsk.answerInTest = .first
+            case "cancel": ClientCertificateAsk.answerInTest = .cancel
+            case "load":
+                guard let held = ClientCertificateAsk.source as? HeldIdentities, values.count == 2,
+                      let data = FileManager.default.contents(atPath: values[0]), held.load(data, password: values[1])
+                else { return answer(["error": "clientcert load needs a readable PKCS#12 file and its password"]) }
+            default: break
+            }
+            answer(["answer": ClientCertificateAsk.answerInTest.rawValue, "dialogs": Dialogs.askedInTest])
         case "trust":
             if action == "continue" { Dialogs.continuesInTest = true }
             if action == "back" { Dialogs.continuesInTest = false }

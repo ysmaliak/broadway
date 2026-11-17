@@ -4930,7 +4930,17 @@ enum ExtensionShims {
         let stores = Spaces.spaceStores()
         let cookies = types.contains(WKWebsiteDataTypeCookies)
         for store in stores where !types.isEmpty {
-            if cookies { SignInKeeper.shared.clearing(store) }
+            if cookies {
+                SignInKeeper.shared.clearing(store)
+                if let origins {
+                    CertificateTrust.clear(in: store) { host in
+                        let site = Registrable.domain(of: host, isSuffix: AtRest.systemSuffix)
+                        return origins.contains { $0 == site || $0.hasSuffix("." + site) }
+                    }
+                } else {
+                    CertificateTrust.clear(in: store) { _ in true }
+                }
+            }
             if let origins {
                 let records = await store.dataRecords(ofTypes: types)
                 let hit = records.filter { record in origins.contains { $0 == record.displayName || $0.hasSuffix("." + record.displayName) } }
