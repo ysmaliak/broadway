@@ -156,7 +156,7 @@ final class TextActionsTests {
     }
 
     @Test func theMenuOffersThreeActionsAndMoreWhenItCanRun() {
-        #expect(browser.textActionRows(on: tab, offered: true) == ["improve", "fix", "translate", "more"])
+        #expect(browser.textActionRows(on: tab, offered: true) == ["improve", "fix", "summarize", "more"])
     }
 
     @Test func theMenuOffersNothingWithTheSwitchOff() {
@@ -177,7 +177,7 @@ final class TextActionsTests {
         browser.prefs.aiPlan = .thisMac
         let list = CommandList(picked: picked, tab: tab)
 
-        #expect(browser.textActionRows(on: tab, offered: true) == ["improve", "fix", "translate", "more"])
+        #expect(browser.textActionRows(on: tab, offered: true) == ["improve", "fix", "summarize", "more"])
         #expect(list.rows.allSatisfy { TextCommand.onDevice.contains($0.id) })
         #expect(!list.rows.contains { $0.id == "explain" })
     }
@@ -199,12 +199,96 @@ final class TextActionsTests {
         let hidden = privateTab()
         let list = CommandList(picked: picked, tab: hidden)
 
-        #expect(browser.textActionRows(on: hidden, offered: true) == ["improve", "fix", "translate", "more"])
+        #expect(browser.textActionRows(on: hidden, offered: true) == ["improve", "fix", "summarize", "more"])
         #expect(list.rows.allSatisfy { TextCommand.onDevice.contains($0.id) })
 
         await connect(claude: true, codex: true, mac: false)
 
         #expect(browser.textActionRows(on: hidden, offered: true).isEmpty)
+    }
+
+    @Test func beforePlansAreLookedAtAPrivateWindowOffersNothing() {
+        let hidden = privateTab()
+        Plans.shared.standIn(fakes[.thisMac], for: .thisMac)
+        let list = CommandList(picked: picked, tab: hidden)
+
+        #expect(!Plans.shared.looked)
+        #expect(browser.textActionRows(on: hidden, offered: true).isEmpty)
+        #expect(list.rows.isEmpty)
+        #expect(browser.textActionRows(on: tab, offered: true) == ["improve", "fix", "summarize", "more"])
+    }
+
+    @Test func theAgentRowIsDimmedWithNothingConnected() async throws {
+        let row = try #require(SettingsIndex.items.first { $0.id == "ai.plan" })
+        #expect(SettingsIndex.applies(row, browser.prefs))
+
+        await connect(claude: false, codex: false, mac: false)
+
+        #expect(!SettingsIndex.applies(row, browser.prefs))
+        #expect(SettingsIndex.needs(row) == "Install Claude Code or Codex and sign in")
+    }
+
+    @Test func findASettingFindsBothRows() {
+        #expect(SettingsIndex.find("text actions").contains { $0.id == "ai.actions" })
+        #expect(SettingsIndex.find("improve writing").contains { $0.id == "ai.actions" })
+        #expect(SettingsIndex.find("which agent").contains { $0.id == "ai.plan" })
+        #expect(SettingsIndex.find("codex").contains { $0.id == "ai.plan" })
+    }
+
+    @Test func translateStaysOutOfTheRightClickMenuButNotEditOrTheList() {
+        let list = CommandList(picked: picked, tab: tab)
+
+        #expect(!TextActions.inMenu.contains("translate"))
+        #expect(Command.named("edit.text.translate") != nil)
+        #expect(list.rows.contains { $0.id == "translate" })
+    }
+
+    @Test func theListSaysOnceAtItsFootWhatRunsIt() async {
+        let panel = { CommandListPanel(browser: self.browser, list: CommandList(picked: self.picked, tab: $0)) }
+
+        browser.prefs.aiPlan = .claude
+        #expect(panel(tab).footLine == "Claude Code, leaves this Mac")
+        browser.prefs.aiPlan = .chatGPT
+        #expect(panel(tab).footLine == "Codex, leaves this Mac")
+        browser.prefs.aiPlan = .thisMac
+        #expect(panel(tab).footLine == "On this Mac")
+        browser.prefs.aiPlan = .claude
+        #expect(panel(privateTab()).footLine == "On this Mac")
+    }
+
+    @Test func aBuiltInRowSaysNothingButItsName() {
+        browser.prefs.aiPlan = .claude
+        let panel = CommandListPanel(browser: browser, list: CommandList(picked: picked, tab: tab))
+
+        #expect(!panel.entries.isEmpty)
+        #expect(panel.entries.allSatisfy { $0.detail.isEmpty })
+    }
+
+    @Test func aRowSaysWhereItRunsOnlyWhenThatDiffersFromTheFoot() {
+        let usual = ModelChoice(plan: .claude, model: "fake", effort: nil)
+
+        #expect(CommandListPanel.own(usual, usual) == "")
+        #expect(CommandListPanel.own(ModelChoice(plan: .chatGPT, model: "fake", effort: nil), usual) == "Codex, leaves this Mac")
+        #expect(CommandListPanel.own(ModelChoice(plan: .thisMac, model: "", effort: nil), usual) == "On this Mac")
+        #expect(CommandListPanel.own(ModelChoice(plan: .claude, model: "other", effort: .high), usual) == "other · High")
+        #expect(CommandListPanel.own(nil, usual) == "")
+    }
+
+    @Test func noBuiltInNameIsCutInTheList() {
+        let room: CGFloat = 300 - 12 - 20
+        for command in TextCommand.builtIn {
+            let label = KitLabel(command.name, font: .systemFont(ofSize: 13), color: KitColor.ink)
+            #expect(FieldLine.width(label, scale: 2) <= room, "\(command.name)")
+        }
+    }
+
+    @Test func theResultNamesTheAgentAsSettingsDoes() {
+        let codex = ModelChoice(plan: .chatGPT, model: "fake", effort: nil)
+        let mac = ModelChoice(plan: .thisMac, model: "", effort: nil)
+
+        #expect(SelectionRun(command: command("improve"), asked: "", picked: picked, tab: tab, choice: claudeOwn).place.hasPrefix("Claude Code · "))
+        #expect(SelectionRun(command: command("improve"), asked: "", picked: picked, tab: tab, choice: codex).place.hasPrefix("Codex · "))
+        #expect(SelectionRun(command: command("improve"), asked: "", picked: picked, tab: tab, choice: mac).place == "On this Mac")
     }
 
     @Test func aRunWithTheSwitchOffSendsNothing() {

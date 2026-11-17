@@ -32,12 +32,19 @@ extension Browser {
     func aiState() -> [String: Any] {
         var out: [String: Any] = lineState()
         out["acting"] = active?.agentActing ?? ""
-        if let commands = ai.commands { out["commands"] = commands.rows.map(\.name); out["selection"] = commands.picked.text }
+        if let commands = ai.commands {
+            out["commands"] = commands.rows.map(\.name)
+            out["selection"] = commands.picked.text
+            let panel = CommandListPanel(browser: self, list: commands)
+            out["foot"] = panel.footLine
+            out["details"] = panel.entries.map(\.detail)
+        }
         if let result = ai.result {
             out["result"] = result.text
             out["resultRunning"] = result.running
             out["target"] = result.command.output.rawValue
             out["canReplace"] = result.picked.editable
+            out["place"] = result.place
         }
         return out
     }

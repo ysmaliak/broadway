@@ -256,7 +256,7 @@ final class CommandList {
     }
 
     private func runs(_ command: TextCommand) -> Bool {
-        !Plans.shared.looked || Plans.shared.commandChoice(command, blind: tab.neverSent, Shared.prefs) != nil
+        Plans.shared.looked ? Plans.shared.commandChoice(command, blind: tab.neverSent, Shared.prefs) != nil : !tab.neverSent
     }
 
     var asking: Bool { !typed.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -318,7 +318,7 @@ final class SelectionRun: Identifiable {
         self.choice = choice
     }
 
-    var place: String { choice.plan == .thisMac ? "On this Mac" : "\(choice.plan.name) · \(choice.label)" }
+    var place: String { choice.plan == .thisMac ? "On this Mac" : "\(choice.plan.tool) · \(choice.label)" }
     var showsDiff: Bool { command.rewrites && !running && failed == nil && !text.isEmpty }
 
     var request: ProviderRequest {
@@ -667,11 +667,13 @@ final class CommandListPanel: NSView, NSTextFieldDelegate {
     private let stage = KitFlippedView()
     private let field = SelectionField.make(placeholder: "Ask about this, or pick a command", size: 13)
     private let rule = KitBox(fill: KitColor.hairline)
+    private let foot = KitLabel("", font: .systemFont(ofSize: 11), color: KitColor.faint)
     private var rows: [CommandRow] = []
     private weak var before: NSResponder?
 
     private static let fieldHeight: CGFloat = 30
     private static let rowHeight: CGFloat = 27
+    private static let footHeight: CGFloat = 24
 
     init(browser: Browser, list: CommandList) {
         self.browser = browser
@@ -681,6 +683,7 @@ final class CommandListPanel: NSView, NSTextFieldDelegate {
         addSubview(glass)
         stage.addSubview(field)
         stage.addSubview(rule)
+        stage.addSubview(foot)
         field.delegate = self
         field.stringValue = list.typed
         field.kitAccess(id: "selection.commands.field", label: "Ask about this, or pick a command")
@@ -710,25 +713,33 @@ final class CommandListPanel: NSView, NSTextFieldDelegate {
         list.typed = field.stringValue
     }
 
-    private var entries: [(title: String, detail: String)] {
-        var out = list.rows.map { ($0.name, place($0)) }
+    var usual: ModelChoice? {
+        guard var plain = TextCommand.standard.first else { return nil }
+        plain.model = nil
+        return browser.choice(for: plain, tab: list.tab)
+    }
+
+    var footLine: String { usual.map { TextActions.runsOn($0.plan) } ?? "" }
+
+    var entries: [(title: String, detail: String)] {
+        let usual = usual
+        var out = list.rows.map { ($0.name, Self.own(browser.choice(for: $0, tab: list.tab), usual)) }
         if list.asking {
-            out.append(("Ask: \(list.typed)", browser.choice(for: TextCommand.standard[3], tab: list.tab).map(where_) ?? ""))
+            out.append(("Ask: \(list.typed)", Self.own(browser.choice(for: TextCommand.standard[3], tab: list.tab), usual)))
         }
         return out
     }
 
-    private func place(_ command: TextCommand) -> String {
-        browser.choice(for: command, tab: list.tab).map(where_) ?? "Not in a private window"
-    }
-
-    private func where_(_ choice: ModelChoice) -> String {
-        choice.plan == .thisMac ? "This Mac" : "\(choice.plan.name), leaves this Mac"
+    static func own(_ choice: ModelChoice?, _ usual: ModelChoice?) -> String {
+        guard let choice, choice != usual else { return "" }
+        guard choice.plan == usual?.plan else { return TextActions.runsOn(choice.plan) }
+        return choice.plan == .thisMac ? "" : choice.label
     }
 
     override var fittingSize: NSSize {
         let count = CGFloat(entries.count)
-        return NSSize(width: 300, height: 6 + Self.fieldHeight + 2 + 1 + count * (Self.rowHeight + 2) + 6)
+        let footRoom = footLine.isEmpty ? 0 : Self.footHeight
+        return NSSize(width: 300, height: 6 + Self.fieldHeight + 2 + 1 + count * (Self.rowHeight + 2) + footRoom + 6)
     }
 
     override func layout() {
@@ -763,6 +774,9 @@ final class CommandListPanel: NSView, NSTextFieldDelegate {
             row.frame = NSRect(x: 6, y: y, width: width, height: Self.rowHeight)
             y += Self.rowHeight + 2
         }
+        foot.text = footLine
+        foot.isHidden = foot.text.isEmpty
+        foot.frame = NSRect(x: 6 + 10, y: y, width: width - 20, height: Self.footHeight - 4)
     }
 }
 
@@ -795,7 +809,7 @@ final class CommandRow: NSView {
     override func layout() {
         super.layout()
         ground.frame = bounds
-        FieldLine.place([.text(title), .spacer(8), .text(detail, fixed: true)], in: self, padding: 10, spacing: 8)
+        FieldLine.place([.text(title, priority: 1), .spacer(8), .text(detail)], in: self, padding: 10, spacing: 8)
     }
 
     override func mouseDown(with event: NSEvent) {}

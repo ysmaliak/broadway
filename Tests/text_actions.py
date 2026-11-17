@@ -20,7 +20,7 @@ sv.use("text-actions")
 
 BEFORE = "Their is a mistake in this sentense."
 AFTER = "There is a mistake in this sentence."
-ROWS = ["Improve Writing", "Fix Spelling and Grammar", "Translate", "More Commands…"]
+ROWS = ["Improve Writing", "Fix Spelling and Grammar", "Summarize", "More Commands…"]
 PAGE = f"""<!doctype html><title>Words</title>
 <body style="font:18px -apple-system;margin:40px;background:white">
 <p id=words>{BEFORE}</p>
@@ -123,6 +123,7 @@ def main():
             t.ok("they sit together", last - first == len(ROWS) - 1, shown)
             t.ok("a separator on each side", shown[first - 1] == "---" and (last + 1 == len(shown) or shown[last + 1] == "---"), shown)
             t.ok("below Copy", "Copy" in shown and shown.index("Copy") < first, shown)
+        t.ok("Translate is not one of ours: no row is named just Translate", "Translate" not in shown, shown)
 
         items, why = menu(tab, pick_field("box"))
         t.ok("the menu on words selected in a box has them too", rows(items) == ROWS, why or titles(items))
@@ -150,10 +151,14 @@ def main():
         state = ai(action="select", id=tab, js=pick_field("box"))
         listed = state.get("commands", [])
         t.ok("More Commands… opens the list for the selection", "Improve Writing" in listed and state.get("selection") == BEFORE, state)
+        t.ok("the list still has Translate", "Translate" in listed, listed)
+        t.ok("its foot says once what runs them", state.get("foot") == "Claude Code, leaves this Mac", state)
+        t.ok("and no row repeats it", state.get("details") and all(d == "" for d in state["details"]), state)
         state = ai(action="take", index=listed.index("Improve Writing") if "Improve Writing" in listed else 0)
         state = finished()
         t.ok("Improve Writing answers with the fake plan's words", state.get("result") == AFTER, state)
         t.ok("the result can replace the words in the box", state.get("canReplace") is True, state)
+        t.ok("the result names the agent as Settings does", str(state.get("place", "")).startswith("Claude Code · "), state)
         said = sent()
         claude = said["sent"].get("claude", {})
         t.ok("one request went to the picked plan, and nothing anywhere else",

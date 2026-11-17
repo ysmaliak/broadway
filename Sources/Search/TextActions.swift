@@ -8,7 +8,7 @@ extension Preferences {
 @MainActor
 enum TextActions {
     nonisolated static let more = "more"
-    static let inMenu = ["improve", "fix", "translate"]
+    static let inMenu = ["improve", "fix", "summarize"]
     nonisolated static let moreTitle = "More Commands…"
 
     nonisolated static func commandID(_ id: String) -> String { "edit.text." + id }
@@ -34,6 +34,8 @@ enum TextActions {
 
     static func agentTitle(_ plan: Plan) -> String { plan == .thisMac ? plan.name : plan.tool }
 
+    static func runsOn(_ plan: Plan) -> String { plan == .thisMac ? "On this Mac" : "\(plan.tool), leaves this Mac" }
+
     nonisolated static let nothingConnected = "Install Claude Code or Codex and sign in"
 }
 
@@ -45,7 +47,7 @@ extension Browser {
 
     func canRun(_ command: TextCommand, on tab: Tab?) -> Bool {
         guard textActionsAllowed(on: tab), let tab else { return false }
-        return !Plans.shared.looked || choice(for: command, tab: tab) != nil
+        return Plans.shared.looked ? choice(for: command, tab: tab) != nil : !tab.neverSent
     }
 
     func canRunAny(on tab: Tab?) -> Bool {
