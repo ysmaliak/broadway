@@ -17,6 +17,7 @@ final class SignInKeeper {
         var released = false
         var cleared = 0
         var looking = false
+        var turn = 0
         var lookWhenReady = false
         var waiters: [() -> Void] = []
 
@@ -101,6 +102,8 @@ final class SignInKeeper {
         store.httpCookieStore.add(observer)
         restore(entry)
     }
+
+    var watching: [UUID] { Array(watched.keys) }
 
     func watches(_ store: WKWebsiteDataStore) -> Bool {
         byStore[ObjectIdentifier(store)] != nil
@@ -245,11 +248,22 @@ final class SignInKeeper {
         waiting.forEach { $0() }
     }
 
+    func resettle(_ seconds: TimeInterval) {
+        settle = seconds
+        for entry in watched.values where entry.looking { schedule(entry) }
+    }
+
     private func changed(_ entry: Watched) {
         guard watched[entry.key] === entry, !entry.looking else { return }
+        schedule(entry)
+    }
+
+    private func schedule(_ entry: Watched) {
         entry.looking = true
+        entry.turn += 1
+        let turn = entry.turn
         DispatchQueue.main.asyncAfter(deadline: .now() + settle) { [weak self, weak entry] in
-            guard let self, let entry else { return }
+            guard let self, let entry, entry.turn == turn else { return }
             entry.looking = false
             self.look(entry, force: false)
         }

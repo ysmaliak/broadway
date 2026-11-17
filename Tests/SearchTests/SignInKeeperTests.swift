@@ -280,6 +280,19 @@ struct SignInKeeperTests {
         #expect(kept(counted, key).count == 5)
     }
 
+    @Test func aShorterSettlingTimeAppliesToALookAlreadyWaiting() async {
+        let shelf = shelf(), key = UUID()
+        let (store, _) = ownStore()
+        let keeper = keeper(shelf)
+        keeper.watch(store, as: key)
+        await keeper.ready(store)
+        await store.httpCookieStore.setCookie(cookie("waiting"))
+
+        keeper.resettle(0.2)
+
+        #expect(await until(3) { kept(shelf, key).map(\.name) == ["waiting"] })
+    }
+
     @Test func quittingWritesTheKeptCopyBeforeItReturns() async {
         let shelf = shelf(), key = UUID()
         let (store, _) = ownStore()
@@ -291,6 +304,47 @@ struct SignInKeeperTests {
         keeper.flush()
 
         #expect(kept(shelf, key).map(\.name) == ["quit"])
+    }
+
+    @Test func aQuitStartedFromABlockOnTheMainQueueWritesWithoutWaitingOutTheDeadline() async {
+        let shelf = shelf(), key = UUID()
+        let (store, _) = ownStore()
+        let keeper = keeper(shelf)
+        keeper.watch(store, as: key)
+        await keeper.ready(store)
+        await store.httpCookieStore.setCookie(cookie("block"))
+
+        let took = await withCheckedContinuation { (done: CheckedContinuation<TimeInterval, Never>) in
+            DispatchQueue.main.async {
+                let started = ProcessInfo.processInfo.systemUptime
+                MainActor.assumeIsolated { keeper.flush() }
+                done.resume(returning: ProcessInfo.processInfo.systemUptime - started)
+            }
+        }
+
+        #expect(kept(shelf, key).map(\.name) == ["block"])
+        #expect(took < 1)
+    }
+
+    @Test func aQuitStartedFromARunLoopTimerWritesWithoutWaitingOutTheDeadline() async {
+        let shelf = shelf(), key = UUID()
+        let (store, _) = ownStore()
+        let keeper = keeper(shelf)
+        keeper.watch(store, as: key)
+        await keeper.ready(store)
+        await store.httpCookieStore.setCookie(cookie("timer"))
+
+        let took = await withCheckedContinuation { (done: CheckedContinuation<TimeInterval, Never>) in
+            let timer = Timer(timeInterval: 0.05, repeats: false) { _ in
+                let started = ProcessInfo.processInfo.systemUptime
+                MainActor.assumeIsolated { keeper.flush() }
+                done.resume(returning: ProcessInfo.processInfo.systemUptime - started)
+            }
+            RunLoop.main.add(timer, forMode: .default)
+        }
+
+        #expect(kept(shelf, key).map(\.name) == ["timer"])
+        #expect(took < 1)
     }
 
     @Test func aClearWhileTheRestoreIsUnderWayIsNotUndone() async {

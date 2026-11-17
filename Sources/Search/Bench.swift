@@ -4286,6 +4286,9 @@ final class Bench {
         case "idle":
             BenchIdle.run(request, browser: browser, answer)
 
+        case "signins":
+            BenchSignIns.run(request, answer)
+
         case "lights":
             BenchLights.run(request, answer)
 
