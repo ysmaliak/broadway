@@ -31,10 +31,11 @@ enum SiteClearing {
     }
 
     @MainActor static func clear(_ site: String, in store: WKWebsiteDataStore) async {
+        SignInKeeper.shared.clearing(store)
         let records = await store.dataRecords(ofTypes: types)
         let mine = records.filter { belongs($0.displayName, to: site) }
-        guard !mine.isEmpty else { return }
-        await store.removeData(ofTypes: types, for: mine)
+        if !mine.isEmpty { await store.removeData(ofTypes: types, for: mine) }
+        await SignInKeeper.shared.cleared(store)
     }
 }
 

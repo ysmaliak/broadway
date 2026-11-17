@@ -16,6 +16,7 @@ final class LocalPageServer {
     private let lock = NSLock()
     private var asked: [String] = []
     private var languages: [String: String] = [:]
+    private var cookieHeaders: [String: String] = [:]
     private var stopped = false
     private let pages: [String: Page]
     let port: UInt16
@@ -82,6 +83,12 @@ final class LocalPageServer {
         return languages[path]
     }
 
+    func cookies(asked path: String) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return cookieHeaders[path]
+    }
+
     func stop() {
         lock.lock()
         let first = !stopped
@@ -123,9 +130,13 @@ final class LocalPageServer {
         let language = header.components(separatedBy: "\r\n")
             .first { $0.lowercased().hasPrefix("accept-language:") }
             .map { String($0.dropFirst("accept-language:".count)).trimmingCharacters(in: .whitespaces) }
+        let cookie = header.components(separatedBy: "\r\n")
+            .first { $0.lowercased().hasPrefix("cookie:") }
+            .map { String($0.dropFirst("cookie:".count)).trimmingCharacters(in: .whitespaces) }
         lock.lock()
         asked.append(path)
         if let language { languages[path] = language }
+        if cookieHeaders[path] == nil { cookieHeaders[path] = cookie ?? "" }
         lock.unlock()
 
         let page = pages[path] ?? Page(status: "404 Not Found", type: "text/html",

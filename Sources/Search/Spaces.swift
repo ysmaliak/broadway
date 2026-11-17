@@ -145,11 +145,16 @@ enum Spaces {
     @MainActor static var known: [UUID: Space] = Dictionary(read().map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
 
     @MainActor static func store(for id: UUID) -> WKWebsiteDataStore {
-        if id == Space.firstID || known[id]?.sharesSignIns == true { return Store.websites }
+        if id == Space.firstID || known[id]?.sharesSignIns == true {
+            let shared = Store.websites
+            SignInKeeper.shared.watch(shared, as: Space.firstID)
+            return shared
+        }
         if let made = stores[id] { return made }
         let made = WKWebsiteDataStore(forIdentifier: id)
         if Store.keepsSignIns { Store.followSignIns(made) } else { Store.followCookies(made) }
         stores[id] = made
+        SignInKeeper.shared.watch(made, as: id)
         return made
     }
 
@@ -182,6 +187,7 @@ enum Spaces {
         // The space's downloads would have kept its store, and asked with
         // its cookies again: they go with it.
         stores[id] = nil
+        SignInKeeper.shared.forget(id)
         eraseStore(store, id: id)
     }
 

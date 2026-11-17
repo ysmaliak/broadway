@@ -1632,7 +1632,8 @@ final class Browser: NSObject {
     func clearSites() {
         let types = WKWebsiteDataStore.allWebsiteDataTypes()
         for store in Spaces.spaceStores() {
-            store.removeData(ofTypes: types, modifiedSince: .distantPast) {}
+            SignInKeeper.shared.clearing(store)
+            store.removeData(ofTypes: types, modifiedSince: .distantPast) { SignInKeeper.shared.cleared(store) }
         }
         announce("Signed out of everything")
     }
@@ -7127,7 +7128,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
                                made: webView.configuration.mediaTypesRequiringUserActionForPlayback)
                 PrivacySignal.apply(to: preferences, shy: shy)
             }
-            decisionHandler(policy, preferences)
+            SignInKeeper.shared.ready(webView.configuration.websiteDataStore) { decisionHandler(policy, preferences) }
         }
     }
 

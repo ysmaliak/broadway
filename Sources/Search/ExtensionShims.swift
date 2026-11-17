@@ -4915,7 +4915,7 @@ enum ExtensionShims {
     }
 
     /// chrome.browsingData, from what WebKit and Search keep.
-    private static func clear(_ what: [String: Bool], options: [String: Any], browser: Browser) async throws {
+    static func clear(_ what: [String: Bool], options: [String: Any], browser: Browser) async throws {
         let since = Date(timeIntervalSince1970: (options["since"] as? Double ?? 0) / 1000)
         let origins = (options["origins"] as? [String])?.compactMap { URL(string: $0)?.host() }
         var types = Set<String>()
@@ -4928,7 +4928,9 @@ enum ExtensionShims {
         ]
         for (key, on) in what where on { types.formUnion(map[key] ?? []) }
         let stores = Spaces.spaceStores()
+        let cookies = types.contains(WKWebsiteDataTypeCookies)
         for store in stores where !types.isEmpty {
+            if cookies { SignInKeeper.shared.clearing(store) }
             if let origins {
                 let records = await store.dataRecords(ofTypes: types)
                 let hit = records.filter { record in origins.contains { $0 == record.displayName || $0.hasSuffix("." + record.displayName) } }
@@ -4936,6 +4938,7 @@ enum ExtensionShims {
             } else {
                 await store.removeData(ofTypes: types, modifiedSince: since)
             }
+            if cookies { await SignInKeeper.shared.cleared(store) }
         }
         if what["history"] == true, origins == nil {
             for trace in browser.history.everything() where trace.last >= since { browser.history.forget(trace.key) }

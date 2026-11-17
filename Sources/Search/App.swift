@@ -14,6 +14,7 @@ enum BroadwayApp {
                 Session.startFresh(spaces: Spaces.read().map(\.id))
                 Browsers.startFresh()
             }
+            SignInKeeper.shared.launch(keeping: Spaces.read())
             let app = NSApplication.shared
             NSWindow.allowsAutomaticWindowTabbing = false
             app.delegate = links
