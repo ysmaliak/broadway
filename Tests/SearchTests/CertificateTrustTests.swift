@@ -176,6 +176,54 @@ final class CertificateTrustTests {
         #expect(answer(store, reply: false) == .refuse)
     }
 
+    private func until(_ seconds: Double = 5, _ check: () -> Bool) async -> Bool {
+        let end = Date().addingTimeInterval(seconds)
+        while Date() < end {
+            if check() { return true }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return check()
+    }
+
+    @Test func aPrivateStoresExceptionsGoWhenTheStoreIsFreed() async {
+        var holder: CertificateHolder?
+        do {
+            let store = WKWebsiteDataStore.nonPersistent()
+            _ = answer(store)
+            holder = CertificateTrust.holder(for: store)
+        }
+        let held = try? #require(holder)
+
+        #expect(await until { held.map { CertificateTrust.book.exceptions($0).isEmpty } ?? false })
+    }
+
+    @Test func signingOutOfEverySiteDropsTheFirstSpacesExceptions() {
+        CertificateTrust.book.excuse(.space(Space.firstID), host: "router.example.org", port: 443, chain: chain)
+        let browser = Browser(record: WindowRecord())
+        defer { browser.closeAll() }
+
+        browser.clearSites()
+
+        #expect(!CertificateTrust.book.covers(.space(Space.firstID), host: "router.example.org", port: 443, chain: chain))
+    }
+
+    @Test func erasingASpaceDropsItsExceptionsAndItsFile() {
+        let id = UUID()
+        let store = Spaces.store(for: id)
+        #expect(CertificateTrust.holder(for: store) == .space(id))
+        CertificateTrust.book.excuse(.space(id), host: "router.example.org", port: 443, chain: chain)
+        #expect(FileManager.default.fileExists(atPath: CertificateTrust.book.file(for: id).path))
+        addTeardownBlock {
+            let left = (Store.settings.stringArray(forKey: "spaces.erasing") ?? []).filter { $0 != id.uuidString }
+            Store.settings.set(left, forKey: "spaces.erasing")
+        }
+
+        Spaces.erase(id)
+
+        #expect(!CertificateTrust.book.covers(.space(id), host: "router.example.org", port: 443, chain: chain))
+        #expect(!FileManager.default.fileExists(atPath: CertificateTrust.book.file(for: id).path))
+    }
+
     @Test func removingASpaceDropsItsExceptions() {
         let id = UUID()
         CertificateTrust.book.excuse(.space(id), host: "router.example.org", port: 443, chain: chain)

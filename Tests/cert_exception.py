@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import split_view as sv  # noqa: E402
+import split_view as sv
 
 sv.use("cert-exception")
 
