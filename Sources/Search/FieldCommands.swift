@@ -146,6 +146,7 @@ extension Browser {
         offers += quick.others.compactMap { quickRow($0) }
         let listed = Set(offers.filter(\.kind.isCommand).map { $0.key.lowercased() })
         offers += fieldRows(for: typed).filter { !listed.contains($0.key.lowercased()) }
+        addFieldAIRows()
     }
 }
 
@@ -167,6 +168,8 @@ extension Browser {
             runPageAction(parts[1])
         case "now":
             runNow(parts[1])
+        case "task", "ask", "ask-new":
+            runFieldAI(parts[0], parts[1])
         default:
             break
         }

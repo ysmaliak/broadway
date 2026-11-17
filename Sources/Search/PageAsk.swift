@@ -10,6 +10,7 @@ final class PageAsk: Identifiable {
     let refusal: String?
     var draft = ""
     var focus = 0
+    var fromField = false
 
     nonisolated var id: ObjectIdentifier { ObjectIdentifier(self) }
 
@@ -50,6 +51,8 @@ extension Preferences {
 }
 
 extension PageAsk {
+    static var board = NSPasteboard.general
+
     static func set(_ on: Bool, _ prefs: Preferences, in browsers: [Browser]? = nil) {
         prefs.askAndChat = on
         if !on { (browsers ?? Browsers.all).forEach { $0.closeLine() } }
@@ -89,7 +92,7 @@ extension Browser {
         Task { @MainActor in await openLine(tab) }
     }
 
-    func openLine(_ tab: Tab) async {
+    func openLine(_ tab: Tab, withPage: Bool = true) async {
         guard prefs.askAndChat, !tab.asksAgent else { return }
         if !Plans.shared.looked { await Plans.shared.refresh() }
         guard active === tab, !tab.asksAgent else { return }
@@ -101,7 +104,7 @@ extension Browser {
         conversation.chat.model = choice
         conversation.pageFinder = { [weak self] id in self?.tabs.first { $0.id == id } }
         conversation.seen = { [weak self, weak conversation] in self?.ai.line?.conversation === conversation }
-        let onPage = choice != nil && tab.askReadable
+        let onPage = withPage && choice != nil && tab.askReadable
         if onPage { conversation.attachments = [Attachment(label: tab.title.isEmpty ? "This page" : tab.title, kind: .tab(tab.id))] }
         ai.line = PageAsk(tab: tab, conversation: conversation, onPage: onPage, refusal: choice == nil ? askRefusal(for: tab) : nil)
     }
@@ -120,6 +123,7 @@ extension Browser {
     func lineKey(_ event: NSEvent, _ flags: NSEvent.ModifierFlags, _ key: String) -> Bool {
         guard let line = ai.line, line.answering, !line.conversation.running else { return false }
         let plain = flags.subtracting([.numericPad, .function])
+        if fieldLineKey(line, event, plain, key) { return true }
         if plain == .command, key == "c", !lineHasSelection() {
             copyAnswer(line)
             return true
@@ -146,8 +150,8 @@ extension Browser {
 
     func copyAnswer(_ line: PageAsk) {
         guard let text = line.conversation.lastAnswer?.text, !text.isEmpty else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        PageAsk.board.clearContents()
+        PageAsk.board.setString(text, forType: .string)
         announce("Copied")
     }
 

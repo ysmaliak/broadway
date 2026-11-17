@@ -2,6 +2,7 @@ import AppKit
 
 struct AIStage {
     var line: PageAsk?
+    var fieldSearchOnTop: String?
     var foldedTasks: Set<UUID> = []
     var commands: CommandList?
     var result: SelectionRun?

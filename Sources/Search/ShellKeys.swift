@@ -252,6 +252,7 @@ extension ContentView {
         if let window, event.window === window, browser.commandKey(event) { return true }
         if event.keyCode == 48, !flags.contains(.command), !flags.contains(.option), !flags.contains(.control) {
             if browser.editingTab != nil { return true }
+            if browser.fieldShowing, !flags.contains(.shift), browser.fieldTabKey() { return true }
             if browser.fieldShowing, !flags.contains(.shift), browser.lockSiteOffer() { return true }
             if browser.fieldShowing, !browser.offers.isEmpty {
                 browser.walk(flags.contains(.shift) ? -1 : 1)

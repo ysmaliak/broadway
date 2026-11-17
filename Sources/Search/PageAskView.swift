@@ -396,6 +396,13 @@ final class AskAnswerCard: NSView {
 
     private var hintWords: [(String, String)] {
         guard !line.conversation.running, let answer = line.conversation.lastAnswer else { return [] }
+        if line.fromField {
+            var out: [(String, String)] = answer.text.isEmpty ? [] : [("↩", "Copy")]
+            if browser.fieldTasks { out.append(("⌘↩", "Task")) }
+            out.append(("⌘R", "Again"))
+            if let other = browser.otherAgent(for: line) { out.append(("⇧⌘R", "Ask \(other.plan.tool)")) }
+            return out
+        }
         var out: [(String, String)] = [("⌘J", "Follow up")]
         if !answer.text.isEmpty { out += [("⇧⌘V", "Put in page"), ("⌘C", "Copy")] }
         if let other = browser.otherAgent(for: line) { out.append(("⇧⌘R", "Ask \(other.plan.tool)")) }
