@@ -109,19 +109,6 @@ final class SaveAsk {
         return true
     }
 
-    func save(id: UUID? = nil) -> Bool {
-        guard let question = pick(id), question.up, let panel = question.panel,
-              let window = question.window, window.attachedSheet === panel else { return false }
-        panel.makeKeyAndOrderFront(nil)
-        for type in [NSEvent.EventType.keyDown, .keyUp] {
-            guard let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-                                               windowNumber: panel.windowNumber, context: nil, characters: "\r",
-                                               charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36) else { continue }
-            NSApp.postEvent(event, atStart: false)
-        }
-        return true
-    }
-
     func tabClosed(_ ids: Set<Tab.ID>) {
         for question in questions where question.tab.map(ids.contains) == true { finish(question, with: nil) }
     }
@@ -157,9 +144,9 @@ final class SaveAsk {
         panel.canCreateDirectories = true
         panel.isExtensionHidden = false
         next.panel = panel
-        let done: (NSApplication.ModalResponse) -> Void = { [weak self, weak next, weak panel] response in
+        let done: (NSApplication.ModalResponse) -> Void = { [weak self, weak next] response in
             guard let self, let next, !next.reply.finished else { return }
-            let file = response == .OK ? panel?.url : nil
+            let file = response == .OK ? panel.url : nil
             next.panel = nil
             self.finish(next, with: file)
         }

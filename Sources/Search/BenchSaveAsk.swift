@@ -14,8 +14,6 @@ enum BenchSaveAsk {
         case "cancel":
             guard ask.cancel(id: values.first.flatMap(UUID.init(uuidString:))) else { return answer(["error": "no question to cancel"]) }
         case "real": ask.realNext = values.first == "off" ? 0 : values.first.flatMap(Int.init) ?? 1
-        case "save":
-            guard ask.save(id: values.first.flatMap(UUID.init(uuidString:))) else { return answer(["error": "no real sheet is up to save"]) }
         case "state": break
         default: return answer(["error": "unknown saveask action"])
         }

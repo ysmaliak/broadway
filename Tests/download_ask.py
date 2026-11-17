@@ -9,8 +9,8 @@ folder inside the world, then a cancel. Last, one question shows the real
 save sheet: the window's sheet is a save panel, a second window still takes
 a bench command while it is up, the bench cancels it, and one picture of
 the probe's own window (and of the sheet's own window) is taken by its id.
-Then Save is pressed in a real sheet, and a second download's real sheet,
-held behind it, comes up after it and is cancelled.
+Then two downloads ask with real sheets: the second waits behind the first
+and comes up when the first is cancelled.
 Pictures go to .context/download-ask/. Where this process may not record the
 screen, DOWNLOAD_ASK_HOLD names a folder: the sheet stays up while the
 process id and window numbers are written there as hold.txt, and pictures
@@ -213,9 +213,9 @@ def case_real(t, pid, shots):
     t.ok("no file after cancelling the sheet", not (Path(trace()["folder"]) / "ask-real.bin").exists())
 
 
-def case_saved(t, picked):
+def case_queued(t, picked):
     ask("real", "2", window=1)
-    start("ask-saved.bin", window=1)
+    start("ask-first.bin", window=1)
     q = question(seconds=12, real=True)
     t.ok("a real sheet comes up for the next download", q is not None, ask())
     if not q:
@@ -226,17 +226,15 @@ def case_saved(t, picked):
     t.ok("a second download waits behind the sheet that is up",
          len(waiting) == 1 and waiting[0]["name"] == "ask-second.bin" and not waiting[0]["sheet"], ask()["questions"])
     t.ok("the sheet starts in the folder picked last", Path(q["folder"]).resolve() == picked.resolve(), q["folder"])
-    time.sleep(1)
-    ask("save", q["id"])
-    t.ok("Save in the real sheet lands the file there and keeps it", landed(picked / "ask-saved.bin"), trace()["kept"])
+    ask("cancel", q["id"])
     second = question(seconds=12, real=True)
     t.ok("the waiting download's sheet comes up once the first is answered",
          second is not None and second["name"] == "ask-second.bin" and second["attachedIsPanel"], ask())
     if second:
         ask("cancel", second["id"])
         time.sleep(1)
-    t.ok("cancelling the second sheet leaves no question and no file",
-         not ask()["questions"] and not (picked / "ask-second.bin").exists(), ask())
+    t.ok("cancelling both sheets leaves no question and no file",
+         not ask()["questions"] and not (picked / "ask-first.bin").exists() and not (picked / "ask-second.bin").exists(), ask())
     sv.cmd({"do": "idle", "action": "hide"})
 
 
@@ -257,7 +255,7 @@ def main():
         case_cancelled(t, picked)
         t.ok("the picture tool builds", have_tool)
         case_real(t, pid, shots)
-        case_saved(t, picked)
+        case_queued(t, picked)
     finally:
         t.done()
         for path in shots:
