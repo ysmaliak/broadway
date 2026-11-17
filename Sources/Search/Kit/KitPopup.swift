@@ -198,6 +198,7 @@ final class KitPopup {
         stage.layoutSubtreeIfNeeded()
         enter(from: start)
         window.addChildWindow(panel, ordered: .above)
+        if panel.level < window.level { panel.level = window.level }
         if focus { panel.makeKey() }
         observe(window, panel)
         Self.watch()

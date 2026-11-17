@@ -107,7 +107,7 @@ struct KeyCombo: Codable, Hashable {
 /// A menu command, and the key it has unless you give it another.
 struct Command: Identifiable {
     enum Section: String, CaseIterable {
-        case app = "Broadway", file = "File", edit = "Edit", view = "View", tabs = "Tabs", spaces = "Spaces", bookmarks = "Bookmarks", history = "History"
+        case app = "Broadway", file = "File", edit = "Edit", view = "View", tabs = "Tabs", spaces = "Spaces", bookmarks = "Bookmarks", history = "History", window = "Window"
     }
 
     let id: String
@@ -160,7 +160,9 @@ struct Command: Identifiable {
         Command("edit.find", "Find on Page…", .edit, KeyCombo("f")) { $0.openFind() },
         Command("edit.findNext", "Find Next", .edit, KeyCombo("g")) { $0.look(forward: true) },
         Command("edit.findPrevious", "Find Previous", .edit, KeyCombo("g", shift: true)) { $0.look(forward: false) },
+        Command("edit.useSelectionForFind", "Use Selection for Find", .edit, nil) { $0.useSelectionForFind() },
         Command("edit.copyCleanLink", "Copy Clean Link", .edit, KeyCombo("c", shift: true, option: true)) { $0.copyCleanLink() },
+        Command("edit.copyLinkToHighlight", "Copy Link to Highlight", .edit, nil) { $0.copyLinkToHighlight() },
         Command("edit.fillForm", "Fill Whole Form", .edit, KeyCombo("return", command: false, option: true)) { $0.forms.begin() },
         Command("edit.copyForAgent", "Copy for Agent", .edit, KeyCombo("c", control: true)) { $0.copyForAgent() },
         Command("edit.copyPageMarkdown", "Copy Page as Markdown", .edit, nil) { $0.copyPageAsMarkdown() },
@@ -267,6 +269,7 @@ struct Command: Identifiable {
         },
         Command("tabs.mute", "Stop Sound in Tab", .tabs, KeyCombo("m", shift: true)) { $0.pauseMedia() },
         Command("tabs.muteToggle", "Mute Tab", .tabs, nil) { $0.active?.toggleMute() },
+        Command("tab.muteOthers", "Mute Other Tabs", .tabs, nil) { $0.muteOtherTabs() },
         Command("tabs.keep", "Keep Tab", .tabs, nil) { browser in
             if let tab = browser.active, tab.agent { browser.keepAgentTab(tab) }
         },
@@ -314,6 +317,8 @@ struct Command: Identifiable {
         Command("history.files", "Files", .history, KeyCombo("j", shift: true)) { $0.filing = true },
         Command("history.clearData", "Clear Browsing Data…", .history, KeyCombo("delete", shift: true)) { $0.clearBrowsingData() },
         Command("history.clear", "Clear History", .history, nil) { $0.clearHistory() },
+        Command("window.keepOnTop", "Keep Window on Top", .window, nil) { KeepOnTop.toggle($0) },
+        Command("window.mergeAll", "Merge All Windows", .window, nil) { WindowMerge.run(into: $0) },
         Command("spaces.next", "Next Space", .spaces, KeyCombo("right", option: true)) { $0.stepSpace(1) },
         Command("spaces.previous", "Previous Space", .spaces, KeyCombo("left", option: true)) { $0.stepSpace(-1) },
         Command("spaces.new", "New Space…", .spaces, nil) { browser in

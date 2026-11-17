@@ -362,6 +362,7 @@ enum Browsers {
             retire(browser, remembered: false)
             return
         }
+        let remembered = unremembered.remove(ObjectIdentifier(browser)) == nil
         let others = all.filter { $0 !== browser && $0.isOpen && !$0.keepsNothing }
         guard !others.isEmpty else {
             // The last one: kept, tabs and all, and written down now. Its
@@ -373,7 +374,14 @@ enum Browsers {
             browser.sleepShut()
             return
         }
-        retire(browser)
+        retire(browser, remembered: remembered)
+    }
+
+    private static var unremembered: Set<ObjectIdentifier> = []
+
+    static func closeUnremembered(_ browser: Browser) {
+        unremembered.insert(ObjectIdentifier(browser))
+        browser.window?.close()
     }
 
     private static func retire(_ browser: Browser, remembered: Bool = true) {

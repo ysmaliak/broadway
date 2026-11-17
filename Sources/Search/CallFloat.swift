@@ -425,7 +425,7 @@ final class CallFloat {
             backing: .buffered,
             defer: false
         )
-        panel.level = .floating
+        panel.level = KeepOnTop.panelLevel
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.backgroundColor = .clear
         panel.isOpaque = false

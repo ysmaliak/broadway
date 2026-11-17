@@ -328,6 +328,9 @@ enum TabMenuItems {
             })
         }
         items.append(action(tab.muted ? "Unmute Tab" : "Mute Tab", symbol: MenuSymbol.mute(tab.muted)) { tab.toggleMute() })
+        if !browser.tabsToMute(sparing: tab).isEmpty {
+            items.append(action("Mute Other Tabs", symbol: MenuSymbol.mute(false)) { browser.muteOtherTabs(sparing: tab) })
+        }
         items.append(.separator())
         items += split(browser, tab)
         if chosen.contains(where: \.isWeb) {

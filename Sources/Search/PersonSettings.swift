@@ -234,6 +234,7 @@ enum PersonSettings {
         "passwords.open": SettingAccess(bar: .always, instead: "broadway logins list reads who is kept, never a password"),
         "privacy.forget": row("Site by site", instead: "broadway permissions reset"),
         "privacy.permissions": row("Site by site", instead: "broadway permissions"),
+        "app.openAtLogin": row("In the Broadway menu"),
         "quit.confirm": row("In the Broadway menu"),
         "routes": row("In Broadway"),
         "search.engine": SettingAccess(takes: Engine.allCases.filter { $0 != .custom }.map(\.rawValue).joined(separator: ", "), read: { $0.engine.rawValue }, write: { prefs, text in

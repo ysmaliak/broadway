@@ -530,7 +530,7 @@ final class Browser: NSObject {
     /// A new search not yet asked, and Next / Previous presses not yet sent.
     @ObservationIgnored private var findFresh = false
     @ObservationIgnored private var findSteps = 0
-    @ObservationIgnored private var resettingFind = false
+    @ObservationIgnored var resettingFind = false
     @ObservationIgnored private weak var findWeb: WKWebView?
 
     /// A question to the page not answered yet, or one waiting to be asked.

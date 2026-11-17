@@ -41,6 +41,7 @@ enum SceneWindow {
                 open()
                 MenuBar.refreshAll()
                 Updates.shared.start()
+                Handoff.start()
             }
         }
     }
@@ -307,6 +308,7 @@ enum MenuBar {
                 act("Settings…", key: "app.settings") { $0.tuning = true },
                 act("Passwords", key: "app.passwords") { $0.managing = true },
                 act("Warn Before Quitting", on: current.prefs.confirmsQuit) { $0.prefs.confirmsQuit.toggle() },
+                act("Open at Login", on: OpenAtLogin.on) { OpenAtLogin.toggle(in: $0) },
             ]
         }
         return menu
@@ -331,11 +333,19 @@ enum MenuBar {
         let menu = NSMenu(title: "Window")
         menu.addItem(standard("Minimize", #selector(NSWindow.performMiniaturize(_:)), "m"))
         menu.addItem(standard("Zoom", #selector(NSWindow.performZoom(_:))))
-        menu.addItem(.separator())
-        menu.addItem(command("Broadway") { SceneWindow.open() })
-        menu.addItem(.separator())
-        menu.addItem(standard("Bring All to Front", #selector(NSApplication.arrangeInFront(_:))))
+        attach(menu, at: menu.items.count, windowRows)
         return menu
+    }
+
+    private static func windowRows() -> [NSMenuItem] {
+        [
+            act("Keep Window on Top", key: "window.keepOnTop", enabled: KeepOnTop.allowed(current), on: KeepOnTop.isOn(current)) { KeepOnTop.toggle($0) },
+            .separator(),
+            command("Broadway") { SceneWindow.open() },
+            .separator(),
+            standard("Bring All to Front", #selector(NSApplication.arrangeInFront(_:))),
+            act("Merge All Windows", key: "window.mergeAll", enabled: WindowMerge.canMerge(into: current)) { WindowMerge.run(into: $0) },
+        ]
     }
 
     static func helpMenu() -> NSMenu {
@@ -390,6 +400,7 @@ enum MenuBar {
             act("Copy Page as Markdown", key: "edit.copyPageMarkdown", enabled: web) { $0.copyPageAsMarkdown() },
             act(LinkCopy.title(.clean, count: browser.keyTabs.filter(\.isWeb).count), key: "edit.copyCleanLink",
                 enabled: !(browser.active?.isBlank ?? true)) { $0.copyCleanLink() },
+            act("Copy Link to Highlight", key: "edit.copyLinkToHighlight", enabled: browser.canCopyLinkToHighlight) { $0.copyLinkToHighlight() },
             act("Fill Whole Form", key: "edit.fillForm", enabled: web) { $0.forms.begin() },
             act("Insert Snippet…", key: "edit.snippets") { $0.enterPlace(.snippets) },
             .separator(),
@@ -403,8 +414,9 @@ enum MenuBar {
             },
             .separator(),
             act("Find on Page…", key: "edit.find", enabled: web || browser.active?.page?.kind == .settings) { $0.openFind() },
-            act("Find Next", key: "edit.findNext", enabled: browser.finding) { $0.look(forward: true) },
-            act("Find Previous", key: "edit.findPrevious", enabled: browser.finding) { $0.look(forward: false) },
+            act("Find Next", key: "edit.findNext", enabled: browser.canFindAgain) { $0.look(forward: true) },
+            act("Find Previous", key: "edit.findPrevious", enabled: browser.canFindAgain) { $0.look(forward: false) },
+            act("Use Selection for Find", key: "edit.useSelectionForFind", enabled: browser.canUseSelectionForFind) { $0.useSelectionForFind() },
             .separator(),
             submenu("Substitutions", substitutions),
             submenu("Spelling and Grammar", [
@@ -567,6 +579,7 @@ enum MenuBar {
             act("Stop Sound in Tab", key: "tabs.mute", enabled: active != nil && browser.canPauseMedia) { browser in
                 if browser.active != nil { browser.pauseMedia() }
             },
+            act("Mute Other Tabs", key: "tab.muteOthers", enabled: browser.canMuteOtherTabs) { $0.muteOtherTabs() },
         ]
         return items
     }

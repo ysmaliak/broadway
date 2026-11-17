@@ -2538,12 +2538,15 @@ final class PageView: WKWebView {
         if picked {
             let markdown = NSMenuItem(title: "Copy Selection as Markdown", action: #selector(copyPageAsMarkdown(_:)), keyEquivalent: "")
             markdown.target = self
+            let highlight = highlightItem()
             if let copy = menu.items.firstIndex(where: { $0.identifier?.rawValue == "WKMenuItemIdentifierCopy" }) {
                 var at = copy + 1
                 while at < menu.items.count, !menu.items[at].isSeparatorItem { at += 1 }
                 menu.insertItem(markdown, at: at)
+                if let highlight { menu.insertItem(highlight, at: at + 1) }
             } else {
                 menu.addItem(markdown)
+                if let highlight { menu.addItem(highlight) }
             }
         }
         addTextActions(to: menu, picked: picked)
@@ -2594,6 +2597,27 @@ final class PageView: WKWebView {
     }
 
     @objc private func translatePage(_ item: NSMenuItem) { onTranslate?() }
+
+    private func highlightItem() -> NSMenuItem? {
+        guard let tab = owner()?.1, let url = tab.address, tab.page == nil,
+              ["http", "https", "file"].contains(url.scheme?.lowercased() ?? "") else { return nil }
+        let item = NSMenuItem(title: "Copy Link to Highlight", action: #selector(copyLinkToHighlight(_:)), keyEquivalent: "")
+        item.target = self
+        item.identifier = NSUserInterfaceItemIdentifier("SearchCopyLinkToHighlight")
+        return item
+    }
+
+    private func owner() -> (Browser, Tab)? {
+        for browser in Browsers.all {
+            if let tab = browser.tabs.first(where: { $0.built === self }) { return (browser, tab) }
+        }
+        return nil
+    }
+
+    @objc private func copyLinkToHighlight(_ item: NSMenuItem) {
+        guard let (browser, tab) = owner() else { return }
+        browser.copyLinkToHighlight(tab)
+    }
     @objc private func copyPageAsMarkdown(_ item: NSMenuItem) {
         for browser in Browsers.all {
             if let tab = browser.tabs.first(where: { $0.built === self }) {

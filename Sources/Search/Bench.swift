@@ -680,6 +680,9 @@ final class Bench {
         case "tear":
             answer(BenchTear.handle(request))
 
+        case "small":
+            answer(BenchSmall.handle(request, browser: browser))
+
         case "quit":
             // ⌘Q, on a test run: the app ends the way it does for you, the
             // session and windows.json written on the way out.

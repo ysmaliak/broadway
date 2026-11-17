@@ -133,7 +133,7 @@ final class Float {
         )
         // Above every ordinary window, this app's and everyone else's, and
         // present on whichever desktop you happen to be looking at.
-        panel.level = .floating
+        panel.level = KeepOnTop.panelLevel
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isMovableByWindowBackground = true
         panel.backgroundColor = .clear
