@@ -1892,6 +1892,8 @@ final class Bench {
                                     "enabled": toggle?.isEnabled ?? false, "more": row.kitSubviews(of: NSButton.self).contains { $0.accessibilityLabel()?.hasPrefix("More about") == true }] as [String: Any]
                 }
             }
+            let setup = AgentSetup.shared
+            reply["agentSetup"] = ["runs": setup.runs, "open": setup.open(), "marked": setup.marked, "on": browser.prefs.agentsOn] as [String: Any]
             if request["chrome"] as? Bool == true { reply["chrome"] = SettingsWindow.shared.benchChrome() }
             if request["stage"] as? Bool == true { reply["stage"] = SettingsWindow.shared.benchStage() }
             answer(reply)

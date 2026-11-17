@@ -663,8 +663,10 @@ final class Preferences {
             if agentsOn, !AgentConsent.grant() { agentsOn = false }
             store.set(agentsOn, forKey: "agents.on")
             if !agentsOn { AgentConsent.revoke() }
+            agentSetup.turned(wasOn: oldValue, isOn: agentsOn)
         }
     }
+    @ObservationIgnored var agentSetup = AgentSetup.shared
     var aiPlan: Plan? {
         didSet { store.set(aiPlan?.rawValue, forKey: "ai.plan") }
     }

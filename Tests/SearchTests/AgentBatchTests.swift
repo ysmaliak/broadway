@@ -229,6 +229,7 @@ final class AgentBatchTests {
 
     @Test func refreshingSkillsNeverRunsInATestWorld() {
         #expect(!AgentCommand.refreshesSkills)
+        #expect(!AgentCommand.setsUpAgents)
         #expect(AgentCommand.refreshWords == ["setup", "claude", "codex", "--refresh"])
     }
 

@@ -309,6 +309,12 @@ final class AgentTests {
                                          ["name": "claude hooks", "ok": false, "detail": "no hooks"], ["name": "running", "ok": false]]
         #expect(AgentCommand.summary(hookless) == "Run broadway setup again to let Broadway see when an agent has finished")
         #expect(AgentCommand.summary([["name": "command", "ok": false]]).hasPrefix("Puts broadway on your PATH"))
+        let skilled: [[String: Any]] = [["name": "command", "ok": false], ["name": "claude", "ok": true, "detail": "/c"],
+                                        ["name": "codex", "ok": true, "detail": "/x"], ["name": "claude hooks", "ok": true]]
+        #expect(AgentCommand.summary(skilled) == "Claude Code and Codex have Broadway's skill. Set Up also puts broadway on your PATH.")
+        let one: [[String: Any]] = [["name": "command", "ok": false], ["name": "codex", "ok": true, "detail": "/x"],
+                                    ["name": "claude", "ok": true, "detail": "not used here"]]
+        #expect(AgentCommand.summary(one) == "Codex has Broadway's skill. Set Up also puts broadway on your PATH.")
     }
 
     @Test func targetsReadRefsWordsAndTheNestedObject() {

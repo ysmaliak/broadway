@@ -51,11 +51,15 @@ enum AgentCommand {
 
     static func summary(_ checks: [[String: Any]]) -> String {
         guard !checks.isEmpty else { return "Run tasks, snapshot pages, click and more, from Terminal" }
-        guard isSetUp(checks) else { return "Puts broadway on your PATH, with shell completions and skills for Claude Code and Codex" }
         let named = [("fish", "fish"), ("zsh", "zsh"), ("bash", "bash"), ("claude", "Claude Code"), ("codex", "Codex")]
         let good = named.filter { name, _ in
             checks.first { $0["name"] as? String == name }.map { $0["ok"] as? Bool == true && $0["detail"] as? String != "not used here" } == true
         }.map(\.1)
+        guard isSetUp(checks) else {
+            let agents = good.filter { $0 == "Claude Code" || $0 == "Codex" }
+            guard !agents.isEmpty else { return "Puts broadway on your PATH, with shell completions and skills for Claude Code and Codex" }
+            return "\(agents.joined(separator: " and ")) \(agents.count == 1 ? "has" : "have") Broadway's skill. Set Up also puts broadway on your PATH."
+        }
         let hooks: Set<String> = ["claude hooks", "codex hooks"]
         let quiet: Set<String> = ["running", "agents", "plan"]
         let broken = checks.first { $0["ok"] as? Bool == false && !quiet.union(hooks).contains($0["name"] as? String ?? "") }

@@ -10,6 +10,7 @@ final class SettingsDrafts {
     var fetched: AutofillBook.Editing?
     var appleCode = ""
     var setup: [[String: Any]] = []
+    var setupRuns = 0
     var busy = false
     var openRouterKey = ""
 }
@@ -82,11 +83,21 @@ extension SettingsPageView {
                 }
             }
         }
-        if drafts.setup.isEmpty {
-            Task { [weak self] in
-                drafts.setup = await AgentCommand.helper(["doctor"])?["checks"] as? [[String: Any]] ?? []
-                self?.refresh()
-            }
+        let setup = AgentSetup.shared
+        if drafts.setup.isEmpty { drafts.setupRuns = setup.runs }
+        update { [weak self] in
+            guard drafts.setupRuns != setup.runs else { return }
+            drafts.setupRuns = setup.runs
+            self?.lookAtSetup()
+        }
+        if drafts.setup.isEmpty { lookAtSetup() }
+    }
+
+    private func lookAtSetup() {
+        let drafts = drafts
+        Task { [weak self] in
+            drafts.setup = await AgentCommand.helper(["doctor"])?["checks"] as? [[String: Any]] ?? []
+            self?.refresh()
         }
     }
 

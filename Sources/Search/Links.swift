@@ -134,7 +134,7 @@ final class Links: NSObject, NSApplicationDelegate {
         DispatchQueue.global(qos: .utility).async { ImportFile.sweepScratch() }
         Trim.start()
         MenuIcons.start()
-        AgentCommand.refreshSkills()
+        AgentSetup.shared.launched(agentsOn: Shared.prefs.agentsOn)
         AppIconShown.apply(Shared.prefs.appIcon)
         let plain = notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool ?? true
         guard !plain else { return }
