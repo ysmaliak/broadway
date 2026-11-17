@@ -198,7 +198,7 @@ extension Browser {
         let stayed = Set(Browser.unmoved(before.order, after.order).map(resolved))
         let order = Browser.ordered(tabs, id: \.id, like: before.order.map(resolved), anchors: stayed)
         if !order.elementsEqual(tabs, by: { $0.id == $1.id }) { setRow(order) }
-        for pair in before.splits where !after.splits.contains(where: { Set($0.tabs) == Set(pair.tabs) }) {
+        for pair in before.splits where !splits.contains(where: { Set($0.tabs) == Set(pair.tabs) }) {
             let members = pair.tabs.map(resolved)
             guard members == pair.tabs, members.allSatisfy({ id in present[id].map { split(for: $0) == nil } ?? false }) else { continue }
             putBackSplit(pair)

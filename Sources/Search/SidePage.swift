@@ -1439,7 +1439,8 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
         if let row = row as? TabRowView, let tab = row.tab {
             return TabMenuItems.menu(browser: browser, tab: tab, close: { [weak browser] in browser?.closeTab(tab) })
         }
-        if let pin = row as? PinSquareView, let tab = pin.tab {
+        if let pin = row as? PinSquareView, let lead = pin.tab {
+            let tab = browser.pinTarget(lead)
             return TabMenuItems.menu(browser: browser, tab: tab, close: { [weak browser] in browser?.closeAsking(tab) })
         }
         return nil
@@ -1724,7 +1725,7 @@ extension SidePageView {
         animateNext = true
         switch block {
         case .loose:
-            if browser.prefs.usesTabGroups { browser.move(tab, within: nil, to: index) } else { browser.moveDisplayedTab(tab, to: index + browser.pinnedCount) }
+            if browser.prefs.usesTabGroups { browser.move(tab, within: nil, to: index) } else { browser.moveDisplayedTab(tab, to: index + browser.squarePins.count) }
         case .folder(let group): browser.move(tab, within: group, to: index)
         case .pins: browser.moveDisplayedTab(tab, to: index)
         case .task: break

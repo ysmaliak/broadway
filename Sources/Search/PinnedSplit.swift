@@ -47,6 +47,8 @@ extension Browser {
 
     func pinSplit(_ pair: TabSplit) {
         guard canPinSplit(pair) else { return }
+        let mark = beginStep("Pin Split View")
+        defer { endStep(mark) }
         let members = pair.tabs.compactMap { id in tabs.first { $0.id == id } }
         let focused = activeID
         for tab in members { pin(tab) }
@@ -61,6 +63,8 @@ extension Browser {
 
     func unpinSplit(_ pair: TabSplit) {
         guard Browser.wholePinned(pair, in: tabs) else { return }
+        let mark = beginStep("Unpin Split View")
+        defer { endStep(mark) }
         let members = pair.tabs.compactMap { id in tabs.first { $0.id == id } }
         let focused = activeID
         replaceSplits(splits.filter { $0.id != pair.id })
@@ -96,6 +100,8 @@ extension Browser {
     func putsDownPinnedSplit(_ tab: Tab) -> Bool {
         guard let pair = pinnedSplit(of: tab) else { return false }
         let members = prefs.splitView ? pair.tabs.compactMap { id in tabs.first { $0.id == id } } : [tab]
+        LiveFolders.shared.signOnTabClosed(tab.id)
+        SaveAsk.shared.tabClosed(Set(members.map(\.id)))
         for page in members {
             heldDialogs.removeValue(forKey: page.id)?.forEach { $0.dismiss() }
             dropQuestions(for: page.id)
@@ -121,6 +127,8 @@ extension Browser {
     func shareSplit(_ pair: TabSplit, everywhere: Bool) {
         guard Browser.wholePinned(pair, in: tabs) else { return }
         let members = pair.tabs.compactMap { id in tabs.first { $0.id == id } }
+        let mark = beginStep(everywhere ? "Keep in Every Space" : "Only in This Space")
+        defer { endStep(mark) }
         replaceSplits(splits.filter { $0.id != pair.id })
         if everywhere {
             for tab in members where !tab.everywhere { shareEverywhere(tab) }
@@ -133,6 +141,17 @@ extension Browser {
         }
         revision &+= 1
         writeSession(now: true)
+    }
+
+    func placePin(_ tab: Tab, atSquare slot: Int) {
+        let moving = pinnedSplit(of: tab).map { pair in pair.tabs.compactMap { id in tabs.first { $0.id == id } } } ?? [tab]
+        let ids = Set(moving.map(\.id))
+        var pins = tabs.filter { $0.pin != nil && !ids.contains($0.id) }
+        let leads = pins.filter(standsInRow)
+        let at = slot < leads.count ? pins.firstIndex { $0.id == leads[max(0, slot)].id } ?? pins.count : pins.count
+        pins.insert(contentsOf: moving, at: at)
+        let row = pins + tabs.filter { $0.pin == nil }
+        if !row.elementsEqual(tabs, by: { $0.id == $1.id }) { replaceRow(row) }
     }
 
     func lineUpPins(_ ids: [Tab.ID]) {

@@ -2009,7 +2009,7 @@ final class Browser: NSObject {
     }
 
     func pinSlot(_ tab: Tab, proposed: Int) -> Int {
-        let tier = tabs.filter { $0.pin != nil && $0.id != tab.id }
+        let tier = squarePins.filter { $0.id != tab.id }
         let shared = prefs.showsSharedPins ? tier.prefix(while: \.everywhere).count : 0
         let low = tab.everywhere ? 0 : shared
         let high = tab.everywhere ? shared : tier.count
@@ -2025,11 +2025,7 @@ final class Browser: NSObject {
             pin(tab)
             guard tab.pin != nil else { return false }
         }
-        let at = pinSlot(tab, proposed: slot)
-        var squares = tabs.filter { $0.pin != nil && $0.id != tab.id }
-        squares.insert(tab, at: min(at, squares.count))
-        let row = squares + tabs.filter { $0.pin == nil }
-        if !row.elementsEqual(tabs, by: { $0.id == $1.id }) { tabs = row }
+        placePin(tab, atSquare: pinSlot(tab, proposed: slot))
         writeSession(now: true)
         return true
     }
@@ -2043,14 +2039,14 @@ final class Browser: NSObject {
         let mark = beginStep("Unpin Tab")
         defer { endStep(mark) }
         guard tab.pin != nil, tabs.contains(where: { $0.id == tab.id }) else { return false }
-        unpin(tab)
+        if let pair = shownPinnedSplit(of: tab) { unpinSplit(pair) } else { unpin(tab) }
         if let group, prefs.usesTabGroups, tabGroups.contains(where: { $0.id == group }) {
             move(tab, toGroup: group)
         } else if prefs.usesTabGroups {
             let peers = tabs(in: nil).filter(standsInRow)
             move(tab, within: nil, to: min(max(0, slot), peers.count - 1))
         } else {
-            moveDisplayedTab(tab, to: min(pinnedCount + max(0, slot), displayedTabs.count - 1))
+            moveDisplayedTab(tab, to: min(squarePins.count + max(0, slot), displayedTabs.count - 1))
         }
         writeSession(now: true)
         return true

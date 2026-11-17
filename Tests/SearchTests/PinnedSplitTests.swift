@@ -429,3 +429,168 @@ final class PinnedSplitPressTests {
         #expect(browser.activeSplit?.id == pair.id)
     }
 }
+
+@Suite(.sharedWorld, .timeLimit(.minutes(5)))
+@MainActor
+final class PinnedSplitPlacesTests {
+    private var browser: Browser!
+
+    init() {
+        keepSettings("splitView", "tabs.groups", "spaces")
+        addTeardownBlock { self.browser?.closeAll(); self.browser = nil }
+        _ = NSApplication.shared
+        NSApp.setActivationPolicy(.prohibited)
+        browser = Browser(record: WindowRecord())
+        browser.leaveFiles()
+        browser.prefs.splitView = true
+        browser.prefs.usesTabGroups = false
+        browser.closeAll()
+    }
+
+    private func page(_ name: String) -> Tab {
+        let tab = browser.makeTab()
+        browser.prepare(tab)
+        tab.restore(url: URL(string: "https://\(name).example/")!, title: name)
+        return tab
+    }
+
+    private func world() -> (left: Tab, right: Tab, lone: Tab, loose: [Tab], pair: TabSplit) {
+        let left = page("pond"), right = page("reeds"), lone = page("heron")
+        let loose = [page("frogs"), page("moss"), page("ferns")]
+        browser.showRow([left, right, lone] + loose, active: loose[0].id)
+        let pair = TabSplit(tabs: [left.id, right.id])
+        browser.putBackSplit(pair)
+        browser.pinSplit(pair)
+        browser.pin(lone)
+        return (left, right, lone, loose, pair)
+    }
+
+    private var order: [Tab.ID] { browser.tabs.map(\.id) }
+
+    @Test func aTabDroppedOnThePinsBeforeAPinnedSplitLandsBeforeBothPages() throws {
+        let (left, right, lone, loose, pair) = world()
+
+        browser.pinDropped(loose[1], at: 0)
+
+        #expect(order.prefix(4) == [loose[1].id, left.id, right.id, lone.id])
+        #expect(browser.splits.contains { $0.id == pair.id })
+    }
+
+    @Test func aTabDroppedOnThePinsAfterAPinnedSplitNeverLandsBetweenItsPages() throws {
+        let (left, right, lone, loose, pair) = world()
+
+        browser.pinDropped(loose[1], at: 1)
+
+        #expect(order.prefix(4) == [left.id, right.id, loose[1].id, lone.id])
+        #expect(browser.splits.contains { $0.id == pair.id })
+    }
+
+    @Test func aPinnedSplitMovedAmongThePinsMovesBothPages() throws {
+        let (left, right, lone, _, pair) = world()
+
+        browser.moveDisplayedTab(left, to: 1)
+
+        #expect(order.prefix(3) == [lone.id, left.id, right.id])
+        #expect(browser.splits.contains { $0.id == pair.id })
+    }
+
+    @Test func aLooseTabMovedInTheListKeepsItsPlaceBesideAPinnedSplit() throws {
+        let (_, _, _, loose, _) = world()
+
+        browser.moveDisplayedTab(loose[2], to: browser.squarePins.count)
+
+        #expect(browser.tabs.filter { $0.pin == nil }.map(\.id) == [loose[2].id, loose[0].id, loose[1].id])
+    }
+
+    @Test func draggingThePinnedSplitOutOfThePinsUnpinsItWhole() throws {
+        let (left, right, lone, loose, pair) = world()
+
+        browser.unpinDropped(left, at: 1)
+
+        #expect(left.pin == nil && right.pin == nil)
+        #expect(browser.split(for: left)?.id == pair.id)
+        #expect(order == [lone.id, loose[0].id, left.id, right.id, loose[1].id, loose[2].id])
+    }
+
+    @Test func aPinnedSplitsPagesHaveNoMoveToAnotherSpace() throws {
+        browser.prefs.usesSpaces = true
+        let (left, _, lone, _, _) = world()
+
+        let titles = { (tab: Tab) in TabMenuItems.items(browser: self.browser, tab: tab, close: {}).flatMap { item in
+            [item.title] + (item.submenu?.items.map(\.title) ?? [])
+        } }
+
+        #expect(!titles(left).contains("Space"))
+        #expect(titles(lone).contains("Space"))
+        #expect(titles(left).contains("Unpin Split View"))
+        #expect(titles(left).contains("Edit Pinned Address…"))
+    }
+}
+
+@Suite(.sharedWorld, .timeLimit(.minutes(5)))
+@MainActor
+struct PinnedSplitUndoTests {
+    private func withBrowser(_ body: (Browser, Tab, Tab, TabSplit, UndoManager) throws -> Void) throws {
+        _ = NSApplication.shared
+        NSApp.setActivationPolicy(.prohibited)
+        let browser = Browser(record: WindowRecord())
+        let saved = browser.prefs.splitView
+        let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 640, height: 400),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer {
+            browser.window = nil
+            for tab in browser.tabs where tab.pin != nil { browser.unpin(tab) }
+            browser.closeAll()
+            window.close()
+            browser.prefs.splitView = saved
+        }
+        browser.prefs.splitView = true
+        browser.closeAll()
+        let pages = ["pond", "reeds", "frogs"].map { name -> Tab in
+            let tab = browser.makeTab()
+            browser.prepare(tab)
+            tab.restore(url: URL(string: "https://\(name).example/")!, title: name)
+            return tab
+        }
+        browser.showRow(pages, active: pages[2].id)
+        let pair = TabSplit(tabs: [pages[0].id, pages[1].id])
+        browser.putBackSplit(pair)
+        browser.window = window
+        let undo = try #require(window.undoManager)
+        undo.removeAllActions()
+        undo.groupsByEvent = false
+        try body(browser, pages[0], pages[1], pair, undo)
+    }
+
+    private func act(_ undo: UndoManager, _ action: () -> Void) {
+        undo.beginUndoGrouping()
+        action()
+        undo.endUndoGrouping()
+    }
+
+    @Test func undoAfterPinSplitViewLeavesTheOrdinarySplitItWas() throws {
+        try withBrowser { browser, left, right, pair, undo in
+            act(undo) { browser.pinSplit(pair) }
+            #expect(undo.undoMenuItemTitle == "Undo Pin Split View")
+
+            undo.undo()
+
+            #expect(left.pin == nil && right.pin == nil)
+            #expect(browser.split(for: left)?.tabs == [left.id, right.id])
+        }
+    }
+
+    @Test func undoAfterUnpinSplitViewPinsTheSplitAgain() throws {
+        try withBrowser { browser, left, right, pair, undo in
+            act(undo) { browser.pinSplit(pair) }
+            undo.removeAllActions()
+            act(undo) { browser.unpinSplit(pair) }
+
+            undo.undo()
+
+            #expect(left.pin != nil && right.pin != nil)
+            #expect(browser.pinnedSplit(of: left)?.tabs == [left.id, right.id])
+        }
+    }
+}

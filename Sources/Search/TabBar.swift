@@ -303,12 +303,14 @@ enum TabMenuItems {
         if chosen.count > 1 {
             items.append(action(tab.pin == nil ? "Pin \(chosen.count) Tabs" : "Unpin \(chosen.count) Tabs",
                                 symbol: tab.pin == nil ? MenuSymbol.pin : MenuSymbol.unpin) { browser.togglePin(chosen, like: tab) })
-        } else if let pair = browser.shownPinnedSplit(of: tab) {
-            items.append(action("Unpin Split View", symbol: MenuSymbol.unpin) { browser.unpinSplit(pair) })
-        } else if let pair = browser.split(for: tab), browser.canPinSplit(pair) {
+        } else if tab.pin == nil, let pair = browser.split(for: tab), browser.canPinSplit(pair) {
             items.append(action("Pin Split View", symbol: MenuSymbol.pin) { browser.pinSplit(pair) })
         } else if tab.pin != nil {
-            items.append(action("Unpin", symbol: MenuSymbol.unpin) { browser.unpin(tab) })
+            if let pair = browser.shownPinnedSplit(of: tab) {
+                items.append(action("Unpin Split View", symbol: MenuSymbol.unpin) { browser.unpinSplit(pair) })
+            } else {
+                items.append(action("Unpin", symbol: MenuSymbol.unpin) { browser.unpin(tab) })
+            }
             if browser.pinMovedOff(tab) {
                 items.append(action("Set Pinned Page to This Page") { browser.setPinnedPage(tab) })
                 items.append(action("Go Back to Pinned Page") { browser.goBackToPinnedPage(tab) })
@@ -371,6 +373,7 @@ enum TabMenuItems {
     private static func move(_ browser: Browser, _ tab: Tab, _ chosen: [Tab]) -> NSMenuItem? {
         let folders = browser.prefs.usesTabGroups && tab.pin == nil && !tab.shy && !tab.bench
         let spaces = browser.prefs.usesSpaces && !browser.isPrivate && !tab.bench && !tab.everywhere
+            && browser.pinnedSplit(of: tab) == nil
             && tab.address.flatMap({ Browser.extensionHost(of: $0) }) == nil
         let others = Browsers.all.filter { $0 !== browser && $0.isOpen && !$0.isPopup && $0.isPrivate == browser.isPrivate }
         let alone = browser.tabs.count < 2
