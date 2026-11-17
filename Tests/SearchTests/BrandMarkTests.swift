@@ -73,12 +73,14 @@ import Testing
         let place = "top: calc(1.2em * \(Self.number(BrandMark.margin)) + \(Self.number(BrandMark.sink))em); width: 1.2em; height: 1.2em; margin-top: -0.4em;"
         let site = try #require(WebRepo.site)
 
-        let pages = try ["index.html", "404.html", "privacy.html", "terms.html", "tools/share.html"].map { try String(contentsOf: site.appendingPathComponent($0), encoding: .utf8) }
+        let pages = try ["index.html", "404.html", "privacy.html", "terms.html"].map { try String(contentsOf: site.appendingPathComponent($0), encoding: .utf8) }
+        let share = try String(contentsOf: site.appendingPathComponent("tools/share.html"), encoding: .utf8)
         let styles = try ["styles.css", "404.css"].map { try String(contentsOf: site.appendingPathComponent($0), encoding: .utf8) }
 
         for page in pages {
             #expect(page.contains(svg))
         }
+        #expect(share.contains(#"<svg viewBox="0 0 32 32" aria-hidden="true"><path d="\#(d)"/></svg>"#))
         for style in styles {
             #expect(style.contains(stroke))
             #expect(style.contains("stroke-linecap: round; stroke-linejoin: round;"))

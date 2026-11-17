@@ -302,7 +302,7 @@ final class AskAnswerCard: NSView {
     private let stage = KitFlippedView()
     private let scroll = NSScrollView()
     private let words = NSTextView()
-    private let footer = KitLabel("", font: .systemFont(ofSize: 10.5), color: KitColor.muted)
+    private let footer = KitLabel("", font: .systemFont(ofSize: 11), color: KitColor.muted)
     private var hints: [CommandHintView] = []
     private var shown = ""
 
@@ -368,7 +368,7 @@ final class AskAnswerCard: NSView {
                 out.append(mark)
             }
             out.append(NSAttributedString(string: " " + string, attributes: [
-                .font: NSFont.systemFont(ofSize: 11.5), .foregroundColor: ink, .paragraphStyle: paragraph,
+                .font: NSFont.systemFont(ofSize: 12), .foregroundColor: ink, .paragraphStyle: paragraph,
             ]))
         }
         if answer.addressed { caution("This page has text written for an AI to follow. The answer may have been steered by it.") }
