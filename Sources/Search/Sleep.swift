@@ -214,7 +214,7 @@ extension Browser {
             if ExtensionCapture.screen(web) { return "recording the screen" }
             if downloading.contains(where: { $0.webView === web }) { return "downloading" }
         }
-        if heldDialogs[tab.id]?.isEmpty == false || paneQuestions.contains(where: { $0.tab == tab.id }) {
+        if heldDialogs[tab.id]?.isEmpty == false || paneQuestions.contains(where: { $0.tab == tab.id }) || tab.leaveQuestion != nil {
             return "a question waiting"
         }
         // A sign-in window hands its answer back to the page that opened it.

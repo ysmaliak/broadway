@@ -523,9 +523,9 @@ enum TabMenuItems {
             items.append(action("Close \(count) Tabs", symbol: MenuSymbol.close) { browser.closePickedTabs() })
         } else if browser.putsAway(tab) {
             items.append(action("Put Away Tab", symbol: MenuSymbol.close, close))
-            items.append(action(tab.liveKey == nil ? "Close Tab" : "Hide from Folder") { browser.close(tab) })
+            items.append(action(tab.liveKey == nil ? "Close Tab" : "Hide from Folder") { browser.closeAsking(tab) })
         } else if tab.liveKey != nil {
-            items.append(action("Hide from Folder", symbol: MenuSymbol.close) { browser.close(tab) })
+            items.append(action("Hide from Folder", symbol: MenuSymbol.close) { browser.closeAsking(tab) })
         } else {
             items.append(action("Close Tab", symbol: MenuSymbol.close, close))
         }

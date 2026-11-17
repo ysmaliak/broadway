@@ -75,7 +75,10 @@ extension Browser {
                 "Move \(movers.count) tabs?",
                 detail: "A page among them has unsaved form entries. They will reopen in “\(destination.name)” with that space's accounts, so the entries may be lost.",
                 confirm: "Move",
-                then: complete
+                then: {
+                    for tab in movers { tab.leaveSettled = true }
+                    complete()
+                }
             )
         }
     }

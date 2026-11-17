@@ -561,7 +561,7 @@ final class PinSquareView: KitHoverView {
         }
         guard let tab, let browser else { return }
         browser.hints.closedByPointer()
-        browser.close(tab)
+        browser.closeAsking(tab)
     }
 
     override func otherMouseDown(with event: NSEvent) {

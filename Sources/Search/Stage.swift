@@ -25,6 +25,7 @@ final class TabPageView: NSView {
     private var note: PageNote?
     private var trouble: PageTroubleView?
     private var stuckCard: StuckCardView?
+    private var leaveCard: StuckCardView?
     private let swipe = SwipeView()
     private lazy var reads = KitReads { [weak self] in self?.later() }
     private var queued = false
@@ -115,8 +116,25 @@ final class TabPageView: NSView {
         }
         trouble?.needsLayout = true
         showStuck()
+        showLeave()
         swipe.pull = tab.pull
         needsLayout = true
+    }
+
+    private func showLeave() {
+        guard let question = tab.leaveQuestion, let browser else {
+            leaveCard?.removeFromSuperview()
+            leaveCard = nil
+            return
+        }
+        if let leaveCard, leaveCard.tab === tab, leaveCard.identifier?.rawValue == question.id.uuidString { return }
+        leaveCard?.removeFromSuperview()
+        let tab = tab
+        let made = StuckCardView(tab: tab, browser: browser, words: .leave) { [weak browser] stay in
+            browser?.answerLeave(tab, leave: !stay)
+        }
+        made.identifier = NSUserInterfaceItemIdentifier(question.id.uuidString)
+        leaveCard = self.made(made, below: swipe)
     }
 
     private func showStuck() {

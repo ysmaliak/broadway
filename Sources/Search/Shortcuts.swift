@@ -300,7 +300,7 @@ struct Command: Identifiable {
             browser.setFolderPinned(folder.id, !folder.pinned)
         },
         Command("tabs.closeFolder", "Close Folder and Tabs", .tabs, nil) { browser in
-            if let folder = browser.frontFolder, !folder.live { browser.closeTabGroup(folder.id) }
+            if let folder = browser.frontFolder, !folder.live { browser.closeTabGroupAsking(folder.id) }
         },
 
         Command("bookmarks.add", "Add This Page", .bookmarks, KeyCombo("b", shift: true)) { $0.bookmarkCurrent() },

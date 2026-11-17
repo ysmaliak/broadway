@@ -513,7 +513,10 @@ extension AgentSocket {
         AgentSessions.shared.stopAll()
         connection.send(["ok": true, "data": ["quit": true]])
         connection.close()
-        DispatchQueue.main.async { NSApp.terminate(nil) }
+        DispatchQueue.main.async {
+            LeaveQuit.settle()
+            NSApp.terminate(nil)
+        }
     }
 
     private func serve(_ request: [String: Any], on connection: LineConnection) {

@@ -27,6 +27,10 @@
     ./bench memory [state]             test run: the memory ceiling, the page processes watched and their last readings
     ./bench memory ceiling MB|standard test run: lower the ceiling a page process may reach, or put it back
     ./bench memory retry ID            test run: press the button on a page stopped for its memory
+    ./bench leave [state]              test run: each tab's open Leave this page? question, and whether its card is drawn
+    ./bench leave hold on|off          test run: let pages ask before they are left, or answer Leave for them again
+    ./bench leave answer ID stay|leave test run: answer the question on a tab
+    ./bench leave do ID reload|close|window  test run: the person's Reload, Close Tab or Close Window on a tab
     ./bench select ID                  bring a tab to the front — --test runs only
     ./bench adopt ID                   a bench tab becomes an ordinary one — --test runs only
     ./bench resize W H [STEPS]         take the window to W×H in steps, like a drag — --test runs only
@@ -697,6 +701,16 @@ def main(argv):
             request["id"], request["value"] = args[1], args[2]
         elif request["action"] == "do" and len(args) == 4 and args[2] == "go":
             request["id"], request["value"], request["url"] = args[1], args[2], args[3]
+        else: sys.exit(usage)
+    elif verb == "leave":
+        usage = "usage: bench leave [state] | hold on|off | answer ID stay|leave | do ID reload|close|window"
+        request["action"] = args[0] if args else "state"
+        if request["action"] == "state" and len(args) <= 1: pass
+        elif request["action"] == "hold" and len(args) == 2 and args[1] in ("on", "off"): request["value"] = args[1]
+        elif request["action"] == "answer" and len(args) == 3 and args[2] in ("stay", "leave"):
+            request["id"], request["value"] = args[1], args[2]
+        elif request["action"] == "do" and len(args) == 3 and args[2] in ("reload", "close", "window"):
+            request["id"], request["value"] = args[1], args[2]
         else: sys.exit(usage)
     elif verb == "memory":
         usage = "usage: bench memory [state] | ceiling MB|standard | retry ID"

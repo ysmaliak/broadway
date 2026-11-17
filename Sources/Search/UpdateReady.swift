@@ -101,7 +101,10 @@ enum UpdateRestart {
             asking = false
             guard let sentence = loss.sentence else { return install() }
             Ask.sure(RestartLoss.title, detail: sentence, confirm: "Restart", cancel: "Not Now", returnCancels: true,
-                     over: window ?? Browsers.front?.window) { install() }
+                     over: window ?? Browsers.front?.window) {
+                if loss.typed { LeaveQuit.settle() }
+                install()
+            }
         }
     }
 }

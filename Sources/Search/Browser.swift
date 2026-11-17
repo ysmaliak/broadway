@@ -3923,6 +3923,7 @@ extension Browser {
     }
 
     func closeTab(_ tab: Tab) {
+        guard mayLeave([tab], again: { [weak self] in self?.closeTab(tab) }) else { return }
         if putsAway(tab) { putAway(tab) } else { close(tab) }
     }
 
@@ -4087,9 +4088,10 @@ extension Browser {
     /// Everything but this one. Pinned tabs are put down rather than removed —
     /// they are not open pages so much as places kept.
     func closeOthers(but keep: Tab) {
+        let partner = split(for: keep).flatMap { $0.partner(of: keep.id) }
+        guard mayLeave(tabs.filter { $0.id != keep.id && $0.id != partner }, again: { [weak self] in self?.closeOthers(but: keep) }) else { return }
         select(keep)
         // The list is read once: closing walks the row and can add to it.
-        let partner = split(for: keep).flatMap { $0.partner(of: keep.id) }
         for tab in tabs.filter({ $0.id != keep.id && $0.id != partner }) {
             close(tab)
         }
@@ -4118,10 +4120,12 @@ extension Browser {
     }
 
     func closeTabsAbove(_ tab: Tab) {
+        guard mayLeave(tabsAbove(tab), again: { [weak self] in self?.closeTabsAbove(tab) }) else { return }
         closeTogether(tabsAbove(tab), keeping: tab)
     }
 
     func closeTabsBelow(_ tab: Tab) {
+        guard mayLeave(tabsBelow(tab), again: { [weak self] in self?.closeTabsBelow(tab) }) else { return }
         closeTogether(tabsBelow(tab), keeping: tab)
     }
 
@@ -4153,6 +4157,7 @@ extension Browser {
     func closePickedTabs() {
         let going = pickedTabs, onScreen = visibleTabIDs
         guard !going.isEmpty else { return }
+        guard mayLeave(going, again: { [weak self] in self?.closePickedTabs() }) else { return }
         clearTabSelection()
         closingTogether(.tabs) { _ in
             for tab in going where !onScreen.contains(tab.id) { closeTab(tab) }
@@ -8227,6 +8232,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
     /// blank page the flow ended on: nothing to look at, and nothing for
     /// reload to fetch, because there is no longer an address to fetch.
     func webViewDidClose(_ webView: WKWebView) {
+        if leaveHeardClose(webView) { return }
         guard let tab = tab(for: webView) else { return }
         // A popup window is the one page it opened: when that
         // page closes itself (a sign-in, once done), the

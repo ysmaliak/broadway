@@ -512,6 +512,12 @@ final class Tab: Identifiable {
     @ObservationIgnored var stuckEnd: StuckEnd?
     @ObservationIgnored var stuckRedoing = false
     @ObservationIgnored var memoryOwed = false
+    var leaveQuestion: LeaveQuestion?
+    @ObservationIgnored var leaveClosing: LeaveClosing?
+    @ObservationIgnored var leaveGranted = false
+    @ObservationIgnored var leaveStayedAt: Date?
+    @ObservationIgnored weak var leaveTried: WKWebView?
+    @ObservationIgnored var leaveSettled = false
     @ObservationIgnored var memoryEnds = 0
     /// An extension is recording from this tab's page (see RecordingIndicator).
     var recording = false
@@ -2126,6 +2132,7 @@ final class Tab: Identifiable {
     /// next time anyone asks for it.
     private func discard() {
         reachToEnd()
+        (delegate as? Browser)?.dropLeave(self)
         stopSettling()
         cancelImageText()
         device = nil

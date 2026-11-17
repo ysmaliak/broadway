@@ -297,6 +297,7 @@ enum Browsers {
         // tied here, before extensions hear of it (#408, lulkebit).
         browser.window = window
         window.isReleasedWhenClosed = false
+        window.delegate = LeaveWindows.shared
         window.tabbingMode = .disallowed
         if browser.keepsNothing { window.isRestorable = false }
         window.contentView = host

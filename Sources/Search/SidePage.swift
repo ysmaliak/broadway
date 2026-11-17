@@ -706,7 +706,7 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
                 if carry?.tab.id != tab.id { put(view, cells[index]) }
                 laid[tab.id] = SideLaid(frame: cells[index], parent: pinsView, block: .pins, index: index, count: squares.count)
                 view.show(tab, in: browser, state: pinState(tab, lit: lit, numbers: numbers))
-                view.close = { [weak browser, weak tab] in if let browser, let tab { browser.close(tab) } }
+                view.close = { [weak browser, weak tab] in if let browser, let tab { browser.closeAsking(tab) } }
                 seenPins.insert(tab.id)
             }
             y = block + SideLook.pinsFoot
@@ -1376,7 +1376,7 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
             let stack = leaving(tab) ? nil : stackTops[tab.id].map { folded in
                 StackFoldButton.Dress(folded: folded) { [weak browser] in browser?.toggleStack(id, in: folder) }
             }
-            row(tab, frame: frame, into: parent, state: state, rise: rise, stack: stack, close: { [weak browser] in browser?.close(tab) })
+            row(tab, frame: frame, into: parent, state: state, rise: rise, stack: stack, close: { [weak browser] in browser?.closeAsking(tab) })
             laid[tab.id] = SideLaid(frame: frame, parent: parent, block: .folder(group.id), index: index, count: members.count)
             seenRows.insert(tab.id)
             if leaving(tab) { rows[tab.id]?.alphaValue = 0; at -= rowHeight + Self.gap }
@@ -1440,7 +1440,7 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
             return TabMenuItems.menu(browser: browser, tab: tab, close: { [weak browser] in browser?.closeTab(tab) })
         }
         if let pin = row as? PinSquareView, let tab = pin.tab {
-            return TabMenuItems.menu(browser: browser, tab: tab, close: { [weak browser] in browser?.close(tab) })
+            return TabMenuItems.menu(browser: browser, tab: tab, close: { [weak browser] in browser?.closeAsking(tab) })
         }
         return nil
     }

@@ -173,6 +173,7 @@ final class AgentSocket {
     private func quitIfIdle() {
         let quiet = Date().timeIntervalSince(lastUsed)
         if AgentIdle.shouldQuit(woken: woken, hidden: NSApp.isHidden, serving: serving, tasks: AgentSessions.shared.live.count, quiet: quiet) {
+            LeaveQuit.settle()
             NSApp.terminate(nil)
         }
     }

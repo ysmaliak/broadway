@@ -73,6 +73,7 @@ enum SceneWindow {
         )
         made.title = "Broadway"
         made.isReleasedWhenClosed = false
+        made.delegate = LeaveWindows.shared
         made.tabbingMode = .disallowed
         made.titlebarAppearsTransparent = true
         made.titleVisibility = .hidden

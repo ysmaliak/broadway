@@ -649,7 +649,7 @@ final class GroupHeadingView: KitHoverView {
         close.isHidden = true
         close.act = { [weak self] in
             guard let self, let browser = self.browser, let group = self.group else { return }
-            browser.closeTabGroup(group.id)
+            browser.closeTabGroupAsking(group.id)
         }
         setAccessibilityElement(true)
         setAccessibilityRole(.button)

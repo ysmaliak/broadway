@@ -51,6 +51,11 @@ extension Tab {
         return follow(plan)
     }
 
+    func endPageProcess() {
+        guard let built else { return }
+        _ = endProcess(of: built)
+    }
+
     func reachToEnd() {
         guard isStuck, let built else { return }
         _ = endProcess(of: built)
@@ -182,6 +187,7 @@ extension Browser {
     }
 
     func heardStuck(_ tab: Tab) {
+        if leaveHeardStuck(tab) { return }
         guard tab.built != nil, tab.page == nil else { return }
         let agent = tab.agentWorking
         switch StuckRules.heard(&tab.stuck, at: Date(), agent: agent, times: StuckClock.times) {

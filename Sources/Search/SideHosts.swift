@@ -461,7 +461,7 @@ enum FolderMenus {
         items.append(.submenu("More", more))
         items.append(.separator)
         items.append(.action(group.query == nil ? "Remove Folder, Keep Tabs" : "Ungroup", run: { browser.removeTabGroup(group.id) }))
-        items.append(.action("Close Folder and Tabs", symbol: MenuSymbol.close, run: { browser.closeTabGroup(group.id) }))
+        items.append(.action("Close Folder and Tabs", symbol: MenuSymbol.close, run: { browser.closeTabGroupAsking(group.id) }))
         return items
     }
 
