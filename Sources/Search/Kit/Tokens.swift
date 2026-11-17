@@ -199,6 +199,24 @@ enum SideLook {
     static let pillFade: CGFloat = 18
 }
 
+enum TearLook {
+    static let width: CGFloat = 220
+    static let aspect: CGFloat = 10.0 / 16.0
+    static let corner: CGFloat = 10
+    static let grab = CGSize(width: 24, height: 16)
+    static let fadeIn: CFTimeInterval = 0.10
+    static let fadeOut: CFTimeInterval = 0.09
+    static let fromScale: CGFloat = 0.90
+    static let grow = KitSpring(response: 0.20, damping: 0.86)
+    static let icon: CGFloat = 16
+    static let pad: CGFloat = 12
+    static let cardHeight: CGFloat = 64
+    static let titleSize: CGFloat = 12
+    static var shadow: KitShadow { PopupLook.shadow }
+    static var edge: NSColor { PopupLook.edge }
+    static var room: CGFloat { PopupLook.room }
+}
+
 struct KitShadow: Equatable {
     var light: Swift.Float
     var dark: Swift.Float

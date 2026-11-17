@@ -647,6 +647,9 @@ final class Bench {
             browser.moveToWindow(tab, target)
             answer(["windows": Browsers.all.count])
 
+        case "tear":
+            answer(BenchTear.handle(request))
+
         case "quit":
             // ⌘Q, on a test run: the app ends the way it does for you, the
             // session and windows.json written on the way out.

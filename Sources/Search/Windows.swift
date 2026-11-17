@@ -133,6 +133,15 @@ enum Browsers {
         Extensions.shared.attach(browser)
     }
 
+    static func forget(_ browser: Browser) {
+        guard Store.testing else { return }
+        all.removeAll { $0 === browser }
+        Extensions.shared.detach(browser)
+        frames[ObjectIdentifier(browser)] = nil
+        spaceWatch[ObjectIdentifier(browser)] = nil
+        if Front.shared.browser === browser { Front.shared.set(all.last) }
+    }
+
     static func browser(for window: NSWindow?) -> Browser? {
         guard let window else { return nil }
         return all.first { $0.window === window }

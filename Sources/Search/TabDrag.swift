@@ -239,11 +239,17 @@ final class TabDrag {
         }
     }
 
+    func benchCancel() {
+        guard Store.testing else { return }
+        cancel()
+    }
+
     private func cancel() {
         // The monitor goes first: a drag whose tab has gone has nothing to
         // cancel, and kept, its monitor would go on asking.
         removeMonitor()
         guard let gestureTab else { return }
+        TearOff.shared.cancelled()
         cancelledID = gestureTab.id
         preview = nil
         carried = nil

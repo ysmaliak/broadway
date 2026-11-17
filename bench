@@ -151,6 +151,10 @@
     ./bench towindow ID N|new|drop X Y test run: a tab to the Nth window, a new one (Move to Window), or let
                                        go at screen point X Y as a drag out of the row
                                        PNG; on: the card in the window
+    ./bench tear begin ID|move X Y|letgo|cancel|read
+                                       test run: drag a tab's row out of its window by script, to screen
+                                       point X Y; says whether it is away, whether its picture is up and
+                                       which window and index would take it
     ./bench quit                       test run: quit the app as ⌘Q does
     ./bench middle ID X Y              test run: the middle button clicked at X Y of a tab's page
     ./bench pin ID [off|home]          test run: pin a tab, unpin it, or double-click it (home)
@@ -519,6 +523,13 @@ def main(argv):
         request["id"] = args[0]
         if args[1] == "drop": request["at"] = [float(args[2]), float(args[3])]
         elif args[1] != "new": request["to"] = int(args[1])
+    elif verb == "tear":
+        if not args or args[0] not in ("begin", "move", "letgo", "cancel", "read") or (args[0] == "begin" and len(args) != 2) \
+                or (args[0] == "move" and len(args) != 3):
+            sys.exit("usage: bench tear begin ID | move X Y | letgo | cancel | read")
+        request["action"] = args[0]
+        if args[0] == "begin": request["id"] = args[1]
+        if args[0] == "move": request["at"] = [float(args[1]), float(args[2])]
     elif verb == "windows":
         if not args: args = ["list"]
         if args[0] not in ("list", "new", "close", "reopen", "frame", "front", "link") or (args[0] in ("close", "frame", "front", "link") and len(args) < 2):

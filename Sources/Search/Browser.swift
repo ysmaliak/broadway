@@ -4538,10 +4538,7 @@ extension Browser {
         if target == nil {
             // Dragged out: the new window where the tab was let go, its row
             // under the hand.
-            let frame = point.map { p -> NSRect in
-                let size = window?.frame.size ?? NSSize(width: 1180, height: 780)
-                return NSRect(x: p.x - 120, y: p.y - size.height + 20, width: size.width, height: size.height)
-            }
+            let frame = point.map { TearOff.newWindow(at: $0, leaving: window) }
             Browsers.open(destination, frame: frame)
         } else {
             destination.window?.makeKeyAndOrderFront(nil)

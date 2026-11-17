@@ -244,8 +244,8 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
     fileprivate let landingGround = KitPlate()
     fileprivate let folderLine = KitPlate(radius: 1)
     fileprivate var looseOrder: [UUID] = []
-    fileprivate var dropOn: GroupDropTarget? { didSet { if dropOn != oldValue { showDrop(); relightCards(animated: false) } } }
-    fileprivate var looseOn: LoosePlace? { didSet { if looseOn != oldValue { showDrop() } } }
+    var dropOn: GroupDropTarget? { didSet { if dropOn != oldValue { showDrop(); relightCards(animated: false) } } }
+    var looseOn: LoosePlace? { didSet { if looseOn != oldValue { showDrop() } } }
     fileprivate var joining: UUID? { didSet { if joining != oldValue { showJoin(); showDrop() } } }
     fileprivate let spring = FolderSpring()
     fileprivate let hold = FolderHold()
@@ -1470,6 +1470,7 @@ struct SideCarry {
     var startY: CGFloat?
     var travel: CGSize = .zero
     var onPage = false
+    var away = false
     var home: NSRect?
     var leftHome = false
     var room: CGFloat?
@@ -1500,8 +1501,26 @@ extension SidePageView {
         guard var carry else { return }
         carry.travel = CGSize(width: point.x - carry.down.x, height: point.y - carry.down.y)
         self.carry = carry
-        follow()
         let tab = carry.tab
+        if carry.block != .pins, let window,
+           TearOff.shared.drag(self, tab: tab, at: window.convertPoint(toScreen: event.locationInWindow), moved: Self.moved(event)) {
+            if browser.prefs.splitView, TabDrag.shared.update(browser: browser, tab: tab, translation: carry.travel, event: event),
+               TabDrag.shared.cancelledID == tab.id, lifted(tab) {
+                setAway(false)
+                _ = land(tab, nil)
+                finishCarry()
+                pending = nil
+                swallowRelease = true
+                return
+            }
+            clearListDrop()
+            if crossing != nil { crossing = nil }
+            _ = outside?(tab, nil, false)
+            setAway(true)
+            return
+        }
+        setAway(false)
+        follow()
         let tasked: Bool = if case .task = carry.block { true } else { false }
         let crossed = tasked ? false : cross(tab, point, fromPin: carry.block == .pins)
         if carry.block != .pins, browser.prefs.splitView, TabDrag.shared.update(browser: browser, tab: tab, translation: carry.travel, event: event) {
@@ -1543,6 +1562,7 @@ extension SidePageView {
             let finished = TabDrag.shared.finish(browser: browser, tab: tab, event: event)
             let source = finished.source
             let cancelled: Bool = if case .cancelled = finished.drop { true } else { false }
+            if !cancelled, carry.away, TearOff.shared.letGo(self, source) { return true }
             if !taken(cancelled ? nil : point, carry) {
                 switch finished.drop {
                 case .stage(let target, let onLeft): browser.pair(source, with: target, onLeft: onLeft)
@@ -1554,7 +1574,7 @@ extension SidePageView {
                         browser.dropTabIntoStrip(source, before: target)
                     }
                 case .outside:
-                    if !browser.dragOut(source, at: finished.point) { drop(source, at: point) }
+                    drop(source, at: point)
                 case .cancelled:
                     break
                 }
@@ -1570,7 +1590,8 @@ extension SidePageView {
             if DragOutToKeep.leftFolder(carry.travel, reach: reach) { browser.keepAgentTab(tab) }
             return true
         case .loose, .folder:
-            if !taken(point, carry), !browser.dragOut(tab) { drop(tab, at: point) }
+            if carry.away, TearOff.shared.letGo(self, tab) { return true }
+            if !taken(point, carry) { drop(tab, at: point) }
             return true
         }
     }
@@ -1632,12 +1653,25 @@ extension SidePageView {
         }
     }
 
+    private func setAway(_ on: Bool) {
+        guard var carry, carry.away != on else { return }
+        carry.away = on
+        self.carry = carry
+        let view = morphCarried == carry.tab.id ? morphView : carry.view
+        view?.alphaValue = on ? 0 : carry.onPage ? 0.4 : 1
+    }
+
+    private static func moved(_ event: NSEvent) -> CGVector? {
+        guard event.type == .leftMouseDragged, event.deltaX != 0 || event.deltaY != 0 else { return nil }
+        return CGVector(dx: event.deltaX, dy: -event.deltaY)
+    }
+
     private func lifted(_ tab: Tab) -> Bool {
         guard let carry, carry.tab.id == tab.id, morphCarried == tab.id else { return false }
         return carry.block != .pins
     }
 
-    private func clearListDrop() {
+    func clearListDrop() {
         if dropOn != nil { dropOn = nil }
         if looseOn != nil { looseOn = nil }
         spring.over(nil) { _ in }
@@ -1665,6 +1699,7 @@ extension SidePageView {
     }
 
     private func finishCarry() {
+        TearOff.shared.end(self)
         guard let carry else { return }
         dropOn = nil
         looseOn = nil
@@ -1726,7 +1761,7 @@ extension SidePageView {
         }
     }
 
-    private func dropFrames() -> [UUID: GroupDropFrame] {
+    func dropFrames() -> [UUID: GroupDropFrame] {
         var frames: [UUID: GroupDropFrame] = [:]
         for (id, rect) in headingFrames {
             let now = headingDocs[id].flatMap { held in held.parent.map { $0.convert(held.rect, to: self) } } ?? rect
@@ -1739,12 +1774,12 @@ extension SidePageView {
         return frames
     }
 
-    private var itemsNow: [(item: Browser.ListItem, rect: CGRect)] {
+    var itemsNow: [(item: Browser.ListItem, rect: CGRect)] {
         let carried = carry.flatMap { lifted($0.tab) ? $0.tab.id : nil }
         return itemDocs.filter { $0.item != .tab(carried ?? UUID()) }.map { ($0.item, listDocument.convert($0.rect, to: self)) }
     }
 
-    private var raisedNow: [CGRect] {
+    var raisedNow: [CGRect] {
         raisedDocs.map { listDocument.convert($0, to: self) }
     }
 
