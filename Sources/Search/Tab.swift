@@ -511,6 +511,8 @@ final class Tab: Identifiable {
     var stuck = StuckState()
     @ObservationIgnored var stuckEnd: StuckEnd?
     @ObservationIgnored var stuckRedoing = false
+    @ObservationIgnored var memoryOwed = false
+    @ObservationIgnored var memoryEnds = 0
     /// An extension is recording from this tab's page (see RecordingIndicator).
     var recording = false
 
@@ -1895,6 +1897,10 @@ final class Tab: Identifiable {
     /// A view that has lost its document is given the address back instead:
     /// there is nothing else for it to reload.
     func reload(fromOrigin: Bool = false) {
+        if failure == MemoryWords.title {
+            recoverFromCrash()
+            return
+        }
         if reach(.reload(fromOrigin: fromOrigin)) { return }
         kicks.reload += 1
         // Search's own pages are drawn from what is there now, always.

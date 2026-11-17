@@ -367,6 +367,8 @@ final class Bench {
 
         case _ where BenchStuck.verbs.contains(verb):
             BenchStuck.run(request, answer)
+        case _ where BenchMemory.verbs.contains(verb):
+            BenchMemory.run(request, answer)
 
         case _ where BenchAddressPill.verbs.contains(verb):
             BenchAddressPill.run(verb, request, answer)

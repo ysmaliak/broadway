@@ -63,6 +63,7 @@ final class AgentErrorsTests {
             "secret_field": (1, true), "refused": (1, true), "timeout": (1, true), "no_answer": (1, false), "failed": (1, false),
             "not_answering": (4, false), "deadline": (4, false), "unseen": (1, true), "opens_window": (1, true), "unmet": (1, false), "moved": (1, true), "nothing_kept": (1, true),
             "page_reloaded": (1, false),
+            "page_too_large": (1, false),
         ]
         for (name, want) in expected {
             let code = ToolCode(rawValue: name)

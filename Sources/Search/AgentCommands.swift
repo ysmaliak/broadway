@@ -176,10 +176,11 @@ enum ToolCode: String, CaseIterable {
     case moved
     case nothingKept = "nothing_kept"
     case pageReloaded = "page_reloaded"
+    case pageTooLarge = "page_too_large"
 
     var mayHaveLanded: Bool {
         switch self {
-        case .noAnswer, .failed, .notAnswering, .deadline, .unmet, .pageReloaded: true
+        case .noAnswer, .failed, .notAnswering, .deadline, .unmet, .pageReloaded, .pageTooLarge: true
         default: false
         }
     }
@@ -236,6 +237,7 @@ enum ToolCode: String, CaseIterable {
         case .moved: "The page moved under the steps. Look with broadway snapshot, then go on with new refs."
         case .nothingKept: "Nothing was asked and nothing was filled. The person can fill it, or broadway handoff gives them the tab."
         case .pageReloaded: "Look with broadway snapshot before you repeat anything"
+        case .pageTooLarge: "Load it again only if you need it, and do less on it"
         }
     }
 }
@@ -256,6 +258,7 @@ enum ToolFailure {
         ("said not now", "said_no"), ("said never here", "never_here"), ("never lets agents", "never_here"),
         ("never shows one for an agent", "opens_window"), ("page nobody is looking at", "unseen"),
         ("page stopped answering", "page_reloaded"),
+        ("page used too much memory", "page_too_large"),
     ]
 
     static func code(_ text: String) -> String {

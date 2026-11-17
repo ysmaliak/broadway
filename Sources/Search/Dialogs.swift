@@ -387,7 +387,10 @@ extension Browser {
     /// one thing worth offering, is what the failure view is for.
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         cancelDisplay(for: webView)
-        guard let tab = tab(for: webView) else { return }
+        guard let tab = tab(for: webView) else {
+            _ = anyTab(for: webView)?.endedOnPurpose(webView)
+            return
+        }
         dropQuestions(for: tab.id)
         if tab.endedOnPurpose(webView) { return }
         // In front of you: straight back, a reload beats a white page with a

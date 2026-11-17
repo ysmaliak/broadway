@@ -134,6 +134,7 @@ final class Links: NSObject, NSApplicationDelegate {
         // among it — goes (Security).
         DispatchQueue.global(qos: .utility).async { ImportFile.sweepScratch() }
         Trim.start()
+        MemoryPages.start()
         MenuIcons.start()
         AgentSetup.shared.launched(agentsOn: Shared.prefs.agentsOn)
         AppIconShown.apply(Shared.prefs.appIcon)

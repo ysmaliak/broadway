@@ -100,6 +100,7 @@ extension Tab {
     }
 
     func endedOnPurpose(_ webView: WKWebView) -> Bool {
+        if built === webView, stopForMemory() { return true }
         guard let end = stuckEnd, end.view === webView else {
             if built === webView { stuck.letGo() }
             return false

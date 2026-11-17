@@ -1,7 +1,7 @@
 import AppKit
 
 enum TroubleKind: String, CaseIterable {
-    case notFound, offline, slow, refused, insecure, other
+    case notFound, offline, slow, refused, insecure, tooLarge, other
 
     init(code: Int) {
         switch code {
@@ -48,6 +48,7 @@ enum TroubleKind: String, CaseIterable {
         case .slow: return "The site took too long to answer"
         case .refused: return "The site refused the connection"
         case .insecure: return "This connection isn't private"
+        case .tooLarge: return MemoryWords.title
         case .other: return "The page didn't load"
         }
     }
@@ -60,6 +61,7 @@ enum TroubleKind: String, CaseIterable {
         case .slow: return "\(site.prefix(1).uppercased() + site.dropFirst()) is taking its time. It might be busy, so try again in a moment."
         case .refused: return "\(site.prefix(1).uppercased() + site.dropFirst()) is there, but isn't taking visitors right now"
         case .insecure: return "Broadway couldn't confirm \(site) is who it says it is, so it stopped before anything was sent"
+        case .tooLarge: return MemoryWords.line
         case .other: return "Something got in the way. Trying again often fixes it."
         }
     }
@@ -71,6 +73,7 @@ enum TroubleKind: String, CaseIterable {
         case .slow: return "hourglass"
         case .refused: return "hand.raised"
         case .insecure: return "lock.slash"
+        case .tooLarge: return "memorychip"
         case .other: return "exclamationmark.triangle"
         }
     }

@@ -8298,6 +8298,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
 
     private func fail(_ webView: WKWebView, _ error: Error) {
         let tab = anyTab(for: webView)
+        if tab?.memoryStopped == true { return }
         DownloadTrace.error("page-failed", error, ["url": webView.url?.absoluteString ?? ""])
         tab?.uncover()
         let nsError = error as NSError

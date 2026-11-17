@@ -159,6 +159,7 @@ extension Browser {
         if tab.bench { return "a bench tab" }
         if tab.isBlank { return "blank" }
         if tab.asleep { return "already asleep" }
+        if tab.memoryStopped { return "stopped for its memory" }
         guard tab.built != nil else { return "no page" }
         if tab.loading { return "still loading" }
         return busy(tab)

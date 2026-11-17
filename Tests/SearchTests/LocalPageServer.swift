@@ -10,6 +10,7 @@ final class LocalPageServer {
         var type: String
         var body: String
         var headers: [String: String] = [:]
+        var hold: TimeInterval = 0
     }
 
     private let socket: Int32
@@ -151,6 +152,7 @@ final class LocalPageServer {
 
         let page = pages[path] ?? Page(status: "404 Not Found", type: "text/html",
                                        body: "<!doctype html><title>Not found</title><p>Nothing here</p>")
+        if page.hold > 0 { Thread.sleep(forTimeInterval: page.hold) }
         let body = Data(page.body.utf8)
         let head = "HTTP/1.1 \(page.status)\r\n"
             + "Content-Type: \(page.type)\r\n"

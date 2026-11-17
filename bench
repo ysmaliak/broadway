@@ -24,6 +24,9 @@
     ./bench stuck do ID reload|stop|back|forward|close|sleep|home|go URL
                                        test run: the person's own command on a tab, through Broadway's path
     ./bench stuck waits QUESTION AGENT QUIET|standard  test run: shorten the waits, in seconds, or put them back
+    ./bench memory [state]             test run: the memory ceiling, the page processes watched and their last readings
+    ./bench memory ceiling MB|standard test run: lower the ceiling a page process may reach, or put it back
+    ./bench memory retry ID            test run: press the button on a page stopped for its memory
     ./bench select ID                  bring a tab to the front — --test runs only
     ./bench adopt ID                   a bench tab becomes an ordinary one — --test runs only
     ./bench resize W H [STEPS]         take the window to W×H in steps, like a drag — --test runs only
@@ -677,6 +680,16 @@ def main(argv):
             request["id"], request["value"] = args[1], args[2]
         elif request["action"] == "do" and len(args) == 4 and args[2] == "go":
             request["id"], request["value"], request["url"] = args[1], args[2], args[3]
+        else: sys.exit(usage)
+    elif verb == "memory":
+        usage = "usage: bench memory [state] | ceiling MB|standard | retry ID"
+        request["action"] = args[0] if args else "state"
+        if request["action"] == "state" and len(args) <= 1: pass
+        elif request["action"] == "ceiling" and args[1:] == ["standard"]: pass
+        elif request["action"] == "ceiling" and len(args) == 2:
+            try: request["megabytes"] = float(args[1])
+            except ValueError: sys.exit(usage)
+        elif request["action"] == "retry" and len(args) == 2: request["id"] = args[1]
         else: sys.exit(usage)
     elif verb == "autofill":
         if len(args) != 1 or args[0] not in ("state", "seed", "clear", "preview", "fill", "undo", "cancel"):

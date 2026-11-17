@@ -226,7 +226,7 @@ extension Browser {
     }
 
     func loadFailedBeforeCommit(_ webView: WKWebView, _ error: Error) {
-        guard let tab = tab(for: webView) else { return }
+        guard let tab = tab(for: webView), !tab.memoryStopped else { return }
         let nsError = error as NSError
         let fault = LoadFault(error: nsError)
         let handedOver = nsError.domain == "WebKitErrorDomain" && [102, 204].contains(nsError.code)
