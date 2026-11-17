@@ -194,6 +194,39 @@ final class LeavePageTests {
         #expect(awake)
     }
 
+    @Test func backThatWouldCloseALinkedTabAsksFirstAndStayKeepsIt() async throws {
+        let from = try await open("/plain")
+        let tab = browser.open(server.url("/asks"), foreground: true, from: from, link: true)
+        try await until("the linked page loads") { settled(tab, at: "/asks") }
+        try await typeInto(tab)
+        try #require(browser.activeID == tab.id)
+
+        browser.back()
+        try await until("the page asks") { tab.leaveQuestion != nil }
+        let stillOpen = open(tab)
+        browser.answerLeave(tab, leave: false)
+        try await Task.sleep(for: .seconds(1.5))
+
+        #expect(stillOpen)
+        #expect(open(tab))
+        #expect(try await text(tab) == "hi")
+    }
+
+    @Test func backThatWouldCloseALinkedTabClosesItOnLeaveAndShowsItsSource() async throws {
+        let from = try await open("/plain")
+        let tab = browser.open(server.url("/asks"), foreground: true, from: from, link: true)
+        try await until("the linked page loads") { settled(tab, at: "/asks") }
+        try await typeInto(tab)
+        try #require(browser.activeID == tab.id)
+
+        browser.back()
+        try await until("the page asks") { tab.leaveQuestion != nil }
+        browser.answerLeave(tab, leave: true)
+        try await until("the tab closes") { !open(tab) }
+
+        #expect(browser.activeID == from.id)
+    }
+
     @Test func aWindowWithTwoAskingTabsAsksBothAndOneStayKeepsIt() async throws {
         let first = try await open("/asks")
         try await typeInto(first)
