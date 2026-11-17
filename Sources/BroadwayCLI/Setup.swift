@@ -25,7 +25,8 @@ struct Step {
 }
 
 enum Setup {
-    static let parts = ["command", "completions", "claude", "codex"]
+    static let parts = ["command", "completions", "claude", "codex", "cursor", "opencode", "gemini"]
+    static let others = ["cursor", "opencode", "gemini"]
     static let opening = "# >>> broadway >>>"
     static let closing = "# <<< broadway <<<"
     static let mark = "written by broadway setup"
@@ -52,12 +53,40 @@ enum Setup {
 
     """
 
+    static let madeFolder = "broadway-made: skills"
+
+    static func sharedSkill(made: Bool) -> String {
+        skill.replacingOccurrences(of: "managed-by: \(mark)\nbroadway-guide: \(guideVersion)\n",
+                                   with: "metadata:\n  managed-by: \(mark)\n  broadway-guide: \"\(guideVersion)\"\n" + (made ? "  \(madeFolder)\n" : ""))
+    }
+
+    static func skill(for part: String, made: Bool) -> String {
+        if others.contains(part) { return sharedSkill(made: made) }
+        guard made else { return skill }
+        return skill.replacingOccurrences(of: "broadway-guide: \(guideVersion)\n", with: "broadway-guide: \(guideVersion)\n\(madeFolder)\n")
+    }
+
+    private static func madeSkills(_ file: String) -> Bool {
+        let skills = ((file as NSString).deletingLastPathComponent as NSString).deletingLastPathComponent
+        return !exists(skills) || (ours(file) && text(file)?.contains(madeFolder) == true)
+    }
+
+    private static func takeSkill(_ file: String, part: String) -> Step {
+        let made = ours(file) && text(file)?.contains(madeFolder) == true
+        let step = take(file, part: part)
+        let folder = (file as NSString).deletingLastPathComponent
+        rmdir(folder)
+        if made { rmdir((folder as NSString).deletingLastPathComponent) }
+        return step
+    }
+
     static func guide(in text: String) -> String? {
         guard text.hasPrefix("---") else { return nil }
         for line in text.split(separator: "\n").dropFirst() {
             if line.hasPrefix("---") { return nil }
-            if line.hasPrefix("broadway-guide:") {
-                return line.dropFirst("broadway-guide:".count).trimmingCharacters(in: .whitespaces)
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("broadway-guide:") {
+                return trimmed.dropFirst("broadway-guide:".count).trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: "\"")))
             }
         }
         return nil
@@ -87,6 +116,24 @@ enum Setup {
         var codex: String { home + "/.codex" }
         var claudeSkill: String { claude + "/skills/broadway/SKILL.md" }
         var codexSkill: String { codex + "/skills/broadway/SKILL.md" }
+        var cursor: String { home + "/.cursor" }
+        var opencode: String { home + "/.config/opencode" }
+        var gemini: String { home + "/.gemini" }
+        var cursorSkill: String { cursor + "/skills/broadway/SKILL.md" }
+        var opencodeSkill: String { opencode + "/skills/broadway/SKILL.md" }
+        var geminiSkill: String { gemini + "/skills/broadway/SKILL.md" }
+
+        func folder(_ part: String) -> String {
+            switch part {
+            case "claude": claude
+            case "codex": codex
+            case "cursor": cursor
+            case "opencode": opencode
+            default: gemini
+            }
+        }
+
+        func skill(_ part: String) -> String { folder(part) + "/skills/broadway/SKILL.md" }
         var codexConfig: String { codex + "/config.toml" }
         var claudeSettings: String { claude + "/settings.json" }
         var codexHooks: String { codex + "/hooks.json" }
@@ -124,6 +171,12 @@ enum Setup {
     }
 
     private static func ours(_ path: String) -> Bool { text(path)?.contains(mark) == true }
+
+    static func cursorReadsElsewhere(_ paths: Paths) -> String? {
+        if ours(paths.claudeSkill) { return "~/.claude/skills" }
+        if ours(paths.codexSkill) { return "~/.codex/skills" }
+        return nil
+    }
 
     private static func put(_ content: String, at path: String) throws {
         try files.createDirectory(atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
@@ -256,12 +309,25 @@ enum Setup {
                 steps.append(Step(part: part, done: false, path: file, note: "skipped: \(folder) isn't here"))
                 continue
             }
-            steps.append(write(skill, at: file, part: part))
+            steps.append(write(skill(for: part, made: madeSkills(file)), at: file, part: part))
             steps.append(addHooks(part, paths: paths))
             if part == "codex", let config = text(paths.codexConfig), let changed = codexTimeout(config) {
                 let done = (try? put(changed, at: paths.codexConfig)) != nil
                 steps.append(Step(part: part, done: done, path: paths.codexConfig, note: done ? "gave broadway's MCP entry a \(codexToolTimeout) s tool timeout" : "couldn't write it"))
             }
+        }
+        for part in others where wanted.contains(part) {
+            let folder = paths.folder(part)
+            let file = paths.skill(part)
+            guard exists(folder) else {
+                steps.append(Step(part: part, done: false, path: file, note: "skipped: \(folder) isn't here"))
+                continue
+            }
+            if part == "cursor", !exists(file), let elsewhere = cursorReadsElsewhere(paths) {
+                steps.append(Step(part: part, done: false, path: file, note: "skipped: Cursor reads broadway's skill in \(elsewhere)"))
+                continue
+            }
+            steps.append(write(sharedSkill(made: madeSkills(file)), at: file, part: part))
         }
         return steps
     }
@@ -275,7 +341,8 @@ enum Setup {
 
     static func refresh(_ wanted: [String], paths: Paths) -> [Step] {
         var steps: [Step] = []
-        for (part, file) in [("claude", paths.claudeSkill), ("codex", paths.codexSkill)] where wanted.contains(part) {
+        for part in ["claude", "codex"] + others where wanted.contains(part) {
+            let file = paths.skill(part)
             guard let here = text(file) else {
                 steps.append(Step(part: part, done: false, path: file, note: "not there"))
                 continue
@@ -284,8 +351,8 @@ enum Setup {
                 steps.append(Step(part: part, done: false, path: file, note: "left alone: this file isn't broadway's"))
                 continue
             }
-            steps.append(older(guide(in: here)) ? write(skill, at: file, part: part) : Step(part: part, done: false, path: file, note: "up to date"))
-            steps.append(updateHooks(part, paths: paths))
+            steps.append(older(guide(in: here)) ? write(skill(for: part, made: here.contains(madeFolder)), at: file, part: part) : Step(part: part, done: false, path: file, note: "up to date"))
+            if !others.contains(part) { steps.append(updateHooks(part, paths: paths)) }
         }
         return steps
     }
@@ -340,14 +407,15 @@ enum Setup {
             }
         }
         if wanted.contains("claude") {
-            steps.append(take(paths.claudeSkill, part: "claude"))
-            rmdir((paths.claudeSkill as NSString).deletingLastPathComponent)
+            steps.append(takeSkill(paths.claudeSkill, part: "claude"))
             steps.append(takeHooks("claude", paths: paths))
         }
         if wanted.contains("codex") {
-            steps.append(take(paths.codexSkill, part: "codex"))
-            rmdir((paths.codexSkill as NSString).deletingLastPathComponent)
+            steps.append(takeSkill(paths.codexSkill, part: "codex"))
             steps.append(takeHooks("codex", paths: paths))
+        }
+        for part in others where wanted.contains(part) {
+            steps.append(takeSkill(paths.skill(part), part: part))
         }
         return steps
     }
@@ -415,6 +483,13 @@ enum Setup {
         }
         skill("claude", paths.claudeSkill, wantedHere: exists(paths.claude))
         skill("codex", paths.codexSkill, wantedHere: exists(paths.codex))
+        if exists(paths.cursor), !exists(paths.cursorSkill), let elsewhere = cursorReadsElsewhere(paths) {
+            found.append(Check(name: "cursor", ok: true, required: false, detail: "Cursor reads broadway's skill in \(elsewhere)", fix: nil))
+        } else {
+            skill("cursor", paths.cursorSkill, wantedHere: exists(paths.cursor))
+        }
+        skill("opencode", paths.opencodeSkill, wantedHere: exists(paths.opencode))
+        skill("gemini", paths.geminiSkill, wantedHere: exists(paths.gemini))
         for part in ["claude", "codex"] {
             let name = part + " hooks"
             guard text(part == "claude" ? paths.claudeSkill : paths.codexSkill)?.contains("managed-by: \(mark)") == true else {
@@ -453,8 +528,8 @@ extension Builtins {
     }
 
     static let setupCommands: [Builtin] = [
-        Builtin(name: "setup", usage: "broadway setup [command] [completions] [claude] [codex] [--refresh]", summary: "Put broadway on your PATH, with completions and agent skills", group: "Setup",
-                details: "Links ~/.local/bin/broadway to this app's copy, writes fish, bash and zsh completions, and installs a skill for Claude Code and Codex where they are present. The skill is short and sends agents to broadway guide. It also adds a Stop and a SessionEnd hook, in ~/.claude/settings.json and ~/.codex/hooks.json, that run broadway agents idle --hook so the agent's card reads finished when its turn ends. It adds only its own entries and keeps the rest of each file as it was. It leaves files that aren't its own alone. broadway remove undoes it. Broadway runs broadway setup claude codex itself when you turn agents on, and once at the first launch that finds them already on. When nothing is at ~/.local/bin/broadway, that run also links the command there, unless Broadway is running from its disk image or a download folder. It never moves or replaces what is already there.\n--refresh  only rewrite skills broadway wrote that are older than this Broadway, and bring broadway's own hook entries up to date where they are already there. It creates no skill and adds no hook. Broadway runs it at each launch.",
+        Builtin(name: "setup", usage: "broadway setup [command] [completions] [claude] [codex] [cursor] [opencode] [gemini] [--refresh]", summary: "Put broadway on your PATH, with completions and agent skills", group: "Setup",
+                details: "Links ~/.local/bin/broadway to this app's copy, writes fish, bash and zsh completions, and installs a skill for Claude Code and Codex where they are present, and for Cursor, opencode and Gemini CLI in their own skills folders when their folders are there. Cursor gets no copy of its own when it already reads broadway's skill in ~/.claude/skills or ~/.codex/skills. The skill is short and sends agents to broadway guide. It also adds a Stop and a SessionEnd hook, in ~/.claude/settings.json and ~/.codex/hooks.json, that run broadway agents idle --hook so the agent's card reads finished when its turn ends. It adds only its own entries and keeps the rest of each file as it was. It leaves files that aren't its own alone. broadway remove undoes it. Broadway runs broadway setup claude codex cursor opencode gemini itself when you turn agents on, and once at the first launch that finds them already on. When nothing is at ~/.local/bin/broadway, that run also links the command there, unless Broadway is running from its disk image or a download folder. It never moves or replaces what is already there.\n--refresh  only rewrite skills broadway wrote that are older than this Broadway, and bring broadway's own hook entries up to date where they are already there. It creates no skill and adds no hook. Broadway runs it at each launch.",
                 examples: ["broadway setup", "broadway setup completions", "broadway setup claude codex --refresh"]) { context, words in
             let refreshing = words.contains("--refresh")
             let parts = try wanted(words.filter { $0 != "--refresh" }, verb: "setup")
@@ -462,7 +537,7 @@ extension Builtins {
             if refreshing { return report(Setup.refresh(parts, paths: paths), verb: "setup", context: context) }
             return report(Setup.install(parts, paths: paths, binary: context.binary), verb: "setup", context: context)
         },
-        Builtin(name: "remove", usage: "broadway remove [command] [completions] [claude] [codex]", summary: "Undo broadway setup", group: "Setup",
+        Builtin(name: "remove", usage: "broadway remove [command] [completions] [claude] [codex] [cursor] [opencode] [gemini]", summary: "Undo broadway setup", group: "Setup",
                 examples: ["broadway remove", "broadway remove codex"]) { context, words in
             report(Setup.uninstall(try wanted(words, verb: "remove"), paths: Setup.Paths(home: context.home)), verb: "remove", context: context)
         },

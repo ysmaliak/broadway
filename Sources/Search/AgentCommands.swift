@@ -23,6 +23,9 @@ enum AgentCatalog {
         var examples: [String] = []
         var columns: [String] = []
         var hidden = false
+        var about: String?
+        var flagNames: [String: String] = [:]
+        var repeats: Set<String> = []
     }
 
     static let olderHint = "This broadway command and the Broadway that's running are different versions. Start a new agent session, or ask the person to quit Broadway and open it again."
@@ -72,7 +75,8 @@ enum AgentCatalog {
         "wait": Shape(positional: ["text"], examples: ["broadway wait", "broadway wait \"Order placed\"", "broadway wait --selector '#done' --seconds 20", "broadway wait --gone Loading", "broadway wait --download", "broadway wait --idle", "broadway wait --request /api/save"]),
         "history": Shape(positional: ["query"], examples: ["broadway history github", "broadway history --limit 5"], columns: ["last", "title", "url"]),
         "handoff": Shape(positional: ["reason"], examples: ["broadway handoff \"Solve the captcha\"", "broadway handoff \"Type the code you were sent\" --seconds 600", "broadway handoff \"Pick a seat\" --optional"]),
-        "ask": Shape(hidden: true),
+        "ask": Shape(positional: ["question"], examples: ["broadway ask \"Which account?\" --choice Work --choice Personal", "broadway ask \"Book which day?\" --choice Friday --choice Saturday --seconds 600"],
+                     about: AgentAskOutside.description, flagNames: ["choices": "choice"], repeats: ["choices"]),
         "skills": Shape(examples: ["broadway skills", "broadway skills --url https://github.com"]),
         "skill": Shape(positional: ["name"], examples: ["broadway skill github"]),
         "sign_in": Shape(hidden: true),
@@ -106,12 +110,17 @@ enum AgentCatalog {
         let inOrder = shape.positional ?? tool.required.filter { $0 != "tab" }
         let positional = (inOrder + tool.required.filter { $0 != "tab" && !inOrder.contains($0) })
             .compactMap { key in tool.properties[key].map { parameter(key, $0, required: tool.required.contains(key)) } }
-        let flags = tool.properties.keys.filter { $0 != "tab" }.sorted()
-            .compactMap { key in tool.properties[key].map { parameter(key, $0, required: tool.required.contains(key)) } }
-        let sentence = tool.description.components(separatedBy: ". ").first ?? tool.description
+        let flags = tool.properties.keys.filter { $0 != "tab" }.sorted { (shape.flagNames[$0] ?? $0) < (shape.flagNames[$1] ?? $1) }
+            .compactMap { key in tool.properties[key].map { schema -> [String: Any] in
+                var found = parameter(shape.flagNames[key] ?? key, schema, required: tool.required.contains(key))
+                if shape.repeats.contains(key) { found["repeats"] = true }
+                return found
+            } }
+        let description = shape.about ?? tool.description
+        let sentence = description.components(separatedBy: ". ").first ?? description
         var found: [String: Any] = ["name": name, "tool": tool.name, "aliases": name == tool.name ? [] : [tool.name],
                                     "summary": sentence.hasSuffix(".") ? String(sentence.dropLast()) : sentence,
-                                    "description": tool.description, "tabbed": tool.properties["tab"] != nil,
+                                    "description": description, "tabbed": tool.properties["tab"] != nil,
                                     "reads": reads.contains(tool.name), "positional": positional, "flags": flags,
                                     "examples": shape.examples.isEmpty ? ["broadway \(name)"] : shape.examples]
         if !shape.columns.isEmpty { found["columns"] = shape.columns }
@@ -177,6 +186,8 @@ enum ToolCode: String, CaseIterable {
     case nothingKept = "nothing_kept"
     case pageReloaded = "page_reloaded"
     case pageTooLarge = "page_too_large"
+    case questionOpen = "question_open"
+    case tooManyQuestions = "too_many_questions"
 
     var mayHaveLanded: Bool {
         switch self {
@@ -238,6 +249,8 @@ enum ToolCode: String, CaseIterable {
         case .nothingKept: "Nothing was asked and nothing was filled. The person can fill it, or broadway handoff gives them the tab."
         case .pageReloaded: "Look with broadway snapshot before you repeat anything"
         case .pageTooLarge: "Load it again only if you need it, and do less on it"
+        case .questionOpen: "Wait for the answer to the question you already asked"
+        case .tooManyQuestions: "Go on with what you already know, or wait before you ask again"
         }
     }
 }
@@ -433,6 +446,7 @@ extension AgentSocket {
             let named = arguments["tab"] as? String
             switch await self.target(named, browser: browser, link: link) {
             case .failure(let refused):
+                if name == "ask", named == nil { return .go(arguments) }
                 return .refuse(.failure(refused.message, code: refused.code))
             case .success(let id):
                 arguments["tab"] = id

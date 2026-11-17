@@ -535,7 +535,8 @@ final class BrowserToolbox: AgentToolbox {
         ToolSpec(name: "autofill", description: "Fill the form on a page from the person's profile, address or card. Broadway fills it itself and tells you only how many boxes. what is details, or card, which needs the person's Touch ID.",
                  properties: ["tab": tab, "what": ["type": "string", "enum": ["details", "card"]]], required: ["tab"]),
         ToolSpec(name: "ask", description: "Ask the person one question, only when you cannot go on without the answer. It can't approve an action. Give two to nine short choices. If the reply says to end your turn, do that: the answer comes as your next message.",
-                 properties: ["question": ["type": "string"], "choices": ["type": "array", "items": ["type": "string"]], "tab": tab], required: ["question"]),
+                 properties: ["question": ["type": "string"], "choices": ["type": "array", "items": ["type": "string"]], "tab": tab,
+                              "seconds": ["type": "number", "description": "How long to wait, 300 by default and 900 at most"]], required: ["question"]),
         ToolSpec(name: "helper_start", description: "Split a big task: start a helper on one part of it. Up to eight run at once, each with its own tabs. A helper can't start helpers, and knows only what you write here.",
                  properties: ["prompt": ["type": "string", "description": "All the helper needs to know, and what to tell you when it's done"]], required: ["prompt"]),
         ToolSpec(name: "helper_wait", description: "Wait for your helpers and read what they found. Without ids it waits for all of them.",
@@ -753,6 +754,7 @@ final class BrowserToolbox: AgentToolbox {
 
     func call(_ name: String, _ arguments: [String: Any], task: UUID?) async -> ToolOutcome {
         let outside = TaskLedger.shared.entry(task)?.origin == .outside
+        if name == "ask", outside, let task, let refused = AgentAskBook.shared.refusal(AgentTasks.shared.root(task)) { return refused }
         if AgentDesk.shared.waits(for: task) {
             let waiting = ToolOutcome.failure(outside ? "This still waits for the person's yes in Broadway. Nothing was done." : "The person hasn't answered yet. Nothing was done.", code: .needsYou)
             guard outside, let task, Self.answering.contains(name), let open = AgentLinks.shared.openAsk(AgentTasks.shared.root(task)) else { return waiting }
@@ -1497,6 +1499,7 @@ final class BrowserToolbox: AgentToolbox {
     }
 
     private func ask(_ arguments: [String: Any], task: UUID?) async -> ToolOutcome {
+        if let task, TaskLedger.shared.entry(task)?.origin == .outside { return await askOutside(arguments, task: task) }
         guard let task, !AgentSessions.shared.answersInTerminal(task) else { return AgentSessions.shared.ask(arguments, task: task) }
         return await askPerson(arguments, task: task)
     }

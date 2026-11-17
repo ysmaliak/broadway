@@ -51,14 +51,16 @@ enum AgentCommand {
 
     static func summary(_ checks: [[String: Any]]) -> String {
         guard !checks.isEmpty else { return "Run tasks, snapshot pages, click and more, from Terminal" }
-        let named = [("fish", "fish"), ("zsh", "zsh"), ("bash", "bash"), ("claude", "Claude Code"), ("codex", "Codex")]
+        let agents = [("claude", "Claude Code"), ("codex", "Codex"), ("cursor", "Cursor"), ("opencode", "opencode"), ("gemini", "Gemini CLI")]
+        let named = [("fish", "fish"), ("zsh", "zsh"), ("bash", "bash")] + agents
         let good = named.filter { name, _ in
             checks.first { $0["name"] as? String == name }.map { $0["ok"] as? Bool == true && $0["detail"] as? String != "not used here" } == true
         }.map(\.1)
         guard isSetUp(checks) else {
-            let agents = good.filter { $0 == "Claude Code" || $0 == "Codex" }
-            guard !agents.isEmpty else { return "Puts broadway on your PATH, with shell completions and skills for Claude Code and Codex" }
-            return "\(agents.joined(separator: " and ")) \(agents.count == 1 ? "has" : "have") Broadway's skill. Set Up also puts broadway on your PATH."
+            let skilled = good.filter { name in agents.contains { $0.1 == name } }
+            guard !skilled.isEmpty else { return "Puts broadway on your PATH, with shell completions and skills for Claude Code, Codex, Cursor, opencode and Gemini CLI" }
+            let listed = skilled.count == 1 ? skilled[0] : skilled.dropLast().joined(separator: ", ") + " and " + skilled[skilled.count - 1]
+            return "\(listed) \(skilled.count == 1 ? "has" : "have") Broadway's skill. Set Up also puts broadway on your PATH."
         }
         let hooks: Set<String> = ["claude hooks", "codex hooks"]
         let quiet: Set<String> = ["running", "agents", "plan"]
@@ -240,6 +242,12 @@ final class AgentSocket {
                 AgentLinks.shared.rename(task, name)
             }
             if let wait = request["wait_person"] as? String { server.environment["BROADWAY_WAIT_PERSON"] = wait }
+            if task != nil, request["task"] == nil {
+                server.person = { [weak self, weak browser] tool, arguments in
+                    guard let self, let browser = browser ?? Browsers.front else { return .failure("Broadway has no window open", code: .noWindow) }
+                    return await PersonTools.call(tool, arguments, link: task, browser: browser, socket: self)
+                }
+            }
             box.browser = browser
             connection.onLine = { line in MainActor.assumeIsolated { server.handle(line) } }
             var greeting: [String: Any] = ["mcp": true]

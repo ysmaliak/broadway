@@ -261,7 +261,17 @@ enum CommandLineInput {
                     throw Failure.usage("\(command.name) has no option --\(parts[0])", hint: near ?? "Run broadway help \(command.name)")
                 }
                 waiting.removeAll { $0.name == flag.name }
-                if parts.count == 2 {
+                if flag.repeats {
+                    let value: String
+                    if parts.count == 2 {
+                        value = parts[1]
+                    } else {
+                        guard index < words.count else { throw Failure.usage("--\(flag.name) needs a value") }
+                        value = words[index]
+                        index += 1
+                    }
+                    found[flag.name] = (found[flag.name] as? [Any] ?? []) + [value]
+                } else if parts.count == 2 {
                     found[flag.name] = try coerce(parts[1], flag, command: command)
                 } else if flag.type == "boolean" {
                     found[flag.name] = true

@@ -61,7 +61,7 @@ final class MCPServer {
     static let offInstructions = "Agents are off in Broadway. The person can turn them on in Settings › Agents."
 
     static let listedNames = ["navigate": "go", "text": "read", "screenshot": "shot", "locate": "find", "fill_form": "fill"]
-    static let hiddenOutside: Set<String> = ["ask", "sign_in", "autofill", "helper_start", "helper_wait", "mac_read", "mac_run"]
+    static let hiddenOutside: Set<String> = ["sign_in", "autofill", "helper_start", "helper_wait", "mac_read", "mac_run"]
 
     static let descriptions: [String: String] = [
         "open": "Open url or urls in new tabs of yours",
@@ -95,10 +95,12 @@ final class MCPServer {
         "skills": "Notes Broadway keeps about sites, for this page's site or an address",
         "skill": "Read one site note by its name",
         "history": "Search the person's browsing history",
+        "ask": AgentAskOutside.description,
     ]
 
     static let arguments: [String: String] = [
         "by": "Points, negative for up", "paths": "Full paths of files on this Mac", "fields": "Fields by ref or label, with their values",
+        "question": "One question, 200 characters at most", "choices": "Two to nine choices, 40 characters at most each",
     ]
 
     private let box: AgentToolbox
@@ -107,6 +109,7 @@ final class MCPServer {
     var named: ((String?) -> Void)?
     var aim: ((_ tool: String, _ arguments: [String: Any]) async -> Aimed)?
     var landed: ((_ tool: String, _ arguments: [String: Any], _ outcome: ToolOutcome) -> Void)?
+    var person: ((_ tool: PersonTools.Tool, _ arguments: [String: Any]) async -> ToolOutcome)?
 
     init(box: AgentToolbox, task: UUID? = nil, reply: @escaping ([String: Any]) -> Void) {
         self.box = box
@@ -127,13 +130,13 @@ final class MCPServer {
     ]
     static let moreTools = "more_tools"
     static let moreSpec: [String: Any] = [
-        "name": moreTools, "description": "List more tools, such as upload, download, hover, choose, drag, select, console, network, pdf, resize and history. Give words for what you need.",
+        "name": moreTools, "description": "More tools, such as upload, download, drag, console, pdf, history, ask, spaces, folders, bookmarks, live folders and settings. Say what you need.",
         "inputSchema": ["type": "object", "properties": ["query": ["type": "string"]]] as [String: Any],
         "annotations": ["readOnlyHint": true, "openWorldHint": false],
     ]
     static let readOnly: Set<String> = ["tab", "tabs", "snapshot", "read", "shot", "find", "wait", "console", "network", "pdf", "skills", "skill", "history"]
-    static let gentle: Set<String> = ["open", "go", "scroll", "hover", "select", "resize", "handoff", "download"]
-    static let closed: Set<String> = ["tab", "tabs", "skills", "skill", "history"]
+    static let gentle: Set<String> = ["open", "go", "scroll", "hover", "select", "resize", "handoff", "download", "ask"]
+    static let closed: Set<String> = ["tab", "tabs", "skills", "skill", "history", "ask"]
 
     static func annotations(_ name: String) -> [String: Any] {
         var found: [String: Any] = [:]
@@ -147,7 +150,17 @@ final class MCPServer {
     var batchHere: Bool { outside && !box.tools.contains { $0.name == AgentBatch.spec.name } }
     var specs: [ToolSpec] { box.tools + (batchHere ? [AgentBatch.spec] : []) }
 
+    var nounTools: [PersonTools.Tool] { outside && person != nil ? PersonTools.tools : [] }
+
+    func nounTool(_ name: String) -> PersonTools.Tool? {
+        nounTools.first { $0.name == name }
+    }
+
     func everything() -> [[String: Any]] {
+        browserTools() + nounTools.map(\.listed)
+    }
+
+    private func browserTools() -> [[String: Any]] {
         let names = Set(box.tools.map(\.name))
         return specs.compactMap { spec -> [String: Any]? in
             guard !Self.hiddenOutside.contains(spec.name) else { return nil }
@@ -176,30 +189,59 @@ final class MCPServer {
         return shown.count < all.count ? shown + [Self.moreSpec] : shown
     }
 
+    static func fit(_ tool: [String: Any], words: [String]) -> Int {
+        guard !words.isEmpty else { return 1 }
+        let name = (tool["name"] as? String ?? "").lowercased()
+        let pieces = name.split(separator: "_").map(String.init)
+        let parts = Set(pieces)
+        let said = (PersonTools.tool(name).map { $0.line.summary + " " + $0.line.about } ?? tool["description"] as? String ?? "").lowercased()
+        var score = words.joined(separator: "_") == name ? 100 : 0
+        for word in words {
+            if pieces.count > 1, pieces.first == word { score += 5 } else if parts.contains(word) || name == word { score += 3 } else if name.contains(word) { score += 2 }
+            if said.contains(word) { score += 1 }
+        }
+        return score
+    }
+
     private func more(_ arguments: [String: Any]) -> ToolOutcome {
         let words = (arguments["query"] as? String ?? "").lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
         let hidden = everything().filter { tool in (tool["name"] as? String).map { !Self.short.contains($0) && !added.contains($0) } ?? false }
-        let fits = hidden.filter { tool in
-            let said = ((tool["name"] as? String ?? "") + " " + (tool["description"] as? String ?? "")).lowercased()
-            return words.isEmpty || words.contains { said.contains($0) }
-        }
-        let taken = fits.prefix(6).compactMap { $0["name"] as? String }
+        let fits = hidden.enumerated().map { (at: $0.offset, tool: $0.element, score: Self.fit($0.element, words: words)) }
+            .filter { $0.score > 0 }
+            .sorted { ($0.score, -$0.at) > ($1.score, -$1.at) }
+        let taken = fits.prefix(6).compactMap { $0.tool["name"] as? String }
         added.formUnion(taken)
         if !taken.isEmpty { reply(["jsonrpc": "2.0", "method": "notifications/tools/list_changed"]) }
         let left = hidden.compactMap { $0["name"] as? String }.filter { !taken.contains($0) }
+        let nouns = Set(nounTools.map(\.name))
+        let browserLeft = left.filter { !nouns.contains($0) }
+        let nounsLeft = PersonTools.nouns.filter { noun in left.contains { nouns.contains($0) && $0.hasPrefix(noun + "_") } }
         var said = taken.isEmpty ? "No more tools fit those words" : "Added \(taken.joined(separator: ", ")). They are in your tool list now."
-        if !left.isEmpty { said += "\nAlso there: \(left.joined(separator: ", "))" }
+        if !browserLeft.isEmpty { said += "\nAlso there: \(browserLeft.joined(separator: ", "))" }
+        if !nounsLeft.isEmpty { said += "\nTools for \(nounsLeft.joined(separator: ", ")), named noun_verb such as bookmarks_add. Give the noun and the verb." }
         return ToolOutcome(text: said, data: ["added": taken, "more": left])
     }
 
     func refusal(_ tool: String, _ name: String, _ arguments: [String: Any]) -> ToolOutcome? {
-        guard outside, let spec = specs.first(where: { $0.name == tool }) else { return nil }
-        let accepted = Set(spec.properties.keys)
+        guard outside else { return nil }
+        let properties: [String: Any]
+        let required: [String]
+        if let noun = nounTool(tool) {
+            properties = noun.properties
+            required = noun.required
+        } else if let spec = specs.first(where: { $0.name == tool }) {
+            properties = spec.properties
+            required = spec.required
+        } else {
+            return nil
+        }
+        let accepted = Set(properties.keys)
         guard let stray = arguments.keys.sorted().first(where: { !accepted.contains($0) && $0 != "tab" && !$0.hasPrefix("_") }) else { return nil }
-        let needed = Set(spec.required).subtracting(["tab"])
-        let keys = spec.properties.keys.filter { $0 != "tab" }.sorted { (needed.contains($0) ? 0 : 1, $0) < (needed.contains($1) ? 0 : 1, $1) }
+        let needed = Set(required).subtracting(["tab"])
+        let keys = properties.keys.filter { $0 != "tab" }.sorted { (needed.contains($0) ? 0 : 1, $0) < (needed.contains($1) ? 0 : 1, $1) }
         let takes = keys.map { needed.contains($0) ? "\($0) (required)" : $0 } + (accepted.contains("tab") ? ["tab"] : [])
-        return .failure("\(name) has no argument \"\(stray)\". It takes \(takes.joined(separator: ", "))", code: .usage, hint: "Call \(name) with only those arguments")
+        let listed = takes.isEmpty ? "It takes no arguments" : "It takes \(takes.joined(separator: ", "))"
+        return .failure("\(name) has no argument \"\(stray)\". \(listed)", code: .usage, hint: "Call \(name) with only those arguments")
     }
 
     func resolve(_ name: String) -> String? {
@@ -281,10 +323,11 @@ final class MCPServer {
             }
             var arguments = params["arguments"] as? [String: Any] ?? [:]
             if name == Self.moreTools, outside { return answer(id, MCPServer.result(more(arguments), tool: name)) }
-            guard let tool = resolve(name) else { return fail(id, -32602, "Broadway \(Self.version) has no tool named \(name). \(AgentCatalog.olderHint)") }
+            let noun = nounTool(name)
+            guard let tool = noun?.name ?? resolve(name) else { return fail(id, -32602, "Broadway \(Self.version) has no tool named \(name). \(AgentCatalog.olderHint)") }
             if let refused = refusal(tool, name, arguments) { return answer(id, MCPServer.result(refused, tool: tool)) }
             if tool == "batch" { arguments = steps(arguments) }
-            let aim = outside && !(tool == AgentBatch.spec.name && batchHere) ? aim : nil
+            let aim = outside && noun == nil && !(tool == AgentBatch.spec.name && batchHere) ? aim : nil
             let key = "\(id)"
             let token = (params["_meta"] as? [String: Any])?["progressToken"]
             if outside, let task, AgentLinks.shared.patience(task) != 0 {
@@ -320,9 +363,14 @@ final class MCPServer {
                 }
                 var finished = false
                 let watching = token.map { self.watch($0) { finished } }
-                let outcome = tool == AgentBatch.spec.name && self.batchHere
-                    ? await self.batch(arguments)
-                    : ToolReply.asking(await self.box.call(tool, arguments, task: self.task), task: self.task)
+                let outcome: ToolOutcome
+                if let noun, let person = self.person {
+                    outcome = ToolReply.asking(await person(noun, arguments), task: self.task)
+                } else if tool == AgentBatch.spec.name && self.batchHere {
+                    outcome = await self.batch(arguments)
+                } else {
+                    outcome = ToolReply.asking(await self.box.call(tool, arguments, task: self.task), task: self.task)
+                }
                 finished = true
                 watching?.cancel()
                 self.landed?(tool, arguments, outcome)

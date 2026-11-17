@@ -155,7 +155,7 @@ public enum BroadwayCommand {
         guard let first = words.first, !streams.contains(first), !first.contains(where: \.isWhitespace) else { return nil }
         var seconds = 600.0
         if let at = words.firstIndex(of: "--wait-person"), at + 1 < words.count, let minutes = Double(words[at + 1]) { seconds = max(seconds, minutes * 60 + 60) }
-        if first == "handoff", let at = words.firstIndex(of: "--seconds"), at + 1 < words.count, let wait = Double(words[at + 1]) { seconds = max(seconds, min(wait, 900) + 60) }
+        if first == "handoff" || first == "ask", let at = words.firstIndex(of: "--seconds"), at + 1 < words.count, let wait = Double(words[at + 1]) { seconds = max(seconds, min(wait, 900) + 60) }
         return Date().addingTimeInterval(seconds)
     }
 

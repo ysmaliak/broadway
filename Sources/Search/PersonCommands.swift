@@ -153,48 +153,61 @@ enum PersonCommands {
     }
 
     static func handle(_ request: [String: Any], browser: Browser, socket: AgentSocket, on connection: LineConnection) {
+        let noun = request["noun"] as? String ?? ""
+        let verb = request["verb"] as? String ?? ""
+        let channel = PersonChannel { [weak connection] event in connection?.send(event) }
+        let gone = connection.onClose
+        connection.onClose = {
+            gone?()
+            MainActor.assumeIsolated { channel.leave() }
+        }
+        Task { @MainActor in
+            let arguments = request["arguments"] as? [String: Any] ?? [:]
+            let connecting = noun == "agents" && verb == "connect"
+            let named = connecting ? (arguments["name"] as? String).flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 } : nil
+            let reply = await perform(request, browser: browser, socket: socket, channel: channel) {
+                socket.link(for: request, create: connecting, rejoin: noun != "agents" && request["hook"] as? Bool != true, name: named)
+            }
+            connection.send(reply)
+            connection.close()
+        }
+    }
+
+    static func perform(_ request: [String: Any], browser: Browser, socket: AgentSocket, channel: PersonChannel,
+                        link: () -> AgentLink?) async -> [String: Any] {
         let box = socket.box
         box.browser = browser
         let noun = request["noun"] as? String ?? ""
         let verb = request["verb"] as? String ?? ""
         guard let entry = find(noun, verb) else {
-            connection.send(failure(PersonRefusal.usage("Broadway has no \(noun) \(verb)", hint: "This broadway and this Broadway may be different versions")))
-            return connection.close()
+            return failure(PersonRefusal.usage("Broadway has no \(noun) \(verb)", hint: "This broadway and this Broadway may be different versions"))
         }
-        guard entry.kind == .open || box.open else {
-            connection.send(ToolFailure.error("agents_off", "Agents are off in Broadway"))
-            return connection.close()
-        }
-        Task { @MainActor in
-            do {
-                var call = PersonCall(noun: noun, verb: verb, arguments: request["arguments"] as? [String: Any] ?? [:], browser: browser, box: box)
-                let connecting = noun == "agents" && verb == "connect"
-                call.link = socket.link(for: request, create: connecting, rejoin: noun != "agents" && request["hook"] as? Bool != true,
-                                        name: connecting ? call.string("name") : nil)
-                if entry.tabbed {
-                    let named = call.arguments["tab"] as? String
-                    switch await socket.target(named, browser: browser, link: call.link?.id) {
-                    case .failure(let refused): throw PersonRefusal(refused.code, refused.message)
-                    case .success(let id):
-                        call.tab = box.find(["tab": id])
-                        if named != nil { socket.remember(id, link: call.link?.id) }
-                    }
+        guard entry.kind == .open || box.open else { return ToolFailure.error("agents_off", "Agents are off in Broadway") }
+        do {
+            var call = PersonCall(noun: noun, verb: verb, arguments: request["arguments"] as? [String: Any] ?? [:], browser: browser, box: box)
+            call.link = link()
+            if entry.tabbed {
+                let named = call.arguments["tab"] as? String
+                switch await socket.target(named, browser: browser, link: call.link?.id) {
+                case .failure(let refused): throw PersonRefusal(refused.code, refused.message)
+                case .success(let id):
+                    call.tab = box.find(["tab": id])
+                    if named != nil { socket.remember(id, link: call.link?.id) }
                 }
-                let caller = request["hook"] as? Bool == true ? nil : call.link?.id
-                AgentLinks.shared.calling(caller)
-                defer { AgentLinks.shared.called(caller) }
-                try await entry.first?(call)
-                call.askedAt = call.tab?.tab.pageAddress
-                try await gate(entry, call, request: request, on: connection)
-                let data = try await entry.run(call)
-                let sealed = Set(box.visible.flatMap(\.tab.sealed))
-                connection.send(["ok": true, "data": AgentSecrets.scrub(data, sealed: sealed)])
-            } catch let refused as PersonRefusal {
-                connection.send(failure(refused))
-            } catch {
-                connection.send(ToolFailure.error("failed", "That didn't work"))
             }
-            connection.close()
+            let caller = request["hook"] as? Bool == true ? nil : call.link?.id
+            AgentLinks.shared.calling(caller)
+            defer { AgentLinks.shared.called(caller) }
+            try await entry.first?(call)
+            call.askedAt = call.tab?.tab.pageAddress
+            try await gate(entry, call, request: request, channel: channel)
+            let data = try await entry.run(call)
+            let sealed = Set(box.visible.flatMap(\.tab.sealed))
+            return ["ok": true, "data": AgentSecrets.scrub(data, sealed: sealed)]
+        } catch let refused as PersonRefusal {
+            return failure(refused)
+        } catch {
+            return ToolFailure.error("failed", "That didn't work")
         }
     }
 
@@ -207,7 +220,7 @@ enum PersonCommands {
         return reply
     }
 
-    private static func gate(_ entry: PersonVerb, _ call: PersonCall, request: [String: Any], on connection: LineConnection) async throws {
+    private static func gate(_ entry: PersonVerb, _ call: PersonCall, request: [String: Any], channel: PersonChannel) async throws {
         let kind = entry.softer?(call) ?? entry.kind
         if kind == .open || kind == .tool { return }
         if let tab = call.tab?.tab, tab.driving || tab.handedBack {
@@ -230,10 +243,10 @@ enum PersonCommands {
                 throw PersonRefusal("needs_task", "This needs the person's yes, and only a task can ask for it. Nothing was done.")
             }
             if AgentDesk.shared.isGranted(.tab, task: link.id, site: site) { return }
-            try await PersonAsk.yes(.tab, call: call, site: site, request: request, on: connection)
+            try await PersonAsk.yes(.tab, call: call, site: site, request: request, channel: channel)
             AgentDesk.shared.grant(.tab, task: link.id, site: site)
         case .person(let act):
-            try await PersonAsk.yes(act, call: call, site: site, request: request, on: connection)
+            try await PersonAsk.yes(act, call: call, site: site, request: request, channel: channel)
         }
     }
 
@@ -316,13 +329,14 @@ enum PersonAsk {
         return words.replacingOccurrences(of: "SITE", with: site ?? "this page")
     }
 
-    static func yes(_ act: AgentAct, call: PersonCall, site: String?, request: [String: Any], on connection: LineConnection) async throws {
+    static func yes(_ act: AgentAct, call: PersonCall, site: String?, request: [String: Any], channel: PersonChannel) async throws {
         var wait = request["wait"] as? Double ?? (request["wait"] as? Int).map(Double.init) ?? 0
         if let link = call.link, wait == 0 { wait = AgentLinks.shared.patience(link.id) }
         guard reachable(wait: wait, request: request) else {
             throw PersonRefusal("needs_you", "This needs the person's yes in Broadway. Nothing was done.",
                                 hint: "Tell the person, or run it with --wait-person MIN while they are at Broadway")
         }
+        if channel.gone { throw PersonRefusal("needs_you", "Nobody answered in Broadway. Nothing was done.") }
         var question = AgentQuestion(kind: .approval(act), title: title(noun: call.noun, verb: call.verb, site: site))
         question.tab = call.tab?.tab.id
         question.site = site
@@ -330,19 +344,15 @@ enum PersonAsk {
         question.quoteLabel = call.link.map { "From \($0.name)" } ?? "From a terminal"
         question.task = call.link?.id
         let id = question.id
-        connection.send(["event": "asking", "message": "Waiting for your yes in Broadway"])
-        let gone = connection.onClose
-        connection.onClose = {
-            gone?()
-            MainActor.assumeIsolated { AgentDesk.shared.take(id, .dropped) }
-        }
+        channel.send(["event": "asking", "message": "Waiting for your yes in Broadway"])
+        channel.left = { AgentDesk.shared.take(id, .dropped) }
         let clock = Task { @MainActor in
             try? await Task.sleep(for: .seconds(wait))
             if !Task.isCancelled { AgentDesk.shared.take(id, .dropped) }
         }
         let answer = await AgentDesk.shared.ask(question)
         clock.cancel()
-        connection.onClose = gone
+        channel.left = nil
         switch answer {
         case .yes:
             return
@@ -356,5 +366,21 @@ enum PersonAsk {
         case .dropped:
             throw PersonRefusal("needs_you", "Nobody answered in Broadway. Nothing was done.")
         }
+    }
+}
+
+@MainActor
+final class PersonChannel {
+    let send: ([String: Any]) -> Void
+    var left: (() -> Void)?
+    private(set) var gone = false
+
+    init(send: @escaping ([String: Any]) -> Void) {
+        self.send = send
+    }
+
+    func leave() {
+        gone = true
+        left?()
     }
 }

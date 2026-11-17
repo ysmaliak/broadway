@@ -8,9 +8,11 @@ struct Parameter: Equatable {
     var choices: [String]
     var many: Bool
     var unlisted = false
+    var repeats = false
 
     var shown: String {
         if type == "boolean" { return "[--\(name)]" }
+        if repeats { return "[--\(name) TEXT]" + String(repeating: ".", count: 3) }
         if !choices.isEmpty { return "[--\(name) \(choices.joined(separator: "|"))]" }
         let value = ["number": "N", "integer": "N", "array": "LIST", "object": "JSON"][type] ?? name.uppercased()
         return "[--\(name) \(value)]"
@@ -24,6 +26,7 @@ struct Parameter: Equatable {
         choices = found["choices"] as? [String] ?? []
         many = found["many"] as? Bool ?? false
         unlisted = found["unlisted"] as? Bool ?? false
+        repeats = found["repeats"] as? Bool ?? false
     }
 }
 

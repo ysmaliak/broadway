@@ -532,6 +532,20 @@ struct ParsingTests {
         #expect(!Person.bare(["tabs", "list"]))
         #expect(!Person.bare(["tabs", "close", "a8b6db94"]))
     }
+
+    @Test func aRepeatedChoiceKeepsEachChoiceWhole() throws {
+        let question = parameter("question", required: true)
+        var choice = parameter("choice", type: "array")
+        choice["many"] = true
+        choice["repeats"] = true
+        let ask = command("ask", positional: [question], flags: [choice, question])
+
+        let found = try CommandLineInput.parse(ask, ["Send it now?", "--choice", "Yes, send it", "--choice=No", "--choice", "Not yet"])
+
+        #expect(found["question"] as? String == "Send it now?")
+        #expect(found["choice"] as? [String] == ["Yes, send it", "No", "Not yet"])
+        #expect(ask.flags.first?.shown == "[--choice TEXT]...")
+    }
 }
 
 extension Command {

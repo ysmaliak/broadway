@@ -2,9 +2,9 @@ import Foundation
 import Observation
 
 extension AgentCommand {
-    static let refreshWords = ["setup", "claude", "codex", "--refresh"]
-    static let setupWords = ["setup", "claude", "codex"]
-    static let setupAndLinkWords = ["setup", "command", "claude", "codex"]
+    static let refreshWords = ["setup", "claude", "codex", "cursor", "opencode", "gemini", "--refresh"]
+    static let setupWords = ["setup", "claude", "codex", "cursor", "opencode", "gemini"]
+    static let setupAndLinkWords = ["setup", "command", "claude", "codex", "cursor", "opencode", "gemini"]
     static let setUpKey = "agents.setUp"
 
     static var refreshesSkills: Bool { Store.world == nil && !Store.testing }

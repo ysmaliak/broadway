@@ -265,7 +265,7 @@ extension AgentSocket {
             let named = given ?? preferred.flatMap { $0.isEmpty ? nil : $0 }
             switch await target(named, browser: browser, link: link, reads: AgentWorkTabs.readsWithoutTab.contains(name)) {
             case .failure(let refused):
-                return (.failure(refused.message, code: refused.code), nil)
+                guard name == "ask", named == nil else { return (.failure(refused.message, code: refused.code), nil) }
             case .success(let id):
                 arguments["tab"] = id
                 used = id

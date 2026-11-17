@@ -211,12 +211,12 @@ final class AgentTests {
         #expect((entry?["args"] as? [String]) == ["mcp"])
     }
 
-    @Test func everyToolBecomesACommandExceptAsk() {
+    @Test func everyToolBecomesACommandExceptTheTasksOwn() {
         let tools = BrowserToolbox().tools
 
         let names = AgentCatalog.commands(tools).compactMap { $0["name"] as? String }
 
-        #expect(names == ["tabs", "open", "go", "close", "snapshot", "read", "shot", "find", "click", "type", "upload", "download", "fill", "drag", "select", "resize", "press", "scroll", "wait", "history", "handoff", "tab", "console", "network", "pdf", "hover", "choose", "dialog", "skills", "skill"])
+        #expect(names == ["tabs", "open", "go", "close", "snapshot", "read", "shot", "find", "click", "type", "upload", "download", "fill", "drag", "select", "resize", "press", "scroll", "wait", "history", "ask", "handoff", "tab", "console", "network", "pdf", "hover", "choose", "dialog", "skills", "skill"])
     }
 
     @Test func aCommandCarriesItsShape() throws {
@@ -315,6 +315,10 @@ final class AgentTests {
         let one: [[String: Any]] = [["name": "command", "ok": false], ["name": "codex", "ok": true, "detail": "/x"],
                                     ["name": "claude", "ok": true, "detail": "not used here"]]
         #expect(AgentCommand.summary(one) == "Codex has Broadway's skill. Set Up also puts broadway on your PATH.")
+        let three: [[String: Any]] = [["name": "command", "ok": false], ["name": "claude", "ok": true, "detail": "/c"],
+                                      ["name": "cursor", "ok": true, "detail": "Cursor reads broadway's skill in ~/.claude/skills"],
+                                      ["name": "gemini", "ok": true, "detail": "/g"], ["name": "opencode", "ok": true, "detail": "not used here"]]
+        #expect(AgentCommand.summary(three) == "Claude Code, Cursor and Gemini CLI have Broadway's skill. Set Up also puts broadway on your PATH.")
     }
 
     @Test func targetsReadRefsWordsAndTheNestedObject() {

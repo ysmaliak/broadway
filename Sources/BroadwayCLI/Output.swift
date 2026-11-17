@@ -52,6 +52,8 @@ struct Failure: Error {
         "needs_person": "Run it where someone can answer, or without --no-person",
         "needs_task": "Start a task with broadway \"what to do\" so the person can answer in Broadway",
         "person_only": "Only the person can change this, in Broadway",
+        "question_open": "Wait for the answer to the question you already asked",
+        "too_many_questions": "Go on with what you already know, or wait before you ask again",
     ]
 }
 

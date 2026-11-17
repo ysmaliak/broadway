@@ -54,13 +54,13 @@ struct AgentSetupTests {
         #expect(!AgentCommand.opensSetup(world: nil, testing: true, unitTests: false, environment: ["BROADWAY_HOME": "/tmp/invented-home"]))
     }
 
-    @Test func theWordsAreOnlyClaudeAndCodexAndTheCommandWhenNothingIsThere() {
-        #expect(AgentCommand.setupWords == ["setup", "claude", "codex"])
-        #expect(AgentCommand.setupAndLinkWords == ["setup", "command", "claude", "codex"])
-        #expect(AgentCommand.setupWords(somethingAtLink: true, staying: true) == ["setup", "claude", "codex"])
-        #expect(AgentCommand.setupWords(somethingAtLink: false, staying: true) == ["setup", "command", "claude", "codex"])
-        #expect(AgentCommand.setupWords(somethingAtLink: false, staying: false) == ["setup", "claude", "codex"])
-        #expect(AgentCommand.setupWords(somethingAtLink: true, staying: false) == ["setup", "claude", "codex"])
+    @Test func theWordsAreEachAgentAndTheCommandWhenNothingIsThere() {
+        #expect(AgentCommand.setupWords == ["setup", "claude", "codex", "cursor", "opencode", "gemini"])
+        #expect(AgentCommand.setupAndLinkWords == ["setup", "command", "claude", "codex", "cursor", "opencode", "gemini"])
+        #expect(AgentCommand.setupWords(somethingAtLink: true, staying: true) == ["setup", "claude", "codex", "cursor", "opencode", "gemini"])
+        #expect(AgentCommand.setupWords(somethingAtLink: false, staying: true) == ["setup", "command", "claude", "codex", "cursor", "opencode", "gemini"])
+        #expect(AgentCommand.setupWords(somethingAtLink: false, staying: false) == ["setup", "claude", "codex", "cursor", "opencode", "gemini"])
+        #expect(AgentCommand.setupWords(somethingAtLink: true, staying: false) == ["setup", "claude", "codex", "cursor", "opencode", "gemini"])
         #expect(!AgentCommand.setsUpAgents)
         #expect(!AgentSetup.shared.open())
     }

@@ -23,7 +23,7 @@ A person typing `broadway` at their own terminal gets a session named for the te
 - **Start.** `broadway agents connect [--name NAME]` starts the session at once. Otherwise the first command that opens or works in a tab starts it, and other commands only join a session that exists.
 - **Between steps.** While nothing is at work in its tabs, a session's line reads "Thinking". It never says "Waiting", which read as waiting for the person.
 - **Finished turn.** When the agent's turn ends, its card reads finished, with the tick face and the last thing it did, such as "Finished after reading example.com", or the agent's own `--summary`. The session stays live: its tabs stay as they are and its next command makes the same card work again. Broadway learns it from, in order of trust:
-  - the agent's **Stop hook**, which runs `broadway agents idle --hook claude` (or `codex`) with the hook's event on stdin. `broadway setup claude` and `broadway setup codex` add it, and Broadway runs `broadway setup claude codex` itself when the person turns agents on, and once at the first launch that finds agents already on. When nothing is at `~/.local/bin/broadway`, that run is `broadway setup command claude codex`, so the hook has a command to call. It links nothing while Broadway runs from its disk image or a download folder, since that copy goes away. The refresh at every launch never adds one, it only brings Broadway's own entries up to date. A Stop with background tasks or scheduled wakeups still pending is not a finished turn.
+  - the agent's **Stop hook**, which runs `broadway agents idle --hook claude` (or `codex`) with the hook's event on stdin. `broadway setup claude` and `broadway setup codex` add it, and Broadway runs `broadway setup claude codex cursor opencode gemini` itself when the person turns agents on, and once at the first launch that finds agents already on. That run also puts the skill where Cursor, opencode and Gemini CLI read it, for those that are installed. They get no hook. When nothing is at `~/.local/bin/broadway`, that run is `broadway setup command claude codex cursor opencode gemini`, so the hook has a command to call. It links nothing while Broadway runs from its disk image or a download folder, since that copy goes away. The refresh at every launch never adds one, it only brings Broadway's own entries up to date. A Stop with background tasks or scheduled wakeups still pending is not a finished turn.
   - `broadway agents idle [--summary TEXT]`, for an agent or script that says so itself.
   - an MCP connection that shares a session with the agent's commands closing.
   - **Quiet time.** With no hook, after 2 minutes with no request, no call in flight, no question up, no download under way and no tab at work, the line reads "Idle", or "Idle after reading example.com", with the sleeping face.
@@ -55,6 +55,18 @@ A yes that arrives after the agent stopped waiting is recorded, so the agent's n
 
 `broadway handoff REASON` is the explicit form of taking over. It puts a card on the agent's tab with the reason, such as "Solve the captcha", tells the person, and waits until they press Done, close the card, or take the tab and hand it back. Then it answers with what changed while they had it. `--optional` adds Skip, which answers `skipped: true`. It passes the same tab gate as any command, never brings the tab forward by itself, and fails with `needs_you` when the person doesn't answer in time (300 seconds by default, 900 at most).
 
+### Asking the person a question
+
+`broadway ask "Which account?" --choice Work --choice Personal`, or the MCP tool `ask` from `more_tools`, puts a question on the agent's own tab. The card reads as the agent's: its face, "Claude Code asks", the question and the choices, with Not Now to close it. The session's row says "Claude Code needs you" with the question, and a press goes to the tab, as for any question. Without a tab of its own the card shows with no tab, never on one of the person's.
+
+- **Limits.** Two to nine choices of 40 characters at most, a question of 200 at most, one question up at a time for a session (`question_open`), and six an hour (`too_many_questions`).
+- **Waiting.** As `handoff`: 300 seconds by default and 900 at most, with the same progress over MCP, then `needs_you`.
+- **The answer** is the words of the choice picked, exactly. A card closed without a pick answers so, plainly, not as an error. Nothing typed by the person is passed back.
+- **Never an approval.** A pick opens nothing the gate would have asked about, and the gate still asks its own question when the agent acts. No mode answers a question, Bypass included.
+- **Only the agent asks.** The words come from the agent's call. Nothing a page says raises a question, and the tool tells agents never to ask because a page told them to.
+
+Broadway's own tasks keep their own `ask`, which ends the turn and takes the answer as the next message.
+
 Signing in and filling forms with saved details stay with Broadway's own tasks. An outside agent uses `broadway fill`, which asks the person every time.
 
 ## What the person decides
@@ -69,7 +81,7 @@ All of these are in Settings › Agents, and none of them can be changed from th
 - **Sites.** A site can be marked Always Here or Never Here from a question's answer. Never Here refuses every act on it. Always Here lets everything through except paying.
 - **Connected agents**, and **the broadway command** for setting it up.
 
-[cli.md](cli.md#who-may-do-what) lists how each command is gated.
+[cli.md](cli.md#who-may-do-what) lists how each command is gated. The MCP tools for spaces, folders, bookmarks, live folders and settings take the same path as their commands, so each is gated exactly as its command is.
 
 ## The Agents area
 
@@ -114,6 +126,6 @@ A session's heading shows the strongest state over its tabs: waving, then drivin
 - `Sources/BroadwayCLI/Ancestor.swift`: the ancestor walk and the names sent with each request.
 - `Sources/Search/AgentLinks.swift`: sessions, their keys, ends and states. `AgentLinkCommands.swift`: how a request finds its session, and the `agents` verbs.
 - `Sources/Search/AgentGate.swift`: the modes, the acts and the verdict for each.
-- `Sources/Search/AgentCommands.swift`: the error codes (`ToolCode`) and the reply envelope. `MCPServer.swift`: the MCP server, its tool names, instructions and short list. `AgentHandoff.swift`: `handoff`. `Sources/BroadwayCLI/MCPRelay.swift`: `broadway mcp` and its hand-over after an update.
+- `Sources/Search/AgentCommands.swift`: the error codes (`ToolCode`) and the reply envelope. `MCPServer.swift`: the MCP server, its tool names, instructions and short list. `AgentHandoff.swift`: `handoff`. `AgentAskOutside.swift`: `ask` for outside agents, its limits and its card words. `Sources/BroadwayCLI/MCPRelay.swift`: `broadway mcp` and its hand-over after an update.
 - `Sources/Search/AgentsArea.swift`, `AgentCharacter.swift`, `AgentPointer.swift`, `AgentDriving.swift`: the area, the face, the pointer and take over.
 - Tests: `Tests/SearchTests/AgentLinksTests.swift`, and the hidden-world probe `Tests/agent_mode.py`.

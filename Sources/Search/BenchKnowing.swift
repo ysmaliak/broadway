@@ -44,9 +44,11 @@ extension Bench {
             switch request["text"] as? String {
             case "yes": pending.first.map { AgentDesk.shared.take($0.id, .yes) }
             case "no": pending.first.map { AgentDesk.shared.take($0.id, .no) }
+            case let text? where text.hasPrefix("pick "):
+                if let first = pending.first, let number = Int(text.dropFirst(5)) { AgentDesk.shared.take(first.id, .picked(number - 1)) }
             default: break
             }
-            answer(["pending": pending.map { ["title": $0.title, "quote": $0.quote, "label": $0.quoteLabel] }])
+            answer(["pending": pending.map(AgentDesk.benchRow)])
         case "visit":
             if let url = (request["text"] as? String).flatMap(URL.init(string:)) {
                 let named = (request["space"] as? String).flatMap { name in browser.spaces.first { $0.name == name }?.id }

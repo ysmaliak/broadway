@@ -246,6 +246,7 @@ struct AgentQuestion: Identifiable, Equatable {
     var quote = ""
     var quoteLabel = "The page says"
     var reason = ""
+    var asker: String?
     var shown = Date()
 
     var keyDelay: TimeInterval {
@@ -447,15 +448,16 @@ final class AgentCardView: NSView {
         made.seed = link?.seed ?? 0
         stage.addSubview(made)
         face = made
-        title.text = question.title
-        who.text = link.map { $0.task ? "" : $0.name } ?? ""
+        let words = question.cardWords
+        title.text = words.title
+        who.text = words.who
         who.isHidden = who.text.isEmpty
         count.text = "1 of \(desk.pending.count)"
         count.isHidden = desk.pending.count <= 1
         quote.stringValue = question.quote.isEmpty ? "" : "\(question.quoteLabel): “\(question.quote)”"
         quote.isHidden = question.quote.isEmpty
-        reason.stringValue = question.reason.isEmpty ? "" : "The agent says: \(question.reason)"
-        reason.isHidden = question.reason.isEmpty
+        reason.stringValue = words.body
+        reason.isHidden = words.body.isEmpty
         for view in buttons { view.removeFromSuperview() }
         for row in choices { row.removeFromSuperview() }
         buttons = []
@@ -480,8 +482,8 @@ final class AgentCardView: NSView {
             trailing.append(key("esc", "Not Now", .no))
             trailing.append(key("⌘↩", "Done", .yes))
         case .choice(let options):
-            for (index, option) in options.prefix(9).enumerated() {
-                let row = AgentChoiceRow(number: index + 1, text: AgentQuestion.clean(option, limit: 90)) {
+            for (index, option) in question.choices.enumerated() where index < options.count {
+                let row = AgentChoiceRow(number: index + 1, text: option) {
                     AgentDesk.shared.take(id, .picked(index))
                 }
                 stage.addSubview(row)

@@ -10,7 +10,7 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "Search",
-            dependencies: [.product(name: "Sparkle", package: "Sparkle")],
+            dependencies: [.product(name: "Sparkle", package: "Sparkle"), "BroadwayCLI"],
             path: "Sources/Search",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
@@ -27,7 +27,7 @@ let package = Package(
         ),
         .testTarget(
             name: "SearchTests",
-            dependencies: ["Search"],
+            dependencies: ["Search", "BroadwayCLI"],
             path: "Tests/SearchTests",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),

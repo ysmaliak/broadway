@@ -229,7 +229,7 @@ extension Bench {
         case "questions":
             answer(["questions": AgentDesk.shared.pending.map { question in
                 ["id": question.id.uuidString, "title": question.title, "quote": question.quote, "reason": question.reason,
-                 "site": question.site ?? ""] as [String: Any]
+                 "site": question.site ?? "", "label": question.quoteLabel, "card": AgentDesk.benchRow(question)["card"] ?? [:]] as [String: Any]
             }])
         case "answer":
             guard let first = AgentDesk.shared.front else { return answer(["error": "no question"]) }

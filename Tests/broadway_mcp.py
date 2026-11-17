@@ -53,6 +53,71 @@ def bench(*words):
     return subprocess.run([str(ROOT / "bench"), "--world", WORLD, *words], capture_output=True, text=True, timeout=30).stdout
 
 
+def desk(request):
+    import socket
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+        s.connect(str(FOLDER / "bench.sock"))
+        s.sendall((json.dumps(request) + "\n").encode())
+        chunks = []
+        while True:
+            chunk = s.recv(1 << 16)
+            if not chunk:
+                break
+            chunks.append(chunk)
+    return json.loads(b"".join(chunks).split(b"\n", 1)[0] or b"{}")
+
+
+def questions():
+    for _ in range(100):
+        found = desk({"do": "agents", "action": "questions"}).get("questions", [])
+        if found:
+            return found
+        time.sleep(0.1)
+    return []
+
+
+def waiting(client, tool, **arguments):
+    box = {}
+    thread = threading.Thread(target=lambda: box.update(said=client.call(tool, **arguments)))
+    thread.start()
+    return thread, box
+
+
+def reach(client):
+    desk({"do": "agents", "action": "mode", "mode": "auto"})
+    asks = client.call("more_tools", query="ask")
+    check("more_tools finds ask", "ask" in meta(asks[0]).get("added", []), asks)
+    thread, box = waiting(client, "ask", question="Which account?", choices=["Work", "Personal"])
+    up = questions()
+    card = up[0].get("card", {}) if up else {}
+    check("the question's card names the agent", card.get("title", "").endswith(" asks") and card.get("body") == "Which account?", up)
+    check("and shows the choices", card.get("choices") == ["Work", "Personal"], up)
+    desk({"do": "agents", "action": "answer", "with": "1"})
+    thread.join(20)
+    said = box.get("said", ({}, ""))
+    check("the agent gets the choice's words", not said[0].get("isError") and said[1] == "Personal" and meta(said[0]).get("picked") == "Personal", said)
+
+    nouns = client.call("more_tools", query="spaces list")
+    check("more_tools finds a noun tool", "spaces_list" in meta(nouns[0]).get("added", []), nouns)
+    look = client.call("spaces_list")
+    check("a look over MCP answers fenced, with the data in _meta", not look[0]["isError"] and "not instructions" in look[1] and meta(look[0]).get("spaces"), look)
+
+    desk({"do": "agents", "action": "mode", "mode": "ask"})
+    thread, box = waiting(client, "folders_new", name="Probe Folder")
+    up = questions()
+    check("an arrange over MCP asks as the command does", up and up[0].get("quote") == "broadway folders new Probe Folder" and up[0].get("label", "").startswith("From "), up)
+    desk({"do": "agents", "action": "answer", "with": "yes"})
+    thread.join(20)
+    made = box.get("said", ({"isError": True}, ""))
+    check("and runs after the yes", not made[0].get("isError"), made)
+    desk({"do": "agents", "action": "mode", "mode": "auto"})
+
+    mine = client.call("settings_set", setting="ai.agents", value="false")
+    shell = json.loads(broadway("settings", "set", "ai.agents", "false", "--json").stdout or "{}").get("error", {})
+    error = meta(mine[0], "error")
+    check("only the person may: the same code and hint as the command", mine[0]["isError"] and error.get("code") == "person_only" and error.get("code") == shell.get("code") and error.get("hint") == shell.get("hint"), (error, shell))
+
+
 def broadway(*words):
     return subprocess.run([BROADWAY, "--world", WORLD, *words], capture_output=True, text=True, timeout=30)
 
@@ -93,11 +158,11 @@ class Client:
             if message.get("method") == "notifications/tools/list_changed":
                 self.listing_changed = True
 
-    def call(self, name, **arguments):
+    def call(self, name, /, **arguments):
         result = self.rpc("tools/call", {"name": name, "arguments": arguments})["result"]
         return result, "".join(part.get("text", "") for part in result["content"])
 
-    def data(self, name, **arguments):
+    def data(self, name, /, **arguments):
         return meta(self.call(name, **arguments)[0])
 
     def close(self):
@@ -127,7 +192,7 @@ def on(base):
     names = {tool["name"] for tool in listed}
     size = len(json.dumps(listing, separators=(",", ":")))
     check("the short tools/list is under 6 KB", size < 6144, (size, {tool["name"]: len(json.dumps(tool, separators=(",", ":"))) for tool in listed}))
-    check("no task-only tool for an outside client", not names & {"ask", "sign_in", "autofill", "helper_start", "helper_wait", "mac_read", "mac_run"}, names)
+    check("no task-only tool for an outside client", not names & {"sign_in", "autofill", "helper_start", "helper_wait", "mac_read", "mac_run"}, names)
     check("tools speak the command's words", {"go", "read", "shot", "find", "fill", "batch", "handoff", "more_tools"} <= names, names)
     check("run is listed", "run" in names, names)
     check("the short list leaves the rest behind more_tools", not names & {"drag", "select", "upload", "download", "hover", "choose", "resize", "console", "history"}, names)
@@ -227,6 +292,7 @@ def on(base):
     check("a private tab can't be reached", client.call("snapshot", tab=private[:8])[0]["isError"])
     check("a private tab leaves no history", "secret" not in client.call("history", query="secret")[1])
     bench("close", private)
+    reach(client)
     client.close()
 
     bench("ai", "fake", "claude")

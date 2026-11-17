@@ -5,3 +5,5 @@ I have spent six years building tools for small teams and would like to do it at
 Available from March.
 The network connection was lost.
  — by \()
+broadway ask "Which account?" --choice Work --choice Personal
+broadway ask "Book which day?" --choice Friday --choice Saturday --seconds 600
