@@ -54,6 +54,7 @@ enum LivePace {
     static func wanted(_ folders: [LiveFolder], moment: LiveMoment, looked: Set<UUID>?, returned: Bool, now: Date) -> [UUID] {
         folders.filter { folder in
             guard !folder.paused, !LiveLimit.holds(folder, at: now) else { return false }
+            if folder.source.heavy, let read = folder.read, read <= now, now.timeIntervalSince(read) < LiveDrive.every { return false }
             let seen = looked?.contains(folder.space) ?? true
             if LivePace.due(folder.read, now: now, every: interval(moment, looked: seen)) { return true }
             return returned && seen && (stale(folder.read, now: now) || folder.state == .failed)

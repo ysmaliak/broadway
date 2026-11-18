@@ -37,6 +37,8 @@ struct LivePreset: Equatable, Identifiable {
                    detail: "Open issues you made", source: .linear(.created)),
         LivePreset(id: "youtube", title: "YouTube Subscriptions", name: "Subscriptions",
                    detail: "New videos from the channels you follow", source: .subscriptions),
+        LivePreset(id: "drive", title: "Google Drive", name: "Recent Files",
+                   detail: "Files you opened lately", source: LiveDrive.source),
     ]
 
     static func same(_ one: LiveSource, _ other: LiveSource) -> Bool {
@@ -202,6 +204,8 @@ enum LiveSuggestions {
         case "youtube.com", "m.youtube.com":
             let channel = path.first.flatMap { $0.hasPrefix("@") ? $0 : nil }
             return Spot(id: "youtube", title: "YouTube Subscriptions", name: "Subscriptions", source: .subscriptions, detail: channel)
+        case "drive.google.com", "docs.google.com":
+            return Spot(id: "drive", title: "Google Drive", name: "Recent Files", source: LiveDrive.source, detail: nil)
         default:
             guard feedLike(path) else { return nil }
             let address = url.absoluteString
@@ -210,13 +214,14 @@ enum LiveSuggestions {
         }
     }
 
-    static let offered: Set<String> = ["github", "linear", "youtube"]
+    static let offered: Set<String> = ["github", "linear", "youtube", "drive"]
 
     static func title(_ id: String) -> String {
         switch id {
         case "github": return "GitHub Pull Requests"
         case "linear": return "Linear My Issues"
         case "youtube": return "YouTube Subscriptions"
+        case "drive": return "Google Drive"
         default: return id
         }
     }

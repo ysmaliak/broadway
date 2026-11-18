@@ -100,7 +100,7 @@ struct LiveSource: Codable, Equatable {
         case .issues, .linear: return "No issues"
         case .notifications: return "No notifications"
         case .subscriptions: return "No new videos"
-        case .feed, .page: return "Nothing new"
+        case .feed, .page: return LiveDrive.reads(self) ? "No recent files" : "Nothing new"
         }
     }
 
@@ -138,7 +138,7 @@ struct LiveSource: Codable, Equatable {
         return format.string(from: start)
     }
 
-    enum Service { case gitHub, youTube, linear, own }
+    enum Service { case gitHub, youTube, linear, drive, own }
 
     var host: String? { URL(string: address)?.host().map { Address.withoutWWW($0.lowercased()) } }
 
@@ -147,6 +147,7 @@ struct LiveSource: Codable, Equatable {
         case "github.com": return .gitHub
         case "youtube.com", "m.youtube.com": return .youTube
         case "linear.app": return .linear
+        case "drive.google.com": return .drive
         default: return .own
         }
     }
@@ -156,6 +157,7 @@ struct LiveSource: Codable, Equatable {
         case .gitHub: return "GitHub"
         case .youTube: return "YouTube"
         case .linear: return "Linear"
+        case .drive: return "Google Drive"
         case .own: return host ?? "this site"
         }
     }
@@ -181,7 +183,7 @@ struct LiveSource: Codable, Equatable {
             if let query = page.query(percentEncoded: true) { next += "?" + query }
             let back = "https://www.youtube.com/signin?action_handle_signin=true&app=desktop&next=\(Self.escaped(next))"
             return URL(string: "https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=\(Self.escaped(back))")
-        case .linear, .own:
+        case .linear, .drive, .own:
             return page
         }
     }
@@ -366,11 +368,13 @@ struct LiveItem: Codable, Equatable {
     }
 
     var byline: String? {
+        if let document = LiveDocuments.byline(self) { return document }
         let parts = [who, label].compactMap { $0?.isEmpty == false ? $0 : nil }
         return parts.isEmpty ? nil : parts.joined(separator: " • ")
     }
 
     var spokenByline: String? {
+        if let document = LiveDocuments.spoken(self) { return document }
         let parts = [author, stack?.spoken, label].compactMap { $0?.isEmpty == false ? $0 : nil }
         return parts.isEmpty ? nil : parts.joined(separator: ", ")
     }
@@ -398,13 +402,14 @@ enum LiveIdentity {
         case "youtu.be":
             if path.count == 1 { return "youtube:\(path[0])" }
         default:
-            break
+            if let document = LiveDocuments.identity(url) { return document }
         }
         return plain(url) ?? key
     }
 
     static func typed(_ identity: String) -> Bool {
         identity.hasPrefix("github:") || identity.hasPrefix("linear:") || identity.hasPrefix("youtube:")
+            || identity.hasPrefix("drive:") || identity.hasPrefix("notion:")
     }
 
     static func same(_ one: String, _ other: String) -> Bool { one == other || of(one) == of(other) }

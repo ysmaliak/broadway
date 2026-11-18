@@ -47,7 +47,7 @@ struct SettingsAccountsGoneTests {
 
         #expect(list.map(\.title) == [
             "GitHub Pull Requests", "Linear My Issues", "YouTube Subscriptions", "GitHub Assigned Issues", "GitHub Notifications",
-            "Linear Mentions", "Linear Inbox", "Linear Created by Me",
+            "Linear Mentions", "Linear Inbox", "Linear Created by Me", "Google Drive",
         ])
         for (index, source) in sources.enumerated() {
             #expect(!sources[(index + 1)...].contains { LivePreset.same($0, source) }, "\(list[index].title)")
@@ -66,7 +66,8 @@ struct SettingsAccountsGoneTests {
 
         let titles = LiveAdd.list(suggestions: [], folders: folders).map(\.title)
 
-        #expect(titles == ["GitHub Pull Requests", "GitHub Notifications", "Linear My Issues", "Linear Created by Me", "YouTube Subscriptions"])
+        #expect(titles == ["GitHub Pull Requests", "GitHub Notifications", "Linear My Issues", "Linear Created by Me", "YouTube Subscriptions",
+                           "Google Drive"])
     }
 
     @Test func addPutsTheFolderInThePickedSpaceAndTheRowLeaves() throws {

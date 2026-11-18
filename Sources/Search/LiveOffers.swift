@@ -27,7 +27,9 @@ enum LiveOfferWords {
         case .linear: return "Issues assigned to you in \(source.siteName), kept up to date"
         case .notifications: return "Your \(source.siteName) notifications, kept up to date"
         case .subscriptions: return "New videos from your \(source.siteName) subscriptions"
-        case .feed, .page: return "What is new on \(source.siteName), kept up to date"
+        case .feed, .page:
+            if LiveDrive.reads(source) { return "Files you opened lately on \(source.siteName), kept up to date" }
+            return "What is new on \(source.siteName), kept up to date"
         }
     }
 

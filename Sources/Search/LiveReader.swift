@@ -267,6 +267,7 @@ final class LiveReader: NSObject, WKNavigationDelegate {
 
     static func read(_ folder: LiveFolder) async -> Answer {
         if let answer = await IntegrationReader.read(folder) { return answer }
+        if let answer = await LiveDrive.read(folder) { return answer }
         guard let asked = folder.source.reading() else { return .failed }
         let store = Spaces.store(for: folder.space)
         if folder.source.kind == .feed {

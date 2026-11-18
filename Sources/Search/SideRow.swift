@@ -315,7 +315,16 @@ final class BylineView: NSView {
         glyph.isHidden = item.stack == nil
         stack.text = item.stack.map { " " + $0.said } ?? ""
         dot.text = label != nil && item.who != nil ? " • " : ""
-        state.text = label ?? ""
+        state.text = LiveDocuments.byline(item) ?? label ?? ""
+        setAccessibilityLabel(item.spokenByline ?? "")
+        needsLayout = true
+    }
+
+    var drawn: String { who.text + stack.text + dot.text + state.text }
+
+    func renew() {
+        guard let item, let said = LiveDocuments.byline(item), said != state.text else { return }
+        state.text = said
         setAccessibilityLabel(item.spokenByline ?? "")
         needsLayout = true
     }
@@ -937,6 +946,7 @@ final class TabRowView: KitHoverView {
         byline.isHidden = editing || tab.liveItem?.byline == nil
         if !byline.isHidden {
             byline.item = tab.liveItem
+            byline.renew()
             byline.stateTint = mergedTint
         }
         if tab.arrives, merged {

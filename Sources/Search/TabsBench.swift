@@ -344,6 +344,10 @@ enum TabsBench {
             let notes = browser.window?.contentView?.kitSubviews(of: LiveNoteView.self) ?? []
             answer(["notes": notes.filter { $0.window != nil && !$0.isHiddenOrHasHiddenAncestor }.map(\.said)])
             return
+        case "bylines":
+            let lines = browser.window?.contentView?.kitSubviews(of: BylineView.self) ?? []
+            answer(["bylines": lines.filter { $0.window != nil && !$0.isHiddenOrHasHiddenAncestor }.map(\.drawn)])
+            return
         case "menu":
             answer(["items": LiveMenu.menu(for: browser).items.map(\.title)])
             return
