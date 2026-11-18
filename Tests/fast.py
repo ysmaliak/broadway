@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import math
 import os
 import pty
 import re
@@ -16,6 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 TIMES = ROOT / ".build" / "fast-times.json"
 ISOLATED = {"SearchTests.DownloadLifecycleTests": 7}
+BUDGET = 120.0
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 LOCATION = re.compile(r"/[^/]+\.swift:\d+:\d+$")
 
@@ -71,12 +73,17 @@ def plan(tests, jobs, weights, filters):
         else:
             shared[suite] = members
     room = jobs - 1 if singles and jobs > 2 else jobs
-    bins = [[] for _ in range(max(1, min(room, len(shared))))]
+
+    def weight(suite):
+        return weights.get(suite, 0.05 * len(shared[suite]) + 0.2)
+
+    wanted = max(room, math.ceil(sum(weight(s) for s in shared) / BUDGET))
+    bins = [[] for _ in range(max(1, min(wanted, len(shared))))]
     loads = [0.0] * len(bins)
-    for suite in sorted(shared, key=lambda s: -weights.get(s, 0.05 * len(shared[s]) + 0.2)):
+    for suite in sorted(shared, key=lambda s: -weight(s)):
         index = loads.index(min(loads))
         bins[index].append(suite)
-        loads[index] += weights.get(suite, 0.05 * len(shared[suite]) + 0.2)
+        loads[index] += weight(suite)
     if filters:
         work = [("tests", [t for s in b for t in shared[s]], sum(len(shared[s]) for s in b)) for b in bins if b]
     else:

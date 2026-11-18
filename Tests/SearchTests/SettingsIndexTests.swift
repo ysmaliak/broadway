@@ -191,19 +191,21 @@ struct SettingsIndexTests {
         let browser = Browser(record: WindowRecord())
         let prefs = browser.prefs
         let groups = AIGroups.shared
-        let was = (groups.standIn, groups.macAvailable, prefs.agentsOn)
+        let was = (groups.standIn, groups.macAvailable, prefs.agentsOn, prefs.usesTabGroups)
         keepSetting(prefs, \.ai, "ai")
         keepSetting(groups, \.on, AIGroups.onKey)
         defer {
             groups.standIn = was.0
             groups.macAvailable = was.1
             prefs.agentsOn = was.2
+            prefs.usesTabGroups = was.3
             browser.closeAll()
         }
         groups.standIn = nil
         groups.macAvailable = { true }
         groups.on = true
         prefs.agentsOn = true
+        prefs.usesTabGroups = true
 
         prefs.ai = false
 
