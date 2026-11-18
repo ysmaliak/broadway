@@ -251,12 +251,8 @@ final class CommandList {
     var rows: [TextCommand] {
         let wanted = typed.trimmingCharacters(in: .whitespaces).lowercased()
         return CommandStore.shared.active.filter { command in
-            command.fits(picked, host: host) && (wanted.isEmpty || command.name.lowercased().contains(wanted)) && runs(command)
+            command.fits(picked, host: host) && (wanted.isEmpty || command.name.lowercased().contains(wanted))
         }
-    }
-
-    private func runs(_ command: TextCommand) -> Bool {
-        Plans.shared.looked ? Plans.shared.commandChoice(command, blind: tab.neverSent, Shared.prefs) != nil : !tab.neverSent
     }
 
     var asking: Bool { !typed.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -318,7 +314,7 @@ final class SelectionRun: Identifiable {
         self.choice = choice
     }
 
-    var place: String { choice.plan == .thisMac ? "On this Mac" : "\(choice.plan.tool) · \(choice.label)" }
+    var place: String { choice.plan == .thisMac ? "On this Mac" : "\(choice.plan.name) · \(choice.label)" }
     var showsDiff: Bool { command.rewrites && !running && failed == nil && !text.isEmpty }
 
     var request: ProviderRequest {
@@ -359,14 +355,9 @@ final class SelectionRun: Identifiable {
 
     func stop() { session?.cancel() }
 
-    var staysOnMac: Bool { tab.neverSent || choice.plan == .thisMac }
-
     func retry(on other: ModelChoice? = nil) {
         guard !running else { return }
-        if let other {
-            guard !staysOnMac || other.plan == .thisMac else { return }
-            choice = other
-        }
+        if let other { choice = other }
         start()
     }
 
@@ -397,7 +388,7 @@ final class SelectionRun: Identifiable {
             return true
         }
         if flags == [.command, .shift], key == "r" {
-            if !staysOnMac, let other = Plans.shared.otherChoice(than: choice, browser.prefs) { retry(on: other) }
+            if let other = Plans.shared.otherChoice(than: choice, browser.prefs) { retry(on: other) }
             return true
         }
         if flags == .command, key == "k" {
@@ -430,10 +421,9 @@ extension Browser {
     }
 
     func runCommand(_ command: TextCommand, picked: PickedText, tab: Tab, asked: String? = nil) {
-        guard textActionsAllowed(on: tab) else { return closeSelection() }
         guard let choice = choice(for: command, tab: tab) else {
             ai.commands = nil
-            return announce(textRefusal(tab))
+            return announce(tab.neverSent ? "In a private window, the page isn't sent" : Plans.shared.trouble(prefs) ?? "Sign in to Claude Code or Codex first")
         }
         let language = Locale.current.localizedString(forLanguageCode: Locale.current.language.languageCode?.identifier ?? "en") ?? "English"
         let run = SelectionRun(command: command, asked: asked ?? command.prompt(language: language), picked: picked, tab: tab, choice: choice)
@@ -460,8 +450,8 @@ extension Browser {
         runCommand(command, picked: picked, tab: tab, asked: "\(question)\n\nThis is about the selected text.")
     }
 
-    func textCommand(_ id: String, in given: Tab? = nil) {
-        guard let tab = given ?? active, textActionsAllowed(on: tab), let command = CommandStore.shared.command(id) else { return }
+    func textCommand(_ id: String) {
+        guard prefs.ai, let tab = active, let command = CommandStore.shared.command(id) else { return }
         Task { @MainActor in
             guard let picked = await PageSelection.read(tab) else { return announce("Select some text first") }
             if !Plans.shared.looked { await Plans.shared.refresh() }
@@ -469,12 +459,11 @@ extension Browser {
         }
     }
 
-    func moreCommands(in given: Tab? = nil) {
-        guard let tab = given ?? active, textActionsAllowed(on: tab) else { return }
+    func moreCommands() {
+        guard prefs.ai, let tab = active else { return }
         Task { @MainActor in
             guard let picked = await PageSelection.read(tab) else { return }
             if !Plans.shared.looked { await Plans.shared.refresh() }
-            guard canRunAny(on: tab) else { return announce(textRefusal(tab)) }
             openCommands(picked, tab: tab)
         }
     }
@@ -667,13 +656,11 @@ final class CommandListPanel: NSView, NSTextFieldDelegate {
     private let stage = KitFlippedView()
     private let field = SelectionField.make(placeholder: "Ask about this, or pick a command", size: 13)
     private let rule = KitBox(fill: KitColor.hairline)
-    private let foot = KitLabel("", font: .systemFont(ofSize: 11), color: KitColor.faint)
     private var rows: [CommandRow] = []
     private weak var before: NSResponder?
 
     private static let fieldHeight: CGFloat = 30
     private static let rowHeight: CGFloat = 27
-    private static let footHeight: CGFloat = 24
 
     init(browser: Browser, list: CommandList) {
         self.browser = browser
@@ -683,7 +670,6 @@ final class CommandListPanel: NSView, NSTextFieldDelegate {
         addSubview(glass)
         stage.addSubview(field)
         stage.addSubview(rule)
-        stage.addSubview(foot)
         field.delegate = self
         field.stringValue = list.typed
         field.kitAccess(id: "selection.commands.field", label: "Ask about this, or pick a command")
@@ -721,33 +707,25 @@ final class CommandListPanel: NSView, NSTextFieldDelegate {
         list.typed = field.stringValue
     }
 
-    var usual: ModelChoice? {
-        guard var plain = TextCommand.standard.first else { return nil }
-        plain.model = nil
-        return browser.choice(for: plain, tab: list.tab)
-    }
-
-    var footLine: String { usual.map { TextActions.runsOn($0.plan) } ?? "" }
-
-    var entries: [(title: String, detail: String)] {
-        let usual = usual
-        var out = list.rows.map { ($0.name, Self.own(browser.choice(for: $0, tab: list.tab), usual)) }
+    private var entries: [(title: String, detail: String)] {
+        var out = list.rows.map { ($0.name, place($0)) }
         if list.asking {
-            out.append(("Ask: \(list.typed)", Self.own(browser.choice(for: TextCommand.standard[3], tab: list.tab), usual)))
+            out.append(("Ask: \(list.typed)", browser.choice(for: TextCommand.standard[3], tab: list.tab).map(where_) ?? ""))
         }
         return out
     }
 
-    static func own(_ choice: ModelChoice?, _ usual: ModelChoice?) -> String {
-        guard let choice, choice != usual else { return "" }
-        guard choice.plan == usual?.plan else { return TextActions.runsOn(choice.plan) }
-        return choice.plan == .thisMac ? "" : choice.label
+    private func place(_ command: TextCommand) -> String {
+        browser.choice(for: command, tab: list.tab).map(where_) ?? "Not in a private window"
+    }
+
+    private func where_(_ choice: ModelChoice) -> String {
+        choice.plan == .thisMac ? "This Mac" : "\(choice.plan.name), leaves this Mac"
     }
 
     override var fittingSize: NSSize {
         let count = CGFloat(entries.count)
-        let footRoom = footLine.isEmpty ? 0 : Self.footHeight
-        return NSSize(width: 300, height: 6 + Self.fieldHeight + 2 + 1 + count * (Self.rowHeight + 2) + footRoom + 6)
+        return NSSize(width: 300, height: 6 + Self.fieldHeight + 2 + 1 + count * (Self.rowHeight + 2) + 6)
     }
 
     override func layout() {
@@ -782,9 +760,6 @@ final class CommandListPanel: NSView, NSTextFieldDelegate {
             row.frame = NSRect(x: 6, y: y, width: width, height: Self.rowHeight)
             y += Self.rowHeight + 2
         }
-        foot.text = footLine
-        foot.isHidden = foot.text.isEmpty
-        foot.frame = NSRect(x: 6 + 10, y: y, width: width - 20, height: Self.footHeight - 4)
     }
 }
 
@@ -817,7 +792,7 @@ final class CommandRow: NSView {
     override func layout() {
         super.layout()
         ground.frame = bounds
-        FieldLine.place([.text(title, priority: 1), .spacer(8), .text(detail)], in: self, padding: 10, spacing: 8)
+        FieldLine.place([.text(title), .spacer(8), .text(detail, fixed: true)], in: self, padding: 10, spacing: 8)
     }
 
     override func mouseDown(with event: NSEvent) {}

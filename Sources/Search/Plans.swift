@@ -48,7 +48,7 @@ final class Plans {
     }
 
     func refresh() async {
-        while looking { try? await Task.sleep(for: .milliseconds(10)) }
+        guard !looking else { return }
         looking = true
         defer { looking = false }
         for plan in Plan.allCases {
@@ -93,28 +93,12 @@ final class Plans {
         return others.first.map { ModelChoice(plan: choice.plan, model: $0.id, effort: $0.defaultEffort) }
     }
 
-    var agents: [Plan] { Plan.allCases.filter(connected) }
-
-    func agent(_ prefs: Preferences) -> Plan? {
-        Self.agent(chosen: prefs.aiPlan, looked: looked, connected: connected)
-    }
-
-    nonisolated static func agent(chosen: Plan?, looked: Bool, connected: (Plan) -> Bool) -> Plan? {
-        if let chosen, connected(chosen) || !looked { return chosen }
-        if chosen == .thisMac { return nil }
-        return Plan.cloud.first(where: connected) ?? (connected(.thisMac) ? .thisMac : nil)
-    }
-
-    nonisolated static let macOff = "This Mac can't answer now. Pick another agent in Settings › Agents."
-
     func commandChoice(_ command: TextCommand, blind: Bool, _ prefs: Preferences) -> ModelChoice? {
         let mac = ModelChoice(plan: .thisMac, model: "", effort: nil)
-        let macCan = command.mine || TextCommand.onDevice.contains(command.id)
-        if blind { return macCan && connected(.thisMac) ? mac : nil }
+        if blind { return connected(.thisMac) ? mac : nil }
         if let model = command.model { return model }
-        guard let plan = agent(prefs) else { return nil }
-        if plan == .thisMac { return macCan ? mac : nil }
-        return defaultChoice(plan)
+        if TextCommand.onDevice.contains(command.id), connected(.thisMac) { return mac }
+        return choice(.commands, prefs)
     }
 
     func start(_ request: ProviderRequest, on choice: ModelChoice) -> ProviderSession {

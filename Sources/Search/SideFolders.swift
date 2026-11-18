@@ -1154,7 +1154,6 @@ final class TaskFolderHeadingView: KitHoverView {
         guard let browser, let folder else { return nil }
         let id = folder.id
         return KitMenu.make([
-            .action("Open Chat") { browser.showTask(id) },
             .action("Mark as Read") { browser.markTaskRead(id) },
             .action("Keep Tabs") { browser.keepTaskTabs(id) },
             .separator,

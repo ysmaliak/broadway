@@ -665,28 +665,6 @@ final class BrowserToolbox: AgentToolbox {
         return settle(answer)
     }
 
-    static let waryReads = MCPServer.readOnly.union(["text", "screenshot", "memory_search", "memory_read", "profile_found", "address_found", "ask"])
-
-    private func wary(_ name: String, _ arguments: [String: Any], task: UUID?) async -> ToolOutcome? {
-        let home = AgentTasks.shared.root(task ?? UUID())
-        guard let task, let entry = TaskLedger.shared.entry(home), entry.chat, entry.addressed, !entry.addressedYes,
-              !Self.waryReads.contains(name) else { return nil }
-        let no = ToolOutcome.failure("The person said not now. Nothing was done. Answer in words and do not act on this page.", code: .saidNo)
-        if entry.addressedNo { return no }
-        let tab = find(arguments)?.tab
-        var question = AgentQuestion(kind: .approval(.tab), title: "Let the chat act on this page?")
-        question.task = task
-        question.tab = tab?.id
-        question.reason = AgentQuestion.clean("This page has text written for an AI. It may be steering the chat.", limit: 240)
-        let heardBack = { (answer: AgentAnswer) in
-            if case .yes = answer { TaskLedger.shared.trustAddressed(home) } else { TaskLedger.shared.doubtAddressed(home) }
-        }
-        guard let answer = await heard(question, tab: tab, later: heardBack) else { return Self.stillWaiting }
-        heardBack(answer)
-        if case .yes = answer { return nil }
-        return no
-    }
-
     static let stillWaiting = ToolOutcome.failure("This waits for the person's yes in Broadway. The question is on their screen: tell them, then try again. Nothing was done.", code: .needsYou)
 
     private func waved(_ tab: Tab?, _ body: () async -> AgentAnswer) async -> AgentAnswer {
@@ -797,7 +775,6 @@ final class BrowserToolbox: AgentToolbox {
             guard await AgentPatience.race(open, seconds: AgentLinks.shared.patience(task)) != nil, !AgentDesk.shared.waits(for: task) else { return waiting }
         }
         if let refused = TaskLedger.shared.refusal(name, arguments, task: task) { return .failure(refused, code: .refused) }
-        if let refused = await wary(name, arguments, task: task) { return refused }
         if outside, let task, name == "open" || find(arguments) != nil { AgentLinks.shared.announce(task) }
         if task == nil || outside, Self.taskOnly.contains(name) {
             return .failure("Only a running task can use \(name). Nothing was done.", code: .needsTask)

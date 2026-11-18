@@ -56,11 +56,11 @@ struct SettingsIndexTests {
         #expect(SettingsPage.named("ai") == .agents)
         #expect(SettingsDetail.allCases == [.linkRule, .liveFolder, .languages])
         #expect(!SettingsIndex.groups.contains { $0.title == "AI" })
-        #expect(SettingsIndex.groups(of: .agents).map(\.id) == ["agents", "agents.broadway"])
+        #expect(SettingsIndex.groups(of: .agents).map(\.id) == ["agents"])
     }
 
     @Test func whatLeftTheAgentsPageIsNotInTheIndex() {
-        let gone = ["ai.on", "ai.plans", "ai.commands", "ai.memory", "ai.skills", "ai.getToKnow", "ai.routines", "ai.watch"]
+        let gone = ["ai.on", "ai.plans", "ai.commands", "ai.memory", "ai.skills", "ai.getToKnow", "ai.routines", "ai.watch", "ai.actions", "ai.ask", "ai.plan", "agents.broadway"]
 
         let found = gone.filter { SettingsIndex.item($0) != nil }
         let stillSet = gone.filter { PersonSettings.table[$0] != nil }

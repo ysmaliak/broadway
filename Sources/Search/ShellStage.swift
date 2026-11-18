@@ -546,7 +546,6 @@ final class AIOverlayView: KitFlippedView {
     let browser: Browser
     private let pointer = AgentPointerView()
     private let selection: SelectionOverlayView
-    private var line: PageAskView?
     private var card: AgentCardView?
     private(set) var cardFrame: CGRect? { didSet { if cardFrame != oldValue { onCard?() } } }
     var onCard: (() -> Void)?
@@ -577,7 +576,6 @@ final class AIOverlayView: KitFlippedView {
         pointer.driving = tab?.driving ?? false
         selection.frame = bounds
         selection.sync()
-        let lineTop = placeLine(for: tab)
         if AgentDesk.shared.front != nil {
             let view = card ?? {
                 let made = AgentCardView(browser: browser, desk: .shared)
@@ -590,34 +588,14 @@ final class AIOverlayView: KitFlippedView {
             let size = view.intrinsicContentSize
             let room = max(0, bounds.width - 40)
             let width = size.width == NSView.noIntrinsicMetric ? min(AgentCardView.widest, room) : min(size.width, AgentCardView.widest, room)
-            view.frame = kitSnap(CGRect(x: (bounds.width - width) / 2, y: (lineTop ?? bounds.height) - 14 - size.height, width: width, height: size.height))
+            view.frame = kitSnap(CGRect(x: (bounds.width - width) / 2, y: bounds.height - 14 - size.height, width: width, height: size.height))
             cardFrame = view.frame
         } else if let card {
             card.removeFromSuperview()
             self.card = nil
-            cardFrame = line?.frame
+            cardFrame = nil
         } else {
-            cardFrame = line?.frame
+            cardFrame = nil
         }
-    }
-
-    private func placeLine(for tab: Tab?) -> CGFloat? {
-        guard let made = browser.ai.line, let tab, made.tab == tab.id else {
-            line?.removeFromSuperview()
-            line = nil
-            return nil
-        }
-        if line?.line !== made {
-            line?.removeFromSuperview()
-            let view = PageAskView(browser: browser, line: made)
-            addSubview(view, positioned: .below, relativeTo: card)
-            line = view
-        }
-        guard let line else { return nil }
-        let width = min(PageAskView.widest, max(0, bounds.width - 40))
-        let height = line.height(for: width)
-        line.frame = kitSnap(CGRect(x: (bounds.width - width) / 2, y: bounds.height - 14 - height, width: width, height: height))
-        line.needsLayout = true
-        return line.frame.minY
     }
 }

@@ -68,10 +68,8 @@ enum FieldCommands {
         }
         if Command.split.contains(command.id), !browser.prefs.splitView { return false }
         if Command.dusk.contains(command.id), !browser.prefs.darkensPages { return false }
-        if Command.asking.contains(command.id), !browser.prefs.askAndChat { return false }
         if Command.meeting.contains(command.id), !browser.prefs.nextMeeting { return false }
         if Command.folders.contains(command.id), !browser.prefs.usesTabGroups { return false }
-        if TextActions.commandIDs.contains(command.id) { return browser.textActionsAllowed(on: browser.active) }
         return true
     }
 
@@ -146,7 +144,6 @@ extension Browser {
         offers += quick.others.compactMap { quickRow($0) }
         let listed = Set(offers.filter(\.kind.isCommand).map { $0.key.lowercased() })
         offers += fieldRows(for: typed).filter { !listed.contains($0.key.lowercased()) }
-        addFieldAIRows()
     }
 }
 
@@ -168,8 +165,6 @@ extension Browser {
             runPageAction(parts[1])
         case "now":
             runNow(parts[1])
-        case "task", "ask", "ask-new":
-            runFieldAI(parts[0], parts[1])
         default:
             break
         }

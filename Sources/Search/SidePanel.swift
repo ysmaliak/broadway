@@ -32,7 +32,6 @@ enum SidePanelContent: Equatable {
     case page(extensionID: String, url: URL, tab: Tab.ID?)
     /// A website, in the space the window was in when it opened.
     case site(url: URL, space: UUID)
-    case chat
 }
 
 /// The sites offered in View › Side Panel, as they are typed: a short list,
@@ -133,7 +132,7 @@ extension Browser {
     /// and closing whatever is there.
     func toggleSitePanel() {
         guard prefs.sitesInPanel else { return }
-        if sidePanelShown, sidePanel != .chat { return closeSidePanel() }
+        if sidePanelShown { return closeSidePanel() }
         let last = URL(string: prefs.panelSite).flatMap { PanelSites.allowed($0) ? $0 : nil }
         showSiteInPanel(last ?? PanelSites.offered[0].url)
     }
@@ -170,7 +169,6 @@ extension Browser {
     func closeSidePanel() {
         if case .page(_, _, let tab?) = sidePanel { SidePanelPages.shared.unbind(tab, in: self) }
         SidePanelPages.shared.drop(in: self)
-        if sidePanel == .chat { ai.chatShown = false }
         sidePanelShown = false
         sidePanel = nil
     }
@@ -568,7 +566,6 @@ final class SidePanelContentView: NSView {
     private var watch: AnyCancellable?
     private var seen: AnyCancellable?
     private weak var seenDelegate: SitePanelDelegate?
-    private var chat: ChatColumnView?
 
     static let lineHeight: CGFloat = 26 + 16
 
@@ -604,23 +601,12 @@ final class SidePanelContentView: NSView {
             toTab.isHidden = false
             name.overflow = .middle
             follow(SidePanelPages.shared.siteDelegate(in: browser))
-        case .chat:
-            follow(nil)
         case nil:
             follow(nil)
         }
-        let chatting = browser.sidePanel == .chat
-        if chatting, chat == nil {
-            let made = ChatColumnView(browser: browser)
-            addSubview(made)
-            chat = made
-        } else if !chatting, let shown = chat {
-            shown.removeFromSuperview()
-            chat = nil
-        }
-        line.isHidden = browser.sidePanel == nil || chatting
-        rule.isHidden = browser.sidePanel == nil || chatting
-        place(browser.sidePanel == nil || chatting ? nil : SidePanelPages.shared.web(in: browser))
+        line.isHidden = browser.sidePanel == nil
+        rule.isHidden = browser.sidePanel == nil
+        place(browser.sidePanel == nil ? nil : SidePanelPages.shared.web(in: browser))
         needsLayout = true
     }
 
@@ -655,7 +641,6 @@ final class SidePanelContentView: NSView {
 
     override func layout() {
         super.layout()
-        chat?.frame = bounds
         let lineHeight = Self.lineHeight
         line.frame = NSRect(x: 0, y: 0, width: bounds.width, height: lineHeight)
         rule.frame = NSRect(x: 0, y: lineHeight, width: bounds.width, height: 1)
@@ -689,7 +674,6 @@ final class SidePanelBesideView: NSView {
     private let hairline = KitBox(fill: KitColor.hairline)
     private let handle: PanelEdgeHandle
     private var lookWatch: AnyCancellable?
-    private var chatWatch: AnyCancellable?
 
     init(browser: Browser) {
         self.browser = browser
@@ -702,9 +686,6 @@ final class SidePanelBesideView: NSView {
         restyle()
         lookWatch = kitObserve(initial: false, distinct: true, { [weak browser] in browser?.pageLook(in: nil) }) { [weak self] _ in
             self?.needsLayout = true
-        }
-        chatWatch = kitObserve({ [weak browser] in browser?.sidePanel == .chat }) { [weak self] chatting in
-            self?.handle.isHidden = chatting
         }
     }
 

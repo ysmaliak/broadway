@@ -404,15 +404,6 @@ enum MenuBar {
             act("Fill Whole Form", key: "edit.fillForm", enabled: web) { $0.forms.begin() },
             act("Insert Snippet…", key: "edit.snippets") { $0.enterPlace(.snippets) },
             .separator(),
-        ] + TextCommand.standard.map { command in
-            act(command.name, key: TextActions.commandID(command.id), enabled: browser.canRun(command, on: browser.active)) {
-                $0.textCommand(command.id)
-            }
-        } + [
-            act(TextActions.moreTitle, key: TextActions.commandID(TextActions.more), enabled: browser.canRunAny(on: browser.active)) {
-                $0.moreCommands()
-            },
-            .separator(),
             act("Find on Page…", key: "edit.find", enabled: web || browser.active?.page?.kind == .settings) { $0.openFind() },
             act("Find Next", key: "edit.findNext", enabled: browser.canFindAgain) { $0.look(forward: true) },
             act("Find Previous", key: "edit.findPrevious", enabled: browser.canFindAgain) { $0.look(forward: false) },
@@ -443,7 +434,7 @@ enum MenuBar {
         ]
         if browser.prefs.sitesInPanel, !browser.isPrivate {
             items.append(submenu("Side Panel", [
-                act(browser.sidePanelShown && browser.sidePanel != .chat ? "Close Side Panel" : "Show Side Panel", key: "view.sitePanel") { $0.toggleSitePanel() },
+                act(browser.sidePanelShown ? "Close Side Panel" : "Show Side Panel", key: "view.sitePanel") { $0.toggleSitePanel() },
                 .separator(),
             ] + PanelSites.offered.map { site in
                 act(site.name) { $0.showSiteInPanel(site.url) }
@@ -462,14 +453,6 @@ enum MenuBar {
             items += [
                 act("Darken This Site", key: "view.dusk", enabled: browser.canDusk, on: active?.dusked ?? false) { $0.toggleDusk() },
                 act("Pause Darkening", key: "view.duskPause", on: Dusk.shared.paused) { $0.pauseDusk() },
-            ]
-        }
-        if browser.prefs.askAndChat {
-            items += [
-                .separator(),
-                act("Ask About This Page…", key: "view.ask", enabled: !(active?.asksAgent ?? true)) { $0.askKey() },
-                act(browser.chatOpen ? "Hide Chat" : "Show Chat", key: "view.chat") { $0.toggleChat() },
-                act("Chats", key: "view.chats") { $0.showChats() },
             ]
         }
         items += [

@@ -167,7 +167,7 @@ struct Command: Identifiable {
         Command("edit.copyForAgent", "Copy for Agent", .edit, KeyCombo("c", control: true)) { $0.copyForAgent() },
         Command("edit.copyPageMarkdown", "Copy Page as Markdown", .edit, nil) { $0.copyPageAsMarkdown() },
         Command("edit.snippets", "Insert Snippet…", .edit, KeyCombo(";")) { $0.enterPlace(.snippets) },
-    ] + TextActions.shortcuts + [
+
         Command("view.fold", "Hide Sidebar", .view, KeyCombo("s")) { $0.toggleFold() },
         // Every tab group of the space at once, as Arc's folders (⌥⌘[ and ⌥⌘],
         // beside ⌘[ and ⌘], which go back and forward).
@@ -185,9 +185,6 @@ struct Command: Identifiable {
         Command("view.developerPanel", "Errors and Network", .view, KeyCombo("k", option: true)) { $0.toggleDeveloperPanel() },
         Command("view.dusk", "Darken This Site", .view, KeyCombo("d", shift: true)) { $0.toggleDusk() },
         Command("view.duskPause", "Pause Darkening", .view, KeyCombo("d", shift: true, option: true)) { $0.pauseDusk() },
-        Command("view.ask", "Ask About This Page…", .view, KeyCombo("j")) { $0.askKey() },
-        Command("view.chat", "Show Chat", .view, KeyCombo("a", control: true)) { $0.toggleChat() },
-        Command("view.chats", "Chats", .view, nil) { $0.showChats() },
         Command("view.hide", "Hide Elements…", .view, KeyCombo("h", shift: true)) { $0.toggleHiding() },
         Command("view.hidden", "Hidden on This Site", .view, KeyCombo("u", shift: true)) { $0.reviewing.toggle() },
         Command("view.zoomIn", "Zoom In", .view, KeyCombo("+")) { $0.zoom(by: 1.1) },

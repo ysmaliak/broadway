@@ -836,10 +836,6 @@ final class Bench {
             let inView = NSPoint(x: x, y: web.isFlipped ? y : web.bounds.height - y)
             let point = web.convert(inView, to: nil)
             PageView.picking = pick
-            PageView.seen = []
-            PageView.seenMarks = []
-            let hold = request["hold"] as? Double ?? 0
-            PageView.pickHold = hold
             for type in [NSEvent.EventType.rightMouseDown, .rightMouseUp] {
                 guard let event = NSEvent.mouseEvent(
                     with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
@@ -848,12 +844,9 @@ final class Bench {
                 ) else { continue }
                 if type == .rightMouseDown { web.rightMouseDown(with: event) } else { web.rightMouseUp(with: event) }
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2 + hold) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                 PageView.picking = nil
                 answer([
-                    "menu": PageView.seen,
-                    "marks": PageView.seenMarks,
-                    "textMark": TextActions.menuMark,
                     "tabs": browser.tabs.map { Bench.short($0) },
                     "urls": browser.tabs.map { $0.address?.absoluteString ?? "" },
                     "active": browser.activeID.flatMap { id in browser.tabs.first { $0.id == id } }.map { Bench.short($0) } ?? "",
@@ -2049,7 +2042,7 @@ final class Bench {
                                                uniquingKeysWith: { first, _ in first })
                 walk(menu, path: item.title)
             }
-            answer(["menus": menus, "keys": keys, "enabled": shown, "ai": browser.prefs.ai, "textActions": browser.prefs.textActions,
+            answer(["menus": menus, "keys": keys, "enabled": shown, "ai": browser.prefs.ai,
                     "settingsPages": SettingsPage.allCases.map(\.rawValue),
                     "settingsPage": browser.settingsPage.rawValue])
 
@@ -2377,18 +2370,10 @@ final class Bench {
                     Plans.shared.standIn(FakeProvider(plan: plan, script: [.emit(.started(model: nil)), .emit(.text("Working ")),
                                                                            .emit(.toolStarted(id: "1", name: "snapshot", summary: "Reading")),
                                                                            .emit(.toolFinished(id: "1", failed: false)), .hang]), for: plan)
-                } else if let words = request["answer"] as? String {
-                    Plans.shared.standIn(FakeProvider(plan: plan, script: [.emit(.started(model: nil)), .emit(.text(words)),
-                                                                           .emit(.finished(ProviderUsage()))]), for: plan)
                 } else {
                     Plans.shared.standIn(FakeProvider(plan: plan, echoes: true), for: plan)
                 }
                 Plans.shared.standIn(FakeProvider(plan: plan.other, echoes: true), for: plan.other)
-                if let mac = request["mac"] as? Bool {
-                    let fake = FakeProvider(plan: .thisMac, echoes: true)
-                    if !mac { fake.fakeStatus = PlanStatus() }
-                    Plans.shared.standIn(fake, for: .thisMac)
-                }
                 Task { @MainActor in
                     await Plans.shared.refresh()
                     answer(["plan": plan.rawValue, "choice": Plans.shared.choice(.tasks, browser.prefs)?.label ?? ""])
@@ -2401,31 +2386,8 @@ final class Bench {
                 guard let id = AgentSessions.shared.live.keys.first else { answer(["error": "no task is running"]); return }
                 AgentSessions.shared.clear(id)
                 answer(["ok": true])
-            case "line", "question":
-                guard let tab = find(request, in: browser) else { answer(missing(request)); return }
-                browser.select(tab)
-                Task { @MainActor in
-                    if browser.ai.line == nil { await browser.openLine(tab) }
-                    if let text = request["text"] as? String {
-                        browser.ai.line?.draft = text
-                        browser.ai.line?.run()
-                    }
-                    answer(browser.aiState())
-                }
-            case "escape":
-                answer(["used": browser.benchEscape()])
-            case "frames":
-                answer(["frames": browser.lineFrames()])
             case "state":
                 answer(browser.aiState())
-            case "sent":
-                var out: [String: Any] = [:]
-                for plan in Plan.allCases {
-                    guard let fake = Plans.shared.provider(plan) as? FakeProvider else { continue }
-                    out[plan.rawValue] = ["count": fake.requests.count, "tools": fake.requests.map { $0.tools == .none ? "none" : "some" },
-                                          "prompts": fake.requests.map(\.prompt)]
-                }
-                answer(["sent": out, "announced": browser.announcement ?? ""])
             case "select":
                 guard let tab = find(request, in: browser) else { answer(missing(request)); return }
                 browser.select(tab)
@@ -2440,23 +2402,6 @@ final class Bench {
                 browser.ai.commands?.index = request["index"] as? Int ?? 0
                 if let commands = browser.ai.commands { commands.take(browser) }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { answer(browser.aiState()) }
-            case "chat":
-                switch request["what"] as? String ?? "toggle" {
-                case "list": browser.showChats()
-                case "new": browser.newChat()
-                case "send":
-                    if !browser.ai.chatShown, let tab = browser.active { browser.showChat(tab) }
-                    browser.ai.chatDraft = request["text"] as? String ?? ""
-                    browser.sendChat()
-                case "done": browser.finishChat(keepOpen: false)
-                default: browser.toggleChat()
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                    var state = browser.aiState()
-                    state["listing"] = browser.ai.chatListing
-                    state["kept"] = ChatStore.shared.chats.map(\.title)
-                    answer(state)
-                }
             case "primary":
                 if let result = browser.ai.result { browser.primary(result) }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { answer(browser.aiState()) }
@@ -4656,7 +4601,6 @@ final class Bench {
                                                        "inspectable": web.map { return $0.isInspectable } ?? false,
                                                        "developerExtras": web.flatMap { $0.configuration.preferences.value(forKey: "developerExtrasEnabled") as? Bool } ?? false]
                 .merging(SidePanelPages.shared.siteReport(in: browser)) { a, _ in a }
-            case .chat: content = ["kind": "chat"]
             case nil: break
             }
             // Where the panel's page and every page sit in the window, from
@@ -4897,9 +4841,6 @@ final class Bench {
 
         case "plans":
             PlansBench.run(request, browser: browser, answer)
-        case "chatcolumn":
-            ChatBench.run(request, browser: browser, answer)
-
         case "hints":
             BenchHints.run(request, browser: browser, answer)
 

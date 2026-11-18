@@ -115,7 +115,7 @@ final class AgentTasks {
 
     func start(prompt: String, choice: ModelChoice?, prefs: Preferences, command: String? = AgentCommand.path, parent: UUID? = nil,
                origin: TaskOrigin = .user, allowed: Set<String>? = nil,
-               chat given: Chat? = nil, material: String? = nil, prepare: ((Conversation) -> Void)? = nil,
+               chat given: Chat? = nil, material: String? = nil,
                happened: @escaping (Conversation.Happening) -> Void) -> Conversation? {
         guard let command else {
             happened(.failed("The broadway tool isn't in this copy of Broadway"))
@@ -147,7 +147,6 @@ final class AgentTasks {
         running[id] = conversation
         TaskLedger.shared.open(id, origin: origin, title: Conversation.title(prompt), allowed: allowed)
         ChatStore.shared.load()
-        prepare?(conversation)
         conversation.send(prompt)
         return conversation
     }

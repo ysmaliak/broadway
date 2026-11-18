@@ -7,7 +7,6 @@ enum ShortcutsList {
     static func shown(_ command: Command, hunt: String, browser: Browser, store: ShortcutStore, prefs: Preferences) -> Bool {
         if command.section == .spaces, !prefs.usesSpaces { return false }
         if Command.dusk.contains(command.id), !browser.prefs.darkensPages { return false }
-        if Command.asking.contains(command.id), !browser.prefs.askAndChat { return false }
         if Command.meeting.contains(command.id), !browser.prefs.nextMeeting { return false }
         if Command.folders.contains(command.id), !browser.prefs.usesTabGroups { return false }
         let words = hunt.trimmingCharacters(in: .whitespaces)
