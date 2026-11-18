@@ -72,6 +72,10 @@ def opened(name):
     return [t for t in tabs() if urlparse(t["url"]).path == f"/opened-{name}"]
 
 
+def private(tab):
+    return next(x for x in tabs() if x["id"] == tab)["shy"] is True
+
+
 def state(tab):
     return sv.cmd({"do": "popups", "id": tab})
 
@@ -163,8 +167,8 @@ def main():
         sv.sp("private")
         shy = next(x["id"] for x in tabs() if x["shy"] and x["active"])
         count = len(opened("auto"))
-        page = visit("/auto", source=shy)
-        t.ok("the page is private", next(x for x in tabs() if x["id"] == page)["shy"] is True)
+        page = quiet = visit("/auto", source=shy)
+        t.ok("the page is private", private(page))
         t.ok("the saved list applies there", len(opened("auto")) == count + 1)
 
         # G: removed in Settings, refused again.
@@ -176,22 +180,25 @@ def main():
 
         # H: a private tab's own choices.
         count = len(opened("auto"))
-        page = visit("/auto", source=shy)
+        page = visit("/auto", source=quiet)
         st = state(page)
-        t.ok("refused in a private tab, with the sign", len(opened("auto")) == count and st["sign"] is True, st)
+        t.ok("refused in a private tab, with the sign",
+             private(page) and len(opened("auto")) == count and st["sign"] is True, st)
         st = sv.cmd({"do": "popups", "id": page, "action": "open", "index": 0})
         time.sleep(1.5)
         t.ok("Open from a private tab is private", st.get("opened", {}).get("shy") is True, st)
-        page = visit("/auto", source=shy)
+        page = visit("/auto", source=quiet)
         st = sv.cmd({"do": "popups", "id": page, "action": "allow"})
-        t.ok("Allow in a private tab saves nothing", st["allowed"] == [] and st["tabAllowed"] == ["localhost"], st)
+        t.ok("Allow in a private tab saves nothing",
+             private(page) and st["allowed"] == [] and st["tabAllowed"] == ["localhost"], st)
         t.ok("nothing written to the settings", sv.cmd({"do": "popups", "action": "sites"})["allowed"] == [])
         count = len(opened("auto"))
         go(page, "/auto")
         t.ok("that private tab's next pop-up opens", len(opened("auto")) == count + 1)
         count = len(opened("auto"))
         other = visit("/auto")
-        t.ok("other tabs are still refused", len(opened("auto")) == count and state(other)["sign"] is True)
+        t.ok("other tabs are still refused",
+             not private(other) and len(opened("auto")) == count and state(other)["sign"] is True)
     finally:
         t.done(); sv.finish()
     return 1 if t.failed else 0

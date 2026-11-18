@@ -511,7 +511,9 @@ struct SettingsStageTests {
         let band = split.pane.band
         let over = band.convert(NSPoint(x: band.bounds.midX, y: band.bounds.midY), to: nil)
 
-        let watches = page.trackingAreas.contains { $0.options.contains([.mouseMoved, .mouseEnteredAndExited, .inVisibleRect]) }
+        page.updateTrackingAreas()
+        page.updateTrackingAreas()
+        let watches = page.trackingAreas.filter { $0.options.contains([.mouseMoved, .mouseEnteredAndExited, .inVisibleRect]) }.count == 1
         page.mouseMoved(with: moved)
         let onRow = (page.markedRow, picture.marked)
         let underBand = page.point(at: over)

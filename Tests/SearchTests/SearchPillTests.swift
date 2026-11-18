@@ -68,19 +68,22 @@ struct SearchPillTests {
     }
 
     @Test func theWholePillRidesWithThePageAndLandsWhereItStarted() async throws {
-        try await twoSpaces { browser, _, column, first, _ in
+        try await twoSpaces { browser, window, column, first, _ in
             let address = try #require(column.kitSubviews(of: SideAddressView.self).first)
             let pages = try #require(column.kitSubviews(of: SidePagesView.self).first)
             let lane = address.lane
             let start = onScreen(lane.here, in: column, lane: lane)
             let width = browser.prefs.columnWidth
             let target = try #require(browser.spaces.firstIndex { $0.id == first })
+            KitHoverView.pointerStandIn = (window, address.convert(NSPoint(x: address.bounds.midX, y: address.bounds.midY), to: nil))
+            defer { KitHoverView.pointerStandIn = nil }
 
             address.benchPillHover(true)
             column.layoutSubtreeIfNeeded()
             #expect(lane.here.state == .hovered)
 
             browser.spaceNext = target
+            try await until("the pill hears the ride begin") { lane.here.state == .resting }
             column.needsLayout = true
             column.layoutSubtreeIfNeeded()
             browser.spaceMotion.follow(width * 0.4, width: width)
@@ -88,7 +91,7 @@ struct SearchPillTests {
 
             #expect(abs(shift(lane) - shift(pages)) < 0.5, "pill \(shift(lane)) against page \(shift(pages))")
             #expect(abs(shift(lane) - width * 0.4) < 0.5)
-            #expect(lane.here.state == .resting, "a hovered pill rides at rest, like the incoming one it is swapped with")
+            #expect(address.hovering && lane.here.state == .resting, "a hovered pill rides at rest, like the incoming one it is swapped with")
             let riding = onScreen(lane.here, in: column, lane: lane)
             #expect(abs(riding.minX - (start.minX + width * 0.4)) < 0.5, "\(riding) from \(start)")
             #expect(riding.size == start.size)
