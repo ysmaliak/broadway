@@ -96,9 +96,16 @@ final class Plans {
     var agents: [Plan] { Plan.allCases.filter(connected) }
 
     func agent(_ prefs: Preferences) -> Plan? {
-        if let chosen = prefs.aiPlan, connected(chosen) || !looked { return chosen }
+        Self.agent(chosen: prefs.aiPlan, looked: looked, connected: connected)
+    }
+
+    nonisolated static func agent(chosen: Plan?, looked: Bool, connected: (Plan) -> Bool) -> Plan? {
+        if let chosen, connected(chosen) || !looked { return chosen }
+        if chosen == .thisMac { return nil }
         return Plan.cloud.first(where: connected) ?? (connected(.thisMac) ? .thisMac : nil)
     }
+
+    nonisolated static let macOff = "This Mac can't answer now. Pick another agent in Settings › Agents."
 
     func commandChoice(_ command: TextCommand, blind: Bool, _ prefs: Preferences) -> ModelChoice? {
         let mac = ModelChoice(plan: .thisMac, model: "", effort: nil)

@@ -510,4 +510,30 @@ final class PageAskTests {
         #expect(browser.otherAgent(for: line) == nil)
         #expect(!browser.canShoot(for: line))
     }
+
+    @Test func withThisMacPickedAndNoModelHereNothingIsAskedOfAnotherAgent() async throws {
+        Shared.prefs.aiPlan = .thisMac
+        claude.fakeStatus.connected = true
+        codex.fakeStatus.connected = true
+        await Plans.shared.refresh()
+        let browser = browser()
+        let tab = try await page(in: browser)
+
+        #expect(Plans.shared.agent(browser.prefs) == nil)
+        #expect(browser.askChoice(for: tab) == nil)
+        #expect(browser.askRefusal(for: tab) == Plans.macOff)
+        #expect(claude.requests.isEmpty)
+        #expect(codex.requests.isEmpty)
+    }
+
+    @Test func aPickOfThisMacNeverBecomesAnotherAgent() {
+        let both: (Plan) -> Bool = { $0 != .thisMac }
+
+        #expect(Plans.agent(chosen: .thisMac, looked: true, connected: both) == nil)
+        #expect(Plans.agent(chosen: .thisMac, looked: false, connected: both) == .thisMac)
+        #expect(Plans.agent(chosen: .thisMac, looked: true, connected: { _ in true }) == .thisMac)
+        #expect(Plans.agent(chosen: .claude, looked: true, connected: { $0 == .chatGPT }) == .chatGPT)
+        #expect(Plans.agent(chosen: .claude, looked: true, connected: { $0 == .thisMac }) == .thisMac)
+        #expect(Plans.agent(chosen: nil, looked: true, connected: both) == Plan.cloud.first)
+    }
 }

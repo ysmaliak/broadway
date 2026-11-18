@@ -80,10 +80,13 @@ extension Browser {
         Task { @MainActor in
             if !Plans.shared.looked { await Plans.shared.refresh() }
             guard prefs.agentsAllowed else { return announce("Turn on Let agents use Broadway in Settings › Agents first") }
-            guard let plan = Plans.shared.agent(prefs) else {
+            let picked = Plans.shared.agent(prefs)
+            guard prefs.aiPlan != .thisMac, picked != .thisMac else {
+                return announce("This Mac can't run a task. Pick another agent in Settings › Agents.")
+            }
+            guard let plan = picked else {
                 return announce(Plans.shared.trouble(prefs) ?? TextActions.nothingConnected)
             }
-            guard plan != .thisMac else { return announce("This Mac can't run a task. Pick another agent in Settings › Agents.") }
             _ = AgentTasks.shared.start(prompt: text, choice: Plans.shared.defaultChoice(plan), prefs: prefs, command: command) { [weak self] event in
                 if case .failed(let said) = event { self?.announce(said) }
             }

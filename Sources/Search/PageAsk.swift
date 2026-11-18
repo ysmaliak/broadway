@@ -80,7 +80,8 @@ extension Browser {
 
     func askRefusal(for tab: Tab) -> String? {
         guard askChoice(for: tab) == nil else { return nil }
-        return tab.neverSent ? "Not available in a private window" : "Install Claude Code or Codex and sign in"
+        if tab.neverSent { return "Not available in a private window" }
+        return prefs.aiPlan == .thisMac ? Plans.macOff : "Install Claude Code or Codex and sign in"
     }
 
     func askKey() {
