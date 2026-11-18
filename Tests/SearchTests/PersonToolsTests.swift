@@ -44,7 +44,7 @@ final class PersonToolsTests {
 
     private func session(_ name: String = "Claude Code") -> UUID {
         let link = AgentLinks.shared.join(.named(UUID().uuidString), name: name)
-        TaskLedger.shared.open(link.id, origin: .outside, title: name)
+        TaskLedger.shared.open(link.id, title: name)
         AgentLinks.shared.setPatience(link.id, 30)
         made.append(link.id)
         return link.id
@@ -267,14 +267,5 @@ final class PersonToolsTests {
         browser.prefs.agentsOn = false
         let said = await call(mcp, "settings_list")
         #expect(error(said)["code"] as? String == "agents_off")
-    }
-
-    @Test func broadwaysOwnTasksGetNoNounTools() {
-        let task = UUID()
-        TaskLedger.shared.open(task, origin: .user, title: "A task")
-        defer { TaskLedger.shared.close(task) }
-        let mcp = MCPServer(box: BrowserToolbox(), task: task) { _ in }
-        mcp.person = { _, _ in .text("") }
-        #expect(mcp.nounTools.isEmpty)
     }
 }

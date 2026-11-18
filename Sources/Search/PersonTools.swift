@@ -50,10 +50,10 @@ enum PersonTools {
     static let leftOut: [String: String] = [
         "space": "not asked for", "tabs": "not asked for", "groups": "not asked for", "split": "not asked for",
         "windows": "not asked for", "downloads": "not asked for", "files": "not asked for", "history": "not asked for",
-        "tasks": "not asked for", "logins": "not asked for", "fill": "not asked for", "page": "not asked for",
+        "logins": "not asked for", "fill": "not asked for", "page": "not asked for",
         "site": "not asked for", "shortcuts": "not asked for", "extensions": "not asked for", "shields": "not asked for",
         "permissions": "not asked for", "skills": "not asked for", "replies": "not asked for", "now": "not asked for",
-        "plans": "not asked for", "agents": "not asked for", "approvals": "not asked for", "helpers": "not asked for", "hooks": "not asked for",
+        "agents": "not asked for", "approvals": "not asked for", "hooks": "not asked for",
         "complete": "Broadway's own completion of a shell's words, not a command an agent runs",
     ]
 

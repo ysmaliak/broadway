@@ -136,7 +136,6 @@ extension BrowserToolbox {
         if looked.since == nil, !looked.ways.isEmpty { told.append(AgentChange.Look.waysLine(looked.ways)) }
         let written = (header.prefix(1) + told + header.dropFirst() + body).joined(separator: "\n")
         let addressed = AIPage.addressesAI(written)
-        TaskLedger.shared.saw(tab.pageAddress, addressed: addressed, task: task)
         var data: [String: Any] = ["title": tab.title, "url": AgentSecrets.shown(tab.pageAddress), "tab": short, "lines": header + body]
         if let since = looked.since {
             let object = since.object()

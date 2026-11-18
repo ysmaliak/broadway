@@ -59,9 +59,6 @@ enum BenchFieldFixtures {
         ]
     }
 
-    static let picked = PickedText(text: "The quick brown fox jumps over the lazy dog.", kind: .page, editable: false,
-                                   box: CGRect(x: 40, y: 40, width: 200, height: 18), family: "", size: 13)
-
     static var question: AgentQuestion {
         var question = AgentQuestion(kind: .approval(.send), title: "Send the form on example.com?")
         question.site = "example.com"
@@ -130,7 +127,7 @@ enum BenchFieldFixtures {
 
     static let names = ["field-rows", "now-rows", "field-chips", "field-slab", "field-bar", "field-menu",
                         "extension-icons", "fetch-doors", "recent-downloads",
-                        "command-list", "selection-result", "agent-card", "agent-badge"]
+                        "agent-card", "agent-badge"]
 
     static func surface(_ name: String, _ request: [String: Any], browser: Browser?) -> NSView? {
         let ink = KitInk(lift: request["lift"] as? Double ?? 0)
@@ -188,21 +185,6 @@ enum BenchFieldFixtures {
             let glass = KitGlass.floating(radius: 16)
             glass.hold(list)
             return padded(glass, size)
-        case "command-list":
-            guard let browser, let tab = browser.active else { return nil }
-            let list = CommandList(picked: picked, tab: tab)
-            holds.append(list)
-            let panel = CommandListPanel(browser: browser, list: list)
-            return padded(panel, panel.fittingSize)
-        case "selection-result":
-            guard let browser, let tab = browser.active else { return nil }
-            let command = TextCommand.standard[0]
-            let run = SelectionRun(command: command, asked: command.prompt, picked: picked, tab: tab,
-                                   choice: ModelChoice(plan: .thisMac, model: "", effort: nil))
-            run.benchFill(request["text"] as? String ?? "The quick brown fox leaps over the lazy dog.")
-            holds.append(run)
-            let panel = SelectionResultPanel(browser: browser, run: run)
-            return padded(panel, NSSize(width: 400, height: panel.height(for: 400)))
         case "agent-card":
             guard let browser else { return nil }
             AgentDesk.shared.benchAsk(question)

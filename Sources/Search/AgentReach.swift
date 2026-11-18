@@ -254,7 +254,7 @@ extension BrowserToolbox {
         let site = AgentSites.site(of: tab.pageAddress)
         let place = tab.pageAddress
         let names = files.map(\.url.lastPathComponent).joined(separator: ", ")
-        let outside = TaskLedger.shared.entry(task)?.origin == .outside
+        let outside = TaskLedger.shared.entry(task) != nil
         if outside {
             if let refused = await gate(.upload, tab: tab, site: site, task: task, quote: names, said: "Files") { return refused }
         } else if let refused = await gate(.mac, tab: tab, site: site, task: task, quote: files.map(\.url.path).joined(separator: "\n"),

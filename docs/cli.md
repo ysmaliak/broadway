@@ -197,35 +197,21 @@ Every error carries a `hint` with the next command to run. Messages are one sent
 
 ## Tasks
 
-`broadway "what to do"` (or `broadway task "what to do"`) runs a task inside Broadway with the person's Claude or ChatGPT plan. Steps go to stderr and the answer to stdout.
-
-| Option | Meaning |
-| --- | --- |
-| `--cli claude\|codex` | which agent runs it |
-| `-m`, `--model MODEL` | which model |
-| `--effort LEVEL` | low, medium, high, xhigh, max or ultra |
-| `--wait-person MINUTES` | wait this long for an answer instead of exiting 3 |
-| `--no-person` | nobody is there: what needs a person fails at once |
-| `--detach` | start it, print the session id and return |
-| `--stdin` | wait for all of a slow pipe |
-
-Text piped in goes along as material to read, not as instructions: up to 1 MB, read for 250 ms unless `--stdin`. A question is asked inline at a terminal. A script gets exit 3 and a line that resumes the task. Closing the command that started a task stops it, unless it was started with `--detach`.
-
-`broadway session list | resume ID [TEXT] | stop ID | steer ID TEXT | queue ID TEXT` follows and steers tasks. `steer` changes what a running task is doing, and `queue` adds a step for after the current one.
+Broadway no longer runs tasks itself. `broadway task`, a bare sentence such as `broadway "what to do"`, `broadway session`, `broadway mcp --task ID`, `plans`, `tasks` and `helpers` print one line saying so and exit 2 with `no_tasks`. An agent you start yourself, such as Claude Code or Codex, uses Broadway with the commands here. Broadway keeps no notes for agents either: `broadway memory` and `broadway notes` print one line saying so and exit 2 with `no_notes`. Site skills stay, in `broadway skills`.
 
 ## Broadway itself
 
 | Command | What it does |
 | --- | --- |
 | `status` | whether Broadway is running, and what it is doing. Never starts it |
-| `quit [--force]` | quit. While tasks are running Broadway stays open, unless `--force` |
+| `quit` | quit |
 | `serve [--no-person]`, `serve --stop` | keep a hidden Broadway open for agents, in the foreground, which suits a LaunchAgent |
-| `mcp [--task ID]` | the browser as an MCP server on stdio |
+| `mcp` | the browser as an MCP server on stdio |
 | `setup`, `remove`, `doctor` | install, remove and check the command, completions and skills, for Claude Code, Codex, Cursor, opencode and Gemini CLI |
-| `watch [--only LIST] [--count N] [--seconds S]` | one line for each thing that happens to tabs, spaces, downloads, tasks or approvals, until stopped |
+| `watch [--only LIST] [--count N] [--seconds S]` | one line for each thing that happens to tabs, spaces, downloads or approvals, until stopped |
 | `completions fish\|zsh\|bash` | print a completion script |
 
-Broadway started by a command opens hidden, with no window and no focus. A hidden Broadway that nobody serves and that runs no task quits after half an hour idle.
+Broadway started by a command opens hidden, with no window and no focus. A hidden Broadway that nobody serves quits after half an hour idle.
 
 Inside a sandbox that denies local sockets, such as Codex's, every command fails at once with `sandboxed` instead of trying to start Broadway.
 
@@ -233,7 +219,7 @@ Inside a sandbox that denies local sockets, such as Codex's, every command fails
 
 `broadway mcp` serves the browser to MCP clients on stdio. The connection is one agent session, with a current tab exactly like the command's.
 
-- **Tools** have the command's names. Listed at first: `open`, `go`, `tabs`, `close`, `snapshot`, `read`, `shot`, `find`, `click`, `type`, `fill`, `press`, `scroll`, `wait`, `dialog`, `batch`, `run`, `handoff`, and `more_tools`. `more_tools` with a few words adds up to six of the rest (`upload`, `download`, `hover`, `choose`, `drag`, `select`, `console`, `network`, `audit`, `timings`, `styles`, `pdf`, `resize`, `skills`, `skill`, `history`, `ask`) to the connection's list and sends `notifications/tools/list_changed`. A tool that isn't listed yet still answers when called. The 0.3 names `navigate`, `text`, `screenshot`, `locate` and `fill_form` still answer, and are not listed. Tools only Broadway's own tasks use are never listed to an outside client, and Broadway's own tasks keep their own list. The first `tools/list` stays under 6 KB.
+- **Tools** have the command's names. Listed at first: `open`, `go`, `tabs`, `close`, `snapshot`, `read`, `shot`, `find`, `click`, `type`, `fill`, `press`, `scroll`, `wait`, `dialog`, `batch`, `run`, `handoff`, and `more_tools`. `more_tools` with a few words adds up to six of the rest (`upload`, `download`, `hover`, `choose`, `drag`, `select`, `console`, `network`, `audit`, `timings`, `styles`, `pdf`, `resize`, `skills`, `skill`, `history`, `ask`) to the connection's list and sends `notifications/tools/list_changed`. A tool that isn't listed yet still answers when called. The 0.3 names `navigate`, `text`, `screenshot`, `locate` and `fill_form` still answer, and are not listed. The first `tools/list` stays under 6 KB.
 - **Spaces, folders, bookmarks, live folders and settings.** Every verb of these five nouns is an MCP tool named `noun_verb`, such as `spaces_list`, `folders_new`, `bookmarks_add`, `live_update` or `settings_get`, added through `more_tools` like the rest and never in the first list. `more_tools` ranks a tool whose name holds the words first, so `bookmarks add` gives `bookmarks_add`. Each takes the command's own arguments, as a schema made from the verb's usage line in `Nouns.swift`, and goes down the same path as `broadway NOUN VERB`: the same class from `PersonCommands.table`, the same question with the command line quoted and the agent's name, the same refusals with the same codes and hints. Its answer is the text the command prints, inside a website-content fence, with the command's JSON `data` in `_meta`. `readOnlyHint` is set only for a look, `destructiveHint: false` only for verbs that add or show (`spaces_new`, `spaces_switch`, `folders_new`, `folders_fold`, `folders_unfold`, `bookmarks_add`, `bookmarks_folder`, `bookmarks_open`, `live_add`, `live_update`, `settings_open`), and `openWorldHint: false` for every one but `bookmarks_open`, `live_add`, `live_update` and `live_resume`. With agents off an MCP client has no tools at all, so `settings_list` and `settings_find`, which a shell may run with agents off, are dark over MCP too. The other nouns are not reachable over MCP, because they were not asked for. Broadway's own tasks get none of these.
 - **Annotations.** Each listed tool says what it may do: `readOnlyHint` for the tools that only look, `destructiveHint: false` for `open`, `go`, `scroll`, `hover`, `select`, `resize`, `handoff`, `download` and `ask`, `openWorldHint: false` for the ones that never reach a site. A tool with none claims the worst.
 - **Arguments.** An argument a tool doesn't take is refused with `usage` and the list of those it takes, such as `click has no argument "element". It takes …`, required ones first and `tab` last. `tab` and names starting with `_` always pass.
@@ -328,8 +314,6 @@ The **C** column is how the command is gated. The classes are explained under [W
 | `files list [QUERY]` | R | what was downloaded and what was given to sites |
 | `history list [QUERY] [--limit N]` | T | newest first |
 | `history delete [URL] [--site HOST] [--since TIME]`, `history clear` | E | `--since` takes times like `30m`, `2h` or `7d` |
-| `tasks list`, `tasks show ID` | R | past and running tasks |
-| `tasks delete ID` | E | |
 | `live list`, `live show ID` | R | Live Folders |
 | `live add NAME SOURCE [--space NAME]`, `rename`, `pause`, `resume`, `update [ID]` | A | a source is a feed, a site, a GitHub `owner/repository`, or one of `github:reviews`, `github:mine`, `github:issues`, `github:notifications`, `linear:assigned`, `linear:mentions`, `linear:inbox`, `linear:cycle/TEAM` |
 | `live statuses ID STATUS...` | A | a Linear assigned, created or cycle folder shows only the named statuses: `triage`, `backlog`, `todo`, `progress`. Backlog is out until named |
@@ -387,7 +371,6 @@ Some things only the person can do, in Broadway. `extensions private`, `shields 
 | `replies stop ID` | A | |
 | `now list` | R | the rows under Now |
 | `now done ID` | A | |
-| `plans list`, `plans usage`, `plans models` | R | the connected AI plans, how much is used and their models |
 | `agents status` | R | the switch, the mode, the site rules and this agent's session |
 | `agents connect [--name TEXT]` | – | start this agent's session |
 | `agents list` | – | connected and finished sessions |
@@ -395,7 +378,6 @@ Some things only the person can do, in Broadway. `extensions private`, `shields 
 | `agents idle [--summary TEXT] [--hook AGENT]` | – | say this agent's turn is over: its card reads finished until its next command. `--hook claude` or `--hook codex` reads a Stop or SessionEnd hook event on stdin, never starts Broadway, prints nothing and exits 0 |
 | `agents disconnect [ID] [--summary TEXT] [--failed]` | –, A | end this session, or another agent's (A) |
 | `approvals list` | R | what waits for the person. Nothing here can answer one |
-| `helpers list [SESSION]` | R | helpers a task started |
 
 ## Who may do what
 
@@ -417,7 +399,7 @@ A site marked Never Here refuses every command on it. A site marked Always Here 
 
 **Never from a shell.** Approvals are never answered and site rules never set from a command, because that would be an agent approving itself. `approvals list` only reads them.
 
-**`fill`.** Signing in and filling details or a card is something only Broadway's own tasks do as tools. `broadway fill login|details|card` asks the person every time, in every mode, Bypass included. Broadway fills the page itself, no reply says what was filled, and a card still needs Touch ID. It refuses if the page moved between the question and the yes.
+**`fill`.** No agent signs in or fills details or a card as a tool. `broadway fill login|details|card` asks the person every time, in every mode, Bypass included. Broadway fills the page itself, no reply says what was filled, and a card still needs Touch ID. It refuses if the page moved between the question and the yes.
 
 ### Settings the command line can't change
 
@@ -460,7 +442,7 @@ A row with no control of its own (a button, a list, a note) reads as such and re
 ## How it is built
 
 - `Sources/BroadwayCLI` is a library, so it can be tested, and `Sources/broadway/main.swift` only calls it. It uses Foundation only.
-- Browser commands are generated from the tools in `BrowserToolbox`, each a `ToolSpec`. The app serves the catalog over the socket, and the app binary prints it with `--broadway-catalog` when Broadway isn't running. `AgentCatalog` gives tools their short names (`navigate` is `go`, `text` is `read`, `screenshot` is `shot`). A tool with no entry becomes a command with its underscores as hyphens. Tools only Broadway's own tasks use are hidden.
+- Browser commands are generated from the tools in `BrowserToolbox`, each a `ToolSpec`. The app serves the catalog over the socket, and the app binary prints it with `--broadway-catalog` when Broadway isn't running. `AgentCatalog` gives tools their short names (`navigate` is `go`, `text` is `read`, `screenshot` is `shot`). A tool with no entry becomes a command with its underscores as hyphens.
 - `broadway click @e3` is one `op: call` on the socket, which runs the same `BrowserToolbox` code as MCP, with the same secret filter, switch and refusals.
 - Commands that aren't tools are `Builtin` entries in `Sources/BroadwayCLI`. A builtin's name wins over a generated one.
 - Noun-verb commands are one `Verb` line each in `Sources/BroadwayCLI/Nouns.swift`. The app links `BroadwayCLI` and reads those lines through `NounSchema`, so an MCP tool's arguments and the command's come from the same line. `PersonTools.swift` makes the MCP tools, and `PersonCommands.perform` is the one path both the socket's `op: do` and MCP take. The line is the usage string, and it gives parsing, help and completion without Broadway running. The app's side is `PersonCommands.table` in `Sources/Search/Person*.swift`: each entry is a noun, a verb, a class and a handler, so a handler can't forget its gate and the class is the app's to say. `broadway __nouns` and `op: do-list` print each side, and `Tests/broadway_cli.py` fails if they differ.

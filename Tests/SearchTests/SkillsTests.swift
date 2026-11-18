@@ -114,10 +114,10 @@ final class SkillsTests {
     }
 
     @Test func theToolsListAndRead() throws {
-        let listed = try #require(KnowledgeTools.call("skills", ["url": "https://github.com/a"], task: nil))
-        let read = try #require(KnowledgeTools.call("skill", ["name": "GitHub"], task: nil))
-        let byPage = try #require(KnowledgeTools.call("skill", ["url": "https://gist.github.com/a"], task: nil))
-        let missing = try #require(KnowledgeTools.call("skill", ["name": "Nothing Here"], task: nil))
+        let listed = try #require(KnowledgeTools.call("skills", ["url": "https://github.com/a"]))
+        let read = try #require(KnowledgeTools.call("skill", ["name": "GitHub"]))
+        let byPage = try #require(KnowledgeTools.call("skill", ["url": "https://gist.github.com/a"]))
+        let missing = try #require(KnowledgeTools.call("skill", ["name": "Nothing Here"]))
 
         #expect(listed.text?.contains("GitHub") == true)
         #expect(!(listed.text?.contains("Slack") == true))

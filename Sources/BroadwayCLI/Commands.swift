@@ -92,7 +92,7 @@ struct Builtin {
 }
 
 enum Builtins {
-    static let all: [Builtin] = batchCommands + taskCommands + appCommands + setupCommands + everydayCommands + [
+    static let all: [Builtin] = batchCommands + appCommands + setupCommands + everydayCommands + [
         Builtin(name: "help", usage: "broadway help [command]", summary: "How to use broadway, or read about one command", group: "Help",
                 examples: ["broadway help", "broadway help click", "broadway help bookmarks add"]) { context, words in
             Help.show(words, context: context)
@@ -148,7 +148,7 @@ public enum BroadwayCommand {
         }
     }
 
-    static let streams: Set<String> = ["watch", "serve", "mcp", "task", "session", "__complete"]
+    static let streams: Set<String> = ["watch", "serve", "mcp", "__complete"]
 
     static func deadline(_ words: [String], globals: Globals) -> Date? {
         if let seconds = globals.timeout { return Date().addingTimeInterval(seconds) }
@@ -188,6 +188,8 @@ public enum BroadwayCommand {
         if first == "pdf", let command = context.catalog().find(first) {
             return try Browse.run(command, Array(words.dropFirst()), called: first, context: context)
         }
+        if gone.contains(first) { throw noTasks }
+        if notesGone.contains(first) { throw noNotes }
         if let routed = try Nouns.route(words) { return try Person.run(routed.noun, routed.verb, routed.rest, context: context, bare: Person.bare(words)) }
         let spaced = first.contains(where: \.isWhitespace)
         if !spaced, !first.hasPrefix("-") {
@@ -196,17 +198,20 @@ public enum BroadwayCommand {
                 return try Browse.run(command, Array(words.dropFirst()), called: first, context: context)
             }
         }
-        let options = try TaskOptions.parse(words)
-        guard let lead = options.words.first else { throw Failure.usage("A task needs words", hint: "broadway \"what to do\"") }
-        if options.words.count == 1, !lead.contains(where: \.isWhitespace), !options.flagged {
-            throw unknown(lead, context: context)
+        if words.count == 1, !spaced { throw unknown(first, context: context) }
+        if !spaced, !first.hasPrefix("-"), let near = nearest(first, context: context) {
+            throw Failure.usage("Unknown command \(first). Did you mean \(near)?", hint: "Run broadway help for the list")
         }
-        if !spaced, !lead.contains(where: \.isWhitespace), !options.flagged, let near = nearest(lead, context: context) {
-            throw Failure.usage("Unknown command \(lead). Did you mean \(near)?",
-                                hint: "To run it as a task, quote it: broadway \(Plain.quote(options.words.joined(separator: " ")))")
-        }
-        return try Tasks.run(options, context: context)
+        throw noTasks
     }
+
+    static let gone: Set<String> = ["task", "session", "plans", "tasks", "helpers"]
+
+    static let notesGone: Set<String> = ["memory", "notes"]
+
+    static let noNotes = Failure("no_notes", "Broadway no longer keeps notes for agents. Site skills stay, in broadway skills.", retrySafe: false, exit: .mistake)
+
+    static let noTasks = Failure("no_tasks", "Broadway no longer runs tasks. An agent you start yourself uses Broadway with the broadway command.", retrySafe: false, exit: .mistake)
 
     private static func nearest(_ word: String, context: Context) -> String? {
         Near.best(word, in: Builtins.names + Nouns.names + context.catalog().names)
@@ -216,6 +221,6 @@ public enum BroadwayCommand {
         if let near = nearest(word, context: context) {
             return Failure.usage("Unknown command \(word). Did you mean \(near)?", hint: "Run broadway help for the list")
         }
-        return Failure.usage("Unknown command \(word)", hint: "Run broadway help for the list. For a one-word task: broadway task \(word)")
+        return Failure.usage("Unknown command \(word)", hint: "Run broadway help for the list")
     }
 }

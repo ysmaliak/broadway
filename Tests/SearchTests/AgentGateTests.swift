@@ -197,17 +197,6 @@ final class AgentGateTests {
         }
     }
 
-    @Test func agentsOnlyGetToTheMacThroughTheirOwnTools() {
-        let claude = ClaudeProvider.arguments(for: ProviderRequest(system: "", prompt: "", tools: .mcp(MCPLaunch(name: "broadway", command: "/x", arguments: []))))
-        let codex = CodexProvider.arguments(for: ProviderRequest(system: "", prompt: "", tools: .mcp(MCPLaunch(name: "broadway", command: "/x", arguments: []))))
-
-        #expect(claude[claude.firstIndex(of: "--tools")! + 1] == "")
-        #expect(claude.contains("--strict-mcp-config"))
-        #expect(claude[claude.firstIndex(of: "--allowedTools")! + 1] == "mcp__broadway")
-        #expect(codex[codex.firstIndex(of: "--sandbox")! + 1] == "read-only")
-        #expect(codex.contains("shell_tool"))
-    }
-
     @Test func autoStopsAtASendButtonUntilTheAnswerIsYes() async throws {
         let (tab, id) = try await page(button)
         let ref = try await ref(id, "Send message")
@@ -507,29 +496,7 @@ final class AgentGateTests {
         #expect(said == .dropped)
     }
 
-    @Test func theMacAsksEveryTimeWithItsReasonEvenInBypass() async throws {
-        browser.prefs.agentMode = .bypass
-        let file = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("broadway-\(UUID().uuidString).txt")
-        try Data("notes".utf8).write(to: file)
-        defer { try? FileManager.default.removeItem(at: file) }
-
-        let call = Task { await box.call("mac_read", ["path": file.path, "reason": "To read your notes"], task: UUID()) }
-        let asked = await question()
-        AgentDesk.shared.take(try #require(asked).id, .yes)
-        let done = await call.value
-
-        #expect(asked?.kind == .approval(.mac))
-        #expect(asked?.reason == "To read your notes")
-        #expect(done.text?.contains("notes") == true)
-    }
-
-    @Test func theMacNeedsAReasonAndKeepsBroadwaysOwnFolderShut() async {
-        let bare = await box.call("mac_read", ["path": "/etc/hosts", "reason": " "], task: task)
-        let own = await box.call("mac_read", ["path": Store.file("x").path, "reason": "why"], task: task)
-
-        #expect(bare.failed)
-        #expect(own.failed)
-        #expect(AgentDesk.shared.front == nil)
+    @Test func theMacKeepsBroadwaysOwnFolderShut() {
         #expect(AgentMac.closed("/Users/a/.ssh/id_rsa", home: "/Users/a", own: "/o/"))
         #expect(!AgentMac.closed("/Users/a/notes.txt", home: "/Users/a", own: "/o/"))
     }

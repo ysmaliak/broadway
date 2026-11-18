@@ -9,10 +9,6 @@ enum PersonKnowledge {
         return found
     }
 
-    private static func looked() async {
-        if !Plans.shared.looked { await Plans.shared.refresh() }
-    }
-
     static let verbs: [PersonVerb] = [
         PersonVerb("skills", "list", .look) { call in
             var arguments: [String: Any] = [:]
@@ -65,26 +61,6 @@ enum PersonKnowledge {
             NowMemory.shared.done(id)
             return ["id": id, "message": "Done"]
         },
-        PersonVerb("plans", "list", .look) { _ in
-            await looked()
-            return ["plans": Plan.cloud.map { plan in
-                let status = Plans.shared.statuses[plan]
-                return ["plan": plan.name, "state": status?.connected == true ? "connected" : status?.installed == true ? "not signed in" : "not installed", "account": status?.account ?? ""]
-            }]
-        },
-        PersonVerb("plans", "usage", .look) { _ in
-            await looked()
-            return ["usage": Plan.cloud.compactMap { plan -> [String: Any]? in
-                guard let limit = Plans.shared.limits[plan] else { return nil }
-                return ["plan": plan.name, "window": limit.window, "used": limit.used.map { "\(Int($0 * 100))%" } ?? "", "resets": PersonCommands.stamp(limit.resets), "out": limit.out]
-            }]
-        },
-        PersonVerb("plans", "models", .look) { _ in
-            await looked()
-            return ["models": Plan.cloud.flatMap { plan in
-                Plans.shared.models(plan).map { ["plan": plan.name, "id": $0.id, "name": $0.name, "efforts": $0.efforts.map(\.name).joined(separator: ", ")] }
-            }]
-        },
         PersonVerb("agents", "status", .look) { call in
             let prefs = call.browser.prefs
             var status: [String: Any] = ["switch": prefs.agentsAllowed, "mode": prefs.agentMode.rawValue, "sites": AgentSites.shared.rules.keys.sorted().map { ["site": $0, "rule": AgentSites.shared.rules[$0]?.rawValue ?? ""] }]
@@ -93,16 +69,8 @@ enum PersonKnowledge {
         },
         PersonVerb("approvals", "list", .look) { call in
             ["website": true, "approvals": AgentDesk.shared.pending.map {
-                ["title": $0.title, "site": $0.site ?? "", "task": $0.task.map { call.browser.taskName($0) } ?? "", "quote": $0.quote]
+                ["title": $0.title, "site": $0.site ?? "", "task": $0.task == nil ? "" : "Task", "quote": $0.quote]
             }]
-        },
-        PersonVerb("helpers", "list", .look) { call in
-            let wanted = call.string("session")?.lowercased()
-            let rows = AgentTasks.shared.helpers.flatMap { parent, helpers -> [[String: Any]] in
-                guard wanted == nil || parent.uuidString.lowercased().hasPrefix(wanted ?? "") else { return [] }
-                return helpers.map { ["session": PersonCommands.short(parent), "id": PersonCommands.short($0.id), "state": $0.state.rawValue, "answer": $0.answer] }
-            }
-            return ["website": true, "helpers": rows]
         },
     ]
 }

@@ -91,7 +91,7 @@ final class AgentFaceSign: NSView {
     private func refresh() {
         guard let tab else { return }
         let mood = tab.agentMood ?? .reading
-        face.seed = tab.agentTask.map { AgentLink(id: $0, name: "", key: .task($0), connected: .distantPast).seed } ?? 0
+        face.seed = tab.agentTask.map { AgentLink(id: $0, name: "", key: .connection($0), connected: .distantPast).seed } ?? 0
         face.mood = tab.driving ? .driving : AgentCharacter.Mood(mood)
         face.colour = mood == .waving ? Palette.NS.unsafe : colour
         face.ink = ink

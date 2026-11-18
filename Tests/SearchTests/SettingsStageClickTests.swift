@@ -10,9 +10,7 @@ struct SettingsStageClickTests {
     private func world() -> Browser {
         _ = NSApplication.shared
         let prefs = Shared.prefs
-        keepSetting(prefs, \.ai, "ai")
         keepSetting(prefs, \.usesSpaces, "spaces")
-        prefs.ai = true
         prefs.usesSpaces = true
         let browser = Browser(record: WindowRecord())
         browser.leaveFiles()

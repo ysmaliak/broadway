@@ -117,15 +117,12 @@ final class AgentFinishTests {
         #expect(links.inFlight(link.id) == 0)
     }
 
-    @Test func busyTabsAndTasksAreNeverQuiet() {
+    @Test func busyTabsAreNeverQuiet() {
         let link = links.join(.named("session:codex:eight"), name: "Codex", at: start)
-        let task = links.join(.task(UUID()), name: "Find a flight", at: start)
 
         links.sweep(at: start.addingTimeInterval(links.quietLimit + 1), busy: { $0 == link.id })
 
         #expect(links.link(link.id)?.rest == nil)
-        #expect(links.link(task.id)?.rest == nil)
-        #expect(!links.finish(task.id))
     }
 
     @Test func theTwentyMinuteEndStillComes() {

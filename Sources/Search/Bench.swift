@@ -2042,7 +2042,7 @@ final class Bench {
                                                uniquingKeysWith: { first, _ in first })
                 walk(menu, path: item.title)
             }
-            answer(["menus": menus, "keys": keys, "enabled": shown, "ai": browser.prefs.ai,
+            answer(["menus": menus, "keys": keys, "enabled": shown,
                     "settingsPages": SettingsPage.allCases.map(\.rawValue),
                     "settingsPage": browser.settingsPage.rawValue])
 
@@ -2364,47 +2364,8 @@ final class Bench {
             // ever to the loopback address.
             guard Store.testing else { answer(["error": "ai only works on a --test run"]); return }
             switch request["action"] as? String {
-            case "fake":
-                let plan = (request["plan"] as? String).flatMap(Plan.init(rawValue:)) ?? .claude
-                if request["hang"] as? Bool == true {
-                    Plans.shared.standIn(FakeProvider(plan: plan, script: [.emit(.started(model: nil)), .emit(.text("Working ")),
-                                                                           .emit(.toolStarted(id: "1", name: "snapshot", summary: "Reading")),
-                                                                           .emit(.toolFinished(id: "1", failed: false)), .hang]), for: plan)
-                } else {
-                    Plans.shared.standIn(FakeProvider(plan: plan, echoes: true), for: plan)
-                }
-                Plans.shared.standIn(FakeProvider(plan: plan.other, echoes: true), for: plan.other)
-                Task { @MainActor in
-                    await Plans.shared.refresh()
-                    answer(["plan": plan.rawValue, "choice": Plans.shared.choice(.tasks, browser.prefs)?.label ?? ""])
-                }
-            case "task-ask":
-                guard let id = AgentSessions.shared.live.keys.first else { answer(["error": "no task is running"]); return }
-                let asked = AgentSessions.Waiting(question: request["text"] as? String ?? "", inBroadway: request["person"] as? Bool ?? false)
-                answer(["said": AgentSessions.shared.raise(id, asked).text ?? ""])
-            case "task-clear":
-                guard let id = AgentSessions.shared.live.keys.first else { answer(["error": "no task is running"]); return }
-                AgentSessions.shared.clear(id)
-                answer(["ok": true])
             case "state":
                 answer(browser.aiState())
-            case "select":
-                guard let tab = find(request, in: browser) else { answer(missing(request)); return }
-                browser.select(tab)
-                let js = request["js"] as? String ?? ""
-                tab.web.evaluateJavaScript(js) { _, _ in
-                    MainActor.assumeIsolated {
-                        browser.moreCommands()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { answer(browser.aiState()) }
-                    }
-                }
-            case "take":
-                browser.ai.commands?.index = request["index"] as? Int ?? 0
-                if let commands = browser.ai.commands { commands.take(browser) }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { answer(browser.aiState()) }
-            case "primary":
-                if let result = browser.ai.result { browser.primary(result) }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { answer(browser.aiState()) }
             case "picture":
                 guard let path = request["path"] as? String else { answer(["error": "ai picture PATH"]); return }
                 var made: [String] = []
@@ -2439,7 +2400,7 @@ final class Bench {
                 }
                 answer(["strays": AIPage.strays(in: text, from: read)])
             default:
-                answer(["error": "ai fake [PLAN] | read ID | check TEXT"])
+                answer(["error": "ai state | picture PATH | read ID | check TEXT"])
             }
 
         case "notifications":
@@ -4839,8 +4800,6 @@ final class Bench {
         case "pageclick":
             BenchPageClick.run(request, browser: browser, answer)
 
-        case "plans":
-            PlansBench.run(request, browser: browser, answer)
         case "hints":
             BenchHints.run(request, browser: browser, answer)
 

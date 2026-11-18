@@ -295,15 +295,14 @@ def on(base):
     reach(client)
     client.close()
 
-    bench("ai", "fake", "claude")
     task = broadway("say hello")
-    check("a task streams its answer", task.returncode == 0 and "Fake answer: say hello" in task.stdout, task.stderr)
+    check("a sentence says Broadway no longer runs tasks", task.returncode == 2 and "Broadway no longer runs tasks" in task.stderr, task.stderr)
 
 
 def off(base):
     check("status says off", "Agents: off" in broadway("status").stdout)
     task = broadway("do a thing")
-    check("a task is refused", task.returncode == 1 and "Agents are off" in task.stderr, task.stderr)
+    check("a sentence says Broadway no longer runs tasks", task.returncode == 2 and "Broadway no longer runs tasks" in task.stderr, task.stderr)
     client = Client()
     check("no tools", client.rpc("tools/list")["result"]["tools"] == [])
     check("a call is refused", client.call("tabs")[0]["isError"])

@@ -545,18 +545,15 @@ extension SpaceStagePreviewView {
 final class AIOverlayView: KitFlippedView {
     let browser: Browser
     private let pointer = AgentPointerView()
-    private let selection: SelectionOverlayView
     private var card: AgentCardView?
     private(set) var cardFrame: CGRect? { didSet { if cardFrame != oldValue { onCard?() } } }
     var onCard: (() -> Void)?
 
     init(browser: Browser) {
         self.browser = browser
-        selection = SelectionOverlayView(browser: browser)
         super.init(frame: .zero)
         pointer.setAccessibilityElement(false)
         addSubview(pointer)
-        addSubview(selection)
     }
 
     @available(*, unavailable)
@@ -574,8 +571,6 @@ final class AIOverlayView: KitFlippedView {
         pointer.frame = bounds
         pointer.tab = tab?.id
         pointer.driving = tab?.driving ?? false
-        selection.frame = bounds
-        selection.sync()
         if AgentDesk.shared.front != nil {
             let view = card ?? {
                 let made = AgentCardView(browser: browser, desk: .shared)

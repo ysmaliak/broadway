@@ -240,7 +240,7 @@ enum PersonCommands {
             throw PersonRefusal("never_here", "The person never lets agents act on \(site ?? "this site"). Leave it.")
         case .needsTask:
             guard let link = call.link else {
-                throw PersonRefusal("needs_task", "This needs the person's yes, and only a task can ask for it. Nothing was done.")
+                throw PersonRefusal("needs_task", "This needs the person's yes, and only a connected agent can ask for it. Nothing was done.")
             }
             if AgentDesk.shared.isGranted(.tab, task: link.id, site: site) { return }
             try await PersonAsk.yes(.tab, call: call, site: site, request: request, channel: channel)
@@ -276,7 +276,7 @@ enum PersonGate: Equatable {
 @MainActor
 enum PersonAsk {
     static func reachable(wait: Double, request: [String: Any]) -> Bool {
-        wait > 0 && request["person"] as? String != "none" && !AgentSessions.shared.nobodyHome && (Store.testing || !NSApp.isHidden)
+        wait > 0 && request["person"] as? String != "none" && !AgentSocket.shared.nobodyHome && (Store.testing || !NSApp.isHidden)
     }
 
     static let generic = "Run this broadway command?"
@@ -318,7 +318,6 @@ enum PersonAsk {
         "extensions remove": "Remove an extension?",
         "permissions reset": "Reset a site's permissions?",
         "skills delete": "Delete a skill?",
-        "tasks delete": "Delete a task?",
         "live delete": "Delete a Live Folder?",
         "folders delete": "Delete a folder?",
         "folders close": "Close a folder's tabs?",

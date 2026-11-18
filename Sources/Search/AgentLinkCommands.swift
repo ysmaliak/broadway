@@ -72,8 +72,8 @@ extension AgentLinks {
     }
 
     static func open(_ link: AgentLink) {
-        guard !link.task, link.live, TaskLedger.shared.entry(link.id) == nil else { return }
-        TaskLedger.shared.open(link.id, origin: .outside, title: link.name)
+        guard link.live, TaskLedger.shared.entry(link.id) == nil else { return }
+        TaskLedger.shared.open(link.id, title: link.name)
     }
 
     static func wire() {
@@ -81,7 +81,7 @@ extension AgentLinks {
         if links.rejoining == nil { links.rejoining = AgentWorkTabs.takeBack }
         guard links.ending == nil else { return }
         links.ending = { link in
-            if !link.task { TaskLedger.shared.close(link.id) }
+            TaskLedger.shared.close(link.id)
             AgentBoard.finish(link.id, mood: link.ended?.failed == true ? .failed : .done)
             for found in AgentBoard.allTabs(of: link.id) { AgentPointers.shared.clear(found.tab.id) }
         }
@@ -102,7 +102,7 @@ extension AgentLinks {
     static func sweepAll(at now: Date = Date()) {
         let links = AgentLinks.shared
         links.sweep(at: now) { id in
-            AgentTasks.shared.running[id] != nil || AgentBoard.allTabs(of: id).contains { $0.tab.agentActing != nil }
+            AgentBoard.allTabs(of: id).contains { $0.tab.agentActing != nil }
         }
         CodexDesktop.shared.settle(at: now)
         links.forgetEnded { id in
@@ -127,7 +127,6 @@ extension AgentLinks {
                                   "connected": PersonCommands.stamp(link.connected)]
         if let summary = link.ended?.summary { row["summary"] = summary }
         if let thread = link.codex { row["codex"] = thread.id }
-        if link.task { row["task"] = true }
         return row
     }
 }
@@ -153,9 +152,6 @@ enum PersonAgents {
             guard let link = call.link else {
                 throw PersonRefusal("no_agent", "This agent has no session in Broadway")
             }
-            guard !link.task else {
-                throw PersonRefusal("refused", "That's a task Broadway runs. It ends by itself.")
-            }
             let links = AgentLinks.shared
             links.finish(link.id, summary: call.string("summary"))
             return ["agent": links.link(link.id).map(links.row) ?? [:], "message": "Your card reads finished until your next command"]
@@ -176,9 +172,6 @@ enum PersonAgents {
             target = link
         } else {
             target = try PersonCommands.pick(links.live, id: \.id, named: call.need("id"), what: "agent session")
-        }
-        guard !target.task else {
-            throw PersonRefusal("refused", "That's a task Broadway runs. Stop it with broadway session stop.")
         }
         if call.flag("close"), call.flag("keep") { throw PersonRefusal.usage("--close and --keep pull opposite ways, so pick one") }
         let summary = call.string("summary")

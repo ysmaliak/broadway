@@ -177,7 +177,7 @@ struct AgentSession: Identifiable, Equatable {
         }
         let loose = pending.first { question in question.task == link.id && !tabs.contains { $0.id == question.tab } }
         let extra = loose.map { [AgentLinkState.TabFacts(question: $0.title, asking: true)] } ?? []
-        return AgentLinkState.of(facts + extra, ended: link.ended, rest: link.task ? nil : link.rest, last: link.last)
+        return AgentLinkState.of(facts + extra, ended: link.ended, rest: link.rest, last: link.last)
     }
 
     func face(_ state: AgentLinkState, now: Date = Date()) -> AgentCharacter.Mood {
@@ -257,11 +257,7 @@ extension Browser {
             menu.addItem(PlusMenu.item("Hide") { CodexDesktop.shared.hide(link) })
         } else if link.live {
             if !menu.items.isEmpty { menu.addItem(.separator()) }
-            if link.task {
-                menu.addItem(PlusMenu.item("Stop Task") { AgentTasks.shared.stop(link.id) })
-            } else {
-                menu.addItem(PlusMenu.item("Disconnect") { AgentLinks.shared.end(link.id, .done(nil)) })
-            }
+            menu.addItem(PlusMenu.item("Disconnect") { AgentLinks.shared.end(link.id, .done(nil)) })
         }
         return menu.items.isEmpty ? nil : menu
     }

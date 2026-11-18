@@ -40,10 +40,6 @@ enum Completions {
             if first == "help" {
                 found = typed.count == 2 ? (Nouns.noun(typed[1]).map { noun in noun.shown.map { ($0.name, $0.summary) } } ?? []) : commands(catalog)
             }
-            if first == "session", typed.count == 1 {
-                found = [("list", "tasks now and lately"), ("resume", "follow a task again"), ("stop", "stop a task"),
-                         ("steer", "change what a task is doing"), ("queue", "add a step for later")]
-            }
             if let command = catalog.find(first), Builtins.find(first) == nil {
                 found = command.listed.map { ("--\($0.name)", $0.description) }
                 if CommandLineInput.takesTarget(command) {

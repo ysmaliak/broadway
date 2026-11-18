@@ -170,19 +170,6 @@ final class AgentLinksTests {
         #expect(AgentLinkState.phrase("Reading", host: nil) == "Reading")
     }
 
-    @Test func aTaskIsASessionUnderItsOwnIdThatNeverIdlesOut() {
-        let task = UUID()
-        let link = links.join(.task(task), name: "Find a flight", at: start)
-
-        links.step(link.id, "Searching flights")
-        let gone = links.sweep(at: start.addingTimeInterval(links.idleLimit * 3))
-        let state = AgentLinkState.of([AgentLinkState.TabFacts()], ended: nil, step: links.lastStep(link.id))
-
-        #expect(link.id == task)
-        #expect(gone.isEmpty)
-        #expect(state == .working("Searching flights"))
-    }
-
     @Test func eachSessionHasASteadyAccentAndSeed() {
         let link = links.join(.named("x"), name: "X", at: start)
 

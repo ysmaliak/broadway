@@ -45,9 +45,6 @@ extension BrowserToolbox {
         let tab = found.tab
         guard tab.page == nil else { return .failure("Broadway internal pages are person-only", code: .personPage) }
         guard let task else { return .failure("Only an agent session can hand a tab to the person", code: .needsTask) }
-        if TaskLedger.shared.entry(task)?.origin.unattended == true {
-            return .failure("This task runs without the person, so nobody can take the tab", code: .refused)
-        }
         let site = AgentSites.site(of: tab.pageAddress)
         if let refused = await gate(.tab, tab: tab, site: site, task: task) { return refused }
         let optional = arguments["optional"] as? Bool ?? false

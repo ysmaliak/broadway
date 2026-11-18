@@ -57,7 +57,7 @@ enum AgentBatch {
             guard allowed.contains(asked) || names[asked] != nil else {
                 return refuse("\(asked.isEmpty ? "a step without a tool" : asked) can't be a batch step", n)
             }
-            guard let name = tool(asked, in: tools), allowed.contains(name), AgentCatalog.shapes[name]?.hidden != true else {
+            guard let name = tool(asked, in: tools), allowed.contains(name) else {
                 return refuse("Broadway has no \(asked) tool", n)
             }
             if let given = object["arguments"], !(given is [String: Any]) { return refuse("arguments is an object", n) }

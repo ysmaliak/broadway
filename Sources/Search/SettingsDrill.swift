@@ -18,7 +18,6 @@ enum SettingsMetrics {
     static var headingInset: CGFloat = 10
     static var footerGap: CGFloat = 10
     static var footerAfter: CGFloat = 30
-    static var planGap: CGFloat = 23
     static var controlGap: CGFloat = 12
     static func tone(light: UInt32, dark: UInt32) -> NSColor {
         func rgb(_ hex: UInt32) -> NSColor {

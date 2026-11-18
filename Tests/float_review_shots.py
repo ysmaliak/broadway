@@ -77,9 +77,6 @@ SURFACES = [
     ("form-fill-card", "card", {}),
     ("form-fill-done", "done", {}),
     ("form-fill-offer", "offer", {}),
-    ("form-drafts-working", "working", {}),
-    ("form-drafts-card", "card", {}),
-    ("form-drafts-warned", "warned", {}),
     ("meeting-alert", "one", {}),
     ("meeting-alert-two", "two", {}),
     ("meeting-alert-faces", "faces", {}),
@@ -91,14 +88,12 @@ SURFACES = [
     ("recent-downloads", "shown", {"stage": "empty"}),
     ("recent-downloads", "running", {"stage": "running"}),
     ("recent-downloads", "failed", {"stage": "failed"}),
-    ("selection-result", "shown", {}),
     ("field-bar", "shown", {}),
     ("field-slab", "shown", {}),
     ("field-rows", "shown", {}),
     ("now-rows", "shown", {}),
     ("field-chips", "shown", {}),
     ("field-menu", "shown", {}),
-    ("command-list", "shown", {}),
     ("account-list", "offer", {"kind": "offer"}),
     ("space-look-chooser", "shown", {}),
     ("space-look-editor", "shown", {}),
@@ -110,8 +105,8 @@ STILL = "--still" in sys.argv
 FAMILY = {
     "float-feedback", "call-bar", "link-bubble", "driving-bar", "agent-card", "capture-question", "screen-question", "password-offer",
     "shield-offer", "find-bar", "find-bar-empty", "find-bar-narrow", "find-count", "form-fill-card", "form-fill-done", "form-fill-offer",
-    "form-drafts-working", "form-drafts-card", "form-drafts-warned", "meeting-alert", "meeting-alert-two", "meeting-alert-faces",
-    "meeting-alert-long", "selection-result",
+    "meeting-alert", "meeting-alert-two", "meeting-alert-faces",
+    "meeting-alert-long",
 }
 
 

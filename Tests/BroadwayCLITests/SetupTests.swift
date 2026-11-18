@@ -108,14 +108,14 @@ final class SetupTests {
     }
 
     @Test func doctorReadsTheAppsStatus() {
-        let status: [String: Any] = ["agents": false, "version": "1.0.8", "plans": ["claude": ["connected": false]]]
+        let status: [String: Any] = ["agents": false, "version": "1.0.8"]
 
         let checks = Setup.checks(paths: paths, binary: binary, environment: [:], status: status, running: true)
 
         let found = Dictionary(uniqueKeysWithValues: checks.map { ($0.name, $0) })
         #expect(found["agents"]?.ok == false)
         #expect(found["agents"]?.required == false)
-        #expect(found["plan"]?.ok == false)
+        #expect(found["plan"] == nil)
     }
 
     @Test func aFolderOnThePathIsFoundWithOrWithoutASlash() {

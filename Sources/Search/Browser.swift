@@ -868,11 +868,6 @@ final class Browser: NSObject {
         forms.browser = self
         return forms
     }()
-    @ObservationIgnored lazy var drafts: FormDrafts = {
-        let drafts = FormDrafts()
-        drafts.browser = self
-        return drafts
-    }()
     /// Set once you have picked, so the list doesn't come straight back for
     /// the box you are still in. Cleared when the caret leaves the boxes.
     @ObservationIgnored private var pickedInto: Tab.ID?
@@ -3879,7 +3874,6 @@ extension Browser {
         looked = nil
         guard tab.id != activeID || arrived else { return }
         tab.agentSeen = true
-        aiTabChanged()
         // An extension's panel opened for one tab goes and comes with it.
         sidePanelFollows(tab)
         // Coming back to the tab whose video is out brings it home first, so

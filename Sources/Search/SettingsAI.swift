@@ -60,8 +60,8 @@ extension SettingsPageView {
                          })
             }
         }
-        let connected = links.live.filter { !$0.task && $0.codex == nil }
-        shape { links.live.filter { !$0.task && $0.codex == nil }.map(\.id) }
+        let connected = links.live.filter { $0.codex == nil }
+        shape { links.live.filter { $0.codex == nil }.map(\.id) }
         if !connected.isEmpty {
             section("Connected") {
                 for link in connected {

@@ -97,7 +97,7 @@ extension BrowserToolbox {
         case .failure(let refused): return refused.outcome
         case .success(let found): asked = found
         }
-        let session = AgentTasks.shared.root(task)
+        let session = task
         if let refused = AgentAskBook.shared.refusal(session) { return refused }
         AgentAskBook.shared.begin(session)
         defer { AgentAskBook.shared.end(session) }
@@ -128,8 +128,8 @@ extension AgentQuestion {
     @MainActor
     var cardWords: AgentCardWords {
         if let asker { return AgentCardWords(title: "\(asker) asks", who: "", body: title) }
-        let link = task.flatMap { AgentLinks.shared.link(AgentTasks.shared.root($0)) }
-        return AgentCardWords(title: title, who: link.map { $0.task ? "" : $0.name } ?? "",
+        let link = task.flatMap { AgentLinks.shared.link($0) }
+        return AgentCardWords(title: title, who: link.map(\.name) ?? "",
                               body: reason.isEmpty ? "" : "The agent says: \(reason)")
     }
 

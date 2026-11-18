@@ -500,7 +500,7 @@ final class AgentWordsTests {
     @Test func aRepeatWhileTheQuestionIsOpenJoinsItInsteadOfAskingAgain() async throws {
         let (tab, id) = try await page("<button onclick='window.clicks=(window.clicks||0)+1'>Pay now</button>")
         let mine = UUID()
-        TaskLedger.shared.open(mine, origin: .outside, title: "An agent")
+        TaskLedger.shared.open(mine, title: "An agent")
         AgentLinks.shared.setPatience(mine, 0.3)
         defer { AgentLinks.shared.setPatience(mine, nil) }
 

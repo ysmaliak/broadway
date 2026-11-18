@@ -2,20 +2,6 @@ import AppKit
 import Testing
 @testable import Search
 
-final class ListedProvider: Provider, @unchecked Sendable {
-    let plan: Plan
-    let listed: [PlanModel]
-
-    init(_ plan: Plan, _ listed: [PlanModel]) {
-        self.plan = plan
-        self.listed = listed
-    }
-
-    func status() async -> PlanStatus { PlanStatus(path: "/fake/\(plan.executable)", connected: true, account: "fake") }
-    func models() -> [PlanModel] { listed }
-    func start(_ request: ProviderRequest) -> ProviderSession { FakeProvider(plan: plan).start(request) }
-}
-
 final class ScriptedGroupEngine: AIGroupDecider, AIGroupNamer, @unchecked Sendable {
     private let lock = NSLock()
     private var decided: [AIGroupAsk] = []
@@ -76,7 +62,6 @@ final class AIGroupsTests {
     }
 
     private func browser(_ pages: [(String, String)]) -> Browser {
-        keepSetting(Shared.prefs, \.ai, "ai")
         keepSetting(AIGroups.shared, \.on, AIGroups.onKey)
         keepSetting(AIGroups.shared, \.emoji, AIGroups.emojiKey)
         _ = NSApplication.shared
@@ -84,7 +69,6 @@ final class AIGroupsTests {
         let browser = Browser(record: WindowRecord())
         browser.leaveFiles()
         browser.prefs.usesTabGroups = true
-        browser.prefs.ai = true
         for (index, page) in pages.enumerated() {
             if index > 0 { browser.newTab() }
             browser.tabs.last?.restore(url: URL(string: page.1)!, title: page.0)
@@ -203,31 +187,6 @@ final class AIGroupsTests {
         #expect(AIGroupTab(id: UUID(), title: "Settings", url: URL(string: "search://settings")) == nil)
     }
 
-    @Test func aPlanEngineReadsItsJSONAnswers() async throws {
-        let flights = tab("Flights to Lisbon", "https://booking.com/flights")
-        let hotels = tab("Hotels in Lisbon", "https://airbnb.com/s/lisbon")
-        let ask = AIGroupAsk(groups: [], loose: [flights], fresh: [hotels])
-        let deciding = FakeProvider(plan: .claude, script: [
-            .emit(.started(model: "haiku")),
-            .emit(.text("Here you go: {\"placements\": [{\"tab\": \"n1\", ")),
-            .emit(.text("\"with\": \"t1\"}]}")),
-            .emit(.finished(ProviderUsage())),
-        ])
-        let naming = FakeProvider(plan: .claude, script: [
-            .emit(.text("{\"name\": \"Lisbon trip\", \"emoji\": \"✈️\", \"keep\": false}")),
-            .emit(.finished(ProviderUsage())),
-        ])
-
-        let picks = try await PlanGroupEngine(provider: deciding, model: "haiku", effort: nil).decide(ask)
-        let name = try await PlanGroupEngine(provider: naming, model: "haiku", effort: nil)
-            .name(AIGroupNameAsk(tabs: [flights, hotels], current: nil, currentEmoji: nil, emoji: true))
-
-        #expect(picks == [hotels.id: .tab(flights.id)])
-        #expect(deciding.requests.first?.model == "haiku")
-        #expect(deciding.requests.first?.prompt.contains("\"Hotels in Lisbon\" airbnb.com/s/lisbon") == true)
-        #expect(name == AIGroupName(name: "Lisbon trip", emoji: "✈️"))
-    }
-
     @Test func thisMacNeverRunsInATest() async {
         let ask = AIGroupAsk(groups: [], loose: [], fresh: [tab("Hacker News", "https://news.ycombinator.com/")])
 
@@ -237,30 +196,6 @@ final class AIGroupsTests {
         } catch {
             #expect((error as? ProviderError) == .refused("A test run never calls a real model"))
         }
-    }
-
-    @Test func theSmallestModelOfEachPlanIsUsed() async {
-        let plans = Plans()
-        plans.standIn(ListedProvider(.claude, ClaudeProvider().models()), for: .claude)
-        let efforts: [Effort] = [.low, .medium, .high]
-        plans.standIn(ListedProvider(.chatGPT, [PlanModel(id: "gpt-6", name: "GPT-6", efforts: efforts, defaultEffort: .medium),
-                                               PlanModel(id: "gpt-6-mini", name: "GPT-6 mini", efforts: efforts, defaultEffort: .medium)]),
-                      for: .chatGPT)
-        await plans.refresh()
-
-        let claude = PlanGroupEngine.smallest(.claude, plans: plans)
-        let codex = PlanGroupEngine.smallest(.chatGPT, plans: plans)
-        plans.standIn(ListedProvider(.chatGPT, [PlanModel(id: "gpt-6-mini", name: "mini"), PlanModel(id: "gpt-6-nano", name: "nano")]),
-                      for: .chatGPT)
-        await plans.refresh()
-        let nano = PlanGroupEngine.smallest(.chatGPT, plans: plans)
-
-        #expect(claude?.model == "haiku")
-        #expect(claude?.effort == nil)
-        #expect(codex?.model == "gpt-6-mini")
-        #expect(codex?.effort == .low)
-        #expect(nano?.model == "gpt-6-nano")
-        #expect(PlanGroupEngine.smallest(.thisMac, plans: plans) == nil)
     }
 
     @Test func aNameIsKeptWhileItStillFitsEveryTab() {

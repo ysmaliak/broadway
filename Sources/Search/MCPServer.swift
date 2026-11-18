@@ -61,7 +61,6 @@ final class MCPServer {
     static let offInstructions = "Agents are off in Broadway. The person can turn them on in Settings › Agents."
 
     static let listedNames = ["navigate": "go", "text": "read", "screenshot": "shot", "locate": "find", "fill_form": "fill"]
-    static let hiddenOutside: Set<String> = ["sign_in", "autofill", "helper_start", "helper_wait", "mac_read", "mac_run"]
 
     static let descriptions: [String: String] = [
         "open": "Open url or urls in new tabs of yours",
@@ -122,11 +121,6 @@ final class MCPServer {
 
     static var version: String { AgentCatalog.version }
 
-    var outside: Bool {
-        guard let task, let origin = TaskLedger.shared.entry(task)?.origin else { return true }
-        return origin == .outside
-    }
-
     static let short: Set<String> = [
         "open", "go", "tabs", "close", "snapshot", "read", "shot", "find", "click", "type", "fill", "press",
         "scroll", "wait", "dialog", "batch", "run", "handoff",
@@ -150,10 +144,10 @@ final class MCPServer {
 
     private var added: Set<String> = []
 
-    var batchHere: Bool { outside && !box.tools.contains { $0.name == AgentBatch.spec.name } }
+    var batchHere: Bool { !box.tools.contains { $0.name == AgentBatch.spec.name } }
     var specs: [ToolSpec] { box.tools + (batchHere ? [AgentBatch.spec] : []) }
 
-    var nounTools: [PersonTools.Tool] { outside && person != nil ? PersonTools.tools : [] }
+    var nounTools: [PersonTools.Tool] { person != nil ? PersonTools.tools : [] }
 
     func nounTool(_ name: String) -> PersonTools.Tool? {
         nounTools.first { $0.name == name }
@@ -166,7 +160,6 @@ final class MCPServer {
     private func browserTools() -> [[String: Any]] {
         let names = Set(box.tools.map(\.name))
         return specs.compactMap { spec -> [String: Any]? in
-            guard !Self.hiddenOutside.contains(spec.name) else { return nil }
             let name = Self.listedNames[spec.name] ?? spec.name
             if name != spec.name, names.contains(name) { return nil }
             var properties: [String: [String: Any]] = [:]
@@ -186,7 +179,6 @@ final class MCPServer {
     }
 
     func listed() -> [[String: Any]] {
-        guard outside else { return box.tools.map(\.listed) }
         let all = everything()
         let shown = all.filter { tool in (tool["name"] as? String).map { Self.short.contains($0) || added.contains($0) } ?? false }
         return shown.count < all.count ? shown + [Self.moreSpec] : shown
@@ -226,7 +218,6 @@ final class MCPServer {
     }
 
     func refusal(_ tool: String, _ name: String, _ arguments: [String: Any]) -> ToolOutcome? {
-        guard outside else { return nil }
         let properties: [String: Any]
         let required: [String]
         if let noun = nounTool(tool) {
@@ -325,15 +316,15 @@ final class MCPServer {
                 return answer(id, MCPServer.result(.failure("Agents are off in Broadway", code: .agentsOff), tool: name))
             }
             var arguments = params["arguments"] as? [String: Any] ?? [:]
-            if name == Self.moreTools, outside { return answer(id, MCPServer.result(more(arguments), tool: name)) }
+            if name == Self.moreTools { return answer(id, MCPServer.result(more(arguments), tool: name)) }
             let noun = nounTool(name)
             guard let tool = noun?.name ?? resolve(name) else { return fail(id, -32602, "Broadway \(Self.version) has no tool named \(name). \(AgentCatalog.olderHint)") }
             if let refused = refusal(tool, name, arguments) { return answer(id, MCPServer.result(refused, tool: tool)) }
             if tool == "batch" { arguments = steps(arguments) }
-            let aim = outside && noun == nil && !(tool == AgentBatch.spec.name && batchHere) ? aim : nil
+            let aim = noun == nil && !(tool == AgentBatch.spec.name && batchHere) ? aim : nil
             let key = "\(id)"
             let token = (params["_meta"] as? [String: Any])?["progressToken"]
-            if outside, let task, AgentLinks.shared.patience(task) != 0 {
+            if let task, AgentLinks.shared.patience(task) != 0 {
                 AgentLinks.shared.setPatience(task, Self.patience(client: client, progress: token != nil, environment: environment))
             }
             ticket += 1
@@ -351,7 +342,7 @@ final class MCPServer {
                     return
                 }
                 self.started.insert(mine)
-                let caller = self.outside ? self.task : nil
+                let caller = self.task
                 AgentLinks.shared.calling(caller)
                 defer {
                     self.started.remove(mine)
@@ -487,7 +478,6 @@ final class MCPServer {
     }
 
     private static func text(_ outcome: ToolOutcome, tool: String, data: [String: Any]) -> String? {
-        if tool.hasPrefix("memory_") { return outcome.text }
         let fenced = outcome.plain != nil
         if let change = AgentChange(object: data), data["settled"] != nil {
             let parts = change.parts()

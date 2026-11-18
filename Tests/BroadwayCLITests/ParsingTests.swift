@@ -136,7 +136,7 @@ struct ParsingTests {
     }
 
     @Test func aNewToolParsesWithNoCodeForIt() throws {
-        let search = Command(["name": "memory-search", "tool": "memory_search", "positional": [parameter("query", required: true)],
+        let search = Command(["name": "trip-search", "tool": "trip_search", "positional": [parameter("query", required: true)],
                               "flags": [parameter("query", required: true), parameter("limit", type: "integer"), parameter("tags", type: "array")]])
 
         let found = try CommandLineInput.parse(search, ["lisbon", "--limit", "3", "--tags", "a, b"])
@@ -144,25 +144,6 @@ struct ParsingTests {
         #expect((found["query"] as? String) == "lisbon")
         #expect((found["limit"] as? Int) == 3)
         #expect((found["tags"] as? [String]) == ["a", "b"])
-    }
-
-    @Test func taskFlags() throws {
-        let found = try TaskOptions.parse(["--cli", "codex", "do", "this", "-m", "gpt", "--effort", "high", "--no-person"])
-
-        #expect(found.words == ["do", "this"])
-        #expect((found.request["cli"] as? String) == "codex")
-        #expect((found.request["model"] as? String) == "gpt")
-        #expect((found.request["effort"] as? String) == "high")
-        #expect((found.request["person"] as? String) == "none")
-    }
-
-    @Test func taskMistakes() {
-        #expect(throws: (any Error).self) { try TaskOptions.parse(["x", "--cli", "gemini"]) }
-        #expect(throws: (any Error).self) { try TaskOptions.parse(["x", "--effort", "huge"]) }
-        #expect(throws: (any Error).self) { try TaskOptions.parse(["x", "--wait-person", "soon"]) }
-        #expect(throws: (any Error).self) { try TaskOptions.parse(["x", "--no-person", "--wait-person", "1"]) }
-        let error = #expect(throws: (any Error).self) { try TaskOptions.parse(["x", "--detatch"]) }
-        #expect((error as? Failure)?.hint == "Did you mean --detach?")
     }
 
     @Test func didYouMean() {

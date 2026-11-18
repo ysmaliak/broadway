@@ -313,7 +313,7 @@ final class AgentSecretsTests {
         box.logins = { Self.kept($0) }
         box.loginSecret = { [secret] in Login(host: $0.host, user: $0.user, password: secret, used: nil, clear: true) }
 
-        let said = await box.call("sign_in", ["tab": id], task: task)
+        let said = await box.signIn(tab, account: nil)
         let box2 = try await tab.web.evaluateJavaScript("document.querySelector('#p').value") as? String
         let read = await box.call("snapshot", ["tab": id], task: task).text ?? ""
 
@@ -324,53 +324,21 @@ final class AgentSecretsTests {
         #expect(tab.sealed.contains(secret))
     }
 
-    @Test func signInNeverReachesAPageThatMovedDuringTheQuestion() async throws {
-        let (tab, id) = try await page("<form><input name=email><input id=p type=password></form>", more: ["/other": "<form><input id=p type=password></form>"])
-        browser.prefs.agentMode = .ask
-        box.logins = { Self.kept($0) }
-        var read = false
-        box.loginSecret = { _ in read = true; return nil }
-
-        let call = Task { await box.call("sign_in", ["tab": id], task: task) }
-        var asked: AgentQuestion?
-        for _ in 0..<400 where asked == nil {
-            asked = AgentDesk.shared.front
-            if let front = asked, front.title.hasPrefix("Let the agent use") {
-                AgentDesk.shared.take(front.id, .yes)
-                asked = nil
-            }
-            try? await Task.sleep(for: .milliseconds(5))
-        }
-        let question = try #require(asked)
-        tab.web.load(URLRequest(url: URL(string: "http://127.0.0.1:\(server.port)/other")!))
-        for _ in 0..<300 where tab.pageAddress?.path != "/other" {
-            try? await Task.sleep(for: .milliseconds(5))
-        }
-        AgentDesk.shared.take(question.id, .yes)
-        let said = await call.value
-
-        #expect(said.failed)
-        #expect(!read)
-    }
-
-    @Test func signInRefusesAHostWithoutALoginAndOnNeverHere() async throws {
-        let (tab, id) = try await page("<form><input id=p type=password></form>")
+    @Test func signInRefusesAHostWithoutALogin() async throws {
+        let (tab, _) = try await page("<form><input id=p type=password></form>")
         box.logins = { _ in [] }
-        let none = await box.call("sign_in", ["tab": id], task: task)
-        box.logins = { Self.kept($0) }
-        AgentSites.shared.set(.never, for: AgentSites.site(of: tab.pageAddress) ?? "")
 
-        let never = await box.call("sign_in", ["tab": id], task: task)
+        let none = await box.signIn(tab, account: nil)
 
         #expect(none.failed)
-        #expect(never.failed)
+        #expect(none.code == "nothing_kept")
     }
 
     @Test func aCardNeedsTouchIDInEveryMode() async throws {
         browser.prefs.agentMode = .bypass
-        let (_, id) = try await page("<form><input autocomplete=cc-number name=card><input autocomplete=cc-exp></form>")
+        let (tab, _) = try await page("<form><input autocomplete=cc-number name=card><input autocomplete=cc-exp></form>")
 
-        let said = await box.call("autofill", ["tab": id, "what": "card"], task: task)
+        let said = await box.autofill(tab, what: "card")
 
         #expect(said.failed)
         #expect(!(said.text?.contains("4242") == true))
@@ -404,13 +372,18 @@ final class AgentSecretsTests {
         return String(tab.id.uuidString.prefix(8)).lowercased()
     }
 
+    private func filled(_ id: String, _ what: String) async throws -> ToolOutcome {
+        let tab = try #require(box.find(["tab": id])?.tab)
+        return await box.autofill(tab, what: what)
+    }
+
     @Test func withNothingKeptNothingIsAskedAndTheAnswerSaysSo() async throws {
         let id = shop(FormStub())
         box.book = AutofillBook(keeper: MemoryKeeper())
         box.logins = { _ in [] }
 
-        let card = await box.call("autofill", ["tab": id, "what": "card"], task: task)
-        let details = await box.call("autofill", ["tab": id, "what": "details"], task: task)
+        let card = try await filled(id, "card")
+        let details = try await filled(id, "details")
         var call = PersonCall(noun: "fill", verb: "card", arguments: [:], browser: browser, box: box)
         call.tab = box.find(["tab": id])
         var refused: PersonRefusal?
@@ -428,71 +401,13 @@ final class AgentSecretsTests {
         #expect(PersonCommands.find("fill", "login")?.first == nil)
     }
 
-    private func signInAnswered(_ id: String, account: String?, logins: [Kept], answer: AgentAnswer) async throws -> (question: AgentQuestion, said: ToolOutcome) {
-        box.logins = { _ in logins }
-        box.loginSecret = { _ in nil }
-        let asking = UUID()
-        var arguments: [String: Any] = ["tab": id]
-        if let account { arguments["account"] = account }
-        let call = Task { await box.call("sign_in", arguments, task: asking) }
-        var asked: AgentQuestion?
-        for _ in 0..<400 where asked == nil {
-            asked = AgentDesk.shared.front
-            if let front = asked, front.title.hasPrefix("Let the agent use") {
-                AgentDesk.shared.take(front.id, .yes)
-                asked = nil
-            }
-            try? await Task.sleep(for: .milliseconds(5))
-        }
-        let question = try #require(asked)
-        AgentDesk.shared.take(question.id, answer)
-        return (question, await call.value)
-    }
-
-    @Test func aSignInAsksFirstAndANoReadsTheSameWhetherOrNotOneIsKept() async throws {
-        let (_, id) = try await page("<form><input name=email><input id=p type=password></form>")
-        browser.prefs.agentMode = .ask
-        let one = [Kept(host: "127.0.0.1", user: "me@example.com", used: nil, clear: true)]
-
-        let none = try await signInAnswered(id, account: nil, logins: [], answer: .no)
-        let some = try await signInAnswered(id, account: nil, logins: one, answer: .no)
-        let noAccount = try await signInAnswered(id, account: "other@example.com", logins: [], answer: .no)
-        let otherAccount = try await signInAnswered(id, account: "other@example.com", logins: one, answer: .no)
-
-        #expect(none.question.title == some.question.title)
-        #expect(none.question.quote == some.question.quote)
-        #expect(none.said.code == some.said.code)
-        #expect(none.said.text == some.said.text)
-        #expect(none.said.code == "said_no")
-        #expect(!(some.question.quote.contains("me@example.com")))
-        #expect(noAccount.question.quote == otherAccount.question.quote)
-        #expect(noAccount.said.code == otherAccount.said.code)
-        #expect(noAccount.said.text == otherAccount.said.text)
-    }
-
-    @Test func aYesWithNoSignInKeptSaysNothingWasFilled() async throws {
-        let (_, id) = try await page("<form><input name=email><input id=p type=password></form>")
-        browser.prefs.agentMode = .ask
-
-        let none = try await signInAnswered(id, account: nil, logins: [], answer: .yes)
-        let other = try await signInAnswered(id, account: "other@example.com", logins: [Kept(host: "127.0.0.1", user: "me@example.com", used: nil, clear: true)], answer: .yes)
-
-        for said in [none.said, other.said] {
-            #expect(said.code == "nothing_kept", "\(said.text ?? "")")
-            #expect(said.text?.contains("nothing was filled") == true)
-            #expect(said.hint?.contains("broadway handoff") == true)
-            #expect(said.hint?.contains("may or may not") == false)
-        }
-        #expect(other.said.text?.contains("me@example.com") == false)
-    }
-
     @Test func aRefusedTouchIDFillsNothing() async throws {
         let stub = FormStub()
         let id = shop(stub)
         Ask.testing = false
         defer { Ask.testing = nil }
 
-        let said = await box.call("autofill", ["tab": id, "what": "card"], task: task)
+        let said = try await filled(id, "card")
 
         #expect(said.failed)
         #expect(stub.applied.isEmpty)
@@ -504,7 +419,7 @@ final class AgentSecretsTests {
         Ask.testing = true
         defer { Ask.testing = nil }
 
-        let said = await box.call("autofill", ["tab": id, "what": "card"], task: task)
+        let said = try await filled(id, "card")
 
         #expect(!said.failed, "\(said.text ?? "")")
         #expect(stub.applied.contains { $0.value.contains("4242") })
@@ -518,7 +433,7 @@ final class AgentSecretsTests {
         Ask.testing = false
         defer { Ask.testing = nil }
 
-        let said = await box.call("autofill", ["tab": id, "what": "details"], task: task)
+        let said = try await filled(id, "details")
 
         #expect(!said.failed, "\(said.text ?? "")")
         #expect(stub.applied.map(\.value) == ["Ada Lovelace"])
@@ -536,7 +451,7 @@ final class AgentSecretsTests {
         Ask.testing = false
         defer { Ask.testing = nil }
 
-        let said = await box.call("autofill", ["tab": id, "what": "details"], task: task)
+        let said = try await filled(id, "details")
 
         #expect(!said.failed, "\(said.text ?? "")")
         #expect(!stub.applied.contains { $0.value == "APX-7" })

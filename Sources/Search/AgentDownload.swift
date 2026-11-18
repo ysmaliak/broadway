@@ -146,7 +146,7 @@ enum AgentDownloadWatch {
     }
 
     static func agentName(_ tab: Tab) -> String {
-        tab.agentTask.flatMap { AgentLinks.shared.link(AgentTasks.shared.root($0))?.name } ?? "Agent"
+        tab.agentTask.flatMap { AgentLinks.shared.link($0)?.name } ?? "Agent"
     }
 
     static func expect(_ tab: Tab, person: Bool, seconds: Double) {

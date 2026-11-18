@@ -108,7 +108,7 @@ enum Person {
 }
 
 enum Watch {
-    static let kinds = ["tabs", "spaces", "downloads", "tasks", "approvals"]
+    static let kinds = ["tabs", "spaces", "downloads", "approvals"]
 
     struct Options {
         var only: [String] = kinds
@@ -184,12 +184,12 @@ extension Builtins {
         Builtin(name: "watch", usage: "broadway watch [--only LIST] [--count N] [--seconds S]", summary: "A live stream of what is happening in Broadway", group: "Broadway",
                 details: """
                 One line for each thing that happens, until you stop it. With --json, one envelope a line.
-                --only     any of tabs,spaces,downloads,tasks,approvals
+                --only     any of tabs,spaces,downloads,approvals
                 --count    stop after this many
                 --seconds  stop after this long
                 Private tabs never appear.
                 """,
-                examples: ["broadway watch", "broadway watch --only tabs,tasks", "broadway watch --json | jq -r .data.event"]) { context, words in
+                examples: ["broadway watch", "broadway watch --only tabs,downloads", "broadway watch --json | jq -r .data.event"]) { context, words in
             try Watch.run(words, context: context)
         },
         Builtin(name: "completions", usage: "broadway completions fish|zsh|bash", summary: "Print the completion script for a shell", group: "Setup",

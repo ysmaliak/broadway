@@ -7,7 +7,7 @@ import Testing
 final class FolderEmojiTests {
     private var browser: Browser!
     private var fake: FakeGroupEngine!
-    private var kept: (Bool, Bool, Bool, Bool)!
+    private var kept: (Bool, Bool, Bool)!
 
     init() async throws {
         keepSettings("ai", AIGroups.onKey, AIGroups.emojiKey)
@@ -19,8 +19,7 @@ final class FolderEmojiTests {
         browser.closeAll()
         browser.tabGroups = []
         browser.newTab()
-        kept = (browser.prefs.ai, browser.prefs.usesTabGroups, AIGroups.shared.on, AIGroups.shared.emoji)
-        browser.prefs.ai = true
+        kept = (browser.prefs.usesTabGroups, AIGroups.shared.on, AIGroups.shared.emoji)
         browser.prefs.usesTabGroups = true
         AIGroups.shared.on = false
         AIGroups.shared.emoji = true
@@ -33,10 +32,9 @@ final class FolderEmojiTests {
         await settled()
         FolderEmojis.shared.standIn = nil
         browser.closeAll()
-        browser.prefs.ai = kept.0
-        browser.prefs.usesTabGroups = kept.1
-        AIGroups.shared.on = kept.2
-        AIGroups.shared.emoji = kept.3
+        browser.prefs.usesTabGroups = kept.0
+        AIGroups.shared.on = kept.1
+        AIGroups.shared.emoji = kept.2
         browser = nil
     }
 

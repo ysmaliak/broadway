@@ -5,7 +5,6 @@ enum AgentLinkKey: Hashable {
     case process(pid: Int32, started: Int64)
     case connection(UUID)
     case named(String)
-    case task(UUID)
     case codex(String)
 }
 
@@ -55,11 +54,6 @@ struct AgentLink: Identifiable, Equatable {
 
     var title: String { number > 1 ? "\(name) \(number)" : name }
 
-    var task: Bool {
-        if case .task = key { return true }
-        return false
-    }
-
     var accent: Int { AgentLinks.accent(for: name) }
 
     var seed: UInt64 {
@@ -108,11 +102,9 @@ final class AgentLinks {
             if let named = Self.clean(name), named != found.name { give(found.id, name: named) }
             return link(found.id) ?? found
         }
-        var id = UUID()
-        if case .task(let task) = key { id = task }
+        let id = UUID()
         var made = AgentLink(id: id, name: Self.clean(name) ?? "Agent", key: key, connected: now)
-        links.removeAll { $0.id == id }
-        let before = made.task ? [] : links.filter { $0.key == key && !$0.live }
+        let before = links.filter { $0.key == key && !$0.live }
             .sorted { ($0.endedAt ?? $0.connected) < ($1.endedAt ?? $1.connected) }.map(\.id)
         made.number = number(for: made.name, besides: id)
         heardAt[id] = now
@@ -144,13 +136,13 @@ final class AgentLinks {
     }
 
     func did(_ id: UUID?, _ what: String) {
-        guard let id, let found = link(id), found.live, !found.task, found.last != what else { return }
+        guard let id, let found = link(id), found.live, found.last != what else { return }
         update(id) { $0.last = what }
     }
 
     @discardableResult
     func finish(_ id: UUID, summary: String? = nil) -> Bool {
-        guard let found = link(id), found.live, !found.task else { return false }
+        guard let found = link(id), found.live else { return false }
         let rest = AgentRest.finished(Self.summary(summary))
         if found.rest != rest { update(id) { $0.rest = rest } }
         resting?(id)
@@ -189,14 +181,6 @@ final class AgentLinks {
 
     func lastTab(_ id: UUID) -> String? {
         lastTabs[id]
-    }
-
-    func step(_ id: UUID, _ said: String?) {
-        AgentSteps.shared.said[id] = Self.summary(said)
-    }
-
-    func lastStep(_ id: UUID) -> String? {
-        AgentSteps.shared.said[id]
     }
 
     func announce(_ id: UUID) {
@@ -247,7 +231,6 @@ final class AgentLinks {
         lastTabs[id] = tabs[id]
         tabs[id] = nil
         calls[id] = nil
-        AgentSteps.shared.said[id] = nil
         if let ended = link(id) { ending?(ended) }
         return true
     }
@@ -273,10 +256,10 @@ final class AgentLinks {
             } else if let process = link.process, !alive(process.pid, process.started) {
                 end(link.id, .done(nil), at: now)
                 gone.append(link.id)
-            } else if !link.task, !busy(link.id), quiet >= idleLimit {
+            } else if !busy(link.id), quiet >= idleLimit {
                 end(link.id, .left, at: now)
                 gone.append(link.id)
-            } else if !link.task, link.rest == nil, inFlight(link.id) == 0, !busy(link.id), !asking(link.id), quiet >= quietLimit {
+            } else if link.rest == nil, inFlight(link.id) == 0, !busy(link.id), !asking(link.id), quiet >= quietLimit {
                 update(link.id) { $0.rest = .quiet }
             }
         }
@@ -303,7 +286,6 @@ final class AgentLinks {
         waits = [:]
         passes = [:]
         calls = [:]
-        AgentSteps.shared.said = [:]
     }
 
     private func drop(_ id: UUID) {
@@ -313,7 +295,6 @@ final class AgentLinks {
         passes[id] = nil
         calls[id] = nil
         tabs[id] = nil
-        AgentSteps.shared.said[id] = nil
     }
 
     private func update(_ id: UUID, _ change: (inout AgentLink) -> Void) {
@@ -376,14 +357,6 @@ final class AgentLinks {
         if let hit = known[client.lowercased()] { return hit }
         return displayName(executable: client)
     }
-}
-
-@MainActor
-@Observable
-final class AgentSteps {
-    static let shared = AgentSteps()
-
-    var said: [UUID: String] = [:]
 }
 
 enum AgentPatience {
@@ -516,7 +489,7 @@ enum AgentLinkState: Equatable {
         var asking = false
     }
 
-    static func of(_ tabs: [TabFacts], ended: AgentLinkEnding?, step: String? = nil, rest: AgentRest? = nil, last: String? = nil) -> AgentLinkState {
+    static func of(_ tabs: [TabFacts], ended: AgentLinkEnding?, rest: AgentRest? = nil, last: String? = nil) -> AgentLinkState {
         if let asked = tabs.first(where: { $0.asking || $0.question != nil || $0.mood == .waving }) {
             return .needsYou(asked.question ?? "")
         }
@@ -528,7 +501,6 @@ enum AgentLinkState: Equatable {
         if let busy = tabs.first(where: { $0.acting != nil }), let acting = busy.acting {
             return .working(phrase(acting, host: busy.host))
         }
-        if let step { return .working(step) }
         if rest == .quiet { return .quiet(last) }
         return .idle
     }

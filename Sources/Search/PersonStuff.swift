@@ -58,34 +58,6 @@ enum PersonStuff {
         return Date().addingTimeInterval(-amount * seconds)
     }
 
-    private static func withheld(_ text: String) -> String {
-        text.components(separatedBy: .newlines).map { MemoryFilter.secret(in: $0) == nil ? $0 : "(a line that looks secret is withheld)" }.joined(separator: "\n")
-    }
-
-    private static func chat(_ call: PersonCall, kind: ChatKind? = nil, excluding: ChatKind? = nil) throws -> Chat {
-        ChatStore.shared.load()
-        let chats = ChatStore.shared.chats.filter { (kind == nil || $0.kind == kind) && $0.kind != excluding }
-        return try PersonCommands.pick(chats, id: \.id, named: try call.need("id"), what: "chat")
-    }
-
-    private static func stopped(_ call: PersonCall) throws {
-        let wanted = try call.need("id").lowercased()
-        if AgentSessions.shared.live.keys.contains(where: { $0.uuidString.lowercased().hasPrefix(wanted) }) {
-            throw PersonRefusal("refused", "It's running. Stop it first with broadway session stop.")
-        }
-    }
-
-    private static func words(_ found: Chat) -> [String: Any] {
-        let lines = found.messages.map { message -> [String: Any] in
-            var row: [String: Any] = ["role": message.role.rawValue, "at": PersonCommands.stamp(message.at), "text": withheld(message.text)]
-            if !message.steps.isEmpty { row["steps"] = message.steps.count }
-            if let failed = message.failed { row["failed"] = withheld(failed) }
-            return row
-        }
-        let text = found.messages.map { "\($0.role == .user ? "You" : "Broadway"): \(withheld($0.text))" }.joined(separator: "\n\n")
-        return ["id": short(found.id), "title": found.title, "kind": found.kind.rawValue, "website": true, "messages": lines, "text": text]
-    }
-
     private static func live(_ call: PersonCall) throws -> LiveFolder {
         try PersonCommands.pick(LiveFolders.shared.folders, id: \.id, named: try call.need("id"), what: "Live Folder")
     }
@@ -258,18 +230,6 @@ enum PersonStuff {
             call.browser.clearHistory()
             return ["deleted": before, "message": "History is empty"]
         },
-        PersonVerb("tasks", "list", .look) { _ in
-            ChatStore.shared.load()
-            return ["tasks": AgentSessions.shared.list()]
-        },
-        PersonVerb("tasks", "show", .look) { call in words(try chat(call, kind: .task)) },
-        PersonVerb("tasks", "delete", .erase, first: { try stopped($0)
-            _ = try chat($0, kind: .task)
-        }) { call in
-            let found = try chat(call, kind: .task)
-            ChatStore.shared.delete(found.id)
-            return ["id": short(found.id), "message": "Deleted"]
-        },
         PersonVerb("live", "list", .look) { _ in
             ["folders": LiveFolders.shared.folders.map {
                 ["id": short($0.id), "name": $0.name, "state": $0.status ?? "fine", "items": $0.items.count, "fresh": $0.freshCount, "source": $0.source.address] as [String: Any]
@@ -342,13 +302,13 @@ enum PersonStuff {
         },
         PersonVerb("fill", "login", .person(.signIn), tabbed: true) { call in
             let account = call.string("account")
-            return try await filling(call) { await call.box.signIn($0, account: account, task: nil, asked: true) }
+            return try await filling(call) { await call.box.signIn($0, account: account) }
         },
         PersonVerb("fill", "details", .person(.address), tabbed: true, first: { try await kept($0, "details") }) { call in
-            try await filling(call) { await call.box.autofill($0, what: "details", task: nil, asked: true) }
+            try await filling(call) { await call.box.autofill($0, what: "details") }
         },
         PersonVerb("fill", "card", .person(.address), tabbed: true, first: { try await kept($0, "card") }) { call in
-            try await filling(call) { await call.box.autofill($0, what: "card", task: nil, asked: true) }
+            try await filling(call) { await call.box.autofill($0, what: "card") }
         },
     ]
 }

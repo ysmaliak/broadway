@@ -313,7 +313,7 @@ def main():
         bench({"do": "ui", "settings": True})
         time.sleep(1.2)
         bench({"do": "ui", "settingsPage": "agents"})
-        shown = wait_for(lambda: (lambda d: d if d and "Run tasks" not in d else None)(command_row()), 15)
+        shown = wait_for(lambda: (lambda d: d if d and "Snapshot pages" not in d else None)(command_row()), 15)
         check("Settings › Agents shows the broadway command row", shown is not None and "Broadway's skill" not in shown, shown)
 
         turned = settings(set="ai.agents", value=True).get("agentSetup", {})
@@ -327,7 +327,7 @@ def main():
         check("and no completions are written",
               not (home.folder / ".config").exists() and not (home.folder / ".local/share").exists(), home.everything().keys())
         check("the mark is kept in the store", defaults("agents.setUp") == "1", defaults("agents.setUp"))
-        fresh = wait_for(lambda: (lambda d: d if d != shown and "Run tasks" not in d else None)(command_row()), 15)
+        fresh = wait_for(lambda: (lambda d: d if d != shown and "Snapshot pages" not in d else None)(command_row()), 15)
         print("     row now reads:", fresh, flush=True)
         check("the Settings row shows the new state without reopening the page",
               fresh is not None and fresh.startswith("On your PATH"), command_row())

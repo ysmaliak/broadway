@@ -188,7 +188,6 @@ extension ContentView {
                 return true
             }
             if browser.escapeFileCard() { return true }
-            if browser.aiEscape() { return true }
             if browser.veiling {
                 browser.toggleHiding()
                 return true

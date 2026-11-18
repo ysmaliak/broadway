@@ -373,7 +373,6 @@ extension BrowserToolbox {
         if found["more"] as? Bool == true { stopped = "max" }
         if let stopped { found["stopped"] = stopped }
         let answer = AgentRows.answer(found, max: limit)
-        TaskLedger.shared.saw(tab.pageAddress, addressed: answer.text.map { AIPage.addressesAI($0) } ?? false, task: task)
         return answer
     }
 }

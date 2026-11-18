@@ -160,12 +160,12 @@ struct OutputTests {
     }
 
     @Test func theOverviewListsWhatTheAppServed() {
-        let catalog = Catalog([["name": "memory-search", "summary": "Search the notes"]])
+        let catalog = Catalog([["name": "trip-search", "summary": "Search the trips"]])
 
         let page = Help.overview(catalog: catalog, style: Style(color: false))
 
-        #expect(page.contains("memory-search"))
-        #expect(page.contains("Search the notes"))
+        #expect(page.contains("trip-search"))
+        #expect(page.contains("Search the trips"))
         #expect(page.contains("130 stopped"))
     }
 
@@ -221,11 +221,9 @@ struct OutputTests {
 
         let commands = Completions.candidates([], current: "wa", catalog: catalog).map(\.0)
         let flags = Completions.candidates(["wait"], current: "--s", catalog: catalog).map(\.0)
-        let parts = Completions.candidates(["session"], current: "s", catalog: catalog).map(\.0)
 
         #expect(commands == ["wait", "watch"])
         #expect(flags == ["--selector"])
-        #expect(parts == ["stop", "steer"])
     }
 
     @Test func aWorldOnlyEverWakesItsOwnBundle() {

@@ -48,7 +48,7 @@ final class AgentAskOutsideTests {
 
     private func session(_ name: String = "Claude Code") -> UUID {
         let link = AgentLinks.shared.join(.named(UUID().uuidString), name: name)
-        TaskLedger.shared.open(link.id, origin: .outside, title: name)
+        TaskLedger.shared.open(link.id, title: name)
         AgentLinks.shared.setPatience(link.id, 30)
         made.append(link.id)
         return link.id

@@ -10,8 +10,8 @@ GROUNDS = {"white": "#ffffff", "black": "#000000", "picture": "picture"}
 GLASS = {
     "float-feedback", "call-bar", "link-bubble", "driving-bar", "capture-question", "screen-question", "password-offer",
     "shield-offer", "find-bar", "find-bar-empty", "find-bar-narrow", "form-fill-card", "form-fill-done", "form-fill-offer",
-    "form-drafts-working", "form-drafts-card", "form-drafts-warned", "meeting-alert", "meeting-alert-two",
-    "meeting-alert-faces", "meeting-alert-long", "agent-card", "agent-badge", "recent-downloads", "selection-result", "command-list",
+    "meeting-alert", "meeting-alert-two",
+    "meeting-alert-faces", "meeting-alert-long", "agent-card", "agent-badge", "recent-downloads",
     "site-file", "announcement", "agent-ask-outside", "offer-bar", "link-preview", "account-list",
     "update-card", "stuck-card", "field-bar", "mini-player", "float-controls",
 }

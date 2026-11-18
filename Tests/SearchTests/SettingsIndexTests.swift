@@ -165,34 +165,11 @@ struct SettingsIndexTests {
         #expect(groups.emoji)
     }
 
-    @Test func aPlanNoLongerGroupsTabs() async {
-        let groups = AIGroups.shared
-        let was = (groups.standIn, groups.macAvailable, groups.engine)
-        defer {
-            groups.standIn = was.0
-            groups.macAvailable = was.1
-            groups.engine = was.2
-        }
-        groups.standIn = nil
-        groups.macAvailable = { false }
-        let plans = Plans()
-        plans.standIn(FakeProvider(plan: .claude), for: .claude)
-        await plans.refresh()
-
-        groups.engine = .claude
-
-        #expect(plans.connected(.claude))
-        #expect(groups.deciding == nil)
-        #expect(groups.naming == nil)
-        #expect(groups.decider() == nil)
-    }
-
     @Test func agentsAndGroupingNoLongerWaitForUseAI() {
         let browser = Browser(record: WindowRecord())
         let prefs = browser.prefs
         let groups = AIGroups.shared
         let was = (groups.standIn, groups.macAvailable, prefs.agentsOn, prefs.usesTabGroups)
-        keepSetting(prefs, \.ai, "ai")
         keepSetting(groups, \.on, AIGroups.onKey)
         defer {
             groups.standIn = was.0
@@ -206,8 +183,6 @@ struct SettingsIndexTests {
         groups.on = true
         prefs.agentsOn = true
         prefs.usesTabGroups = true
-
-        prefs.ai = false
 
         #expect(prefs.agentsAllowed)
         #expect(groups.active(browser))

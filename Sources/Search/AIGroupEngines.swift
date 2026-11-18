@@ -1,6 +1,21 @@
 import Foundation
 import FoundationModels
 
+enum ProviderError: LocalizedError, Equatable, Sendable {
+    case planOut(String)
+    case refused(String)
+    case failed(String)
+    case cancelled
+
+    var errorDescription: String? {
+        switch self {
+        case .planOut(let said): return said.isEmpty ? "The account has run out for now" : said
+        case .refused(let said), .failed(let said): return said
+        case .cancelled: return "Stopped"
+        }
+    }
+}
+
 protocol AIGroupEngine: Sendable {
     var local: Bool { get }
 }
@@ -23,7 +38,7 @@ extension AIGroupDecider {
 }
 
 enum AIGroupEngineKind: String, CaseIterable, Identifiable, Sendable {
-    case auto, thisMac, claude, chatGPT, openRouter
+    case auto, thisMac, openRouter
 
     var id: String { rawValue }
 
@@ -31,18 +46,7 @@ enum AIGroupEngineKind: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .auto: return "Automatic"
         case .thisMac: return "This Mac"
-        case .claude: return "Claude"
-        case .chatGPT: return "ChatGPT"
         case .openRouter: return "OpenRouter"
-        }
-    }
-
-    var plan: Plan? {
-        switch self {
-        case .thisMac: return .thisMac
-        case .claude: return .claude
-        case .chatGPT: return .chatGPT
-        case .auto, .openRouter: return nil
         }
     }
 }
@@ -149,7 +153,7 @@ final class MacGroupEngine: AIGroupDecider, AIGroupNamer {
         guard !CLIGuard.underTest || CLIGuard.realAllowed else {
             throw ProviderError.refused("A test run never calls a real model")
         }
-        guard Self.available else { throw ProviderError.notInstalled(.thisMac) }
+        guard Self.available else { throw ProviderError.failed("Apple Intelligence isn't on this Mac") }
     }
 
     func decide(_ ask: AIGroupAsk) async throws -> [UUID: AIGroupPick] {
@@ -196,64 +200,6 @@ final class MacGroupEngine: AIGroupDecider, AIGroupNamer {
         guard let name = AIGroupName.cleaned(name: said.name, emoji: ask.emoji ? said.emoji : nil, keep: said.keep && ask.current != nil) else {
             throw ProviderError.failed("No name came back")
         }
-        return name
-    }
-}
-
-final class PlanGroupEngine: AIGroupDecider, AIGroupNamer {
-    let provider: Provider
-    let model: String
-    let effort: Effort?
-
-    init(provider: Provider, model: String, effort: Effort?) {
-        self.provider = provider
-        self.model = model
-        self.effort = effort
-    }
-
-    @MainActor
-    static func smallest(_ plan: Plan, plans given: Plans? = nil) -> PlanGroupEngine? {
-        let plans = given ?? .shared
-        guard plan != .thisMac, plans.connected(plan) else { return nil }
-        let models = plans.models(plan)
-        let model: PlanModel?
-        switch plan {
-        case .claude:
-            model = models.first { $0.id == "haiku" } ?? models.last
-        default:
-            model = models.first { $0.id.contains("nano") } ?? models.first { $0.id.contains("mini") } ?? models.first
-        }
-        guard let model else { return nil }
-        let effort = model.efforts.contains(.low) ? Effort.low : model.efforts.first
-        return PlanGroupEngine(provider: plans.provider(plan), model: model.id, effort: effort)
-    }
-
-    private func ask(system: String, prompt: String) async throws -> String {
-        let session = provider.start(ProviderRequest(system: system, prompt: prompt, model: model.isEmpty ? nil : model, effort: effort))
-        var said = ""
-        do {
-            for try await event in session.events {
-                if case .text(let text) = event { said += text }
-            }
-        } catch {
-            session.cancel()
-            throw error
-        }
-        return said
-    }
-
-    func decide(_ ask: AIGroupAsk) async throws -> [UUID: AIGroupPick] {
-        let said = try await self.ask(system: AIGroupPrompt.deciding, prompt: AIGroupPrompt.jsonDeciding(ask))
-        guard let picks = AIGroupPrompt.picks(json: said, labels: AIGroupPrompt.labels(ask)) else {
-            throw ProviderError.failed("The plan didn't say where the tabs go")
-        }
-        return picks
-    }
-
-    func name(_ ask: AIGroupNameAsk) async throws -> AIGroupName {
-        let said = try await self.ask(system: AIGroupPrompt.naming(emoji: ask.emoji), prompt: AIGroupPrompt.jsonNaming(ask))
-        guard var name = AIGroupPrompt.name(json: said) else { throw ProviderError.failed("The plan didn't name the group") }
-        if !ask.emoji { name.emoji = nil }
         return name
     }
 }

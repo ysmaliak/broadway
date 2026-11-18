@@ -37,7 +37,7 @@ enum AgentAwake {
 
     static func atWork(_ link: AgentLink) -> Bool {
         guard link.live else { return false }
-        guard link.rest == nil || AgentDesk.shared.pending.contains(where: { $0.task.map(AgentTasks.shared.root) == link.id }) else { return false }
+        guard link.rest == nil || AgentDesk.shared.pending.contains(where: { $0.task == link.id }) else { return false }
         return !AgentBoard.allTabs(of: link.id).isEmpty
     }
 
@@ -242,9 +242,9 @@ final class AgentSessionBox: AgentToolbox {
 
 extension AgentSocket {
     func session(_ name: String, _ given: [String: Any], task: UUID?, browser: Browser, preferred: String? = nil) async -> (outcome: ToolOutcome, used: String?) {
-        let link = task.map(AgentTasks.shared.root)
+        let link = task
         var arguments = given
-        let outside = TaskLedger.shared.entry(link)?.origin == .outside
+        let outside = TaskLedger.shared.entry(link) != nil
         switch name {
         case "tab":
             return (pick(arguments["id"] as? String, link: link), current(link))
@@ -336,7 +336,6 @@ extension AgentSocket {
         let here = current(link)
         let mine = AgentWorkTabs.tabs(of: link, in: box)
         let going = mine.filter { all || AgentWorkTabs.short($0.tab.id) != here }
-        if let refused = TaskLedger.shared.refusal("close", [:], task: task) { return .failure(refused, code: .refused) }
         let every = box.browsers.flatMap { $0.tabs + $0.parkedAgentTabs }
         let said = await AgentWorkTabs.tidy(going, everyTab: every)
         if all, let here, said.closed.contains(here) { remember(nil, link: link) }
@@ -491,7 +490,6 @@ extension Browser {
         let task = opener.agentTask
         let rule = AgentSites.shared.rule(for: site)
         let refused = AgentPolicy.verdict(.tab, mode: prefs.agentMode, rule: rule) == .refuse
-            || TaskLedger.shared.refusal("open", ["url": url?.absoluteString ?? ""], task: task) != nil
         if refused {
             AgentWorkTabs.note(opener, blocked: site ?? url?.host() ?? "that site")
             return nil

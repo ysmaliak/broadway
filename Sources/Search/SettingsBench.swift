@@ -89,29 +89,24 @@ enum SettingsBenchFaces {
 
 @MainActor
 enum SettingsPieceSurfaces {
-    static let names = ["get-to-know", "developer-servers", "plans", "quick-actions", "quick-action-sheet",
+    static let names = ["developer-servers", "quick-actions", "quick-action-sheet",
                         "shortcuts", "extensions-page", "store-offer", "controls-gallery"]
+
+    static func size(_ request: [String: Any], _ width: Double, _ height: Double) -> CGSize {
+        CGSize(width: request["width"] as? Double ?? width, height: request["height"] as? Double ?? height)
+    }
 
     static func make(_ name: String, _ request: [String: Any]) -> NSView? {
         guard let browser = Browsers.all.first else { return nil }
-        let size = PlansSurface.size(request, 650, 600)
         switch name {
-        case "get-to-know":
-            let meet = GetToKnowSurface.meet(request)
-            return paper(SettingsPieceForm { form in
-                form.section { form.fitted(SettingsFormRow(GetToKnowRowView(browser: browser, meet: meet))) }
-            }, size)
         case "developer-servers":
             DeveloperSurface.servers(request)
             return paper(SettingsPieceForm { form in
                 form.section("Local servers") { form.fitted(SettingsFormRow(DeveloperServersView(browser: browser))) }
-            }, size)
-        case "plans":
-            let (browser, plans) = PlansSurface.fixture(request)
-            return paper(PlansForm(browser: browser, prefs: browser.prefs, plans: plans, models: true), PlansSurface.size(request, 650, 620))
+            }, size(request, 650, 600))
         case "quick-actions":
             let store = QuickActionsSurface.fixture(request)
-            return paper(QuickActionsForm(browser: Browsers.acting, store: store), PlansSurface.size(request, 650, 520))
+            return paper(QuickActionsForm(browser: Browsers.acting, store: store), size(request, 650, 520))
         case "quick-action-sheet":
             let store = QuickActionsSurface.fixture(request)
             let view = QuickActionSheetView(store: store, history: Browsers.acting.history,
@@ -120,9 +115,9 @@ enum SettingsPieceSurfaces {
             return view
         case "shortcuts":
             let acting = Browsers.acting
-            return paper(ShortcutsForm(browser: acting, store: .shared, prefs: acting.prefs), PlansSurface.size(request, 650, 900))
+            return paper(ShortcutsForm(browser: acting, store: .shared, prefs: acting.prefs), size(request, 650, 900))
         case "extensions-page":
-            return paper(ExtensionsForm(browser: Browsers.acting), PlansSurface.size(request, 650, 640))
+            return paper(ExtensionsForm(browser: Browsers.acting), size(request, 650, 640))
         case "store-offer":
             let bar = StoreOfferView(busy: request["busy"] as? Bool ?? false, add: {})
             let stage = KitFlippedView()

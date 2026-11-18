@@ -220,9 +220,9 @@ struct NounTests {
     }
 
     @Test func watchTakesItsFlags() throws {
-        let found = try Watch.parse(["--only", "tabs,tasks", "--count", "2", "--seconds", "1.5"])
+        let found = try Watch.parse(["--only", "tabs,spaces", "--count", "2", "--seconds", "1.5"])
 
-        #expect(found.only == ["tabs", "tasks"])
+        #expect(found.only == ["tabs", "spaces"])
         #expect(found.count == 2)
         #expect(found.seconds == 1.5)
     }

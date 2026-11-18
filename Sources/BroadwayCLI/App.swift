@@ -13,20 +13,12 @@ extension Builtins {
             if let failure = Context.failure(found) { throw failure }
             var rows = ["Broadway \(found["version"] as? String ?? "") is running\(found["hidden"] as? Bool == true ? " hidden" : "")"]
             rows.append("Agents: \(found["agents"] as? Bool == true ? "on" : "off")")
-            let plans = found["plans"] as? [String: [String: Any]] ?? [:]
-            for (key, title) in [("claude", "Claude"), ("chatGPT", "ChatGPT")] {
-                let plan = plans[key] ?? [:]
-                let state = plan["connected"] as? Bool == true ? "connected" : plan["installed"] as? Bool == true ? "not signed in" : "not installed"
-                rows.append("\(title): \(state)")
-            }
-            rows.append("Tasks running: \(found["tasks"] as? Int ?? 0)")
             if !context.console.json { rows.forEach(context.console.line) }
             context.console.success("status", found)
             return .done
         },
-        Builtin(name: "quit", usage: "broadway quit [--force]", summary: "Quit Broadway", group: "Broadway",
-                details: "If tasks are running, Broadway says so and stays open unless you add --force",
-                examples: ["broadway quit", "broadway quit --force"]) { context, words in
+        Builtin(name: "quit", usage: "broadway quit", summary: "Quit Broadway", group: "Broadway",
+                examples: ["broadway quit"]) { context, words in
             let unknown = words.filter { $0 != "--force" }
             if let first = unknown.first { throw Failure.usage("quit doesn't take \(first)") }
             guard context.place.connect() != nil else {
@@ -60,8 +52,8 @@ extension Builtins {
             while link.line() != nil {}
             return .done
         },
-        Builtin(name: "mcp", usage: "broadway mcp [--task ID]", summary: "The browser as an MCP server on stdio", group: "Broadway",
-                details: "For MCP clients that can't run a command line. Broadway's own tasks use it too, for its fixed list of tools.",
+        Builtin(name: "mcp", usage: "broadway mcp", summary: "The browser as an MCP server on stdio", group: "Broadway",
+                details: "For MCP clients that can't run a command line",
                 examples: ["broadway mcp"]) { context, words in
             try MCPRelay.run(words, context: context)
         },

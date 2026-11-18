@@ -102,6 +102,22 @@ final class MCPRelayRunTests {
         #expect(((object(again)["result"] as? [String: Any])?["tools"] as? [[String: Any]])?.count == 1)
     }
 
+    @Test func anMCPThatNamesATaskSaysBroadwayNoLongerRunsTasks() throws {
+        let (globals, _) = try Globals.extract(["mcp"], environment: [:])
+        let place = Place(socket: "/nonexistent/broadway.sock", wakes: false, world: nil, bundle: nil, named: false)
+        let context = Context(globals: globals, console: Console(json: true, quiet: true, noColor: true, environment: [:]), place: place, environment: [:], binary: "/nonexistent/broadway")
+        var said: Failure?
+        var other: Failure?
+
+        do { _ = try MCPRelay.run(["--task", UUID().uuidString], context: context) } catch let failure as Failure { said = failure }
+        do { _ = try MCPRelay.run(["--json-rpc"], context: context) } catch let failure as Failure { other = failure }
+
+        #expect(said?.code == "no_tasks")
+        #expect(said?.exit == .mistake)
+        #expect(said?.message.contains("Broadway no longer runs tasks") == true)
+        #expect(other?.code == "usage")
+    }
+
     @Test func anEmptyListAndOwnTasksGetNoRun() {
         let relay = MCPRelay(path: "/nonexistent", arguments: []) { _ in }
         relay.runs = { _, _ in }

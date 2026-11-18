@@ -454,7 +454,7 @@ final class AgentCardView: NSView {
         shownCount = desk.pending.count
         shownActive = browser.activeID
         face?.removeFromSuperview()
-        let link = question.task.flatMap { AgentLinks.shared.link(AgentTasks.shared.root($0)) }
+        let link = question.task.flatMap { AgentLinks.shared.link($0) }
         let made = AgentCharacterFace(frame: NSRect(x: 0, y: 0, width: 18, height: 18))
         made.mood = .waving
         made.colour = link.map { AgentCharacter.accentColor($0.accent) } ?? KitColor.ink

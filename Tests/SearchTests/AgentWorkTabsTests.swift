@@ -56,9 +56,9 @@ final class AgentWorkTabsTests {
         browser = nil
     }
 
-    private func session(_ name: String = "Claude Code", origin: TaskOrigin = .outside, allowed: Set<String>? = nil) -> UUID {
+    private func session(_ name: String = "Claude Code") -> UUID {
         let link = AgentLinks.shared.join(.named(UUID().uuidString), name: name)
-        TaskLedger.shared.open(link.id, origin: origin, title: name, allowed: allowed)
+        TaskLedger.shared.open(link.id, title: name)
         made.append(link.id)
         return link.id
     }
@@ -407,22 +407,6 @@ final class AgentWorkTabsTests {
         #expect(text.contains("A new tab for localhost was closed. The person never lets agents use that site."))
     }
 
-    @Test func aPopupForAReadOnlyTaskOutsideItsSitesIsRefused() async throws {
-        let task = session("Routine", origin: .routine, allowed: ["127.0.0.1"])
-        let opener = Tab(configuration: Web.configuration(space: browser.spaceID))
-        opener.agent = true
-        opener.agentTask = task
-
-        let outside = browser.agentPopup(Web.configuration(space: browser.spaceID), opener: opener, url: URL(string: "https://elsewhere.example/x"), sized: false)
-        let inside = browser.agentPopup(Web.configuration(space: browser.spaceID), opener: opener, url: URL(string: "http://127.0.0.1/x"), sized: false)
-        let popups = AgentWorkTabs.takePopups(from: opener.id)
-
-        #expect(outside == nil)
-        #expect(inside?.agent == true)
-        #expect(inside?.agentTask == task)
-        #expect(popups.blocked == ["elsewhere.example"])
-    }
-
     @Test func openStillAsksInAskMode() async throws {
         browser.prefs.agentMode = .ask
         let link = session()
@@ -455,20 +439,6 @@ final class AgentWorkTabsTests {
         #expect(asked?.site == "localhost")
         #expect(said.failed)
         #expect(socket.box.find(["tab": id])?.tab.pageAddress?.path == "/shop")
-    }
-
-    @Test func aReadOnlyTaskOnlyOpensItsSitesAndNeverGoes() async {
-        let task = session("Routine", origin: .routine, allowed: ["127.0.0.1"])
-
-        let outside = await call("open", ["url": "http://localhost:\(server.port)/shop"], task)
-        let inside = await call("open", ["url": address("/shop")], task)
-        let went = await call("navigate", ["url": address("/basket")], task)
-
-        #expect(outside.failed)
-        #expect(outside.text?.contains("only opens the sites it was given") == true)
-        #expect(!inside.failed)
-        #expect(went.failed)
-        #expect(AgentWorkTabs.tabs(of: task, in: socket.box).count == 1)
     }
 
     @Test func agentsDoneKeepsTheTabsAndListsThem() async throws {
@@ -813,19 +783,15 @@ final class AgentWorkTabsTests {
         #expect(second?.task == other)
     }
 
-    @Test func openWithASpaceIsTheSessionsTabAndHonoursAReadOnlyTask() async throws {
+    @Test func openWithASpaceIsTheSessionsTab() async throws {
         let link = session()
-        let routine = session("Routine", origin: .routine, allowed: ["example.org"])
         let verb = try #require(PersonCommands.find("tabs", "open"))
         var call = PersonCall(noun: "tabs", verb: "open", arguments: ["url": address("/shop"), "space": browser.space.name], browser: browser, box: socket.box)
         call.link = AgentLinks.shared.link(link)
         let said = try await verb.run(call)
-        call.link = AgentLinks.shared.link(routine)
 
-        await #expect(throws: PersonRefusal.self) { try await verb.run(call) }
         #expect(AgentWorkTabs.tabs(of: link, in: socket.box).map { short($0.tab) } == [said["id"] as? String])
         #expect(socket.current(link) == said["id"] as? String)
-        #expect(AgentWorkTabs.tabs(of: routine, in: socket.box).isEmpty)
     }
 
     @Test func batchStepsWorkInTheSessionsCurrentTab() async {

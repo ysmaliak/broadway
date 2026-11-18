@@ -378,8 +378,6 @@ final class ShellLowerLayer: ShellLayer {
     private var shield: ShieldOfferView?
     private var developer: (key: String, view: OfferBarView)?
     private var linkBar: (id: UUID, view: OfferBarView)?
-    private var draftWorking: FormDraftWorkingBar?
-    private var draftCard: FormDraftCard?
     private var veil: CapsuleNote?
     private var acting: AgentActingBadgeView?
     private var driving: AgentDrivingBarView?
@@ -512,19 +510,6 @@ final class ShellLowerLayer: ShellLayer {
             }
         } else {
             developer = nil
-        }
-        let drafts = browser.drafts
-        if drafts.working != nil, drafts.working == tab {
-            if let view = kept(&draftWorking, true, { FormDraftWorkingBar(drafts: drafts) }) { bars.append(.init(view: view)) }
-        } else {
-            draftWorking = nil
-        }
-        if let up = drafts.preview, up.tab == tab {
-            let view = kept(&draftCard, true) { FormDraftCard(drafts: drafts) }
-            view?.preview = up
-            if let view { bars.append(.init(view: view)) }
-        } else {
-            draftCard = nil
         }
         if browser.veiling {
             if let view = kept(&veil, true, { CapsuleNote("Click anything to hide it   ⌘Z undo   esc done", size: 11.5) }) {

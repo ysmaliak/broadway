@@ -239,7 +239,6 @@ final class AIGroupSubjectTests {
     }
 
     @Test func aLooseTabAboutAFolderThatJustFormedIsGatheredWithoutASharedWord() async {
-        keepSetting(Shared.prefs, \.ai, "ai")
         keepSetting(AIGroups.shared, \.on, AIGroups.onKey)
         keepSetting(AIGroups.shared, \.emoji, AIGroups.emojiKey)
         _ = NSApplication.shared
@@ -247,7 +246,6 @@ final class AIGroupSubjectTests {
         let browser = Browser(record: WindowRecord())
         browser.leaveFiles()
         browser.prefs.usesTabGroups = true
-        browser.prefs.ai = true
         let pages = [("Alfama loft with river view - Airbnb", "https://www.airbnb.com/rooms/1"),
                      ("Sourdough starter in seven days", "https://bread.example/starter"),
                      ("Berlin to Lisbon | Google Flights", "https://www.google.com/travel/flights"),

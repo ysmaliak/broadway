@@ -125,7 +125,7 @@ final class AgentTests {
     @Test func toolboxOffersExactlyTheseTools() {
         let names = Set(BrowserToolbox().tools.map(\.name))
 
-        #expect(names == ["tabs", "open", "navigate", "close", "snapshot", "text", "screenshot", "console", "network", "pdf", "hover", "choose", "dialog", "click", "type", "upload", "download", "locate", "fill_form", "drag", "select", "resize", "press", "scroll", "wait", "history", "sign_in", "autofill", "ask", "helper_start", "helper_wait", "mac_read", "mac_run",
+        #expect(names == ["tabs", "open", "navigate", "close", "snapshot", "text", "screenshot", "console", "network", "pdf", "hover", "choose", "dialog", "click", "type", "upload", "download", "locate", "fill_form", "drag", "select", "resize", "press", "scroll", "wait", "history", "ask",
                                "skills", "skill", "handoff", "tab", "audit", "timings", "styles"])
     }
 
@@ -144,14 +144,10 @@ final class AgentTests {
         let off = prefs.agentsAllowed
         prefs.agentsOn = true
         let on = prefs.agentsAllowed
-        prefs.ai = false
-        let withoutUseAI = prefs.agentsAllowed
-        prefs.ai = true
         prefs.agentsOn = false
 
         #expect(!off)
         #expect(on)
-        #expect(withoutUseAI)
     }
 
     @Test func socketIsUserOnlyAndCarriesLines() async throws {
@@ -278,21 +274,12 @@ final class AgentTests {
         #expect((error?["retry_safe"] as? Bool) == true)
     }
 
-    @Test func askWorksOnlyInsideATask() {
-        let outside = AgentSessions.shared.ask(["question": "Which?"], task: nil)
-        let unknown = AgentSessions.shared.ask(["question": "Which?"], task: UUID())
-
-        #expect(outside.failed)
-        #expect(unknown.failed)
-    }
-
     @Test func aHiddenWakeQuitsOnlyWhenNothingNeedsIt() {
-        #expect(AgentIdle.shouldQuit(woken: true, hidden: true, serving: false, tasks: 0, quiet: 1800))
-        #expect(!AgentIdle.shouldQuit(woken: false, hidden: true, serving: false, tasks: 0, quiet: 1800))
-        #expect(!AgentIdle.shouldQuit(woken: true, hidden: false, serving: false, tasks: 0, quiet: 1800))
-        #expect(!AgentIdle.shouldQuit(woken: true, hidden: true, serving: true, tasks: 0, quiet: 1800))
-        #expect(!AgentIdle.shouldQuit(woken: true, hidden: true, serving: false, tasks: 1, quiet: 1800))
-        #expect(!AgentIdle.shouldQuit(woken: true, hidden: true, serving: false, tasks: 0, quiet: 1799))
+        #expect(AgentIdle.shouldQuit(woken: true, hidden: true, serving: false, quiet: 1800))
+        #expect(!AgentIdle.shouldQuit(woken: false, hidden: true, serving: false, quiet: 1800))
+        #expect(!AgentIdle.shouldQuit(woken: true, hidden: false, serving: false, quiet: 1800))
+        #expect(!AgentIdle.shouldQuit(woken: true, hidden: true, serving: true, quiet: 1800))
+        #expect(!AgentIdle.shouldQuit(woken: true, hidden: true, serving: false, quiet: 1799))
     }
 
     @Test func theSettingsRowReadsDoctor() {
@@ -334,33 +321,5 @@ final class AgentTests {
         #expect(flat.roles == ["textbox", "searchbox"])
         #expect(!AgentTarget([:]).given)
         #expect(AgentTarget(["role": "button"]).given)
-    }
-
-    @Test func aTaskRunsOnTheTasksRouteWithOnlyBroadwayToolsAndStaysUnread() async throws {
-        let fake = FakeProvider(plan: .claude, echoes: true)
-        Plans.shared.standIn(fake, for: .claude)
-        defer { Plans.shared.standIn(nil, for: .claude) }
-        await Plans.shared.refresh()
-        let prefs = Preferences()
-        let choice = Plans.shared.choice(.tasks, prefs)
-        var events: [Conversation.Happening] = []
-
-        let task = AgentTasks.shared.start(prompt: "find it", choice: choice, prefs: prefs, command: "/x/broadway") { events.append($0) }
-        let conversation = try #require(task)
-        let id = conversation.chat.id
-        for _ in 0..<500 where conversation.running || AgentTasks.shared.running[id] != nil {
-            try? await Task.sleep(for: .milliseconds(5))
-        }
-
-        #expect(conversation.chat.kind == .task)
-        #expect(events.last == .done("Fake answer: find it"))
-        #expect(AgentTasks.shared.running[id] == nil)
-        let request = try #require(fake.requests.first)
-        #expect(request.keepOpen)
-        guard case .mcp(let launch) = request.tools else { Issue.record("no tools"); return }
-        #expect(launch.command == "/x/broadway")
-        #expect(launch.arguments.prefix(2) == ["mcp", "--socket"])
-        #expect(ChatStore.shared.chats.contains { $0.id == id && $0.unread })
-        ChatStore.shared.delete(id)
     }
 }

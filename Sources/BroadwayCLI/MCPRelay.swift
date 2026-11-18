@@ -293,15 +293,9 @@ final class MCPRelay {
     }
 
     static func run(_ words: [String], context: Context) throws -> Exit {
-        var task: String?
-        var index = 0
-        while index < words.count {
-            guard words[index] == "--task", index + 1 < words.count else { throw Failure.usage("mcp takes only --task") }
-            task = words[index + 1]
-            index += 2
-        }
-        var hello: [String: Any] = ["op": "mcp"]
-        if let task { hello["task"] = task } else { hello["agent"] = Context.agent }
+        if words.contains("--task") { throw BroadwayCommand.noTasks }
+        if !words.isEmpty { throw Failure.usage("mcp takes no options") }
+        var hello: [String: Any] = ["op": "mcp", "agent": Context.agent]
         if let wait = context.environment["BROADWAY_WAIT_PERSON"] { hello["wait_person"] = wait }
         let link = try context.connection()
         link.watched = false
@@ -311,11 +305,9 @@ final class MCPRelay {
         }
         let relay = MCPRelay(path: context.binary, arguments: Array(CommandLine.arguments.dropFirst())) { context.console.raw($0) }
         relay.session = greeting["link"] as? String
-        if task == nil {
-            let place = context.place
-            let binary = context.binary
-            relay.runs = { [weak relay] arguments, answer in answer(script(arguments, session: relay?.session, place: place, binary: binary)) }
-        }
+        let place = context.place
+        let binary = context.binary
+        relay.runs = { [weak relay] arguments, answer in answer(script(arguments, session: relay?.session, place: place, binary: binary)) }
         func attach(_ link: Link) -> AppLink {
             let app = AppLink { link.sendRaw($0) }
             Thread { [weak relay] in

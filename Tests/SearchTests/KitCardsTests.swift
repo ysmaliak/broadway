@@ -71,30 +71,4 @@ struct KitCardsTests {
         #expect(mark.intrinsicContentSize == NSSize(width: 24, height: 24))
         #expect(mark.hitTest(NSPoint(x: 12, y: 12)) == nil)
     }
-
-    @Test func anUnlitProviderMarkIsGreyer() throws {
-        let lit = try #require(ProviderMarkView.image(.claude, size: 40, lit: true, dark: false, scale: 2))
-        let unlit = try #require(ProviderMarkView.image(.claude, size: 40, lit: false, dark: false, scale: 2))
-
-        func spread(_ image: CGImage) -> Int {
-            let rep = NSBitmapImageRep(cgImage: image)
-            let pad = Int(ProviderMarkView.pad(40) * 2)
-            guard let color = rep.colorAt(x: pad + 6, y: pad + 40) else { return 0 }
-            let parts = [color.redComponent, color.greenComponent, color.blueComponent].map { Int($0 * 255) }
-            return parts.max()! - parts.min()!
-        }
-
-        #expect(spread(lit) > 60)
-        #expect(spread(unlit) < spread(lit) / 2)
-    }
-
-    @Test func theProviderLettersAreDrawnFromTheSystemFont() {
-        let marks = [ProviderMarkView.claudeLetter, ProviderMarkView.chatGPTLetter]
-
-        for mark in marks {
-            #expect(mark.boundingBoxOfPath.width > 10)
-            #expect(mark.boundingBoxOfPath.height > 10)
-        }
-        #expect(marks[0] != marks[1])
-    }
 }

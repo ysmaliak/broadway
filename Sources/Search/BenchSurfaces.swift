@@ -7,8 +7,8 @@ enum BenchSurfaces {
         + ["space-ground", "stacked-headers", "new-space-card", "space-look-editor", "space-look-chooser"]
         + ["settings-switches", "settings-controls", "settings-drill", "settings-danger", "settings-header"]
         + ["newtab", "onboarding", "about"]
-        + ["marks", "provider-marks", "hover-tab-card", "account-list", "device-bar", "hover-folder-list", "tab-offers"]
-        + ["find-bar", "find-bar-empty", "find-bar-narrow", "find-count", "form-fill-card", "form-fill-done", "form-fill-offer", "form-drafts-working", "form-drafts-card", "form-drafts-warned"]
+        + ["marks", "hover-tab-card", "account-list", "device-bar", "hover-folder-list", "tab-offers"]
+        + ["find-bar", "find-bar-empty", "find-bar-narrow", "find-count", "form-fill-card", "form-fill-done", "form-fill-offer"]
         + ["meeting-alert", "meeting-alert-two", "meeting-alert-faces", "meeting-alert-long", "pin-meeting-badges", "history-panel", "downloads-panel", "hidden-panel"]
         + BookmarksSurface.names + SettingsPieceSurfaces.names + BenchFloating.names + BenchPages.names + SiteSurfaces.names
         + BenchFieldFixtures.names + SideSurfaces.names + BenchGlassFamily.names
@@ -63,8 +63,6 @@ enum BenchSurfaces {
             return PieceSurfaces.shortcutNumbers(lift: request["lift"] as? Double ?? 0)
         case "marks":
             return PieceSurfaces.marks(lift: request["lift"] as? Double ?? 0)
-        case "provider-marks":
-            return PieceSurfaces.providerMarks()
         case "hover-tab-card":
             return HoverCards.surface(plain: request["plain"] as? Bool ?? false)
         case "account-list":
@@ -85,8 +83,6 @@ enum BenchSurfaces {
             return IntegrationPreviewSurface.hover(request)
         case "developer":
             return DeveloperSurface.make(request)
-        case "nice-to-meet-you":
-            return GetToKnowSurface.sheet(request)
         case _ where SettingsPieceSurfaces.names.contains(name):
             return SettingsPieceSurfaces.make(name, request)
         case "files-page":
@@ -115,9 +111,6 @@ enum BenchSurfaces {
         case "form-fill-card": return FormFill.surface("card")
         case "form-fill-done": return FormFill.surface("done")
         case "form-fill-offer": return FormFill.surface("offer")
-        case "form-drafts-working": return FormDrafts.surface("working")
-        case "form-drafts-card": return FormDrafts.surface("card")
-        case "form-drafts-warned": return FormDrafts.surface("warned")
         case "meeting-alert": return MeetingAlerts.surface("one")
         case "meeting-alert-two": return MeetingAlerts.surface("two")
         case "meeting-alert-faces": return MeetingAlerts.surface("faces")
@@ -417,26 +410,6 @@ enum PieceSurfaces {
             stage.addSubview(view)
         }
         stage.frame = NSRect(x: 0, y: 0, width: 12 + 9 * side + 8 * 6, height: 12 + side)
-        return sized(stage, width: stage.frame.width, height: stage.frame.height)
-    }
-
-    static func providerMarks() -> NSView {
-        let stage = KitFlippedView()
-        let sizes: [(CGFloat, Bool)] = [(40, true), (32, false), (20, true)]
-        let column: CGFloat = 40
-        let tall = sizes.map(\.0).reduce(0, +) + 10 * CGFloat(sizes.count - 1)
-        for (index, kind) in PlanCardKind.allCases.enumerated() {
-            var y: CGFloat = 8
-            let x = 8 + CGFloat(index) * (column + 12)
-            for (size, lit) in sizes {
-                let mark = ProviderMarkView(kind: kind, size: size, lit: lit)
-                mark.frame = NSRect(x: x + (column - size) / 2, y: y, width: size, height: size)
-                stage.addSubview(mark)
-                y += size + 10
-            }
-        }
-        let count = CGFloat(PlanCardKind.allCases.count)
-        stage.frame = NSRect(x: 0, y: 0, width: 16 + count * column + (count - 1) * 12, height: 16 + tall)
         return sized(stage, width: stage.frame.width, height: stage.frame.height)
     }
 }

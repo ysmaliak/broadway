@@ -330,7 +330,6 @@ extension BrowserToolbox {
         let more = found.count > found.list.count ? ["… \(found.count - found.list.count) more: --limit, --in @ref"] : []
         let written = (lines + more).joined(separator: "\n")
         let addressed = AIPage.addressesAI(written)
-        TaskLedger.shared.saw(tab.pageAddress, addressed: addressed, task: task)
         let shown = found.list.map { element -> [String: Any] in
             var element = element
             if let within = element.removeValue(forKey: "within") { element["in"] = within }

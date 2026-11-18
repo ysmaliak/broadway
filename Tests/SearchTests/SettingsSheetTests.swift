@@ -75,50 +75,6 @@ struct SettingsSheetTests {
     }
 
     @Test(.enabled(if: ProcessInfo.processInfo.environment["SEARCH_SHEET"] != nil, "SEARCH_SHEET names a folder to draw the Settings sheet into"))
-    func drawsYourPlans() async throws {
-        let folder = try #require(self.folder)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        _ = NSApplication.shared
-        let policy = NSApp.activationPolicy()
-        NSApp.setActivationPolicy(.prohibited)
-        defer { NSApp.setActivationPolicy(policy) }
-        let browser = Browser(record: WindowRecord())
-        defer { browser.closeAll() }
-        browser.prefs.ai = true
-        let plans = Plans.shared
-        let claude = FakeProvider(plan: .claude)
-        claude.fakeModels = ClaudeProvider().models()
-        let codex = FakeProvider(plan: .chatGPT)
-        codex.fakeModels = [PlanModel(id: "gpt-6.1-sol", name: "GPT-6.1-Sol", efforts: [.low, .medium, .high, .xhigh], defaultEffort: .low,
-                                      note: "Latest workhorse model for coding and everyday work"),
-                            PlanModel(id: "gpt-6-astra", name: "GPT-6-Astra", efforts: [.low, .medium, .high, .xhigh], defaultEffort: .medium,
-                                      note: "Frontier intelligence for the most demanding work")]
-        let mac = FakeProvider(plan: .thisMac)
-        defer {
-            for plan in Plan.allCases { plans.standIn(nil, for: plan) }
-        }
-        let worlds: [(String, PlanStatus, PlanStatus, Bool)] = [
-            ("ready", PlanStatus(path: "/fake/claude", connected: true, account: "Max plan"),
-             PlanStatus(path: "/fake/codex", connected: true, account: "ChatGPT plan"), false),
-            ("missing", PlanStatus(path: "/fake/claude"), PlanStatus(), true),
-        ]
-        for (name, claudeStatus, codexStatus, macReady) in worlds {
-            claude.fakeStatus = claudeStatus
-            codex.fakeStatus = codexStatus
-            mac.fakeStatus = macReady ? PlanStatus(path: "Apple Intelligence", connected: true) : PlanStatus()
-            plans.standIn(claude, for: .claude)
-            plans.standIn(codex, for: .chatGPT)
-            plans.standIn(mac, for: .thisMac)
-            await plans.refresh()
-            browser.prefs.aiPlan = name == "ready" ? .chatGPT : .claude
-            for dark in [true, false] {
-                try await drawWindow(browser, page: "ai", size: CGSize(width: 860, height: 1500), dark: dark,
-                                     to: folder.appendingPathComponent("plans-\(name)-\(dark ? "dark" : "light").png"))
-            }
-        }
-    }
-
-    @Test(.enabled(if: ProcessInfo.processInfo.environment["SEARCH_SHEET"] != nil, "SEARCH_SHEET names a folder to draw the Settings sheet into"))
     func drawsTheGeneralPage() async throws {
         let folder = try #require(self.folder)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -150,7 +106,6 @@ struct SettingsSheetTests {
         defer { NSApp.setActivationPolicy(policy) }
         let browser = Browser(record: WindowRecord())
         defer { browser.closeAll() }
-        browser.prefs.ai = true
         let only = ProcessInfo.processInfo.environment["SEARCH_SHEET_ONLY"].map { Set($0.split(separator: ",").map(String.init)) }
         let places = SettingsPage.allCases.map(\.rawValue) + SettingsDetail.allCases.map(\.rawValue)
         let schemes = ProcessInfo.processInfo.environment["SEARCH_SHEET_LIGHT"] == nil ? [true] : [true, false]

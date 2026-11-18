@@ -20,7 +20,6 @@ final class SlowGroupNamer: AIGroupDecider, AIGroupNamer, @unchecked Sendable {
 @MainActor
 final class FolderNameTests {
     private func browser(_ pages: [(String, String)]) -> Browser {
-        keepSetting(Shared.prefs, \.ai, "ai")
         keepSetting(AIGroups.shared, \.on, AIGroups.onKey)
         keepSetting(AIGroups.shared, \.emoji, AIGroups.emojiKey)
         _ = NSApplication.shared
@@ -28,7 +27,6 @@ final class FolderNameTests {
         let browser = Browser(record: WindowRecord())
         browser.leaveFiles()
         browser.prefs.usesTabGroups = true
-        browser.prefs.ai = true
         for (index, page) in pages.enumerated() {
             if index > 0 { browser.newTab() }
             browser.tabs.last?.restore(url: URL(string: page.1)!, title: page.0)

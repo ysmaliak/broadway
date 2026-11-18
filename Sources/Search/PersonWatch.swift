@@ -28,7 +28,7 @@ final class PersonWatch {
             return connection.close()
         }
         if AgentPolicy.verdict(.tab, mode: browser.prefs.agentMode, rule: nil) == .ask {
-            connection.send(ToolFailure.error("needs_task", "This needs the person's yes, and only a task can ask for it. Nothing was done."))
+            connection.send(ToolFailure.error("needs_task", "This needs the person's yes, and only a connected agent can ask for it. Nothing was done."))
             return connection.close()
         }
         let watch = PersonWatch(connection: connection, browser: browser, box: box, only: Set(request["only"] as? [String] ?? Self.kinds))
@@ -45,13 +45,7 @@ final class PersonWatch {
         Task { @MainActor in await watch.run() }
     }
 
-    static let kinds = ["tabs", "spaces", "downloads", "tasks", "approvals"]
-
-    static func step(task: UUID, name: String, summary: String) {
-        for watch in live.values where watch.only.contains("tasks") {
-            watch.send("task.step", ["id": PersonCommands.short(task), "name": name, "detail": summary])
-        }
-    }
+    static let kinds = ["tabs", "spaces", "downloads", "approvals"]
 
     private func run() async {
         _ = look()
@@ -110,14 +104,6 @@ final class PersonWatch {
         return found
     }
 
-    private func tasks() -> [String: [String: Any]] {
-        var found: [String: [String: Any]] = [:]
-        for row in AgentSessions.shared.liveRows() {
-            found[row["id"] as? String ?? ""] = row
-        }
-        return found
-    }
-
     private func approvals() -> [String: [String: Any]] {
         var found: [String: [String: Any]] = [:]
         for question in AgentDesk.shared.pending {
@@ -130,10 +116,10 @@ final class PersonWatch {
         var events: [(String, [String: Any])] = []
         let now: [(String, [String: [String: Any]])] = [
             ("tabs", only.contains("tabs") ? tabs() : [:]), ("spaces", only.contains("spaces") ? spaces() : [:]),
-            ("downloads", only.contains("downloads") ? downloads() : [:]), ("tasks", only.contains("tasks") ? tasks() : [:]),
+            ("downloads", only.contains("downloads") ? downloads() : [:]),
             ("approvals", only.contains("approvals") ? approvals() : [:]),
         ]
-        let names = ["tabs": "tab", "spaces": "space", "downloads": "download", "tasks": "task", "approvals": "approval"]
+        let names = ["tabs": "tab", "spaces": "space", "downloads": "download", "approvals": "approval"]
         for (kind, rows) in now {
             let word = names[kind] ?? kind
             let before = seen[kind] ?? [:]

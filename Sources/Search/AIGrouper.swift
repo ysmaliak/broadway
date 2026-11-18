@@ -52,12 +52,10 @@ final class AIGroups {
         }
     }
 
-    func available(_ kind: AIGroupEngineKind, plans given: Plans? = nil) -> Bool {
-        let plans = given ?? .shared
+    func available(_ kind: AIGroupEngineKind) -> Bool {
         switch kind {
         case .auto: return true
         case .thisMac: return standIn != nil || macAvailable()
-        case .claude, .chatGPT: return kind.plan.map(plans.connected) ?? false
         case .openRouter: return openRouter.present
         }
     }

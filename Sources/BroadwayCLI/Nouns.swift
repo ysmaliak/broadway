@@ -208,11 +208,6 @@ enum Nouns {
             Verb("history delete [url] [--site HOST] [--since TIME]", "Forget history", about: "One address, one site, or everything since a time like 30m, 2h or 7d", examples: ["broadway history delete https://example.com/page", "broadway history delete --site example.com", "broadway history delete --since 1h"]),
             Verb("history clear", "Clear all history"),
         ]),
-        Noun("tasks", "Past and running tasks", group: "Your stuff", [
-            Verb("tasks list", "List tasks", about: "broadway session steers them", columns: ["id", "state", "title", "updated"]),
-            Verb("tasks show <id>", "Read a task and its steps"),
-            Verb("tasks delete <id>", "Delete a finished task"),
-        ]),
         Noun("live", "Live Folders", group: "Your stuff", [
             Verb("live list", "List live folders", columns: ["id", "name", "state", "items", "source"]),
             Verb("live show <id>", "What a live folder holds, a pull request folder's lists and a Linear folder's statuses", columns: ["title", "label", "checks", "url"]),
@@ -301,11 +296,6 @@ enum Nouns {
             Verb("now list", "List the rows", columns: ["id", "title", "detail"]),
             Verb("now done <id>", "Mark a row done"),
         ]),
-        Noun("plans", "Your AI plans", group: "AI", [
-            Verb("plans list", "Which plans are connected", columns: ["plan", "state", "account"]),
-            Verb("plans usage", "How much of each plan is used", columns: ["plan", "window", "used", "resets", "out"]),
-            Verb("plans models", "The models each plan offers", columns: ["plan", "id", "name", "efforts"]),
-        ]),
         Noun("agents", "Agents connected to Broadway, and what they may do", group: "AI", first: "status", [
             Verb("agents status", "The switch, the mode, the site rules and this agent's session", about: "Only the person can change the switch, the mode and the sites, in Settings › Agents"),
             Verb("agents connect [--name TEXT]", "Start this agent's session: a card of its own in Broadway's sidebar",
@@ -323,9 +313,6 @@ enum Nouns {
         ]),
         Noun("approvals", "What waits for the person's yes", group: "AI", [
             Verb("approvals list", "List what waits", about: "Only the person can answer, in Broadway", columns: ["title", "site", "task"]),
-        ]),
-        Noun("helpers", "Helpers a task started", group: "AI", [
-            Verb("helpers list [session]", "List helpers", columns: ["session", "id", "state", "answer"]),
         ]),
     ]
 

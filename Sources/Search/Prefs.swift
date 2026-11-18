@@ -656,9 +656,6 @@ final class Preferences {
     /// Whether the shared pins are in the rows: asked for, and with Spaces
     /// on. Off, they wait in pins.json for the switch to come back.
     var showsSharedPins: Bool { sharesPins && usesSpaces }
-    var ai: Bool {
-        didSet { store.set(ai, forKey: "ai") }
-    }
     var agentMode: AgentMode {
         didSet {
             if agentMode == .bypass, !AgentConsent.grantBypass() { agentMode = .auto }
@@ -678,12 +675,6 @@ final class Preferences {
         }
     }
     @ObservationIgnored var agentSetup = AgentSetup.shared
-    var aiPlan: Plan? {
-        didSet { store.set(aiPlan?.rawValue, forKey: "ai.plan") }
-    }
-    private(set) var aiRoutes: [String: ModelChoice] {
-        didSet { store.set(try? JSONEncoder().encode(aiRoutes), forKey: "ai.routes") }
-    }
 
     /// Two pages share one place in the tab row.
     /// Always on since the Settings rework (Drice, 24 Oct 2026): it only
@@ -826,12 +817,9 @@ final class Preferences {
         meetingFolders = Preferences.meetingFoldersOn(store)
         let keepsSite = true
         pinsGoHome = keepsSite
-        ai = store.object(forKey: "ai") as? Bool ?? true
         agentMode = AgentMode.read(store.string(forKey: "agents.mode"), bypassConsent: AgentConsent.bypassGiven)
         agentTabsClose = 60
         agentsOn = store.bool(forKey: "agents.on") && AgentConsent.given
-        aiPlan = store.string(forKey: "ai.plan").flatMap(Plan.init(rawValue:))
-        aiRoutes = [:]
         commandBar = false
         nowRows = true
         nextMeeting = store.bool(forKey: "meetings.next")

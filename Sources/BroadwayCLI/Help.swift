@@ -15,8 +15,7 @@ enum Help {
 
     static func overview(catalog: Catalog, style: Style) -> String {
         var out = [style.bold("broadway") + ": Broadway, the browser, from a terminal. Agents: run broadway guide first.", ""]
-        out += columns([("broadway \"what to do\"", "a task, done by an agent in Broadway: its steps, then its answer"),
-                        ("broadway https://example.com", "open a page in Broadway")])
+        out += columns([("broadway https://example.com", "open a page in Broadway")])
         var groups: [(String, [(String, String)])] = []
         if catalog.known {
             groups.append(("Browser", catalog.commands.filter { Nouns.noun($0.name) == nil && Builtins.find($0.name) == nil }.map { ($0.name, $0.summary) }
@@ -28,7 +27,7 @@ enum Help {
         for name in Nouns.groups {
             groups.append((name, Nouns.all.filter { $0.group == name }.map { ($0.name, $0.summary) }))
         }
-        for name in ["Tasks", "Broadway", "Setup", "Help"] {
+        for name in ["Broadway", "Setup", "Help"] {
             groups.append((name, Builtins.all.filter { $0.group == name && !$0.hidden }.map { ($0.name, $0.summary) }))
         }
         for (title, rows) in groups {
@@ -46,7 +45,7 @@ enum Help {
                         ("--timeout SEC", "give up after this long with exit 4. A command waits 10 minutes at most by default."),
                         ("--world NAME", "a test world of Broadway instead of the real one")])
         out.append("")
-        out.append(style.dim("Tasks and commands on the person's things also take --wait-person MIN and --no-person"))
+        out.append(style.dim("Commands on the person's things also take --wait-person MIN and --no-person"))
         out.append(style.dim("exit: 0 done · 1 failed · 2 command mistake · 3 needs you · 4 no answer in time · 130 stopped"))
         out.append(style.dim("broadway help COMMAND for one command, broadway help NOUN VERB for one verb"))
         return out.joined(separator: "\n")

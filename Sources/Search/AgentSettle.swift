@@ -167,7 +167,7 @@ extension AgentChange.Dialog {
 
 extension BrowserToolbox {
     static func who(_ task: UUID?) -> String {
-        task.map { AgentTasks.shared.root($0).uuidString } ?? "none"
+        task.map { $0.uuidString } ?? "none"
     }
 
     func timed(_ tab: Tab, _ script: String, _ arguments: [String: Any] = [:], in frame: WKFrameInfo? = nil, seconds: Double = 3) async -> Any? {
@@ -194,7 +194,7 @@ extension BrowserToolbox {
 
     func sessionTabs(_ task: UUID?) -> Set<UUID> {
         guard let task else { return [] }
-        let root = AgentTasks.shared.root(task)
+        let root = task
         return Set(visible.filter { $0.tab.agentTask == root }.map(\.tab.id))
     }
 
@@ -393,7 +393,6 @@ extension BrowserToolbox {
     func outcome(_ change: AgentChange, tab: Tab, task: UUID?) -> ToolOutcome {
         let lines = change.lines().joined(separator: "\n")
         let addressed = AIPage.addressesAI(lines)
-        TaskLedger.shared.saw(tab.pageAddress, addressed: addressed, task: task)
         var data = change.object()
         if addressed { data["warning"] = String(ToolReply.warning.dropLast()) }
         return ToolOutcome(text: ToolReply.notice + (addressed ? ToolReply.warning : "") + lines, data: data)
@@ -427,7 +426,7 @@ enum AgentRefBook {
     private static var told: [String: (doc: String, refs: Set<String>)] = [:]
 
     static func key(_ task: UUID?, _ tab: Tab) -> String {
-        "\(task.map { AgentTasks.shared.root($0).uuidString } ?? "-")|\(tab.id.uuidString)"
+        "\(task.map { $0.uuidString } ?? "-")|\(tab.id.uuidString)"
     }
 
     static func tell(_ task: UUID?, _ tab: Tab, doc: String, refs: Set<String>) {

@@ -308,67 +308,6 @@ final class QuickActionsForm: SettingsForm {
 }
 
 @MainActor
-final class PlansForm: SettingsForm {
-    let browser: Browser
-    let prefs: Preferences
-    let plans: Plans
-    let models: Bool
-
-    init(browser: Browser, prefs: Preferences, plans: Plans = .shared, models: Bool = false) {
-        self.browser = browser
-        self.prefs = prefs
-        self.plans = plans
-        self.models = models
-        super.init(follows: true)
-        load()
-    }
-
-    override var shape: AnyHashable { Plan.cloud.filter(plans.connected).map(\.id) }
-
-    override func build() {
-        let cards = keep("cards") { SettingsCardsBlock(PlanCardsView(browser: browser, prefs: prefs, plans: plans)) }
-        add(cards, inset: SettingsMetrics.margin, after: SettingsMetrics.planGap)
-        let plans = plans
-        section(models ? "Models" : nil) {
-            for plan in Plan.cloud.filter(plans.connected) {
-                row("usage-" + plan.id) { PlanUsageLineView(plans: plans, plan: plan) }
-            }
-        }
-    }
-}
-
-final class SettingsCardsBlock: NSView {
-    let content: NSView
-    private var measuredAt: CGFloat = -1
-
-    init(_ content: NSView) {
-        self.content = content
-        super.init(frame: .zero)
-        content.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(content)
-        NSLayoutConstraint.activate([
-            content.leadingAnchor.constraint(equalTo: leadingAnchor, constant: SettingsMetrics.headingInset),
-            content.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -SettingsMetrics.headingInset),
-            content.topAnchor.constraint(equalTo: topAnchor),
-            content.bottomAnchor.constraint(equalTo: bottomAnchor),
-        ])
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError() }
-
-    override var isFlipped: Bool { true }
-
-    override func layout() {
-        super.layout()
-        if abs(content.bounds.width - measuredAt) > 0.5 {
-            measuredAt = content.bounds.width
-            content.invalidateIntrinsicContentSize()
-        }
-    }
-}
-
-@MainActor
 enum SettingsForms {
     static func extensions(_ browser: Browser) -> NSView { ExtensionsForm(browser: browser) }
 

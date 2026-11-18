@@ -134,7 +134,6 @@ enum PersonPages {
             let page = try web(call)
             call.box.acting(page.tab, "Reading")
             guard let read = await AIPage.read(page.tab) else { throw PersonRefusal("no_answer", "There's nothing to read on that page") }
-            TaskLedger.shared.saw(page.tab.pageAddress, addressed: read.addressed, task: nil)
             let rows = lines(of: read.text, matching: try call.need("text"), matchCase: call.flag("case"), words: call.flag("words"))
             return ["website": true, "count": rows.reduce(0) { $0 + ($1["count"] as? Int ?? 0) }, "matches": rows]
         },
@@ -162,7 +161,6 @@ enum PersonPages {
         PersonVerb("page", "pdf", .look, tabbed: true) { call in
             let page = try web(call)
             call.box.acting(page.tab, "Looking")
-            TaskLedger.shared.saw(page.tab.pageAddress, addressed: false, task: nil)
             return ["file": try await pdf(page.tab).base64EncodedString(), "name": fileName(page.tab), "website": true]
         },
         PersonVerb("page", "zoom", .arrange, tabbed: true, softer: { $0.string("value") == nil ? .look : nil }) { call in

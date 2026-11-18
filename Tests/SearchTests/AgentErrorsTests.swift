@@ -10,8 +10,6 @@ private final class ScriptedBox: AgentToolbox {
         ToolSpec(name: "navigate", description: "Go somewhere", properties: ["tab": ["type": "string"], "url": ["type": "string"]], required: ["tab", "url"]),
         ToolSpec(name: "text", description: "Read", properties: ["tab": ["type": "string"]], required: ["tab"]),
         ToolSpec(name: "click", description: "Click", properties: ["tab": ["type": "string"], "ref": ["type": "string"]], required: ["tab"]),
-        ToolSpec(name: "sign_in", description: "Sign in"),
-        ToolSpec(name: "mac_run", description: "Run"),
     ]
     var called: [(String, [String: Any], UUID?)] = []
     var outcome = ToolOutcome.text("ok")
@@ -278,19 +276,11 @@ final class AgentErrorsTests {
         #expect((unknown["message"] as? String)?.contains("different versions") == true)
     }
 
-    @Test func broadwaysOwnTaskKeepsItsList() {
-        let task = UUID()
-        TaskLedger.shared.open(task, origin: .user, title: "A task")
-        defer { TaskLedger.shared.close(task) }
-        let names = server(task: task).listed().compactMap { $0["name"] as? String }
-        #expect(names == box.tools.map(\.name))
-    }
-
     @Test func theRealListIsSmallAndKeepsTaskToolsOut() throws {
         let real = MCPServer(box: BrowserToolbox()) { _ in }
         let listed = real.listed()
         let names = Set(listed.compactMap { $0["name"] as? String })
-        #expect(names.isDisjoint(with: MCPServer.hiddenOutside))
+        #expect(names.isDisjoint(with: ["sign_in", "autofill", "helper_start", "helper_wait", "mac_read", "mac_run", "remember"]))
         #expect(names.isDisjoint(with: ["navigate", "text", "screenshot", "locate", "fill_form"]))
         #expect(names.isSuperset(of: ["open", "go", "tabs", "close", "snapshot", "read", "shot", "find", "click", "type", "fill", "wait"]))
         for tool in listed {

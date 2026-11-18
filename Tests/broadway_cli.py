@@ -222,11 +222,6 @@ def wait_for(condition, seconds=10):
     return False
 
 
-def live_session():
-    rows = envelope("session", "list")[1]["data"]["sessions"]
-    return next((row for row in rows if row["state"] in ("running", "needs_you")), None)
-
-
 def wake_and_quit():
     check("nothing is running first", not held())
     status = broadway("status")
@@ -266,7 +261,7 @@ def help_and_mistakes():
     check("guide mcp", "mcpServers" in broadway("guide", "mcp").stdout)
     typo = broadway("clikc")
     check("a typo suggests a command", typo.returncode == 2 and "Did you mean click" in typo.stderr, typo.stderr)
-    typo, parsed = envelope("sesion", "list")
+    typo, parsed = envelope("clikc", "Save")
     check("a typo keeps the envelope", typo.returncode == 2 and parsed["error"]["code"] == "usage" and parsed["ok"] is False, typo.stdout)
     check("envelope keys", set(parsed) == {"ok", "command", "data", "error"}, parsed)
     check("error keys", set(parsed["error"]) == {"code", "message", "hint", "retry_safe"}, parsed)
@@ -530,133 +525,23 @@ def batching(base):
     broadway("close", "--tab", tab)
 
 
-def tasks():
-    bench("ai", "fake", "claude")
-    task = broadway("say hello")
-    check("a task streams its answer", task.returncode == 0 and task.stdout == "Fake answer: say hello\n", task.stdout + task.stderr)
-    check("progress is on stderr", "session " in task.stderr and "session " not in task.stdout, task.stderr)
-    done, parsed = envelope("a json task", "--cli", "claude", "-m", "fake", "--effort", "low")
-    check("a task's envelope", done.returncode == 0 and parsed["data"]["answer"] == "Fake answer: a json task" and parsed["data"]["session"], done.stdout)
-    piped = subprocess.run([BROADWAY, "--world", WORLD, "summarize this"], input="notes from the pipe\n", capture_output=True, text=True, timeout=30)
-    check("a pipe goes in as material", piped.returncode == 0 and piped.stdout == "Fake answer: summarize this\n", piped.stdout + piped.stderr)
-    def saved():
-        chats = [json.loads(path.read_text()) for path in (FOLDER / "Chats").glob("*.json")]
-        return [chat for chat in chats if chat["title"] == "summarize this"]
-    wait_for(saved)
-    sent = saved()
-    check("the material is labelled", sent and sent[0]["messages"][0]["sources"] == ["Text piped to the broadway command"], sent)
-    session = next(row for row in envelope("session", "list")[1]["data"]["sessions"] if row["title"] == "say hello")
-    check("session list", session["state"] == "done", session)
-    again = broadway("session", "resume", session["id"])
-    check("resume of a finished task prints its answer", again.returncode == 0 and "Fake answer: say hello" in again.stdout, again.stdout + again.stderr)
-    onward = broadway("session", "resume", session["id"], "and goodbye")
-    check("resume with words continues it", onward.returncode == 0 and "Fake answer: and goodbye" in onward.stdout, onward.stdout + onward.stderr)
-    check("no such session", envelope("session", "stop", "zzzzzzzz")[1]["error"]["code"] == "no_session")
-    check("stop of a finished task", envelope("session", "stop", session["id"])[1]["error"]["code"] == "not_running")
-    detached = broadway("a detached one", "--detach")
-    check("--detach prints the session", detached.returncode == 0 and len(detached.stdout.strip()) == 8, detached.stdout + detached.stderr)
-    wait_for(lambda: live_session() is None)
-
-    bench("ai", "fake", "claude", "hang")
-    running = spawn("a long job")
-    check("list shows it running", wait_for(lambda: live_session() is not None), "")
-    row = live_session()
-    check("steps stream", row and row["state"] == "running", row)
-    busy, parsed = envelope("quit")
-    check("quit waits for tasks", busy.returncode == 1 and parsed["error"]["code"] == "tasks_running", parsed)
-    check("queue", broadway("session", "queue", row["id"], "then this").returncode == 0)
-    stopped = broadway("session", "stop", row["id"])
-    check("stop", stopped.returncode == 0, stopped.stderr)
-    running.wait(timeout=15)
-    check("a stopped task exits 130", running.returncode == 130, running.returncode)
-    check("its steps went to stderr", "snapshot" in running.stderr.read())
-
-    running = spawn("another long job")
-    wait_for(lambda: live_session() is not None)
-    time.sleep(0.3)
-    running.send_signal(signal.SIGINT)
-    running.wait(timeout=15)
-    check("Control-C stops the task and exits 130", running.returncode == 130 and wait_for(lambda: live_session() is None), running.returncode)
-
-    running = spawn("a question")
-    wait_for(lambda: live_session() is not None)
-    bench("ai", "task-ask", "Which one?")
-    running.wait(timeout=15)
-    said = running.stderr.read()
-    check("a question exits 3 with a resume line", running.returncode == 3 and "Which one?" in said and "session resume" in said, said)
-    row = live_session()
-    check("it waits as needs_you", row and row["state"] == "needs_you", row)
-    bench("ai", "fake", "claude")
-    answered = broadway("session", "resume", row["id"], "the blue one")
-    check("resume answers it", answered.returncode == 0 and "the blue one" in answered.stdout, answered.stdout + answered.stderr)
-    wait_for(lambda: live_session() is None)
-
-    bench("ai", "fake", "claude", "hang")
-    running = subprocess.Popen([BROADWAY, "--world", WORLD, "--json", "a json question"], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    wait_for(lambda: live_session() is not None)
-    bench("ai", "task-ask", "Red or blue?")
-    running.wait(timeout=15)
-    parsed = json.loads(running.stdout.read())
-    check("a question in json", running.returncode == 3 and parsed["error"]["code"] == "needs_you" and parsed["data"]["question"] == "Red or blue?" and "resume" in parsed["data"], parsed)
-    broadway("session", "stop", live_session()["id"])
-    check("a waiting task stops", wait_for(lambda: live_session() is None))
-
-    running = spawn("no person here", "--no-person")
-    wait_for(lambda: live_session() is not None)
-    bench("ai", "task-ask", "Anyone?")
-    running.wait(timeout=15)
-    said = running.stderr.read()
-    check("--no-person fails at once", running.returncode == 1 and "needs a person" in said, said)
-    check("and the task stops", wait_for(lambda: live_session() is None))
-
-    running = spawn("wait a bit", "--wait-person", "0.03")
-    wait_for(lambda: live_session() is not None)
-    bench("ai", "task-ask", "Still there?")
-    began = time.time()
-    running.wait(timeout=15)
-    check("--wait-person waits, then exits 3", running.returncode == 3 and time.time() - began > 1, running.returncode)
-    broadway("session", "stop", live_session()["id"])
-    wait_for(lambda: live_session() is None)
-
-    running = spawn("wait long", "--wait-person", "5")
-    wait_for(lambda: live_session() is not None)
-    bench("ai", "task-ask", "Which?")
-    row = live_session()
-    wait_for(lambda: live_session()["state"] == "needs_you")
-    bench("ai", "fake", "claude")
-    steered = broadway("session", "steer", row["id"], "the green one")
-    check("steer answers a question", steered.returncode == 0, steered.stderr)
-    running.wait(timeout=15)
-    said = running.stdout.read()
-    check("the waiting caller carries on", running.returncode == 0 and "the green one" in said, said + running.stderr.read())
-    wait_for(lambda: live_session() is None)
-
-    bench("ai", "fake", "claude", "hang")
-    master, slave = pty.openpty()
-    running = subprocess.Popen([BROADWAY, "--world", WORLD, "ask me here"], stdin=slave, stdout=subprocess.PIPE, stderr=slave, text=True)
-    os.close(slave)
-    wait_for(lambda: live_session() is not None)
-    bench("ai", "task-ask", "Which at the terminal?")
-    bench("ai", "fake", "claude")
-    wait_for(lambda: live_session()["state"] == "needs_you")
-    time.sleep(0.3)
-    os.write(master, b"the terminal one\n")
-    running.wait(timeout=15)
-    said = running.stdout.read()
-    os.close(master)
-    check("a terminal is asked there", running.returncode == 0 and "the terminal one" in said, said)
-    wait_for(lambda: live_session() is None)
-
-    bench("ai", "fake", "claude", "hang")
-    running = spawn("an approval")
-    wait_for(lambda: live_session() is not None)
-    bench("ai", "task-ask", "Send it?", "person")
-    running.wait(timeout=15)
-    said = running.stderr.read()
-    check("what happens in Broadway says so", running.returncode == 3 and "Answer in Broadway" in said, said)
-    broadway("session", "stop", live_session()["id"])
-    wait_for(lambda: live_session() is None)
-    bench("ai", "fake", "claude")
+def old_task_words():
+    for words in (["task", "say hello"], ["session", "list"], ["plans", "list"], ["tasks", "list"], ["helpers", "list"], ["say hello"], ["buy", "some", "tea"], ["mcp", "--task", "6f1c2d3e-0000-4000-8000-000000000001"]):
+        said = broadway(*words)
+        lines = said.stderr.strip().splitlines()
+        check(f"{' '.join(words)} says Broadway no longer runs tasks", said.returncode == 2 and said.stdout == "" and len(lines) == 1
+              and "Broadway no longer runs tasks" in lines[0], said.stdout + said.stderr)
+    for words in (["memory", "list"], ["notes"], ["memory"]):
+        said = broadway(*words)
+        lines = said.stderr.strip().splitlines()
+        check(f"{' '.join(words)} says Broadway no longer keeps notes", said.returncode == 2 and said.stdout == "" and len(lines) == 1
+              and "no longer keeps notes" in lines[0], said.stdout + said.stderr)
+    refused, parsed = envelope("say hello")
+    check("its envelope", refused.returncode == 2 and parsed["error"]["code"] == "no_tasks" and parsed["ok"] is False, refused.stdout)
+    shown = broadway("help").stdout
+    check("help names no task", "what to do" not in shown and "Tasks" not in shown, shown)
+    status = broadway("status").stdout
+    check("status names no plan and no task", all(word not in status for word in ("Claude:", "ChatGPT:", "Tasks running")), status)
 
 
 def setup():
@@ -721,11 +606,11 @@ def switched_off(base):
     check("status works off", status.returncode == 0 and "Agents: off" in status.stdout, status.stdout)
     check("help works off", broadway("help", "click").returncode == 0)
     check("doctor works off", "agents are off" in broadway("doctor").stdout)
-    for words in (["read"], ["snapshot"], ["click", "@e1"], ["shot", "-o", "/dev/null"], ["history", "x"], ["wait"], ["go", base], ["session", "list"]):
+    for words in (["read"], ["snapshot"], ["click", "@e1"], ["shot", "-o", "/dev/null"], ["history", "x"], ["wait"], ["go", base]):
         refused, parsed = envelope(*words)
         check(f"{words[0]} is refused off", refused.returncode == 1 and parsed["error"]["code"] == "agents_off" and "Settings" in parsed["error"]["hint"], parsed)
     task = broadway("do a thing")
-    check("a task is refused", task.returncode == 1 and "Agents are off" in task.stderr, task.stderr)
+    check("a sentence says Broadway no longer runs tasks", task.returncode == 2 and "Broadway no longer runs tasks" in task.stderr, task.stderr)
     opened, parsed = envelope("open", base + "byhand")
     check("open still works, as your own tab", opened.returncode == 0 and parsed["data"]["agent"] is False, opened.stdout + opened.stderr)
     check("and a bare address", broadway(base).returncode == 0)
@@ -1028,23 +913,6 @@ def your_stuff(base):
     yes("history clear", "history", "clear")
     check("nothing left", not good("history list", "history", "list")["visits"])
 
-    bench("ai", "fake", "claude")
-    finished = broadway("a finished task", "--no-person")
-    check("a task for the list", finished.returncode == 0, finished.stderr)
-    task = next(row for row in good("tasks list", "tasks", "list")["tasks"] if row["title"] == "a finished task")
-    check("tasks show", "Fake answer: a finished task" in good("tasks show", "tasks", "show", task["id"])["text"])
-    yes("tasks delete", "tasks", "delete", task["id"])
-    check("task gone", not any(row["id"] == task["id"] for row in good("tasks list", "tasks", "list")["tasks"]))
-    bench("ai", "fake", "claude", "hang")
-    running = spawn("a running task")
-    wait_for(live_session)
-    alive = live_session()
-    no("a live task can't be deleted", "refused", "tasks", "delete", alive["id"], "--no-person")
-    broadway("session", "stop", alive["id"])
-    running.wait(timeout=15)
-    wait_for(lambda: live_session() is None)
-    bench("ai", "fake", "claude")
-
     no("a source that isn't", "refused", "live", "add", "Bad", "not an address at all")
     folder = good("live add", "live", "add", "News", base + "feed.xml")["id"]
     good("live update one", "live", "update", folder)
@@ -1270,9 +1138,6 @@ def ai_commands(base):
     no("replies stop", "not_found", "replies", "stop", "zzzzzzzz")
     check("now list", "rows" in good("now list", "now", "list"))
     no("now done", "not_found", "now", "done", "nothing")
-    check("plans list", good("plans list", "plans", "list")["plans"])
-    check("plans usage", "usage" in good("plans usage", "plans", "usage"))
-    check("plans models", "models" in good("plans models", "plans", "models"))
     status = good("agents status", "agents", "status")
     check("agents status", status["switch"] is True and status["mode"] in ("auto", "ask", "bypass"), status)
     connected = good("agents connect", "agents", "connect")["connected"]
@@ -1292,7 +1157,6 @@ def ai_commands(base):
     plain_done = broadway("agents", "done", "--summary", "Plain CLI check")
     check("agents done prints its line and no row", plain_done.returncode == 0 and plain_done.stdout == "" and "Ended." in plain_done.stderr, plain_done.stdout + plain_done.stderr)
     good("agents connect after done", "agents", "connect")
-    check("helpers list", "helpers" in good("helpers list", "helpers", "list"))
     tab = good("a tab to ask about", "tabs", "new", base + "asked")["id"]
     running = subprocess.Popen([BROADWAY, "--world", WORLD, "tabs", "close", tab, "--wait-person", "1", "--json"], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     wait_for(desk, 8)
@@ -1313,7 +1177,7 @@ def everyday(base):
     check("a retired word answers as any unknown one", gone.returncode == unknown.returncode != 0
           and gone.stdout == unknown.stdout and gone.stderr.replace("brief", "zzzz") == unknown.stderr, (gone, unknown))
     gone, unknown = envelope("brief", "read")[1], envelope("zzzz", "read")[1]
-    same = lambda answer: (answer["command"], answer["ok"], (answer["error"] or {}).get("code"), str((answer["data"] or {}).get("answer", "")).replace("zzzz", "brief"))
+    same = lambda answer: (answer["command"].replace("zzzz", "brief"), answer["ok"], (answer["error"] or {}).get("code"), str((answer["data"] or {}).get("answer", "")).replace("zzzz", "brief"))
     check("…with --json too", same(gone) == same(unknown), (gone, unknown))
     drift_cli = envelope("__nouns")[1]["data"]["verbs"]
     drift_app = [name for name in envelope("__nouns", "--app")[1]["data"]["verbs"] if not name.startswith("complete ")]
@@ -1379,7 +1243,7 @@ def everyday(base):
 
 def person_switched_off(base):
     write_settings("false")
-    refused = [["spaces"], ["bookmarks"], ["downloads"], ["history", "list"], ["tasks", "list"], ["skills"], ["settings", "get", "newtab.floating"],
+    refused = [["spaces"], ["bookmarks"], ["downloads"], ["history", "list"], ["skills"], ["settings", "get", "newtab.floating"],
                ["settings", "set", "newtab.floating", "true"], ["page", "info"], ["logins"], ["watch"]]
     for words in refused:
         result, parsed = envelope(*words)
@@ -1440,7 +1304,7 @@ def the_rest(base):
     help_and_mistakes()
     browsing(base)
     batching(base)
-    tasks()
+    old_task_words()
     setup()
     check_quit("quit", "quit")
     check("status after quit exits 1", broadway("status").returncode == 1)

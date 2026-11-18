@@ -11,8 +11,8 @@ enum AgentIdle {
     static let wakeFlag = "--hidden-wake"
     static let patience: TimeInterval = 1800
 
-    static func shouldQuit(woken: Bool, hidden: Bool, serving: Bool, tasks: Int, quiet: TimeInterval) -> Bool {
-        woken && hidden && !serving && tasks == 0 && quiet >= patience
+    static func shouldQuit(woken: Bool, hidden: Bool, serving: Bool, quiet: TimeInterval) -> Bool {
+        woken && hidden && !serving && quiet >= patience
     }
 }
 
@@ -22,7 +22,6 @@ enum AgentCatalog {
         var positional: [String]?
         var examples: [String] = []
         var columns: [String] = []
-        var hidden = false
         var about: String?
         var flagNames: [String: String] = [:]
         var repeats: Set<String> = []
@@ -82,12 +81,6 @@ enum AgentCatalog {
                      about: AgentAskOutside.description, flagNames: ["choices": "choice"], repeats: ["choices"]),
         "skills": Shape(examples: ["broadway skills", "broadway skills --url https://github.com"]),
         "skill": Shape(positional: ["name"], examples: ["broadway skill github"]),
-        "sign_in": Shape(hidden: true),
-        "autofill": Shape(hidden: true),
-        "helper_start": Shape(hidden: true),
-        "helper_wait": Shape(hidden: true),
-        "mac_read": Shape(hidden: true),
-        "mac_run": Shape(hidden: true),
     ]
 
     private static let plainly = [
@@ -108,7 +101,6 @@ enum AgentCatalog {
 
     static func command(_ tool: ToolSpec) -> [String: Any]? {
         let shape = shapes[tool.name] ?? Shape()
-        guard !shape.hidden else { return nil }
         let name = shape.command ?? tool.name.replacingOccurrences(of: "_", with: "-")
         let inOrder = shape.positional ?? tool.required.filter { $0 != "tab" }
         let positional = (inOrder + tool.required.filter { $0 != "tab" && !inOrder.contains($0) })
@@ -179,9 +171,6 @@ enum ToolCode: String, CaseIterable {
     case noWindow = "no_window"
     case needsTask = "needs_task"
     case needsPerson = "needs_person"
-    case tasksRunning = "tasks_running"
-    case noSession = "no_session"
-    case ambiguousSession = "ambiguous_session"
     case unseen
     case opensWindow = "opens_window"
     case unmet
@@ -240,11 +229,8 @@ enum ToolCode: String, CaseIterable {
         case .noAnswer: "The page may be busy. Look with broadway snapshot before you try again."
         case .failed: "It may or may not have happened, so look before you repeat it"
         case .noWindow: "Ask the person to open a window in Broadway"
-        case .needsTask: "Start a task with broadway \"what to do\" so the person can answer in Broadway"
+        case .needsTask: "Run broadway agents connect first, so the person can answer in Broadway"
         case .needsPerson: "Run it where someone can answer, or without --no-person"
-        case .tasksRunning: "Stop them with broadway session stop ID, or run broadway quit --force"
-        case .noSession: "Run broadway session list"
-        case .ambiguousSession: "Run broadway session list and give more of the id"
         case .unseen: "Ask the person to select the agent's tab in Broadway, then try again"
         case .opensWindow: "Use broadway choose REF VALUE for a list, or broadway type for a date, time or colour"
         case .unmet: "Steps before this one landed. Look with broadway snapshot, then go on with broadway batch --from N."
@@ -269,7 +255,7 @@ enum ToolFailure {
         ("macOS is asking", "needs_you"), ("the clipboard is the person's", "refused"), ("Nothing was filled", "refused"), ("Only tabs an agent", "refused"), ("Nothing was attached", "refused"), ("isn't a web address", "refused"), ("isn't one of the keys", "bad_input"),
         ("gave no answer", "no_answer"), ("nothing to read", "no_answer"), ("Broadway has no window", "no_window"), ("No tool named", "unknown_tool"),
         ("waits for the person's yes", "needs_you"), ("hasn't answered", "needs_you"), ("Nobody answered", "needs_you"),
-        ("only a task can ask", "needs_task"), ("Only a running task", "needs_task"), ("runs without the person", "refused"),
+        ("only a connected agent can ask", "needs_task"),
         ("The person is driving", "driving"), ("handed it back", "handed_back"),
         ("said not now", "said_no"), ("said never here", "never_here"), ("never lets agents", "never_here"),
         ("never shows one for an agent", "opens_window"), ("page nobody is looking at", "unseen"),
@@ -370,9 +356,6 @@ extension AgentSocket {
             connection.send(["ok": true, "version": version, "commands": AgentCatalog.commands(box.tools)])
         case "call":
             call(request, browser: browser, on: connection)
-        case "session":
-            guard browser.prefs.agentsAllowed else { return refuse(on: connection) }
-            AgentSessions.shared.handle(request, browser: browser, on: connection)
         case "quit":
             quit(request, on: connection)
         case "serve":
@@ -421,10 +404,6 @@ extension AgentSocket {
         guard let spec = box.tools.first(where: { $0.name == name }) else {
             connection.send(ToolFailure.error(.unknownCommand, "The Broadway that's running doesn't know \(name)", hint: AgentCatalog.olderHint,
                                               data: AgentCatalog.versions(request)))
-            return connection.close()
-        }
-        guard AgentCatalog.shapes[name]?.hidden != true else {
-            connection.send(ToolFailure.error(.unknownCommand, "Only Broadway's own tasks use \(name)"))
             return connection.close()
         }
         let link = self.link(for: request, create: name == "open" || name == "tab" || spec.properties["tab"] != nil, rejoin: true)?.id
@@ -508,12 +487,6 @@ extension AgentSocket {
     }
 
     private func quit(_ request: [String: Any], on connection: LineConnection) {
-        let tasks = AgentSessions.shared.live.count
-        if tasks > 0, request["force"] as? Bool != true {
-            connection.send(ToolFailure.error("tasks_running", "\(tasks) task\(tasks == 1 ? " is" : "s are") running"))
-            return connection.close()
-        }
-        AgentSessions.shared.stopAll()
         connection.send(["ok": true, "data": ["quit": true]])
         connection.close()
         DispatchQueue.main.async {
@@ -524,291 +497,14 @@ extension AgentSocket {
 
     private func serve(_ request: [String: Any], on connection: LineConnection) {
         serving = true
-        AgentSessions.shared.nobodyHome = request["person"] as? String == "none"
+        nobodyHome = request["person"] as? String == "none"
         connection.send(["ok": true, "data": ["serving": true]])
         connection.onClose = { [weak self, previous = connection.onClose] in
             previous?()
             MainActor.assumeIsolated {
                 self?.serving = false
-                AgentSessions.shared.nobodyHome = false
+                self?.nobodyHome = false
             }
         }
-    }
-}
-
-@MainActor
-final class AgentSessions {
-    static let shared = AgentSessions()
-
-    struct Waiting: Equatable {
-        var question: String
-        var choices: [String] = []
-        var inBroadway = false
-    }
-
-    private var held: [UUID: Conversation] = [:]
-    private var streams: [UUID: LineConnection] = [:]
-    private var owners: Set<UUID> = []
-    private var alone: Set<UUID> = []
-    private var terminal: Set<UUID> = []
-    private(set) var waiting: [UUID: Waiting] = [:]
-    var nobodyHome = false
-
-    var live: [UUID: Conversation] {
-        held.merging(AgentTasks.shared.running) { kept, _ in kept }
-    }
-
-    static func short(_ id: UUID) -> String { String(id.uuidString.prefix(8)).lowercased() }
-
-    func begin(prompt: String, choice: ModelChoice, prefs: Preferences, request: [String: Any], on connection: LineConnection) {
-        let chat = Chat(kind: .task, model: choice)
-        let id = chat.id
-        if request["person"] as? String == "none" { alone.insert(id) }
-        attach(id, connection)
-        owners.insert(id)
-        connection.send(["event": "started", "model": choice.label, "session": Self.short(id)])
-        launch(prompt, chat: chat, choice: choice, prefs: prefs, material: request["material"] as? String)
-    }
-
-    private func launch(_ prompt: String, chat: Chat, choice: ModelChoice?, prefs: Preferences, material: String? = nil) {
-        let id = chat.id
-        terminal.insert(id)
-        let conversation = AgentTasks.shared.start(prompt: prompt, choice: choice, prefs: prefs, command: AgentTasks.shared.helperCommand ?? AgentCommand.path,
-                                                   chat: chat, material: material) { [weak self] event in
-            self?.publish(id, event)
-        }
-        if let conversation, conversation.running { held[id] = conversation }
-    }
-
-    private func attach(_ id: UUID, _ connection: LineConnection) {
-        if let old = streams[id], old !== connection {
-            streams[id] = nil
-            old.close()
-        }
-        streams[id] = connection
-        connection.onLine = { [weak self, weak connection] line in
-            MainActor.assumeIsolated {
-                guard let self, let connection else { return }
-                self.heard(id, line, from: connection)
-            }
-        }
-        connection.onClose = { [weak self, weak connection, previous = connection.onClose] in
-            previous?()
-            MainActor.assumeIsolated {
-                guard let self, let connection else { return }
-                self.left(id, connection)
-            }
-        }
-    }
-
-    private func heard(_ id: UUID, _ line: [String: Any], from connection: LineConnection) {
-        switch line["op"] as? String {
-        case "stop":
-            stop(id)
-        case "detach":
-            owners.remove(id)
-            streams[id] = nil
-            connection.close()
-        case "answer":
-            if let text = line["text"] as? String { answer(id, text) }
-        default:
-            break
-        }
-    }
-
-    private func left(_ id: UUID, _ connection: LineConnection) {
-        guard streams[id] === connection else { return }
-        streams[id] = nil
-        if owners.remove(id) != nil { stop(id) }
-    }
-
-    private func publish(_ id: UUID, _ event: Conversation.Happening) {
-        let conversation = live[id]
-        var goesOn = conversation?.steering == true
-        switch event {
-        case .text(let piece):
-            streams[id]?.send(["event": "text", "text": piece])
-        case .step(let name, let summary):
-            streams[id]?.send(["event": "step", "name": name, "summary": summary])
-        case .stepDone(let name, let failed):
-            streams[id]?.send(["event": "stepDone", "name": name, "failed": failed])
-        case .done(let answer):
-            goesOn = goesOn || conversation?.queued.isEmpty == false
-            if goesOn || waiting[id] != nil {
-                streams[id]?.send(["event": "turn", "text": answer])
-                if let conversation { held[id] = conversation }
-            } else {
-                finish(id, ["event": "done", "text": answer])
-            }
-        case .failed(let message):
-            if goesOn {
-                streams[id]?.send(["event": "turn", "text": ""])
-            } else {
-                finish(id, ["event": "failed", "code": "failed", "message": message])
-            }
-        case .stopped:
-            if !goesOn { finish(id, ["event": "stopped"]) }
-        }
-    }
-
-    private func finish(_ id: UUID, _ last: [String: Any]) {
-        held[id] = nil
-        waiting[id] = nil
-        alone.remove(id)
-        terminal.remove(id)
-        owners.remove(id)
-        let stream = streams[id]
-        streams[id] = nil
-        stream?.send(last)
-        stream?.close()
-    }
-
-    private func stop(_ id: UUID) {
-        waiting[id] = nil
-        guard let conversation = live[id] else { return }
-        if conversation.running { conversation.stop() } else { finish(id, ["event": "stopped"]) }
-    }
-
-    func stopAll() {
-        for id in live.keys { stop(id) }
-    }
-
-    private func event(_ id: UUID, _ asked: Waiting) -> [String: Any] {
-        ["event": "question", "session": Self.short(id), "text": asked.question, "choices": asked.choices, "inBroadway": asked.inBroadway]
-    }
-
-    func answersInTerminal(_ id: UUID) -> Bool {
-        terminal.contains(id)
-    }
-
-    func reaches(_ id: UUID) -> Bool {
-        nobodyHome || terminal.contains(id) || alone.contains(id) || streams[id] != nil
-    }
-
-    func ask(_ arguments: [String: Any], task: UUID?) -> ToolOutcome {
-        let question = (arguments["question"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let task, live[task] != nil else { return .failure("ask works only inside a task") }
-        guard !question.isEmpty else { return .failure("ask needs a question") }
-        return raise(task, Waiting(question: question, choices: arguments["choices"] as? [String] ?? []))
-    }
-
-    func raise(_ id: UUID, _ asked: Waiting) -> ToolOutcome {
-        if nobodyHome || alone.contains(id) {
-            let stream = streams[id]
-            streams[id] = nil
-            owners.remove(id)
-            stream?.send(["event": "failed", "code": "needs_person", "message": "This task needs a person, and none is there: \(asked.question)"])
-            stream?.close()
-            stop(id)
-            return .failure("Nobody is there to answer. Stop here.")
-        }
-        waiting[id] = asked
-        streams[id]?.send(event(id, asked))
-        return .text("Your question is with the person. End your turn now and do nothing else: their answer comes as your next message.")
-    }
-
-    func clear(_ id: UUID) {
-        guard waiting.removeValue(forKey: id) != nil else { return }
-        streams[id]?.send(["event": "answered"])
-    }
-
-    private func answer(_ id: UUID, _ text: String) {
-        let asked = waiting.removeValue(forKey: id)
-        streams[id]?.send(["event": "answered"])
-        live[id]?.steer(asked.map { "Your question was: \($0.question)\nThe answer: \(text)" } ?? text)
-    }
-
-    func handle(_ request: [String: Any], browser: Browser, on connection: LineConnection) {
-        ChatStore.shared.load()
-        let action = request["action"] as? String ?? ""
-        if action == "list" {
-            connection.send(["ok": true, "data": ["sessions": list()]])
-            return connection.close()
-        }
-        let wanted = (request["id"] as? String ?? "").lowercased()
-        let text = (request["text"] as? String).flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
-        let known = Set(live.keys).union(ChatStore.shared.chats.filter { $0.kind == .task }.map(\.id))
-        let matches = wanted.isEmpty ? [] : known.filter { $0.uuidString.lowercased().hasPrefix(wanted) }
-        guard matches.count < 2 else {
-            connection.send(ToolFailure.error("ambiguous_session", "\(wanted) fits \(matches.count) sessions: give more of its id"))
-            return connection.close()
-        }
-        guard let id = matches.first else {
-            connection.send(ToolFailure.error("no_session", "No such session: \(wanted)"))
-            return connection.close()
-        }
-        switch action {
-        case "resume":
-            return resume(id, text: text, browser: browser, on: connection)
-        case "stop", "steer", "queue":
-            guard let conversation = live[id] else {
-                connection.send(ToolFailure.error("not_running", "That session isn't running"))
-                return connection.close()
-            }
-            if action != "stop", text == nil {
-                connection.send(ToolFailure.error("usage", "\(action) needs words"))
-                return connection.close()
-            }
-            if action == "stop" { stop(id) }
-            if action == "steer", let text { waiting[id] != nil ? answer(id, text) : conversation.steer(text) }
-            if action == "queue", let text { conversation.send(text) }
-            connection.send(["ok": true, "data": ["session": Self.short(id), "done": action]])
-        default:
-            connection.send(ToolFailure.error("usage", "session list, resume, stop, steer or queue"))
-        }
-        connection.close()
-    }
-
-    private func resume(_ id: UUID, text: String?, browser: Browser, on connection: LineConnection) {
-        if let conversation = live[id] {
-            attach(id, connection)
-            connection.send(["event": "attached", "session": Self.short(id), "text": conversation.lastAnswer?.text ?? ""])
-            if let text {
-                if waiting[id] != nil || !conversation.running { answer(id, text) } else { conversation.send(text) }
-            } else if let asked = waiting[id] {
-                connection.send(event(id, asked))
-            }
-            return
-        }
-        guard let chat = ChatStore.shared.chats.first(where: { $0.id == id }) else {
-            connection.send(["event": "failed", "code": "no_session", "message": "No such session"])
-            return connection.close()
-        }
-        guard let text else {
-            let last = chat.messages.last { $0.role == .assistant }
-            if let failed = last?.failed {
-                connection.send(["event": "failed", "code": "failed", "message": failed])
-            } else if last?.stopped == true {
-                connection.send(["event": "stopped"])
-            } else {
-                connection.send(["event": "done", "text": last?.text ?? ""])
-            }
-            return connection.close()
-        }
-        attach(id, connection)
-        connection.send(["event": "started", "model": chat.model?.label ?? "", "session": Self.short(id)])
-        launch(text, chat: chat, choice: chat.model ?? Plans.shared.choice(.tasks, browser.prefs), prefs: browser.prefs)
-    }
-
-    func liveRows() -> [[String: Any]] {
-        live.map { id, conversation in
-            ["id": Self.short(id), "detail": waiting[id] != nil ? "needs_you" : "running", "title": conversation.chat.title]
-        }
-    }
-
-    func list() -> [[String: Any]] {
-        let format = ISO8601DateFormatter()
-        let running = live
-        var rows: [[String: Any]] = running.map { id, conversation in
-            ["id": Self.short(id), "state": waiting[id] != nil ? "needs_you" : "running", "title": conversation.chat.title,
-             "updated": format.string(from: conversation.chat.updated)]
-        }
-        let saved = ChatStore.shared.chats.filter { $0.kind == .task && running[$0.id] == nil }.prefix(30)
-        rows += saved.map { chat in
-            let last = chat.messages.last { $0.role == .assistant }
-            let state = last?.failed != nil ? "failed" : last?.stopped == true ? "stopped" : "done"
-            return ["id": Self.short(chat.id), "state": state, "title": chat.title, "updated": format.string(from: chat.updated)]
-        }
-        return rows
     }
 }

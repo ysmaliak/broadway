@@ -63,7 +63,7 @@ enum AgentBoard {
         CodexDesktop.shared.wake()
         AgentDesk.shared.told = { question in
             guard !NSApp.isActive else { return }
-            let who = question.task.flatMap { AgentLinks.shared.link(AgentTasks.shared.root($0)) }.map { "\($0.title) needs you" } ?? "An agent needs you"
+            let who = question.task.flatMap { AgentLinks.shared.link($0) }.map { "\($0.title) needs you" } ?? "An agent needs you"
             SiteNotifications.shared.post(id: question.id.uuidString, title: who, body: question.title,
                                           origin: question.site.map { "https://\($0)" } ?? "broadway://agents", tag: "", info: ["search.kind": "agent"])
         }
@@ -98,16 +98,12 @@ extension Browser {
         }
         return order.compactMap { task in
             guard let tabs = members[task], tabs.count >= 2 else { return nil }
-            return TaskFolder(id: task, name: taskName(task), tabs: tabs, folded: ai.foldedTasks.contains(task),
+            return TaskFolder(id: task, name: "Task", tabs: tabs, folded: ai.foldedTasks.contains(task),
                               needsYou: tabs.contains { $0.agentMood == .waving })
         }
     }
 
     var gatheredTabs: Set<Tab.ID> { Set(taskFolders.flatMap(\.tabs).map(\.id)).union(linkedTabs) }
-
-    func taskName(_ task: UUID) -> String {
-        AgentTasks.shared.running[task]?.chat.title ?? ChatStore.shared.chats.first { $0.id == task }?.title ?? "Task"
-    }
 
     func settle(on tab: Tab) {
         if !tab.agent { return select(tab) }
@@ -151,10 +147,6 @@ extension Browser {
 
     func keepTaskTabs(_ task: UUID) {
         for found in AgentBoard.allTabs(of: task) where found.browser === self { keepAgentTab(found.tab) }
-    }
-
-    func markTaskRead(_ task: UUID) {
-        ChatStore.shared.update(task) { $0.unread = false }
     }
 
     func sweepAgentTabs(at now: Date = Date()) {
@@ -223,7 +215,7 @@ extension Bench {
             let data = (request["arguments"] as? String ?? "{}").data(using: .utf8) ?? Data()
             let arguments = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
             Task { @MainActor in
-                let outcome = await box.call(name, arguments, task: task)
+                let outcome = await box.call(name, arguments, task: task.flatMap { TaskLedger.shared.entry($0) == nil ? nil : $0 })
                 answer(["text": outcome.text ?? "", "failed": outcome.failed, "image": outcome.imagePNG?.count ?? 0])
             }
         case "questions":

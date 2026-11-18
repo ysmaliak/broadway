@@ -537,7 +537,6 @@ extension Browser {
         if let up = forms.offer, up.tab == tab { return "save" }
         if let host = Shield.shared.offer, host == hereHost { return "shield" }
         if let key = Developer.shared.offer, key == LocalServer.key(active?.pageAddress) { return "developer" }
-        if let up = drafts.preview, up.tab == tab { return "draft" }
         return nil
     }
 

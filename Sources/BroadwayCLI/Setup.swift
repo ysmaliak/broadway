@@ -447,16 +447,12 @@ public enum Setup {
         found.append(Check(name: "running", ok: running, required: false, detail: running ? "Broadway is answering" : "Broadway isn't running. A browser command starts it hidden.", fix: nil))
         if running {
             let agents = status?["agents"] as? Bool == true
-            found.append(Check(name: "agents", ok: agents, required: false, detail: agents ? "agents are on" : "agents are off: page commands and tasks are refused",
+            found.append(Check(name: "agents", ok: agents, required: false, detail: agents ? "agents are on" : "agents are off: page commands are refused",
                                fix: agents ? nil : Failure.hints["agents_off"]))
             if let app = status?["version"] as? String, let mine = version(binary: binary) {
                 found.append(Check(name: "version", ok: app == mine, required: false, detail: app == mine ? "broadway and Broadway are both \(mine)" : "broadway is \(mine), Broadway is \(app)",
                                    fix: app == mine ? nil : "Restart Broadway"))
             }
-            let plans = status?["plans"] as? [String: [String: Any]] ?? [:]
-            let connected = plans.values.contains { $0["connected"] as? Bool == true }
-            found.append(Check(name: "plan", ok: connected, required: false, detail: connected ? "a plan is connected for tasks" : "no plan is connected: tasks won't run",
-                               fix: connected ? nil : "Install Claude Code or Codex and sign in"))
         }
         func file(_ name: String, _ path: String, _ want: String, wantedHere: Bool, fix: String) {
             guard wantedHere else {
