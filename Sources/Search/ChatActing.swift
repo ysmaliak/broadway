@@ -2,7 +2,10 @@ import AppKit
 
 enum ChatActing {
     static let canAct = "A chat can do things on the page for you"
-    static let tabNote = "The tab in front"
+
+    static func tabNote(_ short: String) -> String {
+        "The tab in front of me is tab \(short). Commands without --tab work in it."
+    }
 
     static func agentsOff(_ agent: String) -> String {
         "\(agent) reads the page and answers. To let it do things, turn on Let agents use Broadway in Settings › Agents."
@@ -45,16 +48,11 @@ extension Browser {
         let front = place?.tab.flatMap { id in tabs.first { $0.id == id } }.flatMap { tab in
             tab.canBeRead && (!tab.agent || chatsOwnTab(tab, of: conversation)) ? tab : nil
         }
-        var attachments = conversation.attachments.filter { if case .tab = $0.kind { return true } else { return false } }
-        if let front {
-            let short = AgentWorkTabs.short(front.id)
-            let title = front.title.isEmpty ? "untitled" : front.title
-            attachments.append(Attachment(label: ChatActing.tabNote,
-                                          kind: .text("Tab \(short) is the person's tab in front, \(title). Commands without --tab work in it.")))
-        }
+        let attachments = conversation.attachments.filter { if case .tab = $0.kind { return true } else { return false } }
         let started = AgentTasks.shared.start(prompt: text, choice: choice, prefs: prefs, command: AgentTasks.shared.helperCommand ?? AgentCommand.path,
                                               chat: chat, prepare: { [weak self] made in
             made.attachments = attachments
+            made.frontNote = front.map { ChatActing.tabNote(AgentWorkTabs.short($0.id)) }
             made.followsFront = false
             made.pageFinder = { [weak self] id in self?.tabs.first { $0.id == id } }
             made.seen = { [weak self, weak made] in self?.ai.chat === made && self?.chatOpen == true }
