@@ -19,6 +19,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("label", nargs="?", default="after")
 parser.add_argument("--only", default="")
 parser.add_argument("--shots", action="store_true")
+parser.add_argument("--trace", default="")
 options = parser.parse_args()
 sys.argv = sys.argv[:1]
 import split_view as sv  # noqa: E402
@@ -243,6 +244,8 @@ def carry(label, stops, expect, half=0, undo=True, wanted="", whole_window=False
         g = grid()
         shot = picture(f"{label}-{index + 1}", whole_window)
         lifted = the_pair(g)
+        if label in options.trace.split(","):
+            print("   trace held:", json.dumps(g.get("drag")), flush=True)
         stop = {"what": what, "point": [round(point[0], 1), round(point[1], 1)], "seen": drop_word(g), "drop": g.get("drop"),
                 "rowShown": lifted is not None and lifted.get("alpha", 1) > 0.5, "shot": shot.name if shot else None}
         entry["stops"].append(stop)
@@ -250,6 +253,8 @@ def carry(label, stops, expect, half=0, undo=True, wanted="", whole_window=False
     if last is not None:
         mouse([last], resume=True)
     time.sleep(1.0)
+    if label in options.trace.split(","):
+        print("   trace after:", json.dumps(grid().get("drag")), flush=True)
     after = where()
     entry["after"] = after
     shot = picture(f"{label}-landed", whole_window)

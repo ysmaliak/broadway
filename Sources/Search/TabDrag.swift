@@ -10,6 +10,26 @@ final class SplitDropMarker: NSView {
     var kind: SplitDropKind = .strip
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        TabDrag.shared.moved(self)
+    }
+
+    override func setFrameOrigin(_ newOrigin: NSPoint) {
+        super.setFrameOrigin(newOrigin)
+        TabDrag.shared.moved(self)
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        TabDrag.shared.moved(self)
+    }
+
+    override func viewDidUnhide() {
+        super.viewDidUnhide()
+        TabDrag.shared.moved(self)
+    }
 }
 
 /// Only the Stage observes `preview`; the browser's tab row stays still while
@@ -78,6 +98,7 @@ final class TabDrag {
     /// A look again once the pointer may have come to rest.
     @ObservationIgnored private var recheck: DispatchWorkItem?
     @ObservationIgnored private var last: NSPoint?
+    @ObservationIgnored private var lookQueued = false
 
     private init() {}
 
@@ -114,6 +135,7 @@ final class TabDrag {
         guard let sourceTab else { return false }
         let matched = match(browser: browser, source: sourceTab, at: point)
         target = matched
+        note("look \(Self.word(matched)) at \(Int(point.x)),\(Int(point.y))")
         guard let wanted = shown(matched, browser: browser, source: sourceTab) else {
             recheck?.cancel()
             if preview != nil { preview = nil }
@@ -152,6 +174,7 @@ final class TabDrag {
         TabPress.brought = false
         lent = sourceTab.id
         browser.select(page)
+        note("gave \(Bench.short(page))")
     }
 
     private func takePageBack(browser: Browser, after drop: Drop) {
@@ -204,6 +227,21 @@ final class TabDrag {
         } else {
             result = .outside
         }
+        if Store.testing {
+            func short(_ id: UUID?) -> String { id.map { String($0.uuidString.prefix(8)).lowercased() } ?? "" }
+            var said: [String: Any] = [:]
+            said["source"] = short(source.id)
+            said["gesture"] = short(tab.id)
+            said["drop"] = Self.word(result)
+            said["matched"] = sourceBrowser === browser ? Self.word(match(browser: browser, source: source, at: point)) : "other browser"
+            said["preview"] = preview.map { [short($0.targetID), "\($0.side)"] } ?? []
+            said["point"] = [Double(point.x), Double(point.y)]
+            said["active"] = short(browser.activeID)
+            said["lent"] = short(lent)
+            said["cancelled"] = cancelledID == tab.id
+            benchFinish = said
+            note("finish \(Self.word(result)) at \(Int(point.x)),\(Int(point.y))")
+        }
         clear()
         takePageBack(browser: browser, after: result)
         return (source, result, point)
@@ -223,6 +261,10 @@ final class TabDrag {
 
     private func begin(browser: Browser, tab: Tab, at origin: NSPoint) {
         clear()
+        if Store.testing {
+            benchTimeline = []
+            benchStart = ProcessInfo.processInfo.systemUptime
+        }
         cancelledID = nil
         sourceBrowser = browser
         gestureTab = tab
@@ -236,6 +278,69 @@ final class TabDrag {
                   let self, self.gestureTab != nil else { return event }
             self.cancel()
             return nil
+        }
+    }
+
+    @ObservationIgnored private(set) var benchFinish: [String: Any] = [:]
+    @ObservationIgnored private(set) var benchTimeline: [String] = []
+    @ObservationIgnored private var benchStart: TimeInterval = 0
+
+    private func note(_ said: @autoclosure () -> String) {
+        guard Store.testing else { return }
+        let ms = Int(((ProcessInfo.processInfo.systemUptime - benchStart) * 1000).rounded())
+        benchTimeline.append("\(ms) \(said())")
+        if benchTimeline.count > 200 { benchTimeline.removeFirst() }
+    }
+
+    func moved(_ marker: SplitDropMarker) {
+        guard gestureTab != nil, marker.browser === sourceBrowser, marker.kind == .stage else { return }
+        note("marker \(marker.tab.map(Bench.short) ?? "") \(marker.window == nil ? "off" : "on") \(Int(marker.frame.width))x\(Int(marker.frame.height))")
+        guard preview == nil, !lookQueued else { return }
+        lookQueued = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            lookQueued = false
+            guard let browser = sourceBrowser, let gestureTab, cancelledID != gestureTab.id, sourceTab != nil, preview == nil,
+                  let last, Store.testing || NSEvent.pressedMouseButtons & 1 != 0 else { return }
+            look(browser: browser, at: last)
+        }
+    }
+
+    func bench(browser: Browser) -> [String: Any] {
+        guard Store.testing else { return [:] }
+        func short(_ id: UUID?) -> String { id.map { String($0.uuidString.prefix(8)).lowercased() } ?? "" }
+        var out: [String: Any] = [:]
+        out["sourceTab"] = short(sourceTab?.id)
+        out["gestureTab"] = short(gestureTab?.id)
+        out["cancelledID"] = short(cancelledID)
+        out["lent"] = short(lent)
+        out["preview"] = preview.map { [short($0.targetID), "\($0.side)"] } ?? []
+        out["target"] = Self.word(target)
+        out["brought"] = TabPress.brought
+        out["sameBrowser"] = sourceBrowser === browser
+        out["finish"] = benchFinish
+        out["timeline"] = benchTimeline
+        var seen: [[String: Any]] = []
+        for view in markers.values.compactMap(\.view) where view.browser === browser {
+            var one: [String: Any] = ["kind": "\(view.kind)", "tab": short(view.tab?.id), "hidden": view.isHiddenOrHasHiddenAncestor,
+                                      "window": view.window === browser.window]
+            if let window = view.window {
+                let rect = window.convertToScreen(view.convert(view.bounds, to: nil))
+                one["frame"] = [Double(rect.minX), Double(rect.minY), Double(rect.width), Double(rect.height)]
+            }
+            seen.append(one)
+        }
+        out["markers"] = seen
+        return out
+    }
+
+    private static func word(_ drop: Drop) -> String {
+        switch drop {
+        case .stage(let tab, let onLeft): return "stage \(Bench.short(tab)) \(onLeft ? "left" : "right")"
+        case .replace(let tab): return "replace \(Bench.short(tab))"
+        case .strip(let tab): return "strip \(tab.map(Bench.short) ?? "")"
+        case .outside: return "outside"
+        case .cancelled: return "cancelled"
         }
     }
 

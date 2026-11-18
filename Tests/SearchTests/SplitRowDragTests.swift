@@ -7,6 +7,7 @@ import Testing
 final class SplitRowDragTests {
     private var browsers: [Browser] = []
     private var windows: [NSWindow] = []
+    private var stages: [SplitStageView] = []
     private var restorePreferences: (() -> Void)?
 
     init() {
@@ -14,6 +15,7 @@ final class SplitRowDragTests {
     }
 
     private func tearDown() async {
+        for stage in stages { stage.returnBorrowedPages() }
         for window in windows {
             window.contentView = nil
             window.close()
@@ -578,6 +580,68 @@ final class SplitRowDragTests {
             world.browser.tabs(in: nil).map(\.id) == [world.left.id, world.right.id, world.loose[0].id, world.loose[1].id]
         }
         #expect(paired(world))
+    }
+
+    private func columnBesideStage(_ world: World) async throws -> (NSWindow, SplitStageView) {
+        world.browser.window = nil
+        let side = world.browser.prefs.sideWidth
+        let size = NSSize(width: side + 600, height: 640)
+        let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: -20_000, y: -20_000), size: size),
+                              styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let content = NSView(frame: NSRect(origin: .zero, size: size))
+        let column = SideColumnView(browser: world.browser)
+        column.frame = NSRect(x: 0, y: 0, width: side, height: size.height)
+        let stage = SplitStageView(browser: world.browser)
+        stage.frame = NSRect(x: side, y: 0, width: 600, height: size.height)
+        content.addSubview(column)
+        content.addSubview(stage)
+        window.contentView = content
+        world.browser.window = window
+        window.orderFrontRegardless()
+        #expect(!NSScreen.screens.contains { $0.frame.intersects(window.frame) }, "never on a screen")
+        windows.append(window)
+        stages.append(stage)
+        stage.update(find: world.browser.findState, corner: Metrics.pageRadius, immersed: nil, hold: nil, card: nil)
+        try await settle(window)
+        return (window, stage)
+    }
+
+    private func sendAtOnce(_ type: NSEvent.EventType, at point: NSPoint, in window: NSWindow) throws {
+        let event = try #require(NSEvent.mouseEvent(
+            with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1
+        ))
+        window.sendEvent(event)
+    }
+
+    @Test func aTabFlungToThePagesEdgeAndHeldStillSplitsThePageThoughThePageCameBackAfterTheLastMove() async throws {
+        let world = try world(window: false)
+        let (window, stage) = try await columnBesideStage(world)
+        let front = world.loose[0], carried = world.loose[1]
+        #expect(world.browser.activeID == front.id)
+        let start = try row(carried, in: window)
+        let press = NSPoint(x: start.midX, y: start.midY)
+        try await send(.leftMouseDown, at: press, in: window)
+        for step in 1...4 {
+            try await send(.leftMouseDragged, at: NSPoint(x: press.x, y: press.y - 2 * CGFloat(step)), in: window)
+        }
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(world.browser.activeID == carried.id, "pressing the row brings its page forward")
+        let lifted = NSPoint(x: press.x, y: press.y - 8)
+        let page = stage.convert(stage.bounds, to: nil)
+        let edge = NSPoint(x: page.maxX - 40, y: page.midY)
+        for step in 1...12 {
+            let f = CGFloat(step) / 12
+            try sendAtOnce(.leftMouseDragged, at: NSPoint(x: lifted.x + (edge.x - lifted.x) * f, y: lifted.y + (edge.y - lifted.y) * f), in: window)
+        }
+        #expect(world.browser.activeID == front.id, "the page in front came back under the hand")
+        try await Task.sleep(for: .milliseconds(500))
+        try await send(.leftMouseUp, at: edge, in: window)
+        try await Task.sleep(for: .milliseconds(300))
+        let split = world.browser.split(for: carried)
+        #expect(split?.contains(front.id) == true, "let go on the page's right edge, the tab is beside that page")
+        #expect(split?.tabs.last == carried.id)
     }
 
     @Test func aLiveFolderRefusesTheSplitRow() async throws {

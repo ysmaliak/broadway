@@ -85,6 +85,19 @@ enum FolderGridBench {
              "folder": browser.group(of: sign.left).flatMap { id in groups.first { $0.id == id }?.name } ?? "",
              "chips": sign.item.chips.map(placed)]
         }
+        func short(_ id: UUID?) -> String { id.map { String($0.uuidString.prefix(8)).lowercased() } ?? "" }
+        let hands: [[String: Any]] = content.kitSubviews(of: SidePageView.self).filter { !$0.embedded }.map { $0.benchHand() }
+        var drag: [String: Any] = [:]
+        drag["tabDrag"] = TabDrag.shared.bench(browser: browser)
+        drag["tearOff"] = TearOff.shared.bench
+        drag["hands"] = hands
+        drag["active"] = short(browser.activeID)
+        drag["pageBefore"] = short(browser.pageBefore)
+        drag["editing"] = short(browser.editingTab)
+        drag["counts"] = ["views": content.kitSubviews(of: NSView.self).count, "signs": content.kitSubviews(of: SplitSignView.self).count,
+                          "items": content.kitSubviews(of: SplitTabItemView.self).count, "panes": content.kitSubviews(of: PaneLayersView.self).count,
+                          "rows": content.kitSubviews(of: TabRowView.self).count, "windows": NSApp.windows.count,
+                          "morphs": content.kitSubviews(of: PinMorphView.self).count]
         answer(["headings": headings, "rows": rows, "splits": splits, "blocks": SidePageView.benchBlocks, "drop": SidePageView.benchDrop,
                 "undo": ["level": undo?.groupingLevel ?? -1, "name": undo?.undoActionName ?? "", "can": undo?.canUndo ?? false],
                 "edges": ["top": ColumnEdges.seen["top"] ?? 0, "bottom": ColumnEdges.seen["bottom"] ?? 0],
@@ -94,6 +107,7 @@ enum FolderGridBench {
                     case .folder(let id): return "folder:" + (groups.first { $0.id == id }?.name ?? "")
                     }
                 },
+                "drag": drag,
                 "raised": browser.pinnedFolders().map(\.name), "editing": browser.editingGroupID.flatMap { id in groups.first { $0.id == id }?.name } ?? ""])
     }
 

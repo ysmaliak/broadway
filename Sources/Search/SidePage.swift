@@ -1700,6 +1700,12 @@ extension SidePageView {
         return CGVector(dx: event.deltaX, dy: -event.deltaY)
     }
 
+    func benchHand() -> [String: Any] {
+        guard Store.testing else { return [:] }
+        return ["carry": carry.map { [Bench.short($0.tab), "\($0.block)", $0.away ? "away" : "", $0.onPage ? "onPage" : ""] } ?? [],
+                "pending": pending != nil, "swallowRelease": swallowRelease, "morphCarried": morphCarried != nil]
+    }
+
     private static func tab(of row: NSView) -> Tab? {
         (row as? TabRowView)?.tab ?? (row as? PinSquareView)?.tab ?? (row as? SplitSignView)?.left
     }

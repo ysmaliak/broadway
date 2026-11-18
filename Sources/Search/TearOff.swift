@@ -96,6 +96,10 @@ final class TearOff {
         return true
     }
 
+    var bench: [String: Any] {
+        ["refused": refused, "out": out, "tab": tabID.map { String($0.uuidString.prefix(8)).lowercased() } ?? "", "state": "\(state)"]
+    }
+
     func cancelled() {
         guard tabID != nil else { return }
         refused = true
