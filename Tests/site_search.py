@@ -35,7 +35,7 @@ def main():
         sv.launch()
         sv.page("start")
         for typed, want in [("red", "Reddit"), ("yout", "YouTube"), ("yt", "YouTube"), ("wiki", "Wikipedia"),
-                            ("gh", "GitHub"), ("chat", "ChatGPT"), ("twi", "X"), ("stack", "Stack Overflow"),
+                            ("gh", "GitHub"), ("chat", "ChatGPT"), ("twi", "Twitch"), ("twitt", "X"), ("stack", "Stack Overflow"),
                             ("x", ""), ("red panda", ""),
                             # The best site, not the first: "goo" + Tab was Google Maps (X, 26 Oct 2026).
                             ("goo", "Google"), ("goog", "Google"), ("google", "Google"),

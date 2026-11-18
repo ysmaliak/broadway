@@ -5,8 +5,9 @@ Build first (`./build.sh`), then `python3 Tests/column_scroller.py [OUT]`. A tes
 copy in a world of its own, its window put below the desktop where
 `screencapture -l` still pictures it alone, with more rows than the column
 holds. Twice: overlay scroll bars (flashed through the bench) and legacy
-ones (the test process started with -AppleShowScrollBars Always, which
-reaches no other app). Each time, dark and light, cards on and off, the
+ones asked for (the test process started with -AppleShowScrollBars Always,
+which reaches no other app), which the column answers with its own overlay
+bar all the same. Each time, dark and light, cards on and off, the
 sidebar on the right, and stacked spaces.
 
 The column's scroll view spans the sidebar's whole width and its rows sit
@@ -76,7 +77,7 @@ def check(label, legacy, stacked=False):
         return
     t.ok(f"{label}: the column scrolls", c.get("scrolls") is True, c.get("measured"))
     knob, frame, view = bar["knob"], bar["frame"], bar["view"]
-    t.ok(f"{label}: the scroll bar is {'legacy' if legacy else 'overlay'}", bar["legacy"] == (1 if legacy else 0), bar)
+    t.ok(f"{label}: the scroll bar is overlay{', legacy ones asked for' if legacy else ''}", bar["legacy"] == 0, bar)
     rows = sv.cmd({"do": "rowframes"})["rows"].values()
     top, bottom = knob[1], knob[1] + knob[3]
     beside = [r for r in rows if r[1] < bottom and r[1] + r[3] > top and r[0] < view[1] and r[0] + r[2] > view[0]]

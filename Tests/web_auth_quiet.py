@@ -109,7 +109,7 @@ def make():
     return str(folder)
 
 
-def flow(page, options, within=20):
+def flow(page, options, within=20, watch=None):
     """Starts a flow from the extension page and waits for its outcome."""
     sv.ev(page, f"""window.__r = undefined; window.__t = Date.now();
 chrome.identity.launchWebAuthFlow({json.dumps(options)})
@@ -117,12 +117,16 @@ chrome.identity.launchWebAuthFlow({json.dumps(options)})
         e => window.__r = {{error: String(e && e.message || e), ms: Date.now() - window.__t}}); 1""")
     for _ in range(int(within / 0.2)):
         time.sleep(0.2)
+        if watch: watch()
         got = sv.ev(page, "JSON.stringify(window.__r || null)")
         if got and got != "null": return json.loads(got)
     return None
 
 
 def tabs(): return [t.get("url", "") for t in sv.cmd({"do": "tabs"}).get("tabs", [])]
+
+
+def tab_ids(): return {t["id"]: t.get("url", "") for t in sv.cmd({"do": "tabs"}).get("tabs", [])}
 
 
 def main():
@@ -204,10 +208,18 @@ def main():
         t.ok("quiet: only http(s)", r and "error" in r, r)
 
         # Unchanged: interactive gets its tab, which the redirect then closes.
-        r = flow(page, {"url": f"{SITE}/now", "interactive": True})
+        known = tab_ids()
+        opened = set()
+        r = flow(page, {"url": f"{SITE}/now", "interactive": True}, watch=lambda: opened.update(set(tab_ids()) - set(known)))
         print("  interactive:", r)
         t.ok("interactive: still answered through its tab", r and "code=now" in (r.get("ok") or ""), r)
-        t.ok("interactive: its tab gone again", tabs() == before, (before, tabs()))
+        now = tab_ids()
+        left = set(now) - set(known)
+        closed = set(known) - set(now)
+        t.ok("interactive: its tab gone again", not left and not (opened & set(now)),
+             (known, now, sorted(opened)))
+        t.ok("interactive: only the blank start tab it was opened from closed with it",
+             all(known[i] == "" for i in closed), (known, now))
         t.ok("nothing reached a screen", "onScreen" not in sv.cmd({"do": "probe"}))
     finally:
         t.done(); sv.finish(); shutil.rmtree(work, ignore_errors=True)
