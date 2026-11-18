@@ -43,7 +43,7 @@ final class PageAsk: Identifiable {
 }
 
 extension Command {
-    static let asking: Set<String> = ["view.ask"]
+    static let asking: Set<String> = ["view.ask", "view.chat", "view.chats"]
 }
 
 extension Preferences {
@@ -55,7 +55,7 @@ extension PageAsk {
 
     static func set(_ on: Bool, _ prefs: Preferences, in browsers: [Browser]? = nil) {
         prefs.askAndChat = on
-        if !on { (browsers ?? Browsers.all).forEach { $0.closeLine() } }
+        if !on { (browsers ?? Browsers.all).forEach { $0.closeLine(); $0.chatSwitchedOff() } }
     }
 }
 

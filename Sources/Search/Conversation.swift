@@ -62,6 +62,7 @@ final class ChatStore {
 
     private(set) var chats: [Chat] = []
     @ObservationIgnored private var loaded = false
+    @ObservationIgnored private var gone: Set<UUID> = []
     let folder: URL
 
     init(folder: URL = Store.file("Chats")) {
@@ -89,6 +90,7 @@ final class ChatStore {
     }
 
     func save(_ chat: Chat) {
+        guard !gone.contains(chat.id) else { return }
         if let index = chats.firstIndex(where: { $0.id == chat.id }) { chats[index] = chat } else { chats.append(chat) }
         chats.sort { $0.updated > $1.updated }
         write(chat)
@@ -101,8 +103,14 @@ final class ChatStore {
     }
 
     func delete(_ id: UUID) {
+        gone.insert(id)
         chats.removeAll { $0.id == id }
         Disk.remove(file(id))
+    }
+
+    func restore(_ chat: Chat) {
+        gone.remove(chat.id)
+        save(chat)
     }
 
     private func write(_ chat: Chat) {
@@ -156,9 +164,12 @@ final class Conversation: Identifiable {
     @ObservationIgnored var happened: ((Happening) -> Void)?
     @ObservationIgnored var pageFinder: ((Tab.ID) -> Tab?)?
     @ObservationIgnored var seen: (() -> Bool)?
+    var followsFront = true
+
     private let fence = AIPage.newFence()
     @ObservationIgnored private var session: ProviderSession?
     @ObservationIgnored private var worker: Task<Void, Never>?
+    @ObservationIgnored private var halted = false
     @ObservationIgnored private var pendingSteer: String?
     @ObservationIgnored private var carried: [AIPrompt.Source] = []
 
@@ -173,6 +184,7 @@ final class Conversation: Identifiable {
 
     var choice: ModelChoice? { chat.model ?? Plans.shared.choice(.tasks, prefs) }
     var lastAnswer: ChatMessage? { chat.messages.last { $0.role == .assistant } }
+    var finished: Bool { !running && lastAnswer != nil }
     var steering: Bool { pendingSteer != nil }
 
     func send(_ text: String, sourcesOnly: [Attachment]? = nil) {
@@ -203,6 +215,7 @@ final class Conversation: Identifiable {
     }
 
     func stop() {
+        if running, session == nil { halted = true }
         session?.cancel()
     }
 
@@ -237,6 +250,7 @@ final class Conversation: Identifiable {
         answer.model = choice
         chat.messages.append(answer)
         carried = []
+        halted = false
         running = true
         status = "Reading"
         worker = Task { @MainActor [weak self] in
@@ -276,7 +290,13 @@ final class Conversation: Identifiable {
     }
 
     private func run(asked: String, attachments: [Attachment], choice: ModelChoice) async {
+        if tools != .none { TaskLedger.shared.turned(chat.id) }
         let gathered = await gather(attachments, on: choice)
+        if tools != .none, gathered.reads.contains(where: \.addressed) { TaskLedger.shared.saw(nil, addressed: true, task: chat.id) }
+        if halted {
+            halted = false
+            return finish(failed: nil, stopped: true, reads: gathered.reads, addressed: gathered.reads.contains(where: \.addressed))
+        }
         let browsing = tools != .none
         var request = ProviderRequest(system: AIPrompt.system(fence: fence, browsing: browsing),
                                       prompt: AIPrompt.compose(fence: fence, sources: gathered.sources + carried, history: history(), request: asked))

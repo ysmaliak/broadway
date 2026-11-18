@@ -443,7 +443,7 @@ enum MenuBar {
         ]
         if browser.prefs.sitesInPanel, !browser.isPrivate {
             items.append(submenu("Side Panel", [
-                act(browser.sidePanelShown ? "Close Side Panel" : "Show Side Panel", key: "view.sitePanel") { $0.toggleSitePanel() },
+                act(browser.sidePanelShown && browser.sidePanel != .chat ? "Close Side Panel" : "Show Side Panel", key: "view.sitePanel") { $0.toggleSitePanel() },
                 .separator(),
             ] + PanelSites.offered.map { site in
                 act(site.name) { $0.showSiteInPanel(site.url) }
@@ -468,6 +468,8 @@ enum MenuBar {
             items += [
                 .separator(),
                 act("Ask About This Page…", key: "view.ask", enabled: !(active?.asksAgent ?? true)) { $0.askKey() },
+                act(browser.chatOpen ? "Hide Chat" : "Show Chat", key: "view.chat") { $0.toggleChat() },
+                act("Chats", key: "view.chats") { $0.showChats() },
             ]
         }
         items += [

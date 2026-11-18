@@ -347,12 +347,12 @@ extension Browser {
         switch question.kind {
         case .approval(let act):
             if act.heavy { return isReturn && flags == .command && desk.press(.yes) }
-            guard isReturn, flags.isEmpty, !editing else { return false }
+            guard isReturn, flags.isEmpty, !editing, !ai.chatFocused else { return false }
             return desk.press(.yes)
         case .stop:
             return isReturn && flags == .command && desk.press(.yes)
         case .choice(let options):
-            guard flags.isEmpty, !editing,
+            guard flags.isEmpty, !editing, !ai.chatFocused || ai.chatDraft.isEmpty,
                   let digit = event.charactersIgnoringModifiers.flatMap(Int.init), (1...min(9, options.count)).contains(digit)
             else { return false }
             return desk.press(.picked(digit - 1))

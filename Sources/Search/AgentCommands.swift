@@ -712,7 +712,7 @@ final class AgentSessions {
         streams[id]?.send(["event": "answered"])
     }
 
-    private func answer(_ id: UUID, _ text: String) {
+    func answer(_ id: UUID, _ text: String) {
         let asked = waiting.removeValue(forKey: id)
         streams[id]?.send(["event": "answered"])
         live[id]?.steer(asked.map { "Your question was: \($0.question)\nThe answer: \(text)" } ?? text)

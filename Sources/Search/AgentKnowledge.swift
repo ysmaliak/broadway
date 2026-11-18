@@ -16,6 +16,9 @@ final class TaskLedger {
         var title: String
         var hosts: [String] = []
         var addressed = false
+        var addressedYes = false
+        var addressedNo = false
+        var chat = false
         var allowed: Set<String>?
     }
 
@@ -28,6 +31,23 @@ final class TaskLedger {
 
     func close(_ task: UUID) {
         entries[task] = nil
+    }
+
+    func trustAddressed(_ task: UUID) {
+        entries[task]?.addressedYes = true
+    }
+
+    func doubtAddressed(_ task: UUID) {
+        entries[task]?.addressedNo = true
+    }
+
+    func markChat(_ task: UUID) {
+        entries[task]?.chat = true
+    }
+
+    func turned(_ task: UUID) {
+        entries[task]?.addressedYes = false
+        entries[task]?.addressedNo = false
     }
 
     func entry(_ task: UUID?) -> Entry? {

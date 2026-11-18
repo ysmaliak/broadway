@@ -3,6 +3,13 @@ import AppKit
 struct AIStage {
     var line: PageAsk?
     var fieldSearchOnTop: String?
+    var chat: Conversation?
+    var chatShown = false
+    var chatListing = false
+    var chatDraft = ""
+    var chatEditing: ChatMessage.ID?
+    var chatFocus = 0
+    var chatFocused = false
     var foldedTasks: Set<UUID> = []
     var commands: CommandList?
     var result: SelectionRun?
@@ -21,9 +28,10 @@ extension Browser {
     }
 
     func aiKey(_ event: NSEvent) -> Bool {
-        if drivingKey(event) || deskKey(event) { return true }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let key = event.charactersIgnoringModifiers?.lowercased() ?? ""
+        if chatKey(event, flags, key) { return true }
+        if drivingKey(event) || deskKey(event) { return true }
         if let result = ai.result, result.keys(event, flags, key, self) { return true }
         if let commands = ai.commands, commands.keys(event, flags, self) { return true }
         if lineKey(event, flags, key) { return true }
@@ -33,6 +41,7 @@ extension Browser {
     func aiState() -> [String: Any] {
         var out: [String: Any] = lineState()
         out["acting"] = active?.agentActing ?? ""
+        out.merge(chatState()) { _, chat in chat }
         if let commands = ai.commands {
             out["commands"] = commands.rows.map(\.name)
             out["selection"] = commands.picked.text

@@ -2435,6 +2435,23 @@ final class Bench {
                 browser.ai.commands?.index = request["index"] as? Int ?? 0
                 if let commands = browser.ai.commands { commands.take(browser) }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { answer(browser.aiState()) }
+            case "chat":
+                switch request["what"] as? String ?? "toggle" {
+                case "list": browser.showChats()
+                case "new": browser.newChat()
+                case "send":
+                    if !browser.ai.chatShown, let tab = browser.active { browser.showChat(tab) }
+                    browser.ai.chatDraft = request["text"] as? String ?? ""
+                    browser.sendChat()
+                case "done": browser.finishChat(keepOpen: false)
+                default: browser.toggleChat()
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    var state = browser.aiState()
+                    state["listing"] = browser.ai.chatListing
+                    state["kept"] = ChatStore.shared.chats.map(\.title)
+                    answer(state)
+                }
             case "primary":
                 if let result = browser.ai.result { browser.primary(result) }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { answer(browser.aiState()) }
@@ -4633,6 +4650,7 @@ final class Bench {
                                                        "inspectable": web.map { return $0.isInspectable } ?? false,
                                                        "developerExtras": web.flatMap { $0.configuration.preferences.value(forKey: "developerExtrasEnabled") as? Bool } ?? false]
                 .merging(SidePanelPages.shared.siteReport(in: browser)) { a, _ in a }
+            case .chat: content = ["kind": "chat"]
             case nil: break
             }
             // Where the panel's page and every page sit in the window, from
@@ -4873,6 +4891,8 @@ final class Bench {
 
         case "plans":
             PlansBench.run(request, browser: browser, answer)
+        case "chatcolumn":
+            ChatBench.run(request, browser: browser, answer)
 
         case "hints":
             BenchHints.run(request, browser: browser, answer)
