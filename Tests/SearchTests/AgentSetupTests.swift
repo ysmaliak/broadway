@@ -46,6 +46,7 @@ struct AgentSetupTests {
         setup.refreshes = { refreshes }
         setup.linkTaken = { linkTaken }
         setup.staying = { staying }
+        setup.here = { name in home.map { FileManager.default.fileExists(atPath: $0.folder(name)) } ?? false }
         return (setup, heard, store)
     }
 
@@ -207,13 +208,16 @@ struct AgentSetupTests {
         #expect(await heard.words == [AgentCommand.setupWords, AgentCommand.setupWords])
     }
 
-    @Test func onlyAMarkFromAnEarlierVersionWithAgentsOnBringsTheNewerAgents() {
-        #expect(AgentCommand.newlyCovered(isOn: true, marked: true, open: true, kept: nil) == ["cursor", "opencode", "gemini"])
-        #expect(AgentCommand.newlyCovered(isOn: true, marked: true, open: true, kept: AgentCommand.agentNames).isEmpty)
-        #expect(AgentCommand.newlyCovered(isOn: true, marked: true, open: true, kept: ["claude", "codex", "cursor"]) == ["opencode", "gemini"])
-        #expect(AgentCommand.newlyCovered(isOn: false, marked: true, open: true, kept: nil).isEmpty)
-        #expect(AgentCommand.newlyCovered(isOn: true, marked: false, open: true, kept: nil).isEmpty)
-        #expect(AgentCommand.newlyCovered(isOn: true, marked: true, open: false, kept: nil).isEmpty)
+    @Test func onlyAMarkWithAgentsOnBringsUncoveredAgentsWhoseFolderIsThere() {
+        let all: (String) -> Bool = { _ in true }
+        #expect(AgentCommand.newlyCovered(isOn: true, marked: true, open: true, kept: nil, here: all) == ["cursor", "opencode", "gemini"])
+        #expect(AgentCommand.newlyCovered(isOn: true, marked: true, open: true, kept: AgentCommand.agentNames, here: all).isEmpty)
+        #expect(AgentCommand.newlyCovered(isOn: true, marked: true, open: true, kept: ["claude", "codex", "cursor"], here: all) == ["opencode", "gemini"])
+        #expect(AgentCommand.newlyCovered(isOn: true, marked: true, open: true, kept: ["claude"], here: { $0 == "codex" }) == ["codex"])
+        #expect(AgentCommand.newlyCovered(isOn: true, marked: true, open: true, kept: nil, here: { _ in false }).isEmpty)
+        #expect(AgentCommand.newlyCovered(isOn: false, marked: true, open: true, kept: nil, here: all).isEmpty)
+        #expect(AgentCommand.newlyCovered(isOn: true, marked: false, open: true, kept: nil, here: all).isEmpty)
+        #expect(AgentCommand.newlyCovered(isOn: true, marked: true, open: false, kept: nil, here: all).isEmpty)
     }
 
     @Test func anUpdateBringsTheNewerAgentsOnceAtLaunch() async throws {
@@ -227,12 +231,11 @@ struct AgentSetupTests {
         setup.launched(agentsOn: true)
         await setup.settled()
 
-        let newer = ["setup", "cursor", "opencode", "gemini"]
-        #expect(await heard.words == [newer, AgentCommand.refreshWords, AgentCommand.refreshWords])
+        #expect(await heard.words == [["setup", "opencode"], AgentCommand.refreshWords, AgentCommand.refreshWords])
         #expect(FileManager.default.fileExists(atPath: home.opencodeSkill))
         #expect(!FileManager.default.fileExists(atPath: home.cursor))
         #expect(!FileManager.default.fileExists(atPath: home.gemini))
-        #expect(store.stringArray(forKey: AgentCommand.setUpForKey) == AgentCommand.agentNames)
+        #expect(store.stringArray(forKey: AgentCommand.setUpForKey) == ["claude", "codex", "opencode"])
         #expect(setup.runs == 1)
     }
 
@@ -282,7 +285,7 @@ struct AgentSetupTests {
         #expect(setup.runs == 1)
     }
 
-    @Test func turningOnTheFirstTimeRecordsEveryAgentSoALaunchOnlyRefreshes() async throws {
+    @Test func turningOnTheFirstTimeRecordsEveryAgentWhoseFolderIsThereSoALaunchOnlyRefreshes() async throws {
         let home = try invented()
         try FileManager.default.createDirectory(atPath: home.opencode, withIntermediateDirectories: true)
         let (setup, heard, store) = made(refreshes: true, home: home)
@@ -293,7 +296,7 @@ struct AgentSetupTests {
         await setup.settled()
 
         #expect(await heard.words == [AgentCommand.setupWords, AgentCommand.refreshWords])
-        #expect(store.stringArray(forKey: AgentCommand.setUpForKey) == AgentCommand.agentNames)
+        #expect(store.stringArray(forKey: AgentCommand.setUpForKey) == ["opencode"])
         #expect(FileManager.default.fileExists(atPath: home.opencodeSkill))
         #expect(setup.runs == 1)
     }
@@ -325,5 +328,97 @@ struct AgentSetupTests {
         #expect(AgentCommand.summary(checks, home: "/tmp/invented-home/") == "On your PATH, but ~/.local/share/broadway/broadway.zsh isn't there. Run broadway doctor.")
         #expect(AgentCommand.summary(checks, home: "/tmp/invented") == "On your PATH, but /tmp/invented-home/.local/share/broadway/broadway.zsh isn't there. Run broadway doctor.")
         #expect(AgentCommand.tilde("/tmp/invented-home is gone", home: "/tmp/invented-home") == "~ is gone")
+    }
+
+    private func later(_ name: String, refreshes: Bool = false) async throws -> (Setup.Paths, Heard, UserDefaults) {
+        let home = try invented()
+        try FileManager.default.createDirectory(atPath: home.claude, withIntermediateDirectories: true)
+        let (setup, heard, store) = made(refreshes: refreshes, home: home)
+        setup.turned(wasOn: false, isOn: true)
+        await setup.settled()
+        #expect(store.stringArray(forKey: AgentCommand.setUpForKey) == ["claude"])
+
+        setup.launched(agentsOn: true)
+        await setup.settled()
+        #expect(await heard.words == [AgentCommand.setupWords])
+        #expect(store.stringArray(forKey: AgentCommand.setUpForKey) == ["claude"])
+        #expect(!FileManager.default.fileExists(atPath: home.folder(name)))
+
+        try FileManager.default.createDirectory(atPath: home.folder(name), withIntermediateDirectories: true)
+        setup.launched(agentsOn: true)
+        await setup.settled()
+        setup.launched(agentsOn: true)
+        await setup.settled()
+
+        #expect(await heard.words == [AgentCommand.setupWords, ["setup", name]])
+        #expect(store.stringArray(forKey: AgentCommand.setUpForKey) == AgentCommand.agentNames.filter { $0 == "claude" || $0 == name })
+        #expect(setup.runs == 2)
+        return (home, heard, store)
+    }
+
+    @Test func codexInstalledLaterIsSetUpOnceWithItsHooks() async throws {
+        let (home, _, _) = try await later("codex")
+
+        #expect(FileManager.default.fileExists(atPath: home.codexSkill))
+        let hooks = try String(contentsOfFile: home.codexHooks, encoding: .utf8)
+        #expect(HookSetup.installed("codex", in: hooks))
+    }
+
+    @Test func opencodeInstalledLaterGetsItsSkillOnce() async throws {
+        let (home, _, _) = try await later("opencode")
+
+        #expect(FileManager.default.fileExists(atPath: home.opencodeSkill))
+        #expect(!FileManager.default.fileExists(atPath: home.codex))
+    }
+
+    @Test func aSkillRemovedAfterAnAgentInstalledLaterWasSetUpIsNotWrittenAgain() async throws {
+        let home = try invented()
+        let (setup, heard, store) = made(home: home)
+        store.set(true, forKey: AgentCommand.setUpKey)
+        store.set(["claude"], forKey: AgentCommand.setUpForKey)
+        try FileManager.default.createDirectory(atPath: home.codex, withIntermediateDirectories: true)
+        setup.launched(agentsOn: true)
+        await setup.settled()
+
+        _ = Setup.uninstall(["codex"], paths: home)
+        setup.launched(agentsOn: true)
+        await setup.settled()
+
+        #expect(await heard.words == [["setup", "codex"]])
+        #expect(!FileManager.default.fileExists(atPath: home.codexSkill))
+    }
+
+    @Test func aLaunchWithNothingToBringStartsNoHelperForSetup() async throws {
+        let home = try invented()
+        try FileManager.default.createDirectory(atPath: home.claude, withIntermediateDirectories: true)
+        let (setup, heard, store) = made(refreshes: true, home: home)
+        store.set(true, forKey: AgentCommand.setUpKey)
+        store.set(["claude"], forKey: AgentCommand.setUpForKey)
+        var asked: [String] = []
+        setup.here = { name in
+            asked.append(name)
+            return FileManager.default.fileExists(atPath: home.folder(name))
+        }
+
+        setup.launched(agentsOn: true)
+        await setup.settled()
+
+        #expect(await heard.words == [AgentCommand.refreshWords])
+        #expect(asked == ["codex", "cursor", "opencode", "gemini"])
+        #expect(setup.runs == 0)
+    }
+
+    @Test func anEarlierMarkWithNoListStillCountsClaudeCodeAndCodexAsCovered() async throws {
+        let home = try invented()
+        try FileManager.default.createDirectory(atPath: home.codex, withIntermediateDirectories: true)
+        let (setup, heard, store) = made(home: home)
+        earlier(store)
+
+        setup.launched(agentsOn: true)
+        await setup.settled()
+
+        #expect(await heard.words.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: home.codexSkill))
+        #expect(store.stringArray(forKey: AgentCommand.setUpForKey) == nil)
     }
 }

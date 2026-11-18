@@ -1,3 +1,4 @@
+import BroadwayCLI
 import Foundation
 import Observation
 
@@ -51,10 +52,14 @@ extension AgentCommand {
         }
     }
 
-    static func newlyCovered(isOn: Bool, marked: Bool, open: Bool, kept: [String]?) -> [String] {
+    static func newlyCovered(isOn: Bool, marked: Bool, open: Bool, kept: [String]?, here: (String) -> Bool) -> [String] {
         guard open, isOn, marked else { return [] }
         let covered = kept ?? earlierNames
-        return agentNames.filter { !covered.contains($0) }
+        return agentNames.filter { !covered.contains($0) && here($0) }
+    }
+
+    static func agentHere(_ name: String) -> Bool {
+        FileManager.default.fileExists(atPath: Setup.Paths(home: home(ProcessInfo.processInfo.environment)).folder(name))
     }
 }
 
@@ -70,6 +75,7 @@ final class AgentSetup {
     @ObservationIgnored var refreshes: () -> Bool = { AgentCommand.refreshesSkills }
     @ObservationIgnored var linkTaken: () -> Bool = { AgentCommand.somethingAtLink }
     @ObservationIgnored var staying: () -> Bool = { AgentCommand.staying }
+    @ObservationIgnored var here: (String) -> Bool = { AgentCommand.agentHere($0) }
     @ObservationIgnored private let store: UserDefaults
     @ObservationIgnored private var last: Task<Void, Never>?
 
@@ -89,7 +95,7 @@ final class AgentSetup {
         if AgentCommand.setsUp(.launch, isOn: agentsOn, marked: marked, open: open()) {
             setUp()
         } else {
-            let newer = AgentCommand.newlyCovered(isOn: agentsOn, marked: marked, open: open(), kept: covered)
+            let newer = AgentCommand.newlyCovered(isOn: agentsOn, marked: marked, open: open(), kept: covered, here: here)
             if !newer.isEmpty { bring(newer) }
         }
         if refreshes() { queue({ AgentCommand.refreshWords }, counts: false) }
@@ -102,7 +108,7 @@ final class AgentSetup {
     private func setUp() {
         guard available() else { return }
         store.set(true, forKey: AgentCommand.setUpKey)
-        store.set(AgentCommand.agentNames, forKey: AgentCommand.setUpForKey)
+        store.set(AgentCommand.agentNames.filter(here), forKey: AgentCommand.setUpForKey)
         let linkTaken = linkTaken
         let staying = staying
         queue({ AgentCommand.setupWords(somethingAtLink: linkTaken(), staying: staying()) }, counts: true)

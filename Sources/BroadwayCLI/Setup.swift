@@ -26,7 +26,7 @@ struct Step {
     var object: [String: Any] { ["part": part, "done": done, "path": path, "note": note] }
 }
 
-enum Setup {
+public enum Setup {
     static let parts = ["command", "completions", "claude", "codex", "cursor", "opencode", "gemini"]
     static let others = ["cursor", "opencode", "gemini"]
     static let opening = "# >>> broadway >>>"
@@ -106,8 +106,12 @@ enum Setup {
         return false
     }
 
-    struct Paths {
-        var home: String
+    public struct Paths {
+        public var home: String
+
+        public init(home: String) {
+            self.home = home
+        }
 
         var link: String { home + "/.local/bin/broadway" }
         var fish: String { home + "/.config/fish/completions/broadway.fish" }
@@ -125,7 +129,7 @@ enum Setup {
         var opencodeSkill: String { opencode + "/skills/broadway/SKILL.md" }
         var geminiSkill: String { gemini + "/skills/broadway/SKILL.md" }
 
-        func folder(_ part: String) -> String {
+        public func folder(_ part: String) -> String {
             switch part {
             case "claude": claude
             case "codex": codex
@@ -531,7 +535,7 @@ extension Builtins {
 
     static let setupCommands: [Builtin] = [
         Builtin(name: "setup", usage: "broadway setup [command] [completions] [claude] [codex] [cursor] [opencode] [gemini] [--refresh]", summary: "Put broadway on your PATH, with completions and agent skills", group: "Setup",
-                details: "Links ~/.local/bin/broadway to this app's copy, writes fish, bash and zsh completions, and installs a skill for Claude Code and Codex where they are present, and for Cursor, opencode and Gemini CLI in their own skills folders when their folders are there. Cursor gets no copy of its own when it already reads broadway's skill in ~/.claude/skills or ~/.codex/skills. The skill is short and sends agents to broadway guide. It also adds a Stop and a SessionEnd hook, in ~/.claude/settings.json and ~/.codex/hooks.json, that run broadway agents idle --hook so the agent's card reads finished when its turn ends. It adds only its own entries and keeps the rest of each file as it was. It leaves files that aren't its own alone. broadway remove undoes it. Broadway runs broadway setup claude codex cursor opencode gemini itself when you turn agents on, and once at the first launch that finds them already on. When nothing is at ~/.local/bin/broadway, that run also links the command there, unless Broadway is running from its disk image or a download folder. It never moves or replaces what is already there.\n--refresh  only rewrite skills broadway wrote that are older than this Broadway, and bring broadway's own hook entries up to date where they are already there. It creates no skill and adds no hook. Broadway runs it at each launch.",
+                details: "Links ~/.local/bin/broadway to this app's copy, writes fish, bash and zsh completions, and installs a skill for Claude Code and Codex where they are present, and for Cursor, opencode and Gemini CLI in their own skills folders when their folders are there. Cursor gets no copy of its own when it already reads broadway's skill in ~/.claude/skills or ~/.codex/skills. The skill is short and sends agents to broadway guide. It also adds a Stop and a SessionEnd hook, in ~/.claude/settings.json and ~/.codex/hooks.json, that run broadway agents idle --hook so the agent's card reads finished when its turn ends. It adds only its own entries and keeps the rest of each file as it was. It leaves files that aren't its own alone. broadway remove undoes it. Broadway runs this by itself when agents are turned on, and again for an agent it finds for the first time. When nothing is at ~/.local/bin/broadway, the run when agents are turned on also links the command there, unless Broadway is running from its disk image or a download folder. It never moves or replaces what is already there.\n--refresh  only rewrite skills broadway wrote that are older than this Broadway, and bring broadway's own hook entries up to date where they are already there. It creates no skill and adds no hook. Broadway runs it at each launch.",
                 examples: ["broadway setup", "broadway setup completions", "broadway setup claude codex --refresh"]) { context, words in
             let refreshing = words.contains("--refresh")
             let parts = try wanted(words.filter { $0 != "--refresh" }, verb: "setup")

@@ -17,6 +17,8 @@ holds made-up ~/.claude and ~/.codex folders:
 6. An update for someone set up before Cursor, opencode and Gemini CLI were covered:
    the first launch writes opencode's skill once, the Settings row reads no fault, a
    relaunch runs nothing, and a skill then removed by hand stays removed.
+7. An agent installed later: Gemini CLI's folder appears, the next launch writes its
+   skill once and keeps its name, and the launch after that runs nothing.
 
 Nothing under the real home is opened. Its broadway files are compared by stat only.
 """
@@ -221,6 +223,26 @@ def open_agents_page():
     bench({"do": "ui", "settingsPage": "agents"})
 
 
+def later_stage(home):
+    quit()
+    check("before Gemini CLI is installed it is not kept as covered", "gemini" not in defaults("agents.setUpFor"), defaults("agents.setUpFor"))
+    gemini = home.folder / ".gemini"
+    gemini.mkdir()
+    skill = gemini / "skills/broadway/SKILL.md"
+    launch(home.folder)
+    ran = wait_for(lambda: setup_state().get("runs") == 1, 20)
+    check("an agent installed later: the next launch sets it up once", ran is not None, setup_state())
+    check("and Gemini CLI gets Broadway's skill", wait_for(skill.exists, 5) is not None, home.everything().keys())
+    check("and its name is kept", "gemini" in defaults("agents.setUpFor"), defaults("agents.setUpFor"))
+    check("and no skill removed by hand comes back", not (home.folder / ".config/opencode/skills/broadway/SKILL.md").exists(),
+          home.everything().keys())
+    quit()
+    launch(home.folder)
+    time.sleep(3)
+    again = setup_state()
+    check("the launch after that runs no setup", again.get("runs") == 0, again)
+
+
 def update_stage(home):
     quit()
     home.link.unlink()
@@ -346,6 +368,7 @@ def main():
         check("a link that points somewhere else is left as it was", home.held_link() == elsewhere and elsewhere[0] == ELSEWHERE,
               (home.held_link(), elsewhere))
         update_stage(home)
+        later_stage(home)
     finally:
         quit()
         shutil.rmtree(FOLDER, ignore_errors=True)
