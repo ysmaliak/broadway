@@ -1650,6 +1650,7 @@ final class Browser: NSObject {
     /// in every space. Clearing it signs you out of everything, which is
     /// the point.
     func clearSites() {
+        DownloadTrace.forget()
         let types = WKWebsiteDataStore.allWebsiteDataTypes()
         CertificateTrust.clearEverything()
         for store in Spaces.spaceStores() {
@@ -1661,6 +1662,7 @@ final class Browser: NSObject {
 
     /// Only what was fetched to draw pages, not what identifies you.
     func clearCache() {
+        DownloadTrace.forget()
         let types: Set<String> = [
             WKWebsiteDataTypeDiskCache,
             WKWebsiteDataTypeMemoryCache,
@@ -1725,6 +1727,7 @@ final class Browser: NSObject {
     }
 
     func clearHistory() {
+        DownloadTrace.forget()
         history.forget()
         // The sites' icons are a list of where you have been, too, and so
         // are the searches learned from sites visited (SiteSearch.swift).
@@ -6920,7 +6923,7 @@ extension Browser {
     /// `aside`: ⌘Return, as in Safari. The place opens in a new tab and the
     /// tab you were on is left as it was, behind it unless `front` (⇧⌘Return)
     /// asks to go there.
-    func submit(aside: Bool = false, front: Bool = false) {
+    func submit(aside: Bool = false, front: Bool = false, split beside: Bool = false) {
         if fieldMenu.showing {
             fieldMenu.runPicked()
             return
@@ -6936,7 +6939,9 @@ extension Browser {
             return
         }
         if fieldPlace != nil {
-            if let item = pickedOffer?.placed { openPlaced(item, aside: aside, front: front) }
+            if let item = pickedOffer?.placed {
+                if beside, splitsFromField(.placed(item)) { openPlacedInSplit(item) } else { openPlaced(item, aside: aside, front: front) }
+            }
             return
         }
         if waitForSnippet(aside: aside, front: front) { return }
@@ -7015,7 +7020,9 @@ extension Browser {
             return
         }
         let known = knownTitle(picked: chosen, going: url)
-        if launching, !aside {
+        if beside, splitsFromField(picked.flatMap { offers.indices.contains($0) ? offers[$0].kind : nil }) {
+            openInSplit(url)
+        } else if launching, !aside {
             // The floating new tab: what was typed gets a tab of its own, and
             // the page the field was raised over stays as it was.
             open(url, foreground: true, from: active, title: known)
@@ -7182,7 +7189,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         // the `WKDownload` that `didBecome download:` below already knows
         // what to do with.
         guard !action.shouldPerformDownload else {
-            DownloadTrace.note("action-download", ["url": action.request.url?.absoluteString ?? ""])
+            DownloadTrace.note("action-download", ["url": action.request.url?.absoluteString ?? ""], private: tracesPrivately(webView))
             decisionHandler(.download)
             return
         }
@@ -7205,7 +7212,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
                 let hold = HeldTabUnder(spawn: spawn, url: held?.url ?? url, navigation: held?.navigation ?? action.navigationType)
                 if case .go = localNetworkStep(action, to: url, in: webView) {
                     opener.heldTabUnder = hold
-                    DownloadTrace.note("window", ["verdict": "tab-under-held", "url": url.absoluteString])
+                    DownloadTrace.note("window", ["verdict": "tab-under-held", "url": url.absoluteString], private: tracesPrivately(webView))
                     decisionHandler(.allow)
                 } else {
                     decisionHandler(.cancel)
@@ -7600,7 +7607,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
     private func tracePopup(_ opener: Tab, _ action: WKNavigationAction, _ verdict: String, clicked: Bool, sized: Bool) {
         guard Store.testing else { return }
         let frame = action.sourceFrame
-        DownloadTrace.note("window", ["verdict": verdict, "url": action.request.url?.absoluteString ?? "", "clicked": String(clicked)])
+        DownloadTrace.note("window", ["verdict": verdict, "url": action.request.url?.absoluteString ?? "", "clicked": String(clicked)], private: tracesPrivately(opener))
         let hits = opener.popupGesture.hits.map { hit in
             "fade \(hit.fade) hidden \(hit.hidden) over \(hit.over) cover \(hit.cover) active \(hit.active) masked \(hit.masked) "
                 + "link \(hit.link?.absoluteString ?? "")"
@@ -7622,7 +7629,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
     }
 
     private func refuseTabUnder(_ hold: HeldTabUnder, opener: Tab) {
-        DownloadTrace.note("window", ["verdict": "tab-under", "url": hold.url.absoluteString])
+        DownloadTrace.note("window", ["verdict": "tab-under", "url": hold.url.absoluteString], private: tracesPrivately(opener))
         if Store.testing {
             opener.popupTrace = Array((opener.popupTrace + [[
                 "verdict": "tab-under", "url": hold.url.absoluteString, "refused": String(hold.spawn.refused),
@@ -7658,7 +7665,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         var request = URLRequest(url: url)
         if let page = opener.committed ?? webView.url { request.setValue(page.absoluteString, forHTTPHeaderField: "Referer") }
         let id = opener.id
-        DownloadTrace.note("window", ["verdict": verdict + "-fetched", "url": url.absoluteString])
+        DownloadTrace.note("window", ["verdict": verdict + "-fetched", "url": url.absoluteString], private: tracesPrivately(webView))
         webView.startDownload(using: request) { [weak self] download in
             MainActor.assumeIsolated {
                 guard let self else { return download.cancel { _ in } }
@@ -7722,7 +7729,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
             let url = response.response.url?.absoluteString ?? ""
             if let hold = tab.heldTabUnder {
                 tab.heldTabUnder = nil
-                DownloadTrace.note("window", ["verdict": file ? "tab-under-file" : "tab-under-page", "url": url])
+                DownloadTrace.note("window", ["verdict": file ? "tab-under-file" : "tab-under-page", "url": url], private: tracesPrivately(webView))
                 if file { return decisionHandler(.download) }
                 decisionHandler(.cancel)
                 refuseTabUnder(hold, opener: tab)
@@ -7730,7 +7737,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
             }
             let by = tab.undoneBy
             tab.undoneBy = nil
-            DownloadTrace.note("window", ["verdict": file ? "undone-file" : "undone-page", "url": url])
+            DownloadTrace.note("window", ["verdict": file ? "undone-file" : "undone-page", "url": url], private: tracesPrivately(webView))
             if file { return decisionHandler(.download) }
             decisionHandler(.cancel)
             DispatchQueue.main.async { [weak self, weak tab] in
@@ -7746,7 +7753,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         if let http = response.response as? HTTPURLResponse,
            let disposition = http.value(forHTTPHeaderField: "Content-Disposition"),
            disposition.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("attachment") {
-            DownloadTrace.note("response-attachment", ["url": response.response.url?.absoluteString ?? ""])
+            DownloadTrace.note("response-attachment", ["url": response.response.url?.absoluteString ?? ""], private: tracesPrivately(webView))
             decisionHandler(.download)
             return
         }
@@ -7777,7 +7784,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         DownloadTrace.note(response.canShowMIMEType ? "response-show" : "response-download", [
             "url": response.response.url?.absoluteString ?? "", "type": response.response.mimeType ?? "",
             "main": String(response.isForMainFrame),
-        ])
+        ], private: tracesPrivately(webView))
         decisionHandler(response.canShowMIMEType ? .allow : .download)
     }
 
@@ -7839,7 +7846,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         helper: WKWebView? = nil
     ) {
         let webView = suppliedWebView ?? download.webView
-        DownloadTrace.note("became", ["url": download.originalRequest?.url?.absoluteString ?? "", "view": String(webView != nil)])
+        DownloadTrace.note("became", ["url": download.originalRequest?.url?.absoluteString ?? "", "view": String(webView != nil)], private: isPrivate || (entry == nil && tracesPrivately(webView)))
         // Find privacy before publishing the entry. A private transfer is
         // still tracked internally so its delegate and Finder progress clean
         // up correctly, but it never enters the shared Downloads panel.
@@ -8157,7 +8164,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
     @objc(_webView:contentRuleListWithIdentifier:performedAction:forURL:)
     func ruleListActed(_ webView: WKWebView, identifier: String, action: NSObject, url: URL) {
         if action.responds(to: NSSelectorFromString("blockedLoad")), (action.value(forKey: "blockedLoad") as? Bool) == true {
-            DownloadTrace.note("blocked", ["list": identifier, "url": url.absoluteString])
+            DownloadTrace.note("blocked", ["list": identifier, "url": url.absoluteString], private: tracesPrivately(webView))
         }
         guard identifier == LocalNetwork.identifier,
               action.responds(to: NSSelectorFromString("blockedLoad")),
@@ -8337,7 +8344,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
     private func fail(_ webView: WKWebView, _ error: Error) {
         let tab = anyTab(for: webView)
         if tab?.memoryStopped == true { return }
-        DownloadTrace.error("page-failed", error, ["url": webView.url?.absoluteString ?? ""])
+        DownloadTrace.error("page-failed", error, ["url": webView.url?.absoluteString ?? ""], private: tracesPrivately(webView))
         tab?.uncover()
         let nsError = error as NSError
         let code = nsError.code
@@ -8387,13 +8394,13 @@ extension Browser: WKDownloadDelegate {
         completionHandler: @escaping (URL?) -> Void
     ) {
         DownloadTrace.note("asked-destination", ["url": response.url?.absoluteString ?? "", "suggested": suggestedFilename,
-                                                 "type": response.mimeType ?? ""])
+                                                 "type": response.mimeType ?? ""], private: tracesPrivately(download))
         if let guess = speculating.removeValue(forKey: ObjectIdentifier(download)) {
             guard FileAnswer.fetchedIsFile(response) else {
-                DownloadTrace.note("refused-page", ["url": guess.url.absoluteString])
+                DownloadTrace.note("refused-page", ["url": guess.url.absoluteString], private: tracesPrivately(download))
                 return completionHandler(nil)
             }
-            DownloadTrace.note("refused-file", ["url": guess.url.absoluteString])
+            DownloadTrace.note("refused-file", ["url": guess.url.absoluteString], private: tracesPrivately(download))
             (tabs + parkedTabs).first { $0.id == guess.opener }?.blockedPopups.removeAll { $0.url == guess.url }
             keep(download, from: download.webView)
         }
@@ -8434,7 +8441,7 @@ extension Browser: WKDownloadDelegate {
     }
 
     private func place(_ download: WKDownload, at file: URL?, chosen: URL?, name: String, held: Bool, asked: Bool = false, _ completionHandler: @escaping (URL?) -> Void) {
-        DownloadTrace.note("placed", ["file": file?.path ?? "", "held": String(held)])
+        DownloadTrace.note("placed", ["file": file?.path ?? "", "held": String(held)], private: tracesPrivately(download))
         guard let file else {
             if let ended = fetches.destinationCancelled(download) {
                 ended.owner.relinquish(download)
@@ -8457,7 +8464,7 @@ extension Browser: WKDownloadDelegate {
         let source = download.originalRequest?.url ?? entry?.request?.url
         let file = download.progress.fileURL ?? entry?.destination
         let listed = !unlisted.contains(ObjectIdentifier(download))
-        DownloadTrace.note("finished", ["file": file?.path ?? "", "listed": String(listed)])
+        DownloadTrace.note("finished", ["file": file?.path ?? "", "listed": String(listed)], private: tracesPrivately(download))
         AgentDownloadWatch.finished(download, at: file)
         let ended = fetches.finish(download, file: file)
         (ended?.owner ?? self).relinquish(download)
@@ -8585,7 +8592,7 @@ extension Browser: WKDownloadDelegate {
         didFailWithError error: Error,
         resumeData: Data?
     ) {
-        DownloadTrace.error("failed", error, ["url": download.originalRequest?.url?.absoluteString ?? ""])
+        DownloadTrace.error("failed", error, ["url": download.originalRequest?.url?.absoluteString ?? ""], private: tracesPrivately(download))
         if speculating.removeValue(forKey: ObjectIdentifier(download)) != nil { return }
         AgentDownloadWatch.failed(download, error.localizedDescription)
         guard let ended = fetches.fail(download, error: error, resumeData: resumeData) else { return }

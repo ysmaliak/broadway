@@ -1387,6 +1387,15 @@ final class Bench {
                 @MainActor func next(_ index: Int) {
                     guard index < pieces.count else {
                         var out: [String: Any] = ["field": field.stringValue, "typed": browser.typed, "offers": browser.offers.map(\.key), "ms": times]
+                        if let held = request["post"] as? [String], let window = field.window {
+                            Bench.postReturn(held, to: window)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                                out["editing"] = browser.editing
+                                out["fieldAfter"] = field.stringValue
+                                answer(out)
+                            }
+                            return
+                        }
                         guard request["go"] as? Bool == true, let tab = browser.active else { answer(out); return }
                         // Then Return, as the field's own delegate takes it:
                         // how long until WebKit is loading the page.

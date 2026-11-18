@@ -45,10 +45,10 @@ enum FieldPlace: String, CaseIterable, Equatable {
 
     var forgetting: String { self == .history ? "Forget" : "Remove" }
 
-    var hints: [(keys: String, word: String)] {
+    func hints(splits: Bool) -> [(keys: String, word: String)] {
         switch self {
         case .history, .bookmarks:
-            [("⌘↩", "New Tab"), ("⇧⌘C", "Copy Link"), ("⌃X", forgetting)]
+            [("⌘↩", "New Tab")] + (splits ? [("⌥↩", "Split View")] : []) + [("⇧⌘C", "Copy Link"), ("⌃X", forgetting)]
         case .downloads:
             [("⌘R", "Show in Finder"), ("⇧⌘C", "Copy Path"), ("⌃X", forgetting)]
         case .snippets:
@@ -272,6 +272,10 @@ extension Browser {
             undoAnnounced()
             return true
         }
+        if combo == KeyCombo("return", command: false, option: true) {
+            submit(split: true)
+            return true
+        }
         guard let row = pickedOffer?.placed else { return false }
         switch combo {
         case KeyCombo("x", command: false, control: true), KeyCombo("delete", command: false, shift: true):
@@ -281,8 +285,6 @@ extension Browser {
         case KeyCombo("r"):
             guard row.place == .downloads else { return false }
             revealPlaced(row)
-        case KeyCombo("return", command: false, option: true):
-            openPlacedAtEnd(row)
         default:
             return false
         }
@@ -306,6 +308,9 @@ extension Browser {
             }
             add("newTab", "Open in New Tab", "plus.square", keys: "⇧⌘↩") { [weak self] in
                 self?.openPlaced(item, aside: true, front: true)
+            }
+            if splitsFromField(.placed(item)) {
+                add("split", "Open in Split View", "rectangle.split.2x1", keys: "⌥↩") { [weak self] in self?.openPlacedInSplit(item) }
             }
             add("copy", "Copy Link", "link", keys: "⇧⌘C") { [weak self] in self?.copyPlaced(item) }
             if item.place == .history {
@@ -445,9 +450,12 @@ final class FieldPlaceRowView: NSView {
     private let aside = FieldLine.label("", size: 12, color: KitColor.muted)
     private var hints: [(cap: FieldKeyCap, word: KitLabel)] = []
 
-    init(item: FieldPlaceItem, lit: Bool) {
+    var splits: Bool { didSet { if splits != oldValue { refresh() } } }
+
+    init(item: FieldPlaceItem, lit: Bool, splits: Bool = false) {
         self.item = item
         self.lit = lit
+        self.splits = splits
         super.init(frame: .zero)
         trailing.wantsLayer = true
         for view in [title, detail, trailing] as [NSView] { addSubview(view) }
@@ -488,7 +496,7 @@ final class FieldPlaceRowView: NSView {
             hint.cap.removeFromSuperview()
             hint.word.removeFromSuperview()
         }
-        hints = lit ? item.place.hints.map { (FieldKeyCap($0.keys), FieldLine.label($0.word, size: 11.5, color: KitColor.muted)) } : []
+        hints = lit ? item.place.hints(splits: splits).map { (FieldKeyCap($0.keys), FieldLine.label($0.word, size: 11.5, color: KitColor.muted)) } : []
         for hint in hints {
             hint.word.setAccessibilityElement(false)
             trailing.addSubview(hint.cap)

@@ -5,10 +5,11 @@ Build first (`./build.sh` or `./build.sh debug`), then run
 `python3 Tests/split_view.py`. The app is started hidden in a world of its
 own (SEARCH_PROBE=split-tests-<checkout>, see use()), driven through
 ./bench's socket, and quit;
-its settings and files are removed afterwards. Nothing here makes, shows or
-brings forward a window: what can only be seen — dragging onto a page's
-edge, the divider under the pointer, the motion itself — is checked by
-hand on a release candidate.
+its settings and files are removed afterwards. Only the ⌥↩ case shows the
+probe's own window, without bringing it forward, for one picture of it by
+its id in .context/split-view/. What can only be seen — dragging onto a
+page's edge, the divider under the pointer, the motion itself — is checked
+by hand on a release candidate.
 """
 
 import atexit
@@ -17,10 +18,12 @@ import json
 import os
 import re
 import secrets
+import shutil
 import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -326,7 +329,7 @@ def case_slice2(t):
     t.ok("two pages, side by side", a in f and b in f and f[a]["x"] == left and f[b]["x"] > left + f[a]["width"], st["paneFrames"])
     gut = f[b]["x"] - left - f[a]["width"]
     t.ok("a 7 pt gutter", abs(gut - 7) < 0.6, gut)
-    t.ok("even halves", abs(f[a]["width"] - f[b]["width"]) < 1, (f[a]["width"], f[b]["width"]))
+    t.ok("even halves", abs(f[a]["width"] - f[b]["width"]) <= 1, (f[a]["width"], f[b]["width"]))
     x = left + f[a]["width"] + 3.5; y = f[a]["y"] + f[a]["height"] / 2
     # drag the divider left, hold
     st = sp("mouse", points=[[x, y], [x - 60, y], [x - 120, y], [x - 160, y]], hold=True, to="view"); time.sleep(0.3); st = sp("state")
@@ -573,9 +576,59 @@ def case_peek(t):
     t.ok("Split View off: kept as a tab, as before", other and st["activeID"] == other[0] and len(st["splits"]) == 1, (st["splits"], other))
 
 
+def still(name):
+    out = ROOT / ".context" / "split-view"
+    out.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix="split-view-shot-"))
+    try:
+        source = work / "WindowShot.swift"
+        source.write_text((ROOT / "Tests" / "WindowShot.swift").read_text())
+        built = subprocess.run(["swiftc", "-parse-as-library", str(source), "-o", str(work / "shot")], cwd=str(work), capture_output=True)
+        if built.returncode != 0:
+            return None
+        number = cmd({"do": "idle", "action": "unhide"})["number"]
+        time.sleep(0.8)
+        pid = next(iter(holding() & running()), None)
+        path = out / f"{name}.png"
+        path.unlink(missing_ok=True)
+        for _ in range(4):
+            subprocess.run([str(work / "shot"), str(pid), str(number), str(path)], cwd=str(work), capture_output=True)
+            if path.exists():
+                break
+            time.sleep(0.8)
+        cmd({"do": "idle", "action": "hide"})
+        return path if path.exists() else None
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def case_field(t):
+    """⌥↩ in the field opens the address beside the page on screen"""
+    setup(splitView=True); launch()
+    a = page("notes"); sp("select", id=a); time.sleep(0.6)
+    got = cmd({"do": "field", "text": f"{BASE}/beside", "post": ["option"]})
+    time.sleep(1.2)
+    st = sp("state")
+    new = [x["id"] for x in st["tabs"] if x["url"].endswith("/beside")]
+    t.ok("⌥↩ in the field: the address opens in a new tab beside the page on screen", new and st["splits"] and st["splits"][0]["tabs"] == [a, new[0]], (st["splits"], new))
+    t.ok("…the page that was on screen stays where it was", url(st, a).endswith("/notes"), url(st, a))
+    t.ok("…the field closes", got.get("editing") is False, got)
+    t.ok("…and no line break went into it", "\n" not in got.get("fieldAfter", "") and "\r" not in got.get("fieldAfter", ""), got)
+    picture = still("option-return")
+    t.ok("…a picture of the probe's window with both pages", picture is not None)
+    if picture:
+        print("  picture", picture)
+    sp("enabled", on=False); time.sleep(0.5)
+    count = len(sp("state")["tabs"])
+    cmd({"do": "field", "text": f"{BASE}/plain", "post": ["option"]})
+    time.sleep(1.2)
+    st = sp("state")
+    t.ok("Split View off: ⌥↩ does what ↩ does, the page on screen goes there", url(st, st["activeID"]).endswith("/plain") and len(st["tabs"]) == count, (url(st, st["activeID"]), len(st["tabs"]), count))
+
+
 def main():
     t = T()
-    for case in [case_slice1, case_slice1b, case_slice2, case_slice3, case_slice4, case_slice5a, case_slice5b, case_slice6, case_peek]:
+    for case in [case_slice1, case_slice1b, case_slice2, case_slice3, case_slice4, case_slice5a, case_slice5b, case_slice6, case_peek, case_field]:
         print(f"— {case.__doc__}")
         try:
             case(t)

@@ -411,7 +411,10 @@ extension Browser {
             add("newTab", "\(opens) in New Tab", "plus.square", keys: "⇧⌘↩") { [weak self] in
                 self?.open(row: offer, .newTab)
             }
-            add("atEnd", "\(opens) in New Tab at the End", "arrow.right.to.line", keys: "⌥↩") { [weak self] in
+            if splitsFromField(offer.kind) {
+                add("split", "Open in Split View", "rectangle.split.2x1", keys: "⌥↩") { [weak self] in self?.openRowInSplit(offer) }
+            }
+            add("atEnd", "\(opens) in New Tab at the End", "arrow.right.to.line") { [weak self] in
                 self?.open(row: offer, .atEnd)
             }
         }
@@ -501,8 +504,7 @@ extension Browser {
         if handleNowKey(combo) { return true }
         if handleFavoriteKey(combo) { return true }
         if combo == KeyCombo("return", command: false, option: true) {
-            guard let row else { return false }
-            open(row: row, .atEnd)
+            submit(split: true)
             return true
         }
         if combo == KeyCombo("delete", command: false, shift: true) {

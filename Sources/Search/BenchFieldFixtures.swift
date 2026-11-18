@@ -215,3 +215,20 @@ enum BenchFieldFixtures {
         }
     }
 }
+
+extension Bench {
+    static func postReturn(_ held: [String], to window: NSWindow) {
+        var flags: NSEvent.ModifierFlags = []
+        if held.contains("option") { flags.insert(.option) }
+        if held.contains("command") { flags.insert(.command) }
+        if held.contains("shift") { flags.insert(.shift) }
+        for type in [NSEvent.EventType.keyDown, .keyUp] {
+            guard let event = NSEvent.keyEvent(
+                with: type, location: .zero, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: window.windowNumber, context: nil, characters: "\r",
+                charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36
+            ) else { continue }
+            NSApp.postEvent(event, atStart: false)
+        }
+    }
+}

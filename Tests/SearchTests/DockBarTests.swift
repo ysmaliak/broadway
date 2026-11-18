@@ -103,8 +103,9 @@ struct DockBarTests {
     }
 
     @Test func theBarFollowsTheDownloadsWithoutTouchingTheDockInATestRun() async throws {
-        let bar = DockBar.shared
+        let bar = DockBar()
         #expect(!bar.drivesTile)
+        #expect(!DockBar.shared.drivesTile)
 
         bar.update([DockLoad(received: 30, expected: 100, underWay: true)])
         try await Task.sleep(for: .milliseconds(300))

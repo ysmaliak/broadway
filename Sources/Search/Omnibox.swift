@@ -696,7 +696,7 @@ final class FieldListView: NSView {
                     row.offer = offers[index]
                     row.lit = lit
                     let offer = offers[index]
-                    FieldHosts.setRow(row.host, offer: offer, height: rowHeight, lit: lit,
+                    FieldHosts.setRow(row.host, offer: offer, height: rowHeight, lit: lit, splits: browser.fieldPairs,
                                       take: { [weak browser] in browser?.take(offer) },
                                       copy: { [weak browser] in browser?.copyAnswer($0, whole: true) })
                 }

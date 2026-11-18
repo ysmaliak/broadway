@@ -16,9 +16,9 @@ final class DockBar {
     var shown: Int? { pace.shown }
     var tileSet: Bool { view != nil && NSApplication.shared.dockTile.contentView === view }
 
-    private init() {
-        iconWatch = NotificationCenter.default.addObserver(forName: AppIconShown.changed, object: nil, queue: .main) { _ in
-            MainActor.assumeIsolated { DockBar.shared.view?.needsDisplay = true; DockBar.shared.paint() }
+    init() {
+        iconWatch = NotificationCenter.default.addObserver(forName: AppIconShown.changed, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.view?.needsDisplay = true; self?.paint() }
         }
     }
 

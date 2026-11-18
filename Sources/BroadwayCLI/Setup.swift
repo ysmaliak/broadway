@@ -533,6 +533,30 @@ extension Builtins {
         return .done
     }
 
+    static func failureLog(_ place: Place) -> FailureLog {
+        FailureLog(folder: URL(fileURLWithPath: place.socket).deletingLastPathComponent())
+    }
+
+    static func failureCount(_ words: ArraySlice<String>) throws -> Int {
+        guard let word = words.first else { return FailureLog.shown }
+        guard words.count == 1, let count = Int(word), (1...FailureLog.limit).contains(count) else {
+            throw Failure.usage("COUNT must be a whole number from 1 to \(FailureLog.limit)", hint: "broadway doctor failures 20")
+        }
+        return count
+    }
+
+    static func failures(_ context: Context, _ words: ArraySlice<String>) throws -> Exit {
+        let lines = failureLog(context.place).last(try failureCount(words))
+        let console = context.console
+        if !console.json {
+            if lines.isEmpty { console.line("No failed loads or downloads are kept") }
+            for line in lines { console.line(line) }
+        }
+        let rows = lines.compactMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) }
+        console.success("doctor", ["failures": rows])
+        return .done
+    }
+
     static let setupCommands: [Builtin] = [
         Builtin(name: "setup", usage: "broadway setup [command] [completions] [claude] [codex] [cursor] [opencode] [gemini] [--refresh]", summary: "Put broadway on your PATH, with completions and agent skills", group: "Setup",
                 details: "Links ~/.local/bin/broadway to this app's copy, writes fish, bash and zsh completions, and installs a skill for Claude Code and Codex where they are present, and for Cursor, opencode and Gemini CLI in their own skills folders when their folders are there. Cursor gets no copy of its own when it already reads broadway's skill in ~/.claude/skills or ~/.codex/skills. The skill is short and sends agents to broadway guide. It also adds a Stop and a SessionEnd hook, in ~/.claude/settings.json and ~/.codex/hooks.json, that run broadway agents idle --hook so the agent's card reads finished when its turn ends. It adds only its own entries and keeps the rest of each file as it was. It leaves files that aren't its own alone. broadway remove undoes it. Broadway runs this by itself when agents are turned on, and again for an agent it finds for the first time. When nothing is at ~/.local/bin/broadway, the run when agents are turned on also links the command there, unless Broadway is running from its disk image or a download folder. It never moves or replaces what is already there.\n--refresh  only rewrite skills broadway wrote that are older than this Broadway, and bring broadway's own hook entries up to date where they are already there. It creates no skill and adds no hook. Broadway runs it at each launch.",
@@ -547,9 +571,10 @@ extension Builtins {
                 examples: ["broadway remove", "broadway remove codex"]) { context, words in
             report(Setup.uninstall(try wanted(words, verb: "remove"), paths: Setup.Paths(home: context.home)), verb: "remove", context: context)
         },
-        Builtin(name: "doctor", usage: "broadway doctor", summary: "Check each piece of the setup and say what is wrong", group: "Setup",
-                details: "It never starts Broadway. Exits 1 if something broadway can't work without is wrong.",
-                examples: ["broadway doctor", "broadway doctor --json"]) { context, _ in
+        Builtin(name: "doctor", usage: "broadway doctor [failures [COUNT]]", summary: "Check each piece of the setup and say what is wrong", group: "Setup",
+                details: "It never starts Broadway. Exits 1 if something broadway can't work without is wrong.\nfailures  print the last steps of failed page loads and downloads that Broadway kept on this Mac, newest last, 100 unless COUNT says otherwise. The log keeps up to 500 lines with no addresses, file names or paths in them, and clearing history, sign-ins or the cache empties it.",
+                examples: ["broadway doctor", "broadway doctor --json", "broadway doctor failures", "broadway doctor failures 20"]) { context, words in
+            if words.first == "failures" { return try failures(context, words.dropFirst()) }
             let link = context.place.connect()
             var status: [String: Any]?
             if let link, link.send(["op": "status"]) { status = link.object() }

@@ -62,7 +62,7 @@ final class SiteFileAsk {
         guard let card = deck.add(verdict, file: file, name: name, site: site, host: host, more: more) else { return reply(true) }
         waiting[file] = Waiting(tab: tab, card: card, store: store, download: ObjectIdentifier(download), reply: reply)
         cards[tab] = deck
-        if Store.testing { DownloadTrace.note("site-file-asked", ["name": name, "site": site, "kind": verdict == .askInsecure ? "insecure" : "site"]) }
+        if Store.testing { DownloadTrace.note("site-file-asked", ["name": name, "site": site, "kind": verdict == .askInsecure ? "insecure" : "site"], private: true) }
     }
 
     func answer(_ id: UUID, allow: Bool) {

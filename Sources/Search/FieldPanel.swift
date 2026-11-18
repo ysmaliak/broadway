@@ -202,6 +202,7 @@ final class FieldRowView: NSView {
     var offer: Suggestion { didSet { if offer != oldValue { refresh(rebuild: kind(offer) != kind(oldValue)) } } }
     var height: CGFloat { didSet { if height != oldValue { invalidateIntrinsicContentSize(); needsLayout = true } } }
     var lit = false { didSet { if lit != oldValue { (content as? FieldPlaceRowView)?.lit = lit } } }
+    var splits = false { didSet { if splits != oldValue { (content as? FieldPlaceRowView)?.splits = splits } } }
     var copyAnswer: ((FieldAnswer) -> Void)? { didSet { (content as? FieldAnswerRowView)?.copyWhole = copyAnswer } }
 
     private var content: NSView?
@@ -238,7 +239,7 @@ final class FieldRowView: NSView {
                 made = row
             default:
                 if let item = offer.placed {
-                    made = FieldPlaceRowView(item: item, lit: lit)
+                    made = FieldPlaceRowView(item: item, lit: lit, splits: splits)
                 } else {
                     made = FieldPlainRowView(offer: offer)
                 }
@@ -766,8 +767,9 @@ final class FieldRowSlot: NSView {
 
     override var isFlipped: Bool { true }
 
-    func set(offer: Suggestion, height: CGFloat, lit: Bool, copy: @escaping (FieldAnswer) -> Void) {
+    func set(offer: Suggestion, height: CGFloat, lit: Bool, splits: Bool = false, copy: @escaping (FieldAnswer) -> Void) {
         if let row {
+            row.splits = splits
             row.offer = offer
             row.height = height
             row.lit = lit
@@ -775,6 +777,7 @@ final class FieldRowSlot: NSView {
             return
         }
         let made = FieldRowView(offer: offer, height: height, lit: lit)
+        made.splits = splits
         made.copyAnswer = copy
         made.frame = bounds
         addSubview(made)
@@ -828,10 +831,10 @@ enum FieldHosts {
 
     static func row() -> FieldRowSlot { FieldRowSlot() }
 
-    static func setRow(_ slot: FieldRowSlot, offer: Suggestion, height: CGFloat, lit: Bool,
+    static func setRow(_ slot: FieldRowSlot, offer: Suggestion, height: CGFloat, lit: Bool, splits: Bool = false,
                        take: @escaping () -> Void, copy: @escaping (FieldAnswer) -> Void) {
         slot.take = take
-        slot.set(offer: offer, height: height, lit: lit, copy: copy)
+        slot.set(offer: offer, height: height, lit: lit, splits: splits, copy: copy)
     }
 
     static func bar() -> FieldBarSlot { FieldBarSlot() }
