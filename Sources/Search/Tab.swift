@@ -753,8 +753,10 @@ final class Tab: Identifiable {
         didSet {
             if groupID == nil, oldValue != nil { letGo = Date() }
             if groupID != oldValue { trimWords = nil }
+            if groupID != oldValue, groupID != bornIn { bornIn = nil }
         }
     }
+    @ObservationIgnored var bornIn: UUID?
 
     /// A name you gave it, in place of whatever the page calls itself. It
     /// stays through navigation: a tab you named is a tab you are keeping for

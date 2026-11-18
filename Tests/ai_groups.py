@@ -4,8 +4,10 @@
 Build first, then `python3 Tests/ai_groups.py` from a worktree. Hidden, with
 the fake engine (aigroups fake): pages open as a person opens them, related
 ones land in one group with a name and an emoji, an unrelated one stays loose,
-a page opened later joins, a tab dragged out stays out, a renamed group keeps
-its name, and an ungrouped group doesn't come back. A result ⌘-clicked from a
+a page opened later joins, a tab dragged out stays out, a page opened from
+inside the folder stays when it belongs and leaves for the row under the folder
+when it does not, a renamed group keeps its name, and an ungrouped group doesn't
+come back. A result ⌘-clicked from a
 search page (the user's shot: "Runner смотреть онлайн на английском") goes into
 one folder with that page, under a short name that is not the query. Nothing
 calls a model.
@@ -167,6 +169,17 @@ def hidden():
         now = ai_groups()[0]
         t.ok("a tab taken out stays out", hotels not in now["tabs"] and museums in now["tabs"], now)
         t.ok("and is remembered as taken out", any("hotels" in key for key in now["refused"]), now)
+
+        trams = sv.sp("open", url=f"{base}/lisbon-trams", **{"from": flights, "foreground": False})["resultID"]
+        pasta = sv.sp("open", url=f"{base}/pasta", **{"from": flights, "foreground": False})["resultID"]
+        left = wait_for(lambda: (lambda g: g if g and pasta not in g["tabs"] and trams in g["tabs"] else None)((ai_groups() or [None])[0]), 10)
+        folder = ai_groups()[0]
+        t.ok("a page opened from inside the folder that belongs stays in it", trams in folder["tabs"], folder)
+        t.ok("a page opened from inside the folder about something else leaves it", left is not None and all(pasta not in g["tabs"] for g in ai("state")["groups"]), ai("state"))
+        t.ok("and is not taken for one the person took out", not any("pasta" in key for key in folder["refused"]), folder)
+        row = [x["id"] for x in sv.sp("state")["tabs"]]
+        t.ok("it sits right under the folder", pasta in row and row.index(pasta) == max(row.index(x) for x in folder["tabs"]) + 1, (row, folder["tabs"]))
+        now = folder
 
         ai("rename", now["name"], "December")
         weather = open_page(base, "weather")

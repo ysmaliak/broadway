@@ -23,6 +23,11 @@ protocol AIGroupEngine: Sendable {
 protocol AIGroupDecider: AIGroupEngine {
     var batch: Int { get }
     func decide(_ ask: AIGroupAsk) async throws -> [UUID: AIGroupPick]
+    func fits(_ tab: AIGroupTab, in group: AIGroupInfo) async throws -> AIGroupFit
+}
+
+enum AIGroupFit: String, Equatable, Sendable {
+    case yes, no, unsure
 }
 
 protocol AIGroupNamer: AIGroupEngine {
@@ -35,6 +40,8 @@ extension AIGroupEngine {
 
 extension AIGroupDecider {
     var batch: Int { 8 }
+
+    func fits(_ tab: AIGroupTab, in group: AIGroupInfo) async throws -> AIGroupFit { .unsure }
 }
 
 enum AIGroupEngineKind: String, CaseIterable, Identifiable, Sendable {
@@ -90,6 +97,7 @@ final class MacGroupEngine: AIGroupDecider, AIGroupNamer {
 
     private static let lock = NSLock()
     nonisolated(unsafe) private static var judged: [String: Bool] = [:]
+    nonisolated(unsafe) private static var linked: [String: String] = [:]
 
     static let joining = """
     You decide whether a new browser tab belongs in an existing folder of tabs. It belongs only when it is about the same \
@@ -105,26 +113,59 @@ final class MacGroupEngine: AIGroupDecider, AIGroupNamer {
          "options": together + ["only the website", "only the kind of page", "nothing"]],
     ]
 
+    typealias Probe = @Sendable (String, String, [[String: Any]]) async throws -> [String: Any]
+
+    static let asking: Probe = { instructions, prompt, fields in
+        try await probe(instructions: instructions, prompt: prompt, fields: fields, most: 200)
+    }
+
     static func belongs(_ group: AIGroupInfo, _ tab: AIGroupTab) async throws -> Bool {
+        try await fitting(group, tab) == .yes
+    }
+
+    static func fitting(_ group: AIGroupInfo, _ tab: AIGroupTab, probe: Probe = asking) async throws -> AIGroupFit {
         let question = "Folder \"\(group.name)\":\n" + group.members.prefix(6).map { "- \($0.localLine)" }.joined(separator: "\n")
             + "\nNew tab: \(tab.localLine)"
-        if let known = lock.withLock({ judged[question] }) { return known }
-        var said: [String: Any] = [:]
+        let site = group.members.contains { $0.host == tab.host }
+        func read(_ link: String) -> AIGroupFit {
+            together.contains(link) ? .yes : link == "nothing" || (link == "only the website" && site) ? .no : .unsure
+        }
+        if let known = lock.withLock({ linked[question] }) { return read(known) }
+        let link: String
         do {
-            said = try await probe(instructions: joining, prompt: question, fields: fit, most: 200)
+            link = try await probe(joining, question, fit)["link"] as? String ?? ""
         } catch is CancellationError {
             throw CancellationError()
         } catch {
-            said = ["link": "no answer: \(error.localizedDescription)"]
+            AIGroupTrace.note("belongs", ["folder": group.name, "tab": tab.title, "link": "no answer: \(error.localizedDescription)", "together": false])
+            return .unsure
         }
-        let yes = together.contains(said["link"] as? String ?? "")
-        AIGroupTrace.note("belongs", ["folder": group.name, "tab": tab.title, "link": said["link"] as? String ?? "", "together": yes])
-        lock.withLock { judged[question] = yes }
-        return yes
+        let answer = read(link)
+        AIGroupTrace.note("belongs", ["folder": group.name, "tab": tab.title, "link": link, "together": answer == .yes])
+        if !link.isEmpty {
+            lock.withLock {
+                if linked.count > 2000 { linked = [:] }
+                linked[question] = link
+            }
+        }
+        return answer
+    }
+
+    static func stays(_ group: AIGroupInfo, _ tab: AIGroupTab, probe: Probe = asking) async throws -> AIGroupFit {
+        let first = try await fitting(group, tab, probe: probe)
+        guard first != .yes, group.members.count > 1 else { return first }
+        var turned = group
+        turned.members.reverse()
+        let second = try await fitting(turned, tab, probe: probe)
+        if second == .yes { return .unsure }
+        return first == .no || second == .no ? .no : .unsure
     }
 
     static func forget() {
-        lock.withLock { judged = [:] }
+        lock.withLock {
+            judged = [:]
+            linked = [:]
+        }
         AIGroupSubjects.forget()
     }
 
@@ -154,6 +195,11 @@ final class MacGroupEngine: AIGroupDecider, AIGroupNamer {
             throw ProviderError.refused("A test run never calls a real model")
         }
         guard Self.available else { throw ProviderError.failed("Apple Intelligence isn't on this Mac") }
+    }
+
+    func fits(_ tab: AIGroupTab, in group: AIGroupInfo) async throws -> AIGroupFit {
+        try allowed()
+        return try await Self.stays(group, tab)
     }
 
     func decide(_ ask: AIGroupAsk) async throws -> [UUID: AIGroupPick] {
@@ -209,11 +255,22 @@ final class FakeGroupEngine: AIGroupDecider, AIGroupNamer, @unchecked Sendable {
     private let lock = NSLock()
     private var decided: [AIGroupAsk] = []
     private var named: [AIGroupNameAsk] = []
+    private var fitted: [(tab: AIGroupTab, group: AIGroupInfo)] = []
     var delay: Double = 0
     var failing = false
+    var verdicts: [String: AIGroupFit] = [:]
 
     var asks: [AIGroupAsk] { lock.withLock { decided } }
     var nameAsks: [AIGroupNameAsk] { lock.withLock { named } }
+    var fitAsks: [(tab: AIGroupTab, group: AIGroupInfo)] { lock.withLock { fitted } }
+
+    func fits(_ tab: AIGroupTab, in group: AIGroupInfo) async throws -> AIGroupFit {
+        lock.withLock { fitted.append((tab, group)) }
+        if delay > 0 { try await Task.sleep(for: .seconds(delay)) }
+        if failing { throw ProviderError.failed("The fake engine failed") }
+        if let said = lock.withLock({ verdicts[tab.title] }) { return said }
+        return group.members.contains { Self.topic($0.title) == Self.topic(tab.title) } ? .yes : .no
+    }
 
     static func topic(_ title: String) -> String {
         title.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).first.map { $0.lowercased() } ?? ""

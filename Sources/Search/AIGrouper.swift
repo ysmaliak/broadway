@@ -117,7 +117,10 @@ final class AIGroups {
     }
 
     func landed(_ tab: Tab, in browser: Browser) {
-        guard active(browser) else { return }
+        guard active(browser) else {
+            tab.bornIn = nil
+            return
+        }
         grouper(for: browser).landed(tab)
     }
 
@@ -204,6 +207,7 @@ final class AIGrouper {
     private(set) var nameAsks = 0
     private(set) var how: [UUID: String] = [:]
     private(set) var provisional: Set<UUID> = []
+    private(set) var away: [Tab.ID: Set<UUID>] = [:]
     private var settings: AIGroups { AIGroups.shared }
 
     static let batch = 8
@@ -226,8 +230,11 @@ final class AIGrouper {
 
     func landed(_ tab: Tab) {
         membershipChanged()
-        guard let browser, !tab.cameBack, !decided.contains(tab.id), Self.usable(tab, in: browser),
-              let scheme = tab.pageAddress?.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return }
+        guard let browser, let scheme = tab.pageAddress?.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return }
+        guard !tab.cameBack, !decided.contains(tab.id), Self.usable(tab, in: browser) else {
+            tab.bornIn = nil
+            return
+        }
         let space = browser.spaceID
         if pending[space]?[tab.id] == nil { pending[space, default: [:]][tab.id] = 0 }
         schedule(space)
@@ -250,7 +257,26 @@ final class AIGrouper {
     }
 
     static func members(_ id: UUID, in browser: Browser) -> Set<Tab.ID> {
-        Set(browser.tabs.filter { $0.groupID == id && shown($0) != nil }.map(\.id))
+        Set(browser.tabs.filter { $0.groupID == id && $0.bornIn == nil && shown($0) != nil }.map(\.id))
+    }
+
+    static func automatic(_ group: TabGroup) -> Bool {
+        group.ai && !group.live && group.query == nil
+    }
+
+    static func born(_ tab: Tab, in browser: Browser) -> TabGroup? {
+        guard let id = tab.bornIn, browser.group(of: tab) == id,
+              let group = browser.tabGroups.first(where: { $0.id == id }), automatic(group) else { return nil }
+        return group
+    }
+
+    func info(_ group: TabGroup, in browser: Browser) -> AIGroupInfo {
+        var refused = Set(group.aiRefused)
+        for tab in browser.tabs where away[tab.id]?.contains(group.id) == true {
+            if let key = Self.shown(tab)?.key { refused.insert(key) }
+        }
+        return AIGroupInfo(id: group.id, name: group.name, members: browser.tabs(in: group.id).compactMap(Self.shown),
+                           refused: refused, settled: !provisional.contains(group.id))
     }
 
     static func named(_ group: TabGroup) -> Bool {
@@ -489,6 +515,7 @@ final class AIGrouper {
             }
         }
         members[space] = now
+        away = away.filter { open[$0.key] != nil }
     }
 
     func regroup() async -> Outcome {
@@ -543,12 +570,28 @@ final class AIGrouper {
             ($0.value, places[$0.key] ?? .max, $0.key.uuidString) < ($1.value, places[$1.key] ?? .max, $1.key.uuidString)
         }
         var chosen: [Tab] = []
+        var born: [Tab] = []
         let tried = Dictionary(waiting.map { ($0.key, $0.value) }, uniquingKeysWith: { one, _ in one })
         for (id, tries) in waiting {
-            guard let tab = browser.tabs.first(where: { $0.id == id }), Self.usable(tab, in: browser),
-                  browser.group(of: tab) == nil else {
+            guard let tab = browser.tabs.first(where: { $0.id == id }), Self.usable(tab, in: browser) else {
                 pending[space]?[id] = nil
                 decided.insert(id)
+                continue
+            }
+            if browser.group(of: tab) != nil {
+                guard Self.born(tab, in: browser) != nil, Self.shown(tab) != nil || tries < 2 else {
+                    tab.bornIn = nil
+                    pending[space]?[id] = nil
+                    decided.insert(id)
+                    continue
+                }
+                guard Self.shown(tab) != nil else {
+                    pending[space]?[id] = tries + 1
+                    continue
+                }
+                guard born.count < Self.batch else { continue }
+                born.append(tab)
+                pending[space]?[id] = nil
                 continue
             }
             guard Self.shown(tab) != nil else {
@@ -558,6 +601,13 @@ final class AIGrouper {
             guard chosen.count < room else { continue }
             chosen.append(tab)
             pending[space]?[id] = nil
+        }
+        for tab in await judge(born, space: space, decider: decider) {
+            if chosen.count < room {
+                chosen.append(tab)
+            } else {
+                pending[space, default: [:]][tab.id] = 0
+            }
         }
         if decider?.local == true {
             for tab in chosen { await tab.readBy() }
@@ -577,10 +627,7 @@ final class AIGrouper {
             openers[shown.id] = source.id
             if !freshIDs.contains(source.id), !loose.contains(where: { $0.id == source.id }) { loose.append(seen) }
         }
-        let groups = browser.tabGroups.filter { $0.ai && !$0.live && $0.query == nil }.map { group in
-            AIGroupInfo(id: group.id, name: group.name, members: browser.tabs(in: group.id).compactMap(Self.shown),
-                        refused: Set(group.aiRefused), settled: !provisional.contains(group.id))
-        }
+        let groups = browser.tabGroups.filter(Self.automatic).map { info($0, in: browser) }
         let ask = AIGroupAsk(groups: groups, loose: loose, fresh: fresh)
         var picks: [UUID: AIGroupPick] = [:]
         var unknown: [AIGroupTab] = []
@@ -650,7 +697,7 @@ final class AIGrouper {
         var touched: Set<UUID> = []
         var kept = browser.tabGroups
         for (tab, id) in plan.joins {
-            guard kept.contains(where: { $0.id == id }), let found = stillLoose(tab) else { continue }
+            guard kept.contains(where: { $0.id == id }), let found = stillLoose(tab), away[found.id]?.contains(id) != true else { continue }
             found.groupID = id
             touched.insert(id)
             outcome.joined += 1
@@ -718,6 +765,70 @@ final class AIGrouper {
         return outcome
     }
 
+    func judge(_ tabs: [Tab], space: UUID, decider: (any AIGroupDecider)?) async -> [Tab] {
+        guard let browser, !tabs.isEmpty else { return [] }
+        if decider?.local == true {
+            for tab in tabs { await tab.readBy() }
+        }
+        let waiting = Set(browser.tabs.filter { $0.bornIn != nil }.map(\.id))
+        var leaving: [(tab: Tab, group: UUID)] = []
+        var failed: String?
+        for tab in tabs {
+            guard let group = Self.born(tab, in: browser), let shown = Self.shown(tab) else {
+                tab.bornIn = nil
+                decided.insert(tab.id)
+                continue
+            }
+            let members = browser.tabs(in: group.id).filter { !waiting.contains($0.id) }.compactMap(Self.shown)
+            let folder = AIGroupInfo(id: group.id, name: group.name, members: members, settled: !provisional.contains(group.id))
+            var fit = AIGroupFit.unsure
+            var why = ""
+            if !folder.settled {
+                why = "the folder is not settled yet"
+            } else if members.count < 2 {
+                why = "the folder has fewer than two other tabs"
+            } else if let failed {
+                why = "an earlier judgment in this pass failed: \(failed)"
+            } else if let decider {
+                let asked = decider.local ? (shown, folder) : (shown.sent, folder.sent)
+                do {
+                    fit = try await Self.within(settings.timeout) { try await decider.fits(asked.0, in: asked.1) }
+                } catch {
+                    why = error.localizedDescription
+                    failed = why
+                }
+            } else {
+                why = "nothing is set up to judge"
+            }
+            AIGroupTrace.note("born", ["tab": shown.title, "folder": group.name, "members": members.map(\.title), "fit": fit.rawValue, "why": why])
+            guard Self.born(tab, in: browser)?.id == group.id else { continue }
+            tab.bornIn = nil
+            decided.insert(tab.id)
+            if fit == .no { leaving.append((tab, group.id)) }
+        }
+        membershipChanged()
+        guard !leaving.isEmpty, browser.spaceID == space, settings.active(browser) else { return [] }
+        var left: [Tab] = []
+        for (tab, id) in leaving {
+            guard tab.groupID == id, browser.group(of: tab) == id, Self.usable(tab, in: browser),
+                  browser.tabs(in: id).count >= 3 else { continue }
+            members[space]?[id]?.remove(tab.id)
+            tab.groupID = nil
+            away[tab.id, default: []].insert(id)
+            decided.remove(tab.id)
+            if let key = Self.shown(tab)?.key, cache[key] == .group(id) { cache[key] = nil }
+            left.append(tab)
+        }
+        guard !left.isEmpty else { return [] }
+        for id in Set(leaving.map(\.group)) {
+            browser.placeLeft(left.filter { tab in leaving.contains { $0.tab === tab && $0.group == id } }, from: id)
+        }
+        browser.arrangeGroupedTabs()
+        browser.writeSession(now: true)
+        observe()
+        return left
+    }
+
     static let gathered = 8
 
     func gather(into ids: Set<UUID>, space: UUID, decider: any AIGroupDecider) async -> Int {
@@ -726,10 +837,7 @@ final class AIGrouper {
         var asked: Set<String> = []
         for _ in 0..<2 {
             guard browser.spaceID == space, settings.active(browser) else { break }
-            let groups = browser.tabGroups.filter { ids.contains($0.id) && $0.ai && !$0.live && $0.query == nil }.map { group in
-                AIGroupInfo(id: group.id, name: group.name, members: browser.tabs(in: group.id).compactMap(Self.shown),
-                            refused: Set(group.aiRefused), settled: !provisional.contains(group.id))
-            }
+            let groups = browser.tabGroups.filter { ids.contains($0.id) && Self.automatic($0) }.map { info($0, in: browser) }
             guard !groups.isEmpty else { break }
             let waiting = pending[space] ?? [:]
             let near = browser.tabs(in: nil).filter { Self.usable($0, in: browser) && waiting[$0.id] == nil }.compactMap(Self.shown)
@@ -755,7 +863,7 @@ final class AIGrouper {
             for (id, group) in plan.joins {
                 guard browser.tabGroups.contains(where: { $0.id == group }),
                       let tab = browser.tabs.first(where: { $0.id == id }), Self.usable(tab, in: browser),
-                      browser.group(of: tab) == nil else { continue }
+                      browser.group(of: tab) == nil, away[id]?.contains(group) != true else { continue }
                 tab.groupID = group
                 decided.insert(id)
                 if let key = Self.shown(tab)?.key { cache[key] = .group(group) }

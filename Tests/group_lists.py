@@ -6,7 +6,9 @@ careful person would make of it and words a good name holds. This runs every
 list through the real grouper (AIGrouper.pass) in a hidden probe of its own:
 the tabs are seeded asleep with their titles and addresses, so nothing is
 loaded from the network, and they land together, one at a time, and one at a
-time in reverse.
+time in reverse. A tab with "born" set to a folder's name is opened inside that
+folder, as a link from one of its tabs is, so the lists named born-… measure
+whether the judge keeps a tab that belongs and puts out one that does not.
 
     ./build.sh && python3 Tests/group_lists.py                 This Mac's model
     python3 Tests/group_lists.py --only picture,one-channel    some lists

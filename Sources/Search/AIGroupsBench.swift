@@ -176,6 +176,7 @@ enum AIGroupsBench {
         let grouper = settings.grouper(for: browser)
         var keys: [UUID: String] = [:]
         var made: [String: Tab] = [:]
+        var homes: [String: UUID] = [:]
         let listed = plan["tabs"] as? [[String: Any]] ?? []
         func seed(_ key: String) -> Tab? {
             if let found = made[key] { return found }
@@ -186,6 +187,11 @@ enum AIGroupsBench {
             tab.cameBack = false
             if let by = entry["by"] as? String, !by.isEmpty { tab.madeBy = (url, by) }
             browser.insert(tab, at: browser.tabs.count)
+            if let home = entry["born"] as? String, let id = homes[home] {
+                tab.groupID = id
+                tab.bornIn = id
+                browser.arrangeGroupedTabs()
+            }
             seeded.insert(tab.id)
             keys[tab.id] = key
             made[key] = tab
@@ -201,6 +207,7 @@ enum AIGroupsBench {
                 group.aiEmoji = mark
             }
             browser.tabGroups.append(group)
+            homes[group.name] = group.id
             for key in folder["keys"] as? [String] ?? [] { seed(key)?.groupID = group.id }
         }
         browser.arrangeGroupedTabs()

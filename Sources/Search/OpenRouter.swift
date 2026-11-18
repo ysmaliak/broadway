@@ -386,4 +386,20 @@ final class AIGroupDeciderChain: AIGroupDecider {
             return try await mac.decide(ask)
         }
     }
+
+    func fits(_ tab: AIGroupTab, in group: AIGroupInfo) async throws -> AIGroupFit {
+        do {
+            let remote = self.remote
+            let shown = (tab.bare, group.bare)
+            let said = try await AIGrouper.within(seconds) { try await remote.fits(shown.0, in: shown.1) }
+            await report(nil)
+            return said
+        } catch {
+            if Task.isCancelled || error is CancellationError || error as? ProviderError == .cancelled { throw error }
+            let trouble = OpenRouterTrouble.from(error)
+            if trouble != .testRun { await report(trouble) }
+            AIGroupTrace.note("failed", ["why": trouble.words, "judged": tab.title])
+            throw trouble
+        }
+    }
 }

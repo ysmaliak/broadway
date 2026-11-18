@@ -70,6 +70,14 @@ struct AIGroupInfo: Equatable, Sendable {
     var members: [AIGroupTab]
     var refused: Set<String> = []
     var settled = true
+
+    var sent: AIGroupInfo {
+        AIGroupInfo(id: id, name: name, members: members.map(\.sent), settled: settled)
+    }
+
+    var bare: AIGroupInfo {
+        AIGroupInfo(id: id, name: name, members: members.map(\.bare), settled: settled)
+    }
 }
 
 struct AIGroupAsk: Equatable, Sendable {

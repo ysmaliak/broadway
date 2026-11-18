@@ -613,6 +613,112 @@
     {"keys": ["stels", "forward", "advice"], "name_any": ["велосипед", "вело", "bike", "байк"]}
    ],
    "also": [[["stels", "forward"]], [["stels", "advice"]], [["forward", "advice"]]]
+  },
+  {
+   "id": "born-stays-trip",
+   "about": "a link opened from inside an automatic trip folder that is about the same trip stays in it",
+   "folders": [
+    {"name": "Lisbon Trip", "emoji": "✈️", "ai": true, "keys": ["lis-flights", "lis-hotel", "lis-tram"]}
+   ],
+   "tabs": [
+    {"key": "lis-flights", "title": "Berlin to Lisbon | Google Flights", "url": "https://www.google.com/travel/flights/search?tfs=CBwQAhoLIS", "by": "", "about": ""},
+    {"key": "lis-hotel", "title": "Hotels in Alfama, Lisbon - Booking.com", "url": "https://www.booking.com/district/pt/lisbon/alfama.html", "by": "", "about": ""},
+    {"key": "lis-tram", "title": "Tram 28 in Lisbon: route, tickets and tips", "url": "https://www.visitlisboa.com/en/tram-28", "by": "", "about": ""},
+    {"key": "lis-belem", "title": "Belém Tower: opening hours and tickets", "url": "https://www.torrebelem.gov.pt/en/visit", "by": "", "about": "", "born": "Lisbon Trip"}
+   ],
+   "batches": {"together": [["lis-belem"]], "single": [["lis-belem"]], "reversed": [["lis-belem"]]},
+   "want": [
+    {"keys": ["lis-flights", "lis-hotel", "lis-tram", "lis-belem"], "name_any": ["lisbon", "lisboa"]}
+   ]
+  },
+  {
+   "id": "born-leaves-trip",
+   "about": "a link opened from inside an automatic trip folder that is about something else leaves it",
+   "folders": [
+    {"name": "Lisbon Trip", "emoji": "✈️", "ai": true, "keys": ["lis-flights", "lis-hotel", "lis-tram"]}
+   ],
+   "tabs": [
+    {"key": "lis-flights", "title": "Berlin to Lisbon | Google Flights", "url": "https://www.google.com/travel/flights/search?tfs=CBwQAhoLIS", "by": "", "about": ""},
+    {"key": "lis-hotel", "title": "Hotels in Alfama, Lisbon - Booking.com", "url": "https://www.booking.com/district/pt/lisbon/alfama.html", "by": "", "about": ""},
+    {"key": "lis-tram", "title": "Tram 28 in Lisbon: route, tickets and tips", "url": "https://www.visitlisboa.com/en/tram-28", "by": "", "about": ""},
+    {"key": "sourdough", "title": "Why is my sourdough starter not rising? 9 fixes", "url": "https://www.kingarthurbaking.com/blog/sourdough-starter-not-rising", "by": "", "about": "", "born": "Lisbon Trip"}
+   ],
+   "batches": {"together": [["sourdough"]], "single": [["sourdough"]], "reversed": [["sourdough"]]},
+   "want": [
+    {"keys": ["lis-flights", "lis-hotel", "lis-tram"], "name_any": ["lisbon", "lisboa"]}
+   ]
+  },
+  {
+   "id": "born-stays-project",
+   "about": "a page of the same project opened from its automatic folder, on another site, stays",
+   "folders": [
+    {"name": "Atlas Launch", "emoji": "🚀", "ai": true, "keys": ["atlas-plan", "atlas-copy", "atlas-board"]}
+   ],
+   "tabs": [
+    {"key": "atlas-plan", "title": "Atlas launch plan - Google Docs", "url": "https://docs.google.com/document/d/1AtlasPlanQx7/edit", "by": "", "about": ""},
+    {"key": "atlas-copy", "title": "Atlas landing page copy draft - Google Docs", "url": "https://docs.google.com/document/d/1AtlasCopyRt2/edit", "by": "", "about": ""},
+    {"key": "atlas-board", "title": "Atlas launch board - Linear", "url": "https://linear.app/atlas/project/launch-9f2c", "by": "", "about": ""},
+    {"key": "atlas-figma", "title": "Atlas landing page – Figma", "url": "https://www.figma.com/design/Qx7Atlas/atlas-landing-page", "by": "", "about": "", "born": "Atlas Launch"}
+   ],
+   "batches": {"together": [["atlas-figma"]], "single": [["atlas-figma"]], "reversed": [["atlas-figma"]]},
+   "want": [
+    {"keys": ["atlas-plan", "atlas-copy", "atlas-board", "atlas-figma"], "name_any": ["atlas"]}
+   ]
+  },
+  {
+   "id": "born-leaves-news",
+   "about": "news opened from a shopping folder leaves it, though it was opened from there",
+   "folders": [
+    {"name": "Standing Desk", "emoji": "🪑", "ai": true, "keys": ["desk-a", "desk-b", "desk-review"]}
+   ],
+   "tabs": [
+    {"key": "desk-a", "title": "FlexiSpot E7 Pro standing desk - Amazon.de", "url": "https://www.amazon.de/dp/B0CDESK7P1", "by": "", "about": ""},
+    {"key": "desk-b", "title": "IKEA TROTTEN desk sit/stand, white", "url": "https://www.ikea.com/de/en/p/trotten-desk-sit-stand-white-s29429/", "by": "", "about": ""},
+    {"key": "desk-review", "title": "The best standing desks of the year, tested", "url": "https://www.nytimes.com/wirecutter/reviews/best-standing-desk/", "by": "Wirecutter", "about": ""},
+    {"key": "storm", "title": "Storm warning for the North Sea coast: what to expect tonight", "url": "https://www.tagesschau.de/inland/sturm-nordsee-100.html", "by": "tagesschau", "about": "", "born": "Standing Desk"}
+   ],
+   "batches": {"together": [["storm"]], "single": [["storm"]], "reversed": [["storm"]]},
+   "want": [
+    {"keys": ["desk-a", "desk-b", "desk-review"], "name_any": ["desk", "schreibtisch"]}
+   ]
+  },
+  {
+   "id": "born-mixed",
+   "about": "three links opened from one automatic folder in a row: the one that belongs stays, the two that do not leave and do not keep each other in",
+   "folders": [
+    {"name": "Kyoto Trip", "emoji": "⛩️", "ai": true, "keys": ["kyo-hotel", "kyo-rail", "kyo-guide"]}
+   ],
+   "tabs": [
+    {"key": "kyo-hotel", "title": "Hotels in Gion, Kyoto - Booking.com", "url": "https://www.booking.com/district/jp/kyoto/gion.html", "by": "", "about": ""},
+    {"key": "kyo-rail", "title": "Kansai area pass: prices and where to buy - JR West", "url": "https://www.westjr.co.jp/global/en/ticket/pass/kansai/", "by": "", "about": ""},
+    {"key": "kyo-guide", "title": "Kyoto in three days: an itinerary", "url": "https://www.japan-guide.com/e/e3900.html", "by": "", "about": ""},
+    {"key": "kyo-inari", "title": "Fushimi Inari Taisha: how to avoid the crowds", "url": "https://www.insidekyoto.com/fushimi-inari-taisha", "by": "", "about": "", "born": "Kyoto Trip"},
+    {"key": "rust-own", "title": "Understanding Ownership - The Rust Programming Language", "url": "https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html", "by": "", "about": "", "born": "Kyoto Trip"},
+    {"key": "tax-dead", "title": "Tax return deadlines this year: what applies to you", "url": "https://www.finanztip.de/steuererklaerung/abgabefrist/", "by": "Finanztip", "about": "", "born": "Kyoto Trip"}
+   ],
+   "batches": {"together": [["kyo-inari", "rust-own", "tax-dead"]], "single": [["kyo-inari"], ["rust-own"], ["tax-dead"]], "reversed": [["tax-dead"], ["rust-own"], ["kyo-inari"]]},
+   "want": [
+    {"keys": ["kyo-hotel", "kyo-rail", "kyo-guide", "kyo-inari"], "name_any": ["kyoto"]}
+   ]
+  },
+  {
+   "id": "born-leave-together",
+   "about": "two links about one other subject opened from an automatic folder leave it and may make a folder of their own",
+   "folders": [
+    {"name": "Heat Pump", "emoji": "♨️", "ai": true, "keys": ["hp-cost", "hp-grant", "hp-noise"]}
+   ],
+   "tabs": [
+    {"key": "hp-cost", "title": "How much does an air source heat pump cost to install?", "url": "https://www.energysavingtrust.org.uk/advice/air-source-heat-pumps/", "by": "", "about": ""},
+    {"key": "hp-grant", "title": "Boiler Upgrade Scheme: apply for a heat pump grant - GOV.UK", "url": "https://www.gov.uk/apply-boiler-upgrade-scheme", "by": "", "about": ""},
+    {"key": "hp-noise", "title": "Are heat pumps noisy? What the decibel numbers mean", "url": "https://www.theheatpumpmonkey.com/heat-pump-noise/", "by": "", "about": ""},
+    {"key": "carb-recipe", "title": "Spaghetti carbonara: the classic Roman recipe", "url": "https://www.giallozafferano.com/recipes/spaghetti-carbonara.html", "by": "", "about": "", "born": "Heat Pump"},
+    {"key": "carb-cheese", "title": "Pecorino or Parmigiano for carbonara? A cook explains", "url": "https://www.seriouseats.com/carbonara-cheese-pecorino-parmigiano", "by": "", "about": "", "born": "Heat Pump"}
+   ],
+   "batches": {"together": [["carb-recipe", "carb-cheese"]], "single": [["carb-recipe"], ["carb-cheese"]], "reversed": [["carb-cheese"], ["carb-recipe"]]},
+   "want": [
+    {"keys": ["hp-cost", "hp-grant", "hp-noise"], "name_any": ["heat", "pump"]}
+   ],
+   "also": [[["hp-cost", "hp-grant", "hp-noise"], ["carb-recipe", "carb-cheese"]]]
   }
  ]
 }

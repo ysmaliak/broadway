@@ -3836,6 +3836,7 @@ extension Browser {
         let page = makeTab(configuration: Browser.extensionConfiguration(for: url))
         prepare(page)
         page.groupID = tab.groupID
+        page.bornIn = tab.bornIn
         replaceSplitMember(tab.id, with: page.id)
         carryReturn(from: tab, to: page)
         tabs[index] = page
@@ -4926,6 +4927,17 @@ extension Browser {
         if !row.elementsEqual(tabs, by: { $0.id == $1.id }) { tabs = row }
     }
 
+    func placeLeft(_ left: [Tab], from group: UUID) {
+        guard prefs.usesTabGroups, !left.isEmpty else { return }
+        let ids = Set(left.map(\.id))
+        let moving = tabs.filter { ids.contains($0.id) }
+        var row = tabs.filter { !ids.contains($0.id) }
+        let family = Set(folderFamily(FolderTree.root(of: group, in: tabGroups)).map(\.id))
+        guard let last = row.lastIndex(where: { $0.pin == nil && $0.groupID.map(family.contains) == true }) else { return }
+        row.insert(contentsOf: moving, at: last + 1)
+        if !row.elementsEqual(tabs, by: { $0.id == $1.id }) { tabs = row }
+    }
+
     enum ListItem: Hashable, Identifiable {
         case tab(Tab.ID)
         case folder(UUID)
@@ -5374,7 +5386,10 @@ extension Browser {
         prepare(tab)
         // A link opened from a grouped tab joins its group, only while groups
         // are on: turned off, they sleep, and nothing new goes into one.
-        if prefs.usesTabGroups, let source, !tab.shy, !tab.bench { tab.groupID = meetingKeepsLoose(from: source, link: link) ? nil : source.groupID }
+        if prefs.usesTabGroups, let source, !tab.shy, !tab.bench {
+            tab.groupID = meetingKeepsLoose(from: source, link: link) ? nil : source.groupID
+            tab.bornIn = tab.groupID
+        }
         if link, let source { tab.linkedFrom = source.id }
         tabs.insert(tab, at: atEnd ? tabs.count : front ? placeForFront() : link ? placeForLink(from: source) : placeForNew())
         if link, !atEnd, !foreground { noteLink(tab, from: source) }
@@ -5425,6 +5440,7 @@ extension Browser {
         fresh.name = tab.name
         prepare(fresh)
         fresh.groupID = tab.groupID
+        fresh.bornIn = tab.bornIn
         let wasActive = activeID == tab.id
         replaceSplitMember(tab.id, with: fresh.id)
         carryReturn(from: tab, to: fresh)
@@ -5601,7 +5617,7 @@ extension Browser {
     /// ⌘D. The same page, beside itself.
     func duplicate() {
         guard let url = active?.address else { return }
-        open(url, foreground: true, from: active)
+        open(url, foreground: true, from: active).bornIn = nil
     }
 
     /// ⌘⇧V, when nothing is being typed. What is in the clipboard, if it is a
@@ -7609,13 +7625,19 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         // ⌘-click's goes (see open(_:foreground:)).
         prepare(tab)
         if behind || beside {
-            if prefs.usesTabGroups, !tab.shy, !tab.bench { tab.groupID = opener.groupID }
+            if prefs.usesTabGroups, !tab.shy, !tab.bench {
+                tab.groupID = opener.groupID
+                tab.bornIn = tab.groupID
+            }
             tabs.insert(tab, at: placeForLink(from: opener, beside: beside))
             noteLink(tab, from: opener)
             noteReturn(tab, front: false, from: opener)
             if beside { pair(tab, with: opener, onLeft: false) }
         } else {
-            if prefs.usesTabGroups, !tab.shy, !tab.bench { tab.groupID = opener.groupID }
+            if prefs.usesTabGroups, !tab.shy, !tab.bench {
+                tab.groupID = opener.groupID
+                tab.bornIn = tab.groupID
+            }
             tabs.insert(tab, at: placeForLink(from: opener))
             if clicked, let run = linkRun { runBeforeScript = (tab.id, run) }
             noteReturn(tab, front: true, from: opener)
@@ -7720,7 +7742,10 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
                split(for: tab) == nil, let at = tabs.firstIndex(where: { $0.id == tab.id }) {
                 if !foreground, run?.opener == source.id { linkRun = run }
                 tabs.remove(at: at)
-                if prefs.usesTabGroups, !tab.shy, !tab.bench { tab.groupID = source.groupID }
+                if prefs.usesTabGroups, !tab.shy, !tab.bench {
+                    tab.groupID = source.groupID
+                    tab.bornIn = tab.groupID
+                }
                 tab.linkedFrom = source.id
                 tabs.insert(tab, at: placeForLink(from: source))
                 if !foreground {

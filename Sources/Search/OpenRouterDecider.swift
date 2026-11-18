@@ -77,6 +77,7 @@ final class OpenRouterDecider: AIGroupDecider {
         var model: String
         var cost: Double?
         var yes: [String: Double]
+        var refused: Set<String> = []
     }
 
     static let jev = "~typesafe/jev-latest"
@@ -208,6 +209,26 @@ final class OpenRouterDecider: AIGroupDecider {
         return Self.picks(ask, heard: heard, thresholds: thresholds)
     }
 
+    func fits(_ tab: AIGroupTab, in group: AIGroupInfo) async throws -> AIGroupFit {
+        var folder = group
+        folder.refused = []
+        guard let made = requests(AIGroupAsk(groups: [folder], loose: [], fresh: [tab])).first else { return .unsure }
+        try allowed()
+        let said = try await send(made.body)
+        note(made, said)
+        var heard: [Candidate: Double] = [:]
+        for (id, candidate) in made.asked where !said.refused.contains(id) {
+            heard[candidate] = max(heard[candidate] ?? 0, said.yes[id] ?? 0)
+        }
+        guard let chance = Self.chance([tab.id: heard], tab.id, .group(group.id), thresholds: thresholds) else {
+            AIGroupTrace.note("fits", ["tab": tab.title, "folder": group.name, "fit": AIGroupFit.unsure.rawValue, "why": "no answer about the folder"])
+            return .unsure
+        }
+        let fit: AIGroupFit = chance < thresholds.no ? .no : chance >= thresholds.yes ? .yes : .unsure
+        AIGroupTrace.note("fits", ["tab": tab.title, "folder": group.name, "chance": chance, "fit": fit.rawValue])
+        return fit
+    }
+
     func confirmations(_ ask: AIGroupAsk, heard: [UUID: [Candidate: Double]]) -> [Request] {
         ask.loose.compactMap { loose in
             let raters = ask.fresh.filter { (heard[$0.id]?[.tab(loose.id)] ?? 0) >= thresholds.yes }
@@ -235,24 +256,28 @@ final class OpenRouterDecider: AIGroupDecider {
         }
     }
 
+    static func chance(_ heard: [UUID: [Candidate: Double]], _ tab: UUID, _ candidate: Candidate, thresholds: Thresholds) -> Double? {
+        guard let said = heard[tab]?[candidate] else { return nil }
+        if case .tab(let other) = candidate, let back = heard[other]?[.tab(tab)] {
+            return min(said, back)
+        }
+        if case .group(let group) = candidate {
+            let members = heard[tab]?.compactMap { asked, chance -> Double? in
+                if case .member(group, _) = asked { return chance }
+                return nil
+            } ?? []
+            let sorted = members.sorted(by: >)
+            if let closest = sorted.first {
+                if closest < thresholds.yes { return min(said, closest) }
+                return max(said, sorted.count >= 2 ? sorted[1] : closest)
+            }
+        }
+        return said
+    }
+
     static func picks(_ ask: AIGroupAsk, heard: [UUID: [Candidate: Double]], thresholds: Thresholds) -> [UUID: AIGroupPick] {
         func chance(_ tab: UUID, _ candidate: Candidate) -> Double? {
-            guard let said = heard[tab]?[candidate] else { return nil }
-            if case .tab(let other) = candidate, let back = heard[other]?[.tab(tab)] {
-                return min(said, back)
-            }
-            if case .group(let group) = candidate {
-                let members = heard[tab]?.compactMap { asked, chance -> Double? in
-                    if case .member(group, _) = asked { return chance }
-                    return nil
-                } ?? []
-                let sorted = members.sorted(by: >)
-                if let closest = sorted.first {
-                    if closest < thresholds.yes { return min(said, closest) }
-                    return max(said, sorted.count >= 2 ? sorted[1] : closest)
-                }
-            }
-            return said
+            Self.chance(heard, tab, candidate, thresholds: thresholds)
         }
         var picks: [UUID: AIGroupPick] = [:]
         var strength: [UUID: Double] = [:]
@@ -417,6 +442,7 @@ final class OpenRouterDecider: AIGroupDecider {
         guard let found = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let answers = found["answers"] as? [String: Any] else { return nil }
         var yes: [String: Double] = [:]
+        var refused: Set<String> = []
         for id in asked {
             guard let answer = answers[id] as? [String: Any], let type = answer["type"] as? String else { return nil }
             switch type {
@@ -426,12 +452,13 @@ final class OpenRouterDecider: AIGroupDecider {
                 yes[id] = said.doubleValue
             case "refusal":
                 yes[id] = 0
+                refused.insert(id)
             default:
                 return nil
             }
         }
         let usage = found["usage"] as? [String: Any]
-        return Heard(model: found["model"] as? String ?? "", cost: (usage?["cost"] as? NSNumber)?.doubleValue, yes: yes)
+        return Heard(model: found["model"] as? String ?? "", cost: (usage?["cost"] as? NSNumber)?.doubleValue, yes: yes, refused: refused)
     }
 
     static func reason(_ error: Error) -> ProviderError {
@@ -491,6 +518,10 @@ struct OpenRouterBench: AIGroupDecider, AIGroupNamer {
 
     func decide(_ ask: AIGroupAsk) async throws -> [UUID: AIGroupPick] {
         try await decider.decide(ask)
+    }
+
+    func fits(_ tab: AIGroupTab, in group: AIGroupInfo) async throws -> AIGroupFit {
+        try await decider.fits(tab, in: group)
     }
 
     func name(_ ask: AIGroupNameAsk) async throws -> AIGroupName {
