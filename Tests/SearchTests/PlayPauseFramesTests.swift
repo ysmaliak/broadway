@@ -20,32 +20,41 @@ struct PlayPauseFramesTests {
         transport?.needsLayout = true
         transport?.layoutSubtreeIfNeeded()
         try? await Task.sleep(for: .milliseconds(800))
-        guard let transport else {
-            Issue.record("no transport in the gallery")
+        guard let symbol = transport?.toggle.symbol else {
+            Issue.record("no play key in the gallery")
             return [:]
         }
-        return await BenchGlassFrames.record(transport.mark, seconds: 0.8, into: Self.folder(name)) { gallery.chrome.playing = playing }
+        return await BenchGlassFrames.record(symbol, seconds: 0.8, into: Self.folder(name)) { gallery.chrome.playing = playing }
+    }
+
+    func smaller(_ row: [String: Any]) -> (rest: Int, frames: Int, sides: [Int]) {
+        let sides = row["sides"] as? [Int] ?? []
+        let rest = min(sides.first ?? 0, sides.last ?? 0)
+        return (rest, sides.filter { Double($0) <= Double(rest) * 0.6 }.count, sides)
     }
 
     @Test(arguments: [true, false])
-    func theFloatsPlayKeyDrawsFramesBetweenItsTwoFaces(playing: Bool) async {
+    func theFloatsPlayKeyDrawsASmallerMarkBetweenItsTwoGlyphs(playing: Bool) async {
         let row = await floatFrames(reduced: false, to: playing, name: "float-to-\(playing ? "pause" : "play")")
+        let found = smaller(row)
 
         #expect(row["ends"] as? Double ?? 0 > 0.004)
-        #expect(row["between"] as? Int ?? 0 >= 4, "\(row["between"] ?? "none") frames between")
+        #expect(found.rest > 0 && found.frames >= 2, "the mark is never smaller between its two glyphs: \(found.sides)")
     }
 
     @Test func withReducedMotionTheFloatsPlayKeySwapsWithNothingBetween() async {
         let row = await floatFrames(reduced: true, to: false, name: "float-reduced")
+        let found = smaller(row)
 
         #expect(row["ends"] as? Double ?? 0 > 0.004)
         #expect(row["between"] as? Int == 0)
+        #expect(found.rest > 0 && found.frames == 0, "\(found.sides)")
     }
 
-    @Test func theSidebarPlayKeyDrawsFramesBetweenItsTwoGlyphs() async {
+    @Test func theSidebarPlayKeyDrawsASmallerMarkBetweenItsTwoGlyphs() async {
         Store.settings.set(false, forKey: "motion.testReduced")
         defer { Store.settings.removeObject(forKey: "motion.testReduced") }
-        let gallery = GlassKeyGallery(dark: true)
+        let gallery = GlassKeyGallery(dark: false)
         defer { gallery.close() }
         let toggle = MiniToggle {}
         toggle.frame = NSRect(x: 20, y: 20, width: MiniPlayerView.key, height: MiniPlayerView.key)
@@ -56,8 +65,9 @@ struct PlayPauseFramesTests {
         guard let glyph = toggle.kitSubviews(of: MiniGlyph.self).first else { Issue.record("no glyph"); return }
 
         let row = await BenchGlassFrames.record(glyph, seconds: 0.8, into: Self.folder("sidebar-to-play")) { toggle.show(playing: false) }
+        let found = smaller(row)
 
         #expect(row["ends"] as? Double ?? 0 > 0.004)
-        #expect(row["between"] as? Int ?? 0 >= 4, "\(row["between"] ?? "none") frames between")
+        #expect(found.rest > 0 && found.frames >= 2, "the mark is never smaller between its two glyphs: \(found.sides)")
     }
 }

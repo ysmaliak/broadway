@@ -294,37 +294,41 @@ struct FloatOpticsTests {
         #expect(view.rewind.symbol?.frame == view.forward.symbol?.frame)
     }
 
-    @Test func theToggleKeepsOneCentreForPlayAndPause() {
+    @Test func theToggleGivesEachMarkTheNudgeThatSetsItsWeightOnTheCentre() {
+        let style = KitSymbol.Style(size: 21, weight: .semibold)
         let (view, chrome) = transport(playing: true)
-        let pause = view.mark.frame
+        let pause = view.toggle.nudge
 
         chrome.playing = false
         view.needsLayout = true
         view.layoutSubtreeIfNeeded()
 
-        #expect(view.toggle.nudge == .zero)
-        #expect(view.mark.face == .play)
-        #expect(view.mark.frame == pause)
-        #expect(view.mark.frame.midX == FloatLayout.play / 2)
-        #expect(view.mark.frame.midY == FloatLayout.play / 2)
+        #expect(pause == FloatOptics.nudge("pause.fill", style))
+        #expect(view.toggle.nudge == FloatOptics.nudge("play.fill", style))
+        #expect(view.toggle.symbol?.name == "play.fill")
+        #expect(view.toggle.nudge.dx > pause.dx + 0.5)
+        #expect(abs(pause.dx) < 0.5)
     }
 
-    @Test func theToggleSwapsWithoutShrinkingTheMark() {
+    @Test func theToggleSwapsWithTheSystemsReplaceAndNoMotionOfBroadwaysOwn() {
+        Store.settings.set(false, forKey: "motion.testReduced")
+        defer { Store.settings.removeObject(forKey: "motion.testReduced") }
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100), styleMask: [.borderless], backing: .buffered, defer: true)
         let (view, chrome) = transport(playing: true)
         window.contentView?.addSubview(view)
         view.layoutSubtreeIfNeeded()
-        let size = view.mark.frame.size
 
         chrome.playing = false
         view.needsLayout = true
         view.layoutSubtreeIfNeeded()
-        let layer = view.mark.layer
+        let layer = view.toggle.symbol?.layer
 
-        #expect(view.mark.face == .play)
-        #expect(layer?.animation(forKey: "transform") == nil)
-        #expect(layer?.animation(forKey: "opacity") == nil)
-        #expect(view.mark.frame.size == size)
+        #expect(view.toggle.symbol?.name == "play.fill")
+        #expect(view.toggle.symbol?.replaced == 1)
+        #expect(view.toggle.symbol?.played == KitSwap.downUp)
+        #expect(layer?.animation(forKey: KitSwap.leave) == nil)
+        #expect(layer?.animation(forKey: KitSwap.arrive) == nil)
+        #expect(layer?.animation(forKey: KitSwap.crossKey) == nil)
     }
 
     @Test func glyphsWithoutAnOpticalOffsetStayCentred() {

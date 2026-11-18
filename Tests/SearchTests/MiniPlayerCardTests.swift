@@ -110,6 +110,40 @@ struct MiniPlayerCardTests {
         #expect(speed(book))
     }
 
+    @Test func theKeySwapsWithMotionOnlyForTheItemTheCardAlreadyShows() {
+        let song = UUID(), other = UUID()
+
+        #expect(MiniPlayerView.swaps(song, after: song, share: 1))
+        #expect(MiniPlayerView.swaps(song, after: song, share: 0.4))
+        #expect(!MiniPlayerView.swaps(song, after: nil, share: 1))
+        #expect(!MiniPlayerView.swaps(song, after: other, share: 1))
+        #expect(!MiniPlayerView.swaps(song, after: song, share: 0))
+    }
+
+    @Test func aCardThatArrivesAlreadyPlayingShowsPauseWithNoSwap() throws {
+        Store.settings.set(false, forKey: "motion.testReduced")
+        defer { Store.settings.removeObject(forKey: "motion.testReduced") }
+        let window = NSWindow(contentRect: NSRect(x: -20_000, y: -20_000, width: 258, height: MiniPlayerView.full), styleMask: .borderless,
+                              backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let view = MiniPlayerView(mini: MiniPlayer(surface: item(pair: .tracks, duration: 285, speed: false)))
+        view.frame = NSRect(x: 0, y: 0, width: 258, height: MiniPlayerView.full)
+        window.contentView?.addSubview(view)
+        defer { window.contentView = nil }
+        view.layoutSubtreeIfNeeded()
+        view.needsLayout = true
+        view.layoutSubtreeIfNeeded()
+
+        let toggle = try #require(view.kitSubviews(of: MiniToggle.self).first)
+        let glyph = try #require(toggle.kitSubviews(of: MiniGlyph.self).first)
+
+        #expect(toggle.window === window)
+        #expect(toggle.showing == "pause")
+        #expect(glyph.image === KitGlyph.image("pause.fill", MiniGlyph.style))
+        #expect(glyph.replaced == 0)
+        #expect(glyph.played == nil)
+    }
+
     private func card(_ shown: MiniPlayer.Item, width: CGFloat = 258) -> MiniPlayerView {
         let view = MiniPlayerView(mini: MiniPlayer(surface: shown))
         view.frame = NSRect(x: 0, y: 0, width: width, height: MiniPlayerView.full)

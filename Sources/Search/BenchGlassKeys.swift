@@ -300,6 +300,12 @@ enum BenchGlassKeys {
             gallery = made
         }
         guard let gallery else { return answer(["error": "no gallery"]) }
+        func mark(_ transport: FloatTransportView?) -> [String: Any] {
+            guard let key = transport?.toggle, let symbol = key.symbol else { return ["swaps": -1, "mark": ""] }
+            return ["swaps": symbol.replaced, "mark": symbol.name.replacingOccurrences(of: ".fill", with: ""),
+                    "downUp": symbol.played == KitSwap.downUp, "nudge": [Double(key.nudge.dx), Double(key.nudge.dy)],
+                    "rests": key.held == nil && key.nudge == FloatOptics.nudge(symbol.name, symbol.style), "reduced": Motion.reduced]
+        }
         func frame(_ key: GlassKeyGallery.Key) -> [Double] {
             let rect = key.view.convert(key.view.bounds, to: nil)
             let height = gallery.window.frame.height
@@ -319,12 +325,20 @@ enum BenchGlassKeys {
             let transport = gallery.keys.first { $0.name == "float play" }?.view as? FloatTransportView
             transport?.needsLayout = true
             transport?.layoutSubtreeIfNeeded()
-            answer(["playing": gallery.chrome.playing, "swaps": transport?.mark.swaps ?? -1, "mark": transport?.mark.face.rawValue ?? ""])
+            var said = mark(transport)
+            said["playing"] = gallery.chrome.playing
+            answer(said)
         case "state":
             let transport = gallery.keys.first { $0.name == "float play" }?.view as? FloatTransportView
             transport?.needsLayout = true
             transport?.layoutSubtreeIfNeeded()
-            answer(["swaps": transport?.mark.swaps ?? -1, "mark": transport?.mark.face.rawValue ?? ""])
+            answer(mark(transport))
+        case "skip":
+            gallery.chrome.rewinds += 1
+            let transport = gallery.keys.first { $0.name == "float play" }?.view as? FloatTransportView
+            transport?.needsLayout = true
+            transport?.layoutSubtreeIfNeeded()
+            answer(["rewinds": gallery.chrome.rewinds])
         case "close":
             gallery.close()
             self.gallery = nil
@@ -372,8 +386,25 @@ enum BenchGlassFrames {
                 try? rep.representation(using: .png, properties: [:])?.write(to: folder.appendingPathComponent(String(format: "%04d.png", index)))
             }
         }
-        return ["frames": shots.count, "ends": ends, "between": between, "times": times, "path": path,
+        let wide = max(1, Int(ground.bounds.width * 2))
+        return ["frames": shots.count, "ends": ends, "between": between, "times": times, "path": path, "sides": shots.map { side($0, wide: wide) },
                 "mostAnimations": moving.max() ?? 0, "animatedFrames": moving.filter { $0 > 0 }.count]
+    }
+
+    static func side(_ pixels: [UInt8], wide: Int) -> Int {
+        let high = pixels.count / 4 / max(1, wide)
+        var left = wide, right = -1, top = high, bottom = -1
+        for y in 0..<high {
+            for x in 0..<wide {
+                let at = (y * wide + x) * 4
+                guard Int(pixels[at]) + Int(pixels[at + 1]) + Int(pixels[at + 2]) > 180 else { continue }
+                left = min(left, x)
+                right = max(right, x)
+                top = min(top, y)
+                bottom = max(bottom, y)
+            }
+        }
+        return right < left ? 0 : max(right - left + 1, bottom - top + 1)
     }
 
     static func animations(_ layer: CALayer) -> Int {

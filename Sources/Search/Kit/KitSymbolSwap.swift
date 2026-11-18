@@ -1,4 +1,5 @@
 import AppKit
+import Symbols
 
 extension KitSymbol {
     func fade(to name: String, duration: CFTimeInterval = KitSwap.cross) {
@@ -17,11 +18,13 @@ extension KitSymbol {
 extension NSImageView {
     var kitReplaces: Bool { !Motion.reduced && window != nil && image != nil }
 
-    func kitReplace(with next: NSImage) {
-        if kitReplaces {
-            setSymbolImage(next, contentTransition: .replace)
-        } else {
+    @discardableResult
+    func kitReplace(with next: NSImage) -> ReplaceSymbolEffect? {
+        guard kitReplaces else {
             image = next
+            return nil
         }
+        setSymbolImage(next, contentTransition: KitSwap.downUp)
+        return KitSwap.downUp
     }
 }

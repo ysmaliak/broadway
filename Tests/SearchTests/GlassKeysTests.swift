@@ -1,4 +1,5 @@
 import AppKit
+import Symbols
 import Testing
 @testable import Search
 
@@ -149,7 +150,7 @@ struct GlassKeysTests {
         #expect(hit?.mouseDownCanMoveWindow == key.mouseDownCanMoveWindow)
     }
 
-    @Test func playAndPauseChangeOnceForEachRealChangeWithTheMarksOwnSwap() async {
+    @Test func playAndPauseChangeOnceForEachRealChangeWithTheSymbolsReplace() {
         Store.settings.set(false, forKey: "motion.testReduced")
         defer { Store.settings.removeObject(forKey: "motion.testReduced") }
         let chrome = FloatChrome()
@@ -165,25 +166,24 @@ struct GlassKeysTests {
             transport.layoutSubtreeIfNeeded()
         }
         settle()
-        let mark = transport.mark
+        let symbol = transport.toggle.symbol
 
-        let first = mark.swaps
+        let first = symbol?.replaced
         chrome.playing = false
         settle()
-        let clicked = mark.swaps
-        try? await Task.sleep(for: .milliseconds(80))
+        let clicked = symbol?.replaced
         chrome.playing = false
         settle()
-        let twice = mark.swaps
+        let twice = symbol?.replaced
         chrome.playing = true
         settle()
 
         #expect(first == 0)
         #expect(clicked == 1)
         #expect(twice == 1)
-        #expect(mark.swaps == 2)
-        #expect(mark.face == .pause)
-        #expect(transport.toggle.symbol == nil)
+        #expect(symbol?.replaced == 2)
+        #expect(symbol?.name == "pause.fill")
+        #expect(symbol?.played == ReplaceSymbolEffect.replace.downUp.byLayer)
         #expect(transport.toggle.accessibilityLabel() == "Pause")
     }
 
@@ -199,6 +199,7 @@ struct GlassKeysTests {
         symbol.replace(to: "play.fill")
 
         #expect(symbol.replaced == 0)
+        #expect(symbol.played == nil)
         #expect(symbol.name == "play.fill")
         #expect(symbol.image === KitSymbol.image("play.fill", symbol.style))
     }
@@ -219,6 +220,54 @@ struct GlassKeysTests {
         toggle.show(playing: false)
 
         #expect(glyph?.replaced == 2)
+        #expect(glyph?.played == ReplaceSymbolEffect.replace.downUp.byLayer)
+        #expect(glyph?.image === KitGlyph.image("play.fill", MiniGlyph.style))
         #expect(toggle.showing == "play")
+    }
+
+    @Test func theSidebarPlayersGlyphIsSimplyThereOnItsFirstShowAndWithReducedMotion() {
+        Store.settings.set(false, forKey: "motion.testReduced")
+        defer { Store.settings.removeObject(forKey: "motion.testReduced") }
+        let toggle = MiniToggle {}
+        toggle.frame = NSRect(x: 0, y: 0, width: MiniPlayerView.key, height: MiniPlayerView.key)
+        let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 60, height: 60), styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView?.addSubview(toggle)
+        defer { window.contentView = nil }
+        let glyph = toggle.kitSubviews(of: MiniGlyph.self).first
+
+        toggle.show(playing: true, moving: false)
+        let first = glyph?.replaced
+        Store.settings.set(true, forKey: "motion.testReduced")
+        toggle.show(playing: false)
+
+        #expect(first == 0)
+        #expect(glyph?.replaced == 0)
+        #expect(glyph?.played == nil)
+        #expect(glyph?.image === KitGlyph.image("play.fill", MiniGlyph.style))
+        #expect(toggle.showing == "play")
+    }
+
+    @Test func aSecondPressOnTheSidebarPlayerEndsOnTheLastGlyph() {
+        Store.settings.set(false, forKey: "motion.testReduced")
+        defer { Store.settings.removeObject(forKey: "motion.testReduced") }
+        let toggle = MiniToggle {}
+        toggle.frame = NSRect(x: 0, y: 0, width: MiniPlayerView.key, height: MiniPlayerView.key)
+        let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 60, height: 60), styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView?.addSubview(toggle)
+        defer { window.contentView = nil }
+        let glyph = toggle.kitSubviews(of: MiniGlyph.self).first
+        let key = toggle.frame
+
+        toggle.show(playing: true)
+        toggle.show(playing: false)
+        toggle.show(playing: true)
+
+        #expect(glyph?.replaced == 3)
+        #expect(glyph?.image === KitGlyph.image("pause.fill", MiniGlyph.style))
+        #expect(toggle.showing == "pause")
+        #expect(toggle.accessibilityLabel() == "Pause")
+        #expect(toggle.frame == key)
     }
 }

@@ -1,4 +1,5 @@
 import AppKit
+import Symbols
 import Testing
 @testable import Search
 
@@ -21,6 +22,8 @@ enum FloatKeyBench {
         view.layoutSubtreeIfNeeded()
         return window
     }
+
+    static let middle = KitSymbol.Style(size: 21, weight: .semibold)
 
     static func transport(playing: Bool) -> (FloatTransportView, FloatChrome) {
         let chrome = FloatChrome()
@@ -73,13 +76,6 @@ enum FloatKeyBench {
         }
         guard sum > 0 else { return nil }
         return CGPoint(x: across / sum / Double(scale), y: down / sum / Double(scale))
-    }
-
-    static func weight(of shape: KitPlayShape, progress: Double, in side: CGFloat, scale: CGFloat) -> CGPoint? {
-        let middle = CGPoint(x: side / 2, y: side / 2)
-        return canvas(NSSize(width: side, height: side), scale: scale) { context in
-            shape.draw(progress, around: middle, colour: NSColor.white.cgColor, in: context)
-        }.flatMap { weight(of: $0, scale: scale) }
     }
 
     struct Place {
@@ -144,304 +140,251 @@ enum FloatKeyBench {
             out.append(Place(key: key, face: name, scale: scale, disc: FloatLayout.skip, frame: frame, image: frame.origin, weight: weight,
                              ring: ring(of: image, at: frame.origin)))
         }
-        let shape = KitPlayShape(size: 21)
-        let frame = FloatOptics.frame(NSSize(width: shape.side, height: shape.side), nudge: .zero, in: FloatLayout.play, scale: CGFloat(scale))
-        for face in [KitPlayMark.Face.play, .pause] {
-            guard let inside = weight(of: shape, progress: face.rest, in: shape.side, scale: CGFloat(scale)) else { continue }
-            out.append(Place(key: "middle", face: face.rawValue, scale: scale, disc: FloatLayout.play, frame: frame, image: frame.origin,
-                             weight: CGPoint(x: frame.minX + inside.x, y: frame.minY + inside.y), ring: nil))
+        for name in ["play.fill", "pause.fill"] {
+            guard let image = KitGlyph.image(name, middle) else { continue }
+            let frame = FloatOptics.frame(image.size, nudge: FloatOptics.nudge(name, middle), in: FloatLayout.play, scale: CGFloat(scale))
+            guard let weight = KitGlyph.weight(of: image, backing: scale, at: frame.origin) else { continue }
+            out.append(Place(key: "middle", face: name, scale: scale, disc: FloatLayout.play, frame: frame, image: frame.origin, weight: weight,
+                             ring: nil))
         }
         return out
     }
 }
 
-@Suite(.sharedWorld, .timeLimit(.minutes(5)))
-@MainActor
-struct KitPlayTurnTests {
-    @Test func aTurnStartsAtRestWhereTheMarkWasAndArrivesOnTheOtherFace() {
-        let turn = KitPlayTurn(from: 1, to: 0, began: 40, spring: KitPlayTurn.lively)
-
-        #expect(turn.value(at: 40) == 1)
-        #expect(turn.speed(at: 40) == 0)
-        #expect(turn.value(at: 40.05) < 1 && turn.value(at: 40.05) > 0)
-        #expect(abs(turn.value(at: 40 + turn.length)) <= KitPlayTurn.near * 2)
-        #expect(turn.length > 0.15 && turn.length <= KitPlayTurn.longest)
-        #expect(!turn.settled(at: 40.05))
-        #expect(turn.settled(at: 40 + turn.length))
-    }
-
-    @Test func theFramesOfATurnBeginWhereItWasAndEndExactlyOnTheFace() {
-        for spring in [KitPlayTurn.lively, KitPlayTurn.calm] {
-            let turn = KitPlayTurn(from: 0, to: 1, began: 7, spring: spring)
-
-            let frames = turn.frames
-
-            #expect(frames.first == 0)
-            #expect(frames.last == 1)
-            #expect(frames.count == Int((turn.length / KitPlayTurn.step).rounded()) + 1)
-            #expect(zip(frames, frames.dropFirst()).allSatisfy { abs($1 - $0) < 0.12 })
-        }
-    }
-
-    @Test func aTurnBackStartsWhereTheMarkIsAndKeepsItsSpeedBeforeItTurns() {
-        let first = KitPlayTurn(from: 1, to: 0, began: 0, spring: KitPlayTurn.lively)
-        let cut = 0.06
-        let here = first.value(at: cut)
-        let speed = first.speed(at: cut)
-
-        let back = first.turned(to: 1, at: cut, spring: KitPlayTurn.lively)
-
-        #expect(here > 0.05 && here < 0.95)
-        #expect(speed < 0)
-        #expect(back.from == here)
-        #expect(back.to == 1)
-        #expect(back.began == cut)
-        #expect(abs(back.speed(at: cut) - speed) < 0.0001)
-        #expect(back.value(at: cut + 0.004) < here)
-        #expect(back.value(at: cut + 0.004) > 0)
-        #expect(abs(back.value(at: cut + back.length) - 1) <= KitPlayTurn.near * 2)
-        #expect(back.frames.first == here)
-        #expect(back.frames.last == 1)
-    }
-
-    @Test func aTurnThatIsAlreadyThereDoesNotBlowUp() {
-        let first = KitPlayTurn(from: 1, to: 0, began: 0, spring: KitPlayTurn.lively)
-
-        let back = first.turned(to: 1, at: 0, spring: KitPlayTurn.lively)
-
-        #expect(back.lean == 0)
-        #expect(back.frames.allSatisfy { $0 == 1 })
-    }
-}
-
-@Suite(.sharedWorld, .timeLimit(.minutes(5)))
-@MainActor
-struct KitPlayShapeTests {
-    @Test func thePlayTrianglesWeightSitsOnTheCentreAndItsBackOnAWholePoint() {
-        let play = KitPlayShape.play
-
-        #expect(abs(KitPlayShape.lead - 4.5) < 0.001)
-        #expect(abs(play[0].x - KitPlayShape.round + 6) < 0.001)
-        #expect(play[0].x == play[3].x)
-        #expect(play[5] == play[6])
-        #expect(play[5].y == 0)
-        #expect(play[1] == play[4] && play[2] == play[7])
-    }
-
-    @Test func thePauseBarsAreCentredAsAPairOnHalfPoints() {
-        let pause = KitPlayShape.pause
-        let round = KitPlayShape.round
-
-        #expect(pause[0].x - round == -7 && pause[1].x + round == -1.5)
-        #expect(pause[4].x - round == 1.5 && pause[5].x + round == 7)
-        #expect(pause[0].y - round == -9 && pause[3].y + round == 9)
-        #expect((0..<4).allSatisfy { pause[$0].x == -pause[[5, 4, 7, 6][$0]].x })
-    }
-
-    @Test func everyFrameOfTheSwapIsTheSameAboveAndBelowTheCentre() {
-        let shape = KitPlayShape(size: 21)
-
-        for step in 0...10 {
-            let points = shape.points(Double(step) / 10)
-            #expect(points[0].y == -points[3].y && points[1].y == -points[2].y)
-            #expect(points[4].y == -points[7].y && points[5].y == -points[6].y)
-        }
-    }
-
-    @Test func everyFrameOfTheSwapIsOneTaperingOutlineWithASlit() {
-        let shape = KitPlayShape(size: 21)
-
-        for step in 0...10 {
-            let points = shape.points(Double(step) / 10)
-            let top = [points[0], points[1], points[4], points[5]]
-            let lean = (top[3].y - top[0].y) / (top[3].x - top[0].x)
-            #expect(top.allSatisfy { abs($0.y - (top[0].y + lean * ($0.x - top[0].x))) < 0.0001 })
-            #expect(points[1].x == -points[4].x && points[1].x <= 0)
-            #expect(points[0].x < points[1].x && points[4].x < points[5].x)
-        }
-        #expect(shape.points(0)[1].x == 0)
-        #expect(shape.points(1)[4].x - shape.round == KitPlayShape.gap / 2)
-    }
-
-    @Test(arguments: [1, 2, 8])
-    func theDrawnWeightOfBothFacesIsOnTheCentre(scale: Int) throws {
-        let shape = KitPlayShape(size: 21)
-
-        let play = try #require(FloatKeyBench.weight(of: shape, progress: 0, in: shape.side, scale: CGFloat(scale)))
-        let pause = try #require(FloatKeyBench.weight(of: shape, progress: 1, in: shape.side, scale: CGFloat(scale)))
-
-        #expect(abs(play.x - shape.side / 2) < 0.03 && abs(play.y - shape.side / 2) < 0.03, "play \(play)")
-        #expect(abs(pause.x - shape.side / 2) < 0.03 && abs(pause.y - shape.side / 2) < 0.03, "pause \(pause)")
-    }
-
-    @Test func aSmallerMarkKeepsItsProportionsAndAnEvenBox() {
-        let small = KitPlayShape(size: 10.5)
-
-        #expect(small.round == 0.75)
-        #expect(small.side == 12)
-        #expect(small.points(1)[0].x == KitPlayShape.pause[0].x / 2)
-    }
-}
-
 @Suite(.sharedWorld, .serialized, .timeLimit(.minutes(5)))
 @MainActor
-struct KitPlayMarkTests {
-    private func hosted(_ face: KitPlayMark.Face) -> (KitPlayMark, NSWindow) {
-        let mark = KitPlayMark(face, size: 21)
-        mark.frame = NSRect(origin: .zero, size: mark.intrinsicContentSize)
-        return (mark, FloatKeyBench.host(mark))
+struct FloatPlayKeyTests {
+    private func image(_ name: String) -> NSImage? { KitSymbol.image(name, FloatKeyBench.middle) }
+
+    private func nudge(_ name: String) -> CGVector { FloatOptics.nudge(name, FloatKeyBench.middle) }
+
+    private func place(_ name: String, in window: NSWindow?) -> NSRect? {
+        FloatKeyBench.places(scale: Int(window?.backingScaleFactor ?? 2)).first { $0.face == name }?.frame
     }
 
-    private func path(_ mark: KitPlayMark, _ progress: Double) -> CGPath {
-        mark.shape.path(progress, around: CGPoint(x: mark.bounds.midX, y: mark.bounds.midY))
+    private func pastTheDot() async {
+        try? await Task.sleep(for: .milliseconds(Int(KitSwap.dot * 1000) + 150))
     }
 
     @Test(arguments: [true, false])
-    func theFirstTimeTheKeyIsShownItsMarkIsSimplyThereWithNoMotion(playing: Bool) {
+    func theFirstTimeTheKeyIsShownItsMarkIsSimplyThereWithNoMotion(playing: Bool) throws {
         let restore = FloatKeyBench.still()
         defer { restore() }
         let (transport, _) = FloatKeyBench.transport(playing: playing)
         let window = FloatKeyBench.host(transport)
         defer { window.contentView = nil }
+        let name = playing ? "pause.fill" : "play.fill"
 
-        let mark = transport.mark
+        let symbol = try #require(transport.toggle.symbol)
 
-        #expect(mark.face == (playing ? .pause : .play))
-        #expect(mark.turn == nil)
-        #expect(mark.swaps == 0)
-        #expect(mark.ink.animationKeys() ?? [] == [])
-        #expect(mark.ink.path == path(mark, playing ? 1 : 0))
+        #expect(symbol.name == name)
+        #expect(symbol.image === image(name))
+        #expect(symbol.replaced == 0)
+        #expect(symbol.played == nil)
+        #expect(transport.toggle.nudge == nudge(name))
+        #expect(symbol.frame == place(name, in: window))
+        #expect(symbol.layer.map(BenchGlassFrames.animations) == 0)
     }
 
-    @Test func aSwapInterruptedMidwayTurnsBackFromWhereItIs() throws {
-        let restore = FloatKeyBench.still()
-        defer { restore() }
-        let (mark, window) = hosted(.pause)
-        defer { window.contentView = nil }
-        let start = CACurrentMediaTime()
-
-        mark.show(.play, at: start)
-        let first = try #require(mark.turn)
-        let cut = start + 0.06
-        let here = first.value(at: cut)
-        mark.show(.pause, at: cut)
-        let back = try #require(mark.turn)
-        let film = try #require(mark.ink.animation(forKey: KitPlayMark.key) as? CAKeyframeAnimation)
-        let frames = try #require(film.values).map { $0 as! CGPath }
-
-        #expect(here > 0.05 && here < 0.95)
-        #expect(back == first.turned(to: 1, at: cut, spring: KitPlayTurn.lively))
-        #expect(back.from == here)
-        #expect(mark.face == .pause)
-        #expect(mark.swaps == 2)
-        #expect(frames.count == back.frames.count)
-        #expect(frames.first == path(mark, here))
-        #expect(frames.last == path(mark, 1))
-        #expect(film.duration == back.length)
-        #expect(mark.ink.path == path(mark, 1))
-    }
-
-    @Test func playingFlickeringSeveralTimesDoesNotStackAnimations() throws {
-        let restore = FloatKeyBench.still()
-        defer { restore() }
-        let (mark, window) = hosted(.pause)
-        defer { window.contentView = nil }
-        let layer = try #require(mark.layer)
-        let start = CACurrentMediaTime()
-
-        for turn in 0..<7 {
-            mark.show(turn % 2 == 0 ? .play : .pause, at: start + Double(turn) * 0.03)
-            #expect(mark.ink.animationKeys() ?? [] == [KitPlayMark.key])
-            #expect(BenchGlassFrames.animations(layer) == 1)
-        }
-
-        #expect(mark.swaps == 7)
-        #expect(mark.face == .play)
-        #expect(mark.turn?.to == 0)
-        #expect(mark.ink.path == path(mark, 0))
-        #expect(layer.sublayers?.count == 1)
-    }
-
-    @Test func theKeyFlickeringWithTheChromeEndsOnTheLastWordWithOneAnimationAtMost() {
+    @Test func aChangeOfStatePlaysTheSystemsDownUpReplaceOnceInsideAKeyThatStaysStill() throws {
         let restore = FloatKeyBench.still()
         defer { restore() }
         let (transport, chrome) = FloatKeyBench.transport(playing: true)
         let window = FloatKeyBench.host(transport)
         defer { window.contentView = nil }
-        let mark = transport.mark
+        let symbol = try #require(transport.toggle.symbol)
+        let key = transport.toggle.frame
+
+        chrome.playing = false
+        FloatKeyBench.settle(transport)
+
+        #expect(symbol.name == "play.fill")
+        #expect(symbol.image === image("play.fill"))
+        #expect(symbol.replaced == 1)
+        #expect(symbol.played == ReplaceSymbolEffect.replace.downUp.byLayer)
+        #expect(KitSwap.downUp == ReplaceSymbolEffect.replace.downUp.byLayer)
+        #expect(symbol.layer?.animation(forKey: KitSwap.leave) == nil)
+        #expect(symbol.layer?.animation(forKey: KitSwap.crossKey) == nil)
+        #expect(transport.toggle.frame == key)
+        #expect(transport.toggle.layer?.animationKeys() ?? [] == [])
+    }
+
+    @Test func theNewMarkTakesItsOwnPlaceOnlyWhenTheOldOneIsADot() async throws {
+        let restore = FloatKeyBench.still()
+        defer { restore() }
+        let (transport, chrome) = FloatKeyBench.transport(playing: true)
+        let window = FloatKeyBench.host(transport)
+        defer { window.contentView = nil }
+        let symbol = try #require(transport.toggle.symbol)
+        let before = symbol.frame
+
+        chrome.playing = false
+        FloatKeyBench.settle(transport)
+        let leaving = (nudge: transport.toggle.nudge, frame: symbol.frame, held: transport.toggle.held)
+        await pastTheDot()
+        transport.layoutSubtreeIfNeeded()
+
+        #expect(before == place("pause.fill", in: window))
+        #expect(leaving.nudge == nudge("pause.fill"))
+        #expect(leaving.held == CGPoint(x: before.midX, y: before.midY))
+        #expect(leaving.frame.size == image("play.fill")?.size)
+        #expect(abs(leaving.frame.midX - before.midX) < 0.001 && abs(leaving.frame.midY - before.midY) < 0.001, "\(leaving.frame) after \(before)")
+        #expect(transport.toggle.held == nil)
+        #expect(transport.toggle.nudge == nudge("play.fill"))
+        #expect(symbol.frame == place("play.fill", in: window))
+        #expect(symbol.frame.size == symbol.image?.size)
+    }
+
+    @Test func aSecondPressBeforeTheOldMarkIsGoneEndsOnTheLastState() async throws {
+        let restore = FloatKeyBench.still()
+        defer { restore() }
+        let (transport, chrome) = FloatKeyBench.transport(playing: true)
+        let window = FloatKeyBench.host(transport)
+        defer { window.contentView = nil }
+        let symbol = try #require(transport.toggle.symbol)
+
+        chrome.playing = false
+        FloatKeyBench.settle(transport)
+        chrome.playing = true
+        FloatKeyBench.settle(transport)
+        await pastTheDot()
+        transport.layoutSubtreeIfNeeded()
+
+        #expect(symbol.name == "pause.fill")
+        #expect(symbol.image === image("pause.fill"))
+        #expect(symbol.replaced == 2)
+        #expect(transport.toggle.held == nil)
+        #expect(transport.toggle.nudge == nudge("pause.fill"))
+        #expect(symbol.frame == place("pause.fill", in: window))
+        #expect(transport.toggle.accessibilityLabel() == "Pause")
+    }
+
+    @Test func aSecondPressWhileTheNewMarkGrowsEndsOnTheLastStateToo() async throws {
+        let restore = FloatKeyBench.still()
+        defer { restore() }
+        let (transport, chrome) = FloatKeyBench.transport(playing: true)
+        let window = FloatKeyBench.host(transport)
+        defer { window.contentView = nil }
+        let symbol = try #require(transport.toggle.symbol)
+
+        chrome.playing = false
+        FloatKeyBench.settle(transport)
+        await pastTheDot()
+        transport.layoutSubtreeIfNeeded()
+        let grown = transport.toggle.nudge
+        chrome.playing = true
+        FloatKeyBench.settle(transport)
+        chrome.playing = false
+        FloatKeyBench.settle(transport)
+        await pastTheDot()
+        transport.layoutSubtreeIfNeeded()
+
+        #expect(grown == nudge("play.fill"))
+        #expect(symbol.name == "play.fill")
+        #expect(symbol.image === image("play.fill"))
+        #expect(symbol.replaced == 3)
+        #expect(transport.toggle.nudge == nudge("play.fill"))
+        #expect(symbol.frame == place("play.fill", in: window))
+        #expect(transport.toggle.accessibilityLabel() == "Play")
+    }
+
+    @Test func theKeyFlickeringWithTheChromeEndsOnTheLastWord() async throws {
+        let restore = FloatKeyBench.still()
+        defer { restore() }
+        let (transport, chrome) = FloatKeyBench.transport(playing: true)
+        let window = FloatKeyBench.host(transport)
+        defer { window.contentView = nil }
+        let symbol = try #require(transport.toggle.symbol)
 
         for turn in 0..<9 {
             chrome.playing = turn % 2 == 1
             FloatKeyBench.settle(transport)
-            #expect((mark.ink.animationKeys() ?? []).count <= 1)
         }
+        await pastTheDot()
+        transport.layoutSubtreeIfNeeded()
 
-        #expect(mark.face == .play)
-        #expect(mark.ink.path == path(mark, 0))
+        #expect(symbol.name == "play.fill")
+        #expect(symbol.image === image("play.fill"))
+        #expect(symbol.replaced == 9)
+        #expect(transport.toggle.nudge == nudge("play.fill"))
+        #expect(symbol.frame == place("play.fill", in: window))
         #expect(transport.toggle.accessibilityLabel() == "Play")
     }
 
-    @Test func showingTheFaceItAlreadyHasDoesNothing() {
+    @Test func showingTheMarkItAlreadyHasDoesNothing() throws {
         let restore = FloatKeyBench.still()
         defer { restore() }
-        let (mark, window) = hosted(.pause)
+        let (transport, _) = FloatKeyBench.transport(playing: true)
+        let window = FloatKeyBench.host(transport)
         defer { window.contentView = nil }
+        let symbol = try #require(transport.toggle.symbol)
 
-        mark.show(.pause)
-        mark.show(.play)
-        let turn = mark.turn
-        mark.show(.play)
+        transport.toggle.show("pause.fill", animated: true)
+        transport.toggle.show("play.fill", animated: true)
+        transport.toggle.show("play.fill", animated: true)
 
-        #expect(mark.swaps == 1)
-        #expect(mark.turn == turn)
+        #expect(symbol.replaced == 1)
+        #expect(symbol.name == "play.fill")
     }
 
-    @Test func reduceMotionGivesAPlainSwap() {
+    @Test func reduceMotionChangesTheMarkAtOnce() throws {
         Store.settings.set(true, forKey: "motion.testReduced")
         defer { Store.settings.removeObject(forKey: "motion.testReduced") }
         let (transport, chrome) = FloatKeyBench.transport(playing: true)
         let window = FloatKeyBench.host(transport)
         defer { window.contentView = nil }
-        let mark = transport.mark
+        let symbol = try #require(transport.toggle.symbol)
 
         chrome.playing = false
         FloatKeyBench.settle(transport)
 
-        #expect(mark.face == .play)
-        #expect(mark.turn == nil)
-        #expect(mark.swaps == 0)
-        #expect(mark.ink.animationKeys() ?? [] == [])
-        #expect(mark.ink.path == path(mark, 0))
+        #expect(symbol.name == "play.fill")
+        #expect(symbol.image === image("play.fill"))
+        #expect(symbol.replaced == 0)
+        #expect(symbol.played == nil)
+        #expect(transport.toggle.nudge == nudge("play.fill"))
+        #expect(symbol.frame == place("play.fill", in: window))
     }
 
-    @Test func reduceMotionTurnedOnMidwayEndsTheSwapAtOnce() {
+    @Test func reduceMotionTurnedOnMidwayEndsTheSwapAtOnce() throws {
         let restore = FloatKeyBench.still()
         defer { restore() }
-        let (mark, window) = hosted(.pause)
+        let (transport, chrome) = FloatKeyBench.transport(playing: true)
+        let window = FloatKeyBench.host(transport)
         defer { window.contentView = nil }
-        let start = CACurrentMediaTime()
-        mark.show(.play, at: start)
+        let symbol = try #require(transport.toggle.symbol)
+        chrome.playing = false
+        FloatKeyBench.settle(transport)
+        let leaving = transport.toggle.held
 
         Store.settings.set(true, forKey: "motion.testReduced")
-        mark.show(.pause, at: start + 0.05)
+        chrome.playing = true
+        FloatKeyBench.settle(transport)
 
-        #expect(mark.turn == nil)
-        #expect(mark.ink.animationKeys() ?? [] == [])
-        #expect(mark.ink.path == path(mark, 1))
+        #expect(symbol.name == "pause.fill")
+        #expect(symbol.image === image("pause.fill"))
+        #expect(leaving != nil)
+        #expect(symbol.replaced == 1)
+        #expect(transport.toggle.held == nil)
+        #expect(transport.toggle.nudge == nudge("pause.fill"))
+        #expect(symbol.frame == place("pause.fill", in: window))
     }
 
-    @Test func aMarkThatIsInNoWindowSwapsPlainly() {
+    @Test func aKeyInNoWindowChangesItsMarkAtOnce() throws {
         let restore = FloatKeyBench.still()
         defer { restore() }
-        let mark = KitPlayMark(.pause, size: 21)
-        mark.frame = NSRect(origin: .zero, size: mark.intrinsicContentSize)
-        mark.layoutSubtreeIfNeeded()
+        let (transport, chrome) = FloatKeyBench.transport(playing: true)
+        transport.layoutSubtreeIfNeeded()
+        let symbol = try #require(transport.toggle.symbol)
 
-        mark.show(.play)
+        chrome.playing = false
+        FloatKeyBench.settle(transport)
 
-        #expect(mark.face == .play)
-        #expect(mark.turn == nil)
-        #expect(mark.ink.path == path(mark, 0))
+        #expect(symbol.name == "play.fill")
+        #expect(symbol.image === image("play.fill"))
+        #expect(symbol.replaced == 0)
+        #expect(transport.toggle.nudge == nudge("play.fill"))
+        #expect(symbol.frame == place("play.fill", in: nil))
     }
 
     @Test func theKeysLabelAndHelpStillFlipBetweenPlayAndPause() {
@@ -463,20 +406,18 @@ struct KitPlayMarkTests {
         #expect(paused == ["Play", "Play", "Play"])
         #expect([key.accessibilityLabel(), key.accessibilityHelp(), key.toolTip] == ["Pause", "Pause", "Pause"])
         #expect(key.accessibilityRole() == .button)
-        #expect(!transport.mark.isAccessibilityElement())
+        #expect(key.symbol?.isAccessibilityElement() == false)
     }
 
     @Test func theMarkSitsWithTheSkipMarksInColourAndLight() {
         let (transport, _) = FloatKeyBench.transport(playing: true)
         transport.layoutSubtreeIfNeeded()
-        let mark = transport.mark
 
-        #expect(mark.tint == .white)
+        #expect(transport.toggle.symbol?.tint == .white)
         #expect(transport.rewind.symbol?.tint == .white)
-        #expect(mark.ink.fillColor?.components == [1, 1, 1, 1])
-        #expect(mark.ink.strokeColor == mark.ink.fillColor)
-        #expect(mark.layer?.opacity == transport.rewind.face.layer?.opacity)
-        #expect(mark.layer?.opacity == 0.92)
+        #expect(transport.toggle.symbol?.style == FloatKeyBench.middle)
+        #expect(transport.toggle.face.layer?.opacity == transport.rewind.face.layer?.opacity)
+        #expect(transport.toggle.face.layer?.opacity == 0.92)
     }
 
     @Test func aMarkOverABrightFrameIsShadedLikeTheOthers() {
@@ -486,8 +427,8 @@ struct KitPlayMarkTests {
         transport.toggle.shaded = true
         transport.rewind.shaded = true
 
-        #expect(transport.mark.layer?.shadowOpacity == FloatShade.glyphOpacity)
-        #expect(transport.mark.layer?.shadowRadius == transport.rewind.face.layer?.shadowRadius)
+        #expect(transport.toggle.face.layer?.shadowOpacity == FloatShade.glyphOpacity)
+        #expect(transport.toggle.face.layer?.shadowRadius == transport.rewind.face.layer?.shadowRadius)
     }
 }
 
@@ -555,8 +496,8 @@ struct FloatGlassStateTests {
 
         #expect(said.count >= 9, "\(said)")
         #expect(notes == ["float", "video"], "\(said)")
-        #expect(kinds.contains("KitPlayMark"))
-        #expect(said.first { $0["kind"] as? String == "KitPlayMark" }?["text"] as? String == "pause")
+        #expect(kinds.contains("KitSymbol"))
+        #expect(said.contains { $0["kind"] as? String == "KitSymbol" && $0["text"] as? String == "pause.fill" })
         #expect(live.count == 1 && live.allSatisfy { $0["note"] as? String == "video" })
         #expect(said.filter { $0["text"] as? String == "Go Live" }.allSatisfy { $0["note"] as? String == "float" })
     }
@@ -572,11 +513,13 @@ struct FloatKeyPlacesTests {
         let forward = places.first { $0.key == "forward" }
         let middle = places.filter { $0.key == "middle" }
 
+        let pixel = 0.5 / CGFloat(scale) + 0.1
         #expect(places.count == 4)
+        #expect(Set(middle.map(\.face)) == ["play.fill", "pause.fill"])
         for place in middle {
-            #expect(abs(place.off.dx) < 0.03 && abs(place.off.dy) < 0.03, "\(place.line)")
+            #expect(abs(place.off.dx) <= pixel && abs(place.off.dy) <= pixel, "\(place.line)")
+            #expect(place.frame.size == KitGlyph.image(place.face, FloatKeyBench.middle)?.size)
         }
-        #expect(middle.first?.frame == middle.last?.frame)
         for place in [back, forward].compactMap({ $0 }) {
             #expect(abs(place.off.dx) <= 0.5 && abs(place.off.dy) <= 0.5, "\(place.line)")
             #expect(abs(place.ringOff?.dx ?? 9) <= 0.5 / CGFloat(scale) + 0.01 && abs(place.ringOff?.dy ?? 9) <= 0.5 / CGFloat(scale) + 0.01, "\(place.line)")
@@ -592,7 +535,7 @@ struct FloatKeyPlacesTests {
         transport.layoutSubtreeIfNeeded()
         let places = FloatKeyBench.places(scale: 2)
 
-        let pause = transport.mark.frame
+        let pause = transport.toggle.symbol?.frame
         chrome.playing = false
         FloatKeyBench.settle(transport)
 
@@ -600,14 +543,16 @@ struct FloatKeyPlacesTests {
         #expect(transport.forward.symbol?.frame == places.first { $0.key == "forward" }?.frame)
         #expect(transport.rewind.symbol?.whole == true && transport.forward.symbol?.whole == true)
         #expect(transport.rewind.symbol?.frame.size == transport.rewind.symbol?.image?.size)
-        #expect(pause == places.first { $0.key == "middle" }?.frame)
-        #expect(transport.mark.frame == pause)
-        #expect(transport.toggle.nudge == .zero)
-        #expect(transport.toggle.symbol == nil)
+        #expect(pause == places.first { $0.face == "pause.fill" }?.frame)
+        #expect(transport.toggle.symbol?.frame == places.first { $0.face == "play.fill" }?.frame)
+        #expect(transport.toggle.symbol?.whole == true)
+        #expect(transport.toggle.symbol?.frame.size == transport.toggle.symbol?.image?.size)
+        #expect(transport.toggle.nudge == FloatOptics.nudge("play.fill", FloatKeyBench.middle))
     }
 
-    @Test func theRealKeysDrawTheirMarksWhereTheNumbersSay() throws {
-        let (transport, _) = FloatKeyBench.transport(playing: true)
+    @Test(arguments: [true, false])
+    func theRealKeysDrawTheirMarksWhereTheNumbersSay(playing: Bool) throws {
+        let (transport, _) = FloatKeyBench.transport(playing: playing)
         let window = FloatKeyBench.host(transport)
         defer {
             window.orderOut(nil)
@@ -623,7 +568,7 @@ struct FloatKeyPlacesTests {
         for (key, view) in [("back", transport.rewind), ("middle", transport.toggle), ("forward", transport.forward)] {
             let holder = try #require(view.face.superview)
             let drawn = try #require(FloatKeyBench.drawnWeight(of: holder, scale: CGFloat(scale)))
-            let place = try #require(places.first { $0.key == key && $0.face != "play" })
+            let place = try #require(places.first { $0.key == key && $0.face != (playing ? "play.fill" : "pause.fill") })
             #expect(holder.bounds.width == place.disc)
             #expect(abs(drawn.x - place.weight.x) < 0.05 && abs(drawn.y - place.weight.y) < 0.05, "\(key) drawn at \(drawn), \(place.line)")
         }
@@ -643,6 +588,19 @@ struct FloatKeyPlacesTests {
         #expect(FloatOptics.nudge("xmark", KitSymbol.Style(size: 12, weight: .bold)) == .zero)
         let close = FloatKeyView(symbol: "xmark", size: 12, weight: .bold, label: "Close", action: {})
         #expect(close.symbol?.whole == false)
+    }
+
+    @Test func thePlayTriangleTakesANudgeOfItsOwnAndThePauseBarsNeedNoneAcross() throws {
+        let play = FloatOptics.nudge("play.fill", FloatKeyBench.middle)
+        let pause = FloatOptics.nudge("pause.fill", FloatKeyBench.middle)
+        let size = try #require(KitGlyph.image("play.fill", FloatKeyBench.middle)?.size)
+        let weight = try #require(KitGlyph.weight("play.fill", FloatKeyBench.middle))
+
+        #expect(abs(pause.dx) < 0.5 && abs(pause.dy) < 0.5, "pause \(pause)")
+        #expect(play.dx > pause.dx + 0.5, "play \(play), pause \(pause)")
+        #expect(abs(weight.x + play.dx - size.width / 2) < 0.001 && abs(weight.y + play.dy - size.height / 2) < 0.001)
+        #expect(FloatOptics.weighed("play.fill") && FloatOptics.weighed("pause.fill") && FloatOptics.weighed("gobackward.15"))
+        #expect(!FloatOptics.weighed("xmark"))
     }
 
     @Test(arguments: [NSSize(width: 400, height: 225), NSSize(width: 320, height: 180), NSSize(width: 641, height: 361)])
@@ -685,88 +643,10 @@ struct FloatKeyPicturesTests {
         try data.write(to: folder.appendingPathComponent(name))
     }
 
-    private func words(_ text: String, at point: CGPoint, in context: CGContext) {
-        let pen = NSGraphicsContext(cgContext: context, flipped: true)
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = pen
-        (text as NSString).draw(at: point, withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 7, weight: .regular),
-                                                            .foregroundColor: NSColor(white: 1, alpha: 0.7)])
-        NSGraphicsContext.restoreGraphicsState()
-    }
-
     private func cross(at centre: CGPoint, reach: CGFloat, in context: CGContext) {
         context.setFillColor(Self.guide.cgColor)
         context.fill(CGRect(x: centre.x - reach, y: centre.y - 0.05, width: reach * 2, height: 0.1))
         context.fill(CGRect(x: centre.x - 0.05, y: centre.y - reach, width: 0.1, height: reach * 2))
-    }
-
-    private func strip(_ frames: [(time: Double, progress: Double)], name: String, in folder: URL) throws {
-        let shape = KitPlayShape(size: 21)
-        let side = FloatLayout.play + 8
-        let columns = 10
-        let rows = (frames.count + columns - 1) / columns
-        let image = FloatKeyBench.canvas(NSSize(width: side * CGFloat(columns), height: (side + 10) * CGFloat(rows)), scale: 6, ground: Self.ground) { context in
-            for (index, frame) in frames.enumerated() {
-                let origin = CGPoint(x: CGFloat(index % columns) * side, y: CGFloat(index / columns) * (side + 10))
-                let centre = CGPoint(x: origin.x + side / 2, y: origin.y + side / 2)
-                context.setFillColor(Self.disc.cgColor)
-                context.fillEllipse(in: CGRect(x: centre.x - FloatLayout.play / 2, y: centre.y - FloatLayout.play / 2, width: FloatLayout.play, height: FloatLayout.play))
-                shape.draw(frame.progress, around: centre, colour: NSColor.white.cgColor, in: context)
-                words(String(format: "%3.0f ms  %.2f", frame.time * 1000, frame.progress), at: CGPoint(x: origin.x + 8, y: origin.y + side - 1), in: context)
-            }
-        }
-        try save(image, name, in: folder)
-    }
-
-    private func frames(_ turn: KitPlayTurn, from start: Double, until end: Double? = nil) -> [(time: Double, progress: Double)] {
-        let last = end ?? turn.began + turn.length
-        var out: [(time: Double, progress: Double)] = []
-        var time = start
-        while time < last - 0.0001 {
-            out.append((time, turn.value(at: time)))
-            time += 1.0 / 60
-        }
-        return out
-    }
-
-    @Test func theMarksOwnLayersAtALargeScale() throws {
-        let folder = try home()
-        for face in [KitPlayMark.Face.play, .pause] {
-            let mark = KitPlayMark(face, size: 21)
-            mark.frame = NSRect(origin: .zero, size: mark.intrinsicContentSize)
-            mark.layoutSubtreeIfNeeded()
-            let layer = try #require(mark.layer)
-            let side = FloatLayout.play
-            let inset = (side - mark.bounds.width) / 2
-            let image = FloatKeyBench.canvas(NSSize(width: side, height: side), scale: 16, ground: Self.ground) { context in
-                context.setFillColor(Self.disc.cgColor)
-                context.fillEllipse(in: CGRect(x: 0, y: 0, width: side, height: side))
-                context.saveGState()
-                context.translateBy(x: inset, y: inset)
-                layer.render(in: context)
-                context.restoreGState()
-                cross(at: CGPoint(x: side / 2, y: side / 2), reach: side / 2, in: context)
-            }
-            try save(image, "mark-\(face.rawValue)-16x.png", in: folder)
-        }
-    }
-
-    @Test func aRowOfFramesThroughTheSwapEachWayAndOneTurnedBack() throws {
-        let folder = try home()
-        let toPlay = KitPlayTurn(from: 1, to: 0, began: 0, spring: KitPlayTurn.lively)
-        let toPause = KitPlayTurn(from: 0, to: 1, began: 0, spring: KitPlayTurn.lively)
-        let back = toPlay.turned(to: 1, at: 0.07, spring: KitPlayTurn.lively)
-        let calm = KitPlayTurn(from: 1, to: 0, began: 0, spring: KitPlayTurn.calm)
-
-        try strip(frames(toPlay, from: 0) + [(toPlay.length, 0)], name: "swap-to-play.png", in: folder)
-        try strip(frames(toPause, from: 0) + [(toPause.length, 1)], name: "swap-to-pause.png", in: folder)
-        try strip(frames(toPlay, from: 0, until: 0.07) + frames(back, from: 0.07) + [(back.began + back.length, 1)], name: "swap-turned-back.png", in: folder)
-        try strip(frames(calm, from: 0) + [(calm.length, 0)], name: "swap-to-play-low-power.png", in: folder)
-        let lines = [("to play", toPlay), ("to pause", toPause), ("turned back at 70 ms", back), ("to play in low power", calm)].map { name, turn in
-            String(format: "%@: %.0f ms long, %d frames at 120 a second, furthest past its end %.3f", name, turn.length * 1000, turn.frames.count,
-                   turn.frames.map { turn.to == 1 ? $0 - 1 : -$0 }.max() ?? 0)
-        }
-        try lines.joined(separator: "\n").write(to: folder.appendingPathComponent("swap.txt"), atomically: true, encoding: .utf8)
     }
 
     @Test(arguments: [1, 2])
@@ -774,21 +654,20 @@ struct FloatKeyPicturesTests {
         let folder = try home()
         let pad: CGFloat = 8
         let style = KitSymbol.Style(size: 16, weight: .semibold)
-        let shape = KitPlayShape(size: 21)
         let size = NSSize(width: FloatLayout.transport.width + pad * 2, height: FloatLayout.transport.height + pad * 2)
         let discs: [(key: String, x: CGFloat, side: CGFloat)] = [("back", 0, FloatLayout.skip), ("middle", FloatLayout.skip + FloatLayout.gap, FloatLayout.play),
                                                                ("forward", FloatLayout.skip + FloatLayout.play + FloatLayout.gap * 2, FloatLayout.skip)]
         let places = FloatKeyBench.places(scale: scale)
-        for face in [KitPlayMark.Face.play, .pause] {
+        for face in ["play", "pause"] {
             let small = FloatKeyBench.canvas(size, scale: CGFloat(scale), ground: Self.ground) { context in
                 for disc in discs {
                     let top = pad + (FloatLayout.play - disc.side) / 2
                     let box = CGRect(x: pad + disc.x, y: top, width: disc.side, height: disc.side)
                     context.setFillColor(Self.disc.cgColor)
                     context.fillEllipse(in: box)
-                    if disc.key == "middle" {
-                        shape.draw(face.rest, around: CGPoint(x: box.midX, y: box.midY), colour: NSColor.white.cgColor, in: context)
-                    } else if let place = places.first(where: { $0.key == disc.key }), let image = KitGlyph.image(place.face, style) {
+                    let middle = disc.key == "middle"
+                    if let place = places.first(where: { $0.key == disc.key && (!middle || $0.face == face + ".fill") }),
+                       let image = KitGlyph.image(place.face, middle ? FloatKeyBench.middle : style) {
                         let white = NSImage(size: image.size, flipped: false) { rect in
                             image.draw(in: rect)
                             NSColor.white.set()
@@ -819,7 +698,7 @@ struct FloatKeyPicturesTests {
                           reach: disc.side / 2 * CGFloat(scale), in: context)
                 }
             }
-            try save(large, "keys-at-rest-\(face.rawValue)-\(scale)x.png", in: folder)
+            try save(large, "keys-at-rest-\(face)-\(scale)x.png", in: folder)
         }
         let text = places.map(\.line).joined(separator: "\n")
         try text.write(to: folder.appendingPathComponent("places-\(scale)x.txt"), atomically: true, encoding: .utf8)

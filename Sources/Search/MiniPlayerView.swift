@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import Symbols
 
 final class MiniPlayerView: KitHoverView, NSViewToolTipOwner, KitOnGlass {
     static let height: CGFloat = 44
@@ -527,8 +528,10 @@ final class MiniPlayerView: KitHoverView, NSViewToolTipOwner, KitOnGlass {
         item.map { Self.times($0) }
     }
 
+    static func swaps(_ shown: Tab.ID, after last: Tab.ID?, share: Double) -> Bool { last == shown && share > 0 }
+
     private func dress(_ shown: MiniPlayer.Item) {
-        toggle.show(playing: shown.playing)
+        toggle.show(playing: shown.playing, moving: Self.swaps(shown.id, after: shownID, share: share))
         switch shown.pair {
         case .tracks:
             back.set("backward.fill", words: "Previous")
@@ -751,11 +754,11 @@ final class MiniToggle: KitButton {
 
     override var intrinsicContentSize: NSSize { NSSize(width: MiniPlayerView.key, height: MiniPlayerView.key) }
 
-    func show(playing: Bool) {
+    func show(playing: Bool, moving: Bool = true) {
         let name = playing ? "pause" : "play"
         guard name != showing else { return }
         showing = name
-        glyph.show(playing ? "pause.fill" : "play.fill", animated: window != nil)
+        glyph.show(playing ? "pause.fill" : "play.fill", animated: moving && window != nil)
         setAccessibilityLabel(playing ? "Pause" : "Play")
         toolTip = playing ? "Pause" : "Play"
     }
@@ -792,12 +795,13 @@ final class MiniGlyph: NSImageView {
     override var allowsVibrancy: Bool { false }
 
     private(set) var replaced = 0
+    private(set) var played: ReplaceSymbolEffect?
 
     func show(_ name: String, animated: Bool) {
         guard let next = KitGlyph.image(name, Self.style) else { return }
         if animated, kitReplaces {
             replaced += 1
-            setSymbolImage(next, contentTransition: .replace)
+            played = kitReplace(with: next)
         } else {
             image = next
         }

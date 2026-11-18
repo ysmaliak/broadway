@@ -11,6 +11,8 @@ enum KitSwap {
     static let crossKey = "swap.cross"
     static let small: CGFloat = 0.6
     static let spring = KitSpring(response: 0.26, damping: 0.62)
+    static let downUp: ReplaceSymbolEffect = .replace.downUp.byLayer
+    static let dot: CFTimeInterval = 0.115
 }
 
 final class KitSymbol: NSImageView {
@@ -30,7 +32,9 @@ final class KitSymbol: NSImageView {
     var ink: KitInk = .flat { didSet { if ink != oldValue { refresh() } } }
     var whole = false { didSet { if whole != oldValue { invalidateIntrinsicContentSize() } } }
 
-    override var intrinsicContentSize: NSSize { whole ? image?.size ?? super.intrinsicContentSize : super.intrinsicContentSize }
+    override var intrinsicContentSize: NSSize {
+        whole ? (Self.image(name, style) ?? image)?.size ?? super.intrinsicContentSize : super.intrinsicContentSize
+    }
 
     init(_ name: String, style: Style = Style(), tint: NSColor = KitColor.ink, label: String? = nil) {
         self.name = name
@@ -147,6 +151,7 @@ final class KitSymbol: NSImageView {
     private var turn = 0
     private var replacing = false
     private(set) var replaced = 0
+    private(set) var played: ReplaceSymbolEffect?
 
     func replace(to name: String) {
         guard name != self.name else { return }
@@ -158,7 +163,7 @@ final class KitSymbol: NSImageView {
         self.name = name
         replacing = false
         replaced += 1
-        kitReplace(with: next)
+        played = kitReplace(with: next)
     }
 
     static func image(_ name: String, _ style: Style) -> NSImage? {
