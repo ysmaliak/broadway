@@ -340,6 +340,7 @@ final class Tab: Identifiable {
         // sending its window there, then writing) is that page's, not the
         // one before it, and is offered nothing that belonged to it.
         if let url = built?.url { committed = url }
+        if !ClickedWindow.blank(built?.url) { shownPage = true }
         dropFillMarks()
         // A page arrived after all: the address is its own again.
         if held != nil, let url = built?.url, url.absoluteString != "about:blank" {
@@ -712,6 +713,8 @@ final class Tab: Identifiable {
     /// The tab whose page opened this one, when a script did. Sign-in flows
     /// hand you back to it when they are done.
     @ObservationIgnored var opener: Tab.ID?
+    @ObservationIgnored var openedByClick = false
+    @ObservationIgnored private(set) var shownPage = false
     @ObservationIgnored var linkedFrom: Tab.ID?
     @ObservationIgnored var returnTo: Tab.ID?
     @ObservationIgnored var returnWay = TabReturn.front

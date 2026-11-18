@@ -7578,6 +7578,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         let tab = Tab(shy: opener.shy, configuration: configuration)
         tab.popup = popup
         tab.opener = from
+        tab.openedByClick = clicked
         tab.linkedFrom = from
         if clicked { opener.popupGesture.opened(tab.id, sized: popup) }
         opener.lastWindow = (action.request.url, ProcessInfo.processInfo.systemUptime)

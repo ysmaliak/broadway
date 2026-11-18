@@ -44,7 +44,13 @@ final class SiteFilesWorldTests {
             });
             </script>
             """),
+            "/open-blank-then": Self.page("<a id=go href=\"#\" onclick=\"var w = window.open('about:blank'); w.location = '/file/blankthen.zip'; return false\" \(Self.cover)>Download</a>"),
+            "/open-await": Self.page("<a id=go href=\"#\" onclick=\"event.preventDefault(); var w = window.open(''); fetch('/link').then(function () { w.location = '/file/await.zip' })\" \(Self.cover)>Download</a>"),
+            "/opened-alone": Self.page("<p>Wait</p><script>setTimeout(function () { var w = window.open('about:blank'); if (w) { w.location = '/file/alone.zip' } }, 1500)</script>"),
             "/file/clicked.zip": Self.file("clicked.zip"),
+            "/file/blankthen.zip": Self.file("blankthen.zip"),
+            "/file/await.zip": Self.file("await.zip"),
+            "/file/alone.zip": Self.file("alone.zip"),
             "/file/timer.zip": Self.file("timer.zip"),
             "/file/again.zip": Self.file("again.zip"),
             "/file/first.zip": Self.file("first.zip"),
@@ -150,6 +156,34 @@ final class SiteFilesWorldTests {
 
         #expect(await until { self.landed("clicked.zip") })
         #expect(SiteFileAsk.shared.cards.isEmpty)
+    }
+
+    @Test func aClickThatOpensABlankWindowAndSendsItToAFileDownloadsWithoutAQuestion() async throws {
+        let tab = try await open(server.url("/open-blank-then"))
+
+        try await click(tab)
+
+        #expect(await until { self.landed("blankthen.zip") })
+        #expect(SiteFileAsk.shared.cards.isEmpty)
+    }
+
+    @Test func aClickThatOpensAWindowAndSendsItToAFileLaterDownloadsWithoutAQuestion() async throws {
+        let tab = try await open(server.url("/open-await"))
+
+        try await click(tab)
+
+        #expect(await until { self.landed("await.zip") })
+        #expect(SiteFileAsk.shared.cards.isEmpty)
+    }
+
+    @Test func aBlankWindowAPageOpenedByItselfStillAsksBeforeItsFile() async throws {
+        let tab = try await open(server.url("/opened-alone"))
+        let site = try #require(BlockedPopups.site(of: tab.pageAddress))
+        tab.popupSites.insert(site)
+
+        #expect(await until { self.browser.tabs.count == 2 })
+        #expect(await until { self.browser.tabs.contains { SiteFileAsk.shared.card(for: $0.id)?.names.contains("alone.zip") == true } })
+        #expect(!landed("alone.zip"))
     }
 
     @Test func aTimerAsksAllowLandsTheFileAndTheSiteIsNotAskedAgain() async throws {

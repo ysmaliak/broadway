@@ -154,12 +154,13 @@ extension Browser {
     func noteFileBegan(_ download: WKDownload, from webView: WKWebView?, start: FileStart) {
         guard let webView, let tab = anyTab(for: webView) else { return }
         let all = tabs + parkedTabs
-        let opener = tab.committed == nil ? tab.opener.flatMap { id in all.first { $0.id == id } } : nil
+        let fresh = tab.takesOpenersClick
+        let opener = fresh ? tab.opener.flatMap { id in all.first { $0.id == id } } : nil
         let clickTab = opener ?? tab
         let typed = start == .page && tab.fileTyped && tab.committed == nil
         if start == .page, tab.fileTyped { tab.fileTyped = false }
         let page = typed ? nil : clickTab.committed
-        let leaving = tab.committed == nil && tab.pin == nil && opener != nil && tabs.count > 1
+        let leaving = fresh && tab.pin == nil && opener != nil && tabs.count > 1
         SiteFileAsk.shared.note(download, SiteFileAsk.Began(
             tab: leaving ? clickTab.id : tab.id, clickTab: clickTab.id, page: page,
             start: typed ? .typed : start, store: SiteFileAsk.storeKey(webView.configuration.websiteDataStore)))
