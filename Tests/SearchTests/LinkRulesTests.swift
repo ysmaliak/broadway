@@ -304,6 +304,22 @@ final class LinkRulesTests {
         #expect(small.height >= LinkChooserLook.head + LinkChooserLook.heading + LinkChooserLook.row + LinkChooserLook.bar)
     }
 
+    @Test func theChoosersGlassIsTheFieldsPlainGlassTintedByTheSpace() throws {
+        let look = SpaceLook()
+        let view = LinkChooserView(rows: [.window], url: URL(string: "https://linear.example/a")!, site: "linear.example", marks: [:])
+        let glass = try #require(view.subviews.compactMap { $0 as? KitGlass }.first)
+
+        #expect(glass.tintColor == nil)
+        view.look = look
+        view.layoutSubtreeIfNeeded()
+
+        let tint = try #require(glass.tintColor)
+        #expect(glass.ground == nil)
+        #expect(glass.contentView == nil)
+        #expect(glass.cornerRadius == OmniboxView.radius)
+        #expect(abs(tint.alphaComponent - look.pageTint.alphaComponent * 0.65) < 0.001)
+    }
+
     @Test func theChoosersHeadNamesTheSiteAndTheRestOfTheAddress() {
         let plain = LinkChooserLook.words(for: URL(string: "https://www.linear.app/")!)
         let deep = LinkChooserLook.words(for: URL(string: "https://linear.app/team/issue/RDR-214?tab=all")!)

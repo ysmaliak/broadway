@@ -138,7 +138,7 @@ enum BenchSurfaces {
         case _ where BenchGlassFamily.names.contains(name):
             return BenchGlassFamily.make(name, request, browser: browser)
         case _ where BenchLinkChooser.names.contains(name):
-            return BenchLinkChooser.make(request)
+            return BenchLinkChooser.make(name, request)
         default:
             return BenchFloating.make(name, request)
         }

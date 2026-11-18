@@ -158,6 +158,7 @@ final class LinkChooser {
         let made = LinkChooserView(rows: rows, url: url, site: site, marks: marks)
         made.lit = choosing.lit
         made.always = always
+        made.look = browser.makingSpace ? browser.draftLook : browser.space.look ?? SpaceLook()
         made.choose = { [weak self] in self?.finish($0) }
         made.point = { [weak self] in self?.point(at: $0) }
         made.flip = { [weak self] in self?.always.toggle() }

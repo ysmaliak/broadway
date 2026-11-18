@@ -3,7 +3,7 @@ import QuartzCore
 
 @MainActor
 enum BenchLinkChooser {
-    static let names = ["link-chooser"]
+    static let names = ["link-chooser", "link-chooser-bar"]
 
     static let spaces: [(name: String, symbol: String, colour: String)] = [
         ("Home", "house", "peach"), ("Work", "briefcase", "sky"), ("Sun", "sun.max", "F5D21F"), ("Reading", "book", "sage"),
@@ -17,7 +17,11 @@ enum BenchLinkChooser {
         return SpaceLook(colours: [colour], intensity: SpaceLook.bold)
     }
 
-    static func make(_ request: [String: Any]) -> NSView? {
+    static func make(_ name: String, _ request: [String: Any]) -> NSView? {
+        if name == "link-chooser-bar" {
+            let keys = LinkChooserView.keys()
+            return BenchFieldFixtures.row([keys.here, keys.open], spacing: 10, pad: 8)
+        }
         let count = max(0, min(spaces.count, request["spaces"] as? Int ?? 2))
         let address = request["url"] as? String ?? "https://linear.example/team/issue/RDR-214"
         guard let url = URL(string: address) else { return nil }
@@ -34,6 +38,7 @@ enum BenchLinkChooser {
         view.lit = request["lit"] as? Int ?? 0
         view.faint = request["faint"] as? Bool ?? false
         view.always = request["always"] as? Bool ?? false
+        if let front = spaces.prefix(count).first { view.look = look(front.colour) }
         var size = view.intrinsicContentSize
         if let width = request["width"] as? Double { size.width = CGFloat(width) }
         view.setFrameSize(size)

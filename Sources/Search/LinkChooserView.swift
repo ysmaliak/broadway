@@ -30,6 +30,10 @@ enum LinkChooserLook {
         if let query = url.query(), !query.isEmpty { rest += "?" + query }
         return (Address.withoutWWW(host), rest)
     }
+
+    static func tint(for look: SpaceLook) -> NSColor {
+        look.pageTint.withAlphaComponent(look.pageTint.alphaComponent * 0.65)
+    }
 }
 
 final class LinkChooserView: NSView {
@@ -47,6 +51,7 @@ final class LinkChooserView: NSView {
     }
     var faint = false { didSet { if faint != oldValue { needsLayout = true } } }
     var always = false { didSet { remember.isOn = always } }
+    var look: SpaceLook? { didSet { if look != oldValue { needsLayout = true } } }
     var choose: ((Int) -> Void)?
     var point: ((Int) -> Void)?
     var flip: (() -> Void)?
@@ -55,7 +60,7 @@ final class LinkChooserView: NSView {
 
     var count: Int { rows.count }
 
-    private let glass = KitGlass.floating(radius: OmniboxView.radius)
+    private let glass = KitGlass(radius: OmniboxView.radius)
     private let inside = KitFlippedView()
     private let mark: FieldMark
     private let address = KitLabel()
@@ -70,16 +75,21 @@ final class LinkChooserView: NSView {
     private let hereKey: KitGlassKey
     private let openKey: KitGlassKey
     private var shownLit: Int??
+    private var tint: NSColor?
 
     init(rows choices: [LinkChooser.Row], url: URL, site: String?, marks: [UUID: Mark]) {
         let words = LinkChooserLook.words(for: url)
         mark = FieldMark(icon: Favicons.shared.cached(for: url), letter: words.site.first.map { String($0).uppercased() } ?? "•", size: 20)
         remember = LinkChooserAlways(site.map { "Always for \($0)" } ?? "")
-        hereKey = KitGlassKey(title: "Open Here", size: .regular, tall: FieldBarView.height)
-        openKey = KitGlassKey(title: "Open", size: .regular, tall: FieldBarView.height)
+        (hereKey, openKey) = Self.keys()
         super.init(frame: NSRect(origin: .zero, size: NSSize(width: LinkChooserLook.width, height: LinkChooserLook.height(rows: choices.count))))
         wantsLayer = true
         layer?.allowsGroupOpacity = true
+        glass.wantsLayer = true
+        inside.wantsLayer = true
+        inside.layer?.cornerRadius = OmniboxView.radius
+        inside.layer?.cornerCurve = .continuous
+        inside.layer?.masksToBounds = true
         identifier = NSUserInterfaceItemIdentifier("link.chooser")
         let font = NSFont.systemFont(ofSize: 20)
         address.runs = [KitLabel.Run(text: words.site, font: font, color: KitColor.ink)]
@@ -115,19 +125,11 @@ final class LinkChooserView: NSView {
             guard let self, on != self.always else { return }
             self.flip?()
         }
-        hereKey.content = FieldHint("Open Here", keys: "esc")
         hereKey.action = { [weak self] in self?.here?() }
-        hereKey.setAccessibilityLabel("Open Here")
-        hereKey.setAccessibilityHelp("Escape opens the link where you are")
-        hereKey.setAccessibilityIdentifier("link.chooser.here")
-        openKey.content = FieldHint("Open", keys: "↩")
         openKey.action = { [weak self] in self?.open?() }
-        openKey.setAccessibilityLabel("Open ↩")
-        openKey.setAccessibilityIdentifier("link.chooser.open")
-        for key in [hereKey, openKey] { key.grounded = true }
         for view in [mark, address, heading, scroll, above, below, remember, hereKey, openKey] as [NSView] { inside.addSubview(view) }
         addSubview(glass)
-        glass.hold(inside)
+        addSubview(inside)
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
         setAccessibilityLabel("Open Link In")
@@ -137,7 +139,27 @@ final class LinkChooserView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
+    static func keys() -> (here: KitGlassKey, open: KitGlassKey) {
+        let here = KitGlassKey(title: "Open Here", size: .regular, tall: FieldBarView.height)
+        let open = KitGlassKey(title: "Open", size: .regular, tall: FieldBarView.height)
+        here.content = FieldHint("Open Here", keys: "esc")
+        here.setAccessibilityLabel("Open Here")
+        here.setAccessibilityHelp("Escape opens the link where you are")
+        here.setAccessibilityIdentifier("link.chooser.here")
+        open.content = FieldHint("Open", keys: "↩")
+        open.setAccessibilityLabel("Open ↩")
+        open.setAccessibilityIdentifier("link.chooser.open")
+        for key in [here, open] { key.grounded = true }
+        return (here, open)
+    }
+
     override var isFlipped: Bool { true }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        tint = nil
+        needsLayout = true
+    }
 
     override var intrinsicContentSize: NSSize {
         NSSize(width: LinkChooserLook.width, height: LinkChooserLook.height(rows: rows.count))
@@ -167,6 +189,12 @@ final class LinkChooserView: NSView {
     override func layout() {
         super.layout()
         glass.frame = bounds
+        inside.frame = bounds
+        let wanted = look.map(LinkChooserLook.tint)
+        if tint != wanted {
+            tint = wanted
+            glass.tintColor = wanted
+        }
         let width = bounds.width
         let height = bounds.height
         let head = LinkChooserLook.head

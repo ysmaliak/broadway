@@ -23,7 +23,6 @@ enum BenchInk {
             if let face = here as? KitGlassFace, let plate = face.plate, plate !== Palette.NS.glassGround { return "own" }
             if let row = here as? NSTableRowView, row.isSelected { return "picked" }
             if let key = here as? KitButton, !key.isEnabled, key.superview is FieldBarView { return "off" }
-            if here is LinkSpaceTile { return "own" }
             at = here.superview
         }
         return ""
