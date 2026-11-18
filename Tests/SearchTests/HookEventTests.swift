@@ -268,11 +268,10 @@ final class HookEventTests {
         HookClock.tick(now: start.addingTimeInterval(5 * 60), book: lab.book)
 
         #expect(early == 0)
-        #expect(await hookSoon { self.lab.exists("timer.in") })
+        #expect(await hookSoon { self.lab.book.results.values.contains { $0.problem == nil } })
         let given = try #require(lab.json("timer.in"))
         #expect(given["event"] as? String == "timer")
         #expect(given["minutes"] as? Int == 5)
-        #expect(await hookSoon { self.lab.book.results.values.contains { $0.problem == nil } })
     }
 
     @Test func limit1TheCommandCanListHooksAndNothingMore() {
