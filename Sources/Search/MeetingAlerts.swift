@@ -578,12 +578,12 @@ final class MeetingAlertPanel {
         Bench.pagesShown = pagesShown
     }
 
-    private class Lifted: NSPanel {
+    class Lifted: KitLitPanel {
         override var canBecomeKey: Bool { false }
         override var canBecomeMain: Bool { false }
     }
 
-    private final class Keyed: Lifted {
+    final class Keyed: Lifted {
         override var canBecomeKey: Bool { true }
     }
 }
@@ -719,7 +719,7 @@ final class MeetingAlertCardView: NSView {
             let box = KitBox(fill: Palette.NS.glassTint, stroke: Palette.NS.cardEdge, corners: .radius(24))
             ground = box
         } else {
-            ground = KitGlass.floating(radius: 24)
+            ground = KitGlass.floating(radius: 24, ground: false)
         }
         dismiss = Self.key(symbol: "xmark", drawn: drawn, label: "Dismiss") {}
         snooze = Self.key(title: "Snooze", drawn: drawn) {}

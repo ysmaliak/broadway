@@ -138,7 +138,7 @@ enum FloatMotion {
     }
 
     static func leave(from frame: NSRect, picture: CGImage?, shadow: Bool, home: @escaping () -> NSRect?) {
-        let ghost = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        let ghost = KitLitPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         ghost.level = .floating
         ghost.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
         ghost.backgroundColor = .clear

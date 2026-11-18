@@ -333,7 +333,7 @@ final class FullScreenEscape {
 
 /// The reminder's window: borderless, never key or main, and nothing the
 /// pointer can catch, over the window it is a child of.
-private final class ReminderPanel: NSPanel {
+final class ReminderPanel: KitLitPanel {
     /// From the top of the full screen to the top of the pill.
     static let fromTop: CGFloat = 44
 

@@ -384,7 +384,7 @@ final class FileChoice: NSObject, NSOpenSavePanelDelegate, NSWindowDelegate {
         Bench.pagesShown = snapshotPages
     }
 
-    private final class ChoicePanel: NSPanel {
+    final class ChoicePanel: KitLitPanel {
         override var canBecomeKey: Bool { true }
         override var canBecomeMain: Bool { false }
     }
@@ -395,7 +395,7 @@ final class FileChoiceCardView: NSView {
     static let width: CGFloat = 420
 
     private unowned let choice: FileChoice
-    private let glass = KitGlass.floating(radius: MenuMetrics.corner)
+    private let glass = KitGlass.floating(radius: MenuMetrics.corner, ground: false)
     private let inside = KitBox(fill: nil)
     private let header = KitLabel("", font: .systemFont(ofSize: 12, weight: .medium), color: .secondaryLabelColor)
     private let empty = KitLabel("No recent files match this field", font: .systemFont(ofSize: 13), color: .secondaryLabelColor)

@@ -681,7 +681,7 @@ final class CallFloat {
         return true
     }
 
-    private final class Panel: NSPanel {
+    final class Panel: KitLitPanel {
         var keys: ((NSEvent) -> Bool)?
         override var canBecomeKey: Bool { true }
         override var canBecomeMain: Bool { false }
@@ -744,7 +744,7 @@ extension Browser {
 
 private final class CallBar: KitFlippedView {
     private let call: CallFloat
-    private let glass = KitGlass.floating(radius: 20)
+    private let glass = KitGlass.floating(radius: 20, ground: false)
     private let group = KitGlassGroup(spacing: 2)
     private lazy var mic = tool { [weak self] in self?.call.toggleMic() }
     private lazy var camera = tool { [weak self] in self?.call.toggleCamera() }

@@ -16,7 +16,7 @@ import WebKit
 
 @MainActor
 final class Float {
-    private var panel: Panel?
+    private var panel: FloatPanel?
     private var controls: Controls?
     private weak var page: NSView?
 
@@ -125,7 +125,7 @@ final class Float {
         )
         if let away = Float.benchAway { spot.origin = away }
 
-        let panel = Panel(
+        let panel = FloatPanel(
             contentRect: spot,
             styleMask: [.borderless, .resizable, .nonactivatingPanel],
             backing: .buffered,
@@ -1306,7 +1306,7 @@ enum Grounded {
 ///
 /// Borderless windows refuse to become key by default, and a window that never
 /// becomes key is a window the system stops routing gestures to.
-private final class Panel: NSPanel {
+final class FloatPanel: KitLitPanel {
     var onPress: (() -> Void)?
 
     override var canBecomeKey: Bool { true }
@@ -1324,6 +1324,7 @@ final class FloatOutline: NSVisualEffectView {
         material = .fullScreenUI
         blendingMode = .withinWindow
         appearance = NSAppearance(named: .darkAqua)
+        state = KitLitPanel.holds ? .active : .followsWindowActiveState
         maskImage = FloatOutline.mask(FloatLayout.corner)
     }
 

@@ -1,10 +1,10 @@
 import AppKit
 
 extension KitGlass {
-    static func floating(radius: CGFloat = 0, capsule: Bool = false, interactive: Bool = false) -> KitGlass {
+    static func floating(radius: CGFloat = 0, capsule: Bool = false, interactive: Bool = false, ground: Bool = true) -> KitGlass {
         let glass = KitGlass(radius: radius, tint: Palette.NS.glassTint, interactive: interactive)
         glass.capsule = capsule
-        glass.ground = Palette.NS.glassGround
+        if ground { glass.ground = Palette.NS.glassGround }
         return glass
     }
 }

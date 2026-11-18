@@ -141,7 +141,7 @@ final class RecordingIndicator {
 
 /// The panel: borderless, never key or main, over every space and full
 /// screen app, at the foot of the screen Search is on.
-private final class PillPanel: NSPanel {
+final class PillPanel: KitLitPanel {
     private let content: RecordingPillView
     /// Where lent pages go: behind the pill's own content, 2×2 points.
     private let lending = NSView(frame: NSRect(x: 2, y: 2, width: 2, height: 2))
