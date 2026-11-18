@@ -260,13 +260,15 @@ enum TabsBench {
             }
             live.setStatuses(folder.id, args[2].split(separator: ",").compactMap { LinearStatus.named(String($0)) })
         case "force":
-            guard Store.testing, args.count == 3, let folder = live.folders.first(where: { $0.name == args[1] }) else {
-                answer(["error": "live force NAME waiting|fine|signIn|sso|failed, test runs only"]); return
+            guard Store.testing, args.count == 3 || args.count == 4, let folder = live.folders.first(where: { $0.name == args[1] }) else {
+                answer(["error": "live force NAME waiting|fine|signIn|sso [ORG]|failed|offline|limited|unread|old|more|rows|paused, test runs only"]); return
             }
             switch args[2] {
             case "fine": live.apply(.items([], nil), to: folder.id)
             case "signIn": live.apply(.signIn, to: folder.id)
-            case "sso": live.apply(.sso(LiveSSO(org: "Acme", url: "https://github.com/orgs/acme/sso?return_to=%2Fpulls"), []), to: folder.id)
+            case "sso": live.apply(.sso(LiveSSO(org: args.count == 4 ? args[3] : "Acme", url: "https://github.com/orgs/acme/sso?return_to=%2Fpulls"), []), to: folder.id)
+            case "paused": live.pause(folder.id, true)
+            case "running": live.pause(folder.id, false)
             case "failed": live.apply(.failed, to: folder.id)
             case "waiting": live.forget(folder.id)
             case "offline": live.apply(.missed(LiveMiss(cause: .offline)), to: folder.id)
@@ -337,6 +339,10 @@ enum TabsBench {
             return
         case "now":
             answer(["rows": browser.nowRows().map { [$0.key, $0.title, $0.url.absoluteString] }])
+            return
+        case "notes":
+            let notes = browser.window?.contentView?.kitSubviews(of: LiveNoteView.self) ?? []
+            answer(["notes": notes.filter { $0.window != nil && !$0.isHiddenOrHasHiddenAncestor }.map(\.said)])
             return
         case "menu":
             answer(["items": LiveMenu.menu(for: browser).items.map(\.title)])

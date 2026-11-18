@@ -617,7 +617,6 @@ final class LiveNoteView: NSView, SideGrounded {
     var interactive: Bool { didSet { if interactive != oldValue { refresh() } } }
     var ground = RowGround() { didSet { if ground != oldValue { paint(animated: false) } } }
     private let line = LiveNoteLine()
-    private var retry: LiveSignInPill?
     private var watch: AnyCancellable?
 
     init(browser: Browser, id: UUID, height: CGFloat, interactive: Bool) {
@@ -644,13 +643,18 @@ final class LiveNoteView: NSView, SideGrounded {
         action?()
     }
 
+    var said: [String: Any] {
+        layoutSubtreeIfNeeded()
+        return ["text": line.isHidden ? "" : line.text, "detail": line.detail ?? "", "cut": !line.isHidden && line.cut,
+                "retry": !line.isHidden && line.detail == "Try again", "button": line.button, "width": bounds.width,
+                "folder": LiveFolders.shared.folder(id)?.name ?? ""]
+    }
+
     private func refresh() {
         let live = LiveFolders.shared
         guard let folder = live.folder(id), let note = folder.note else {
             clock(false)
             line.isHidden = true
-            retry?.removeFromSuperview()
-            retry = nil
             return
         }
         line.isHidden = false
@@ -664,48 +668,73 @@ final class LiveNoteView: NSView, SideGrounded {
             line.show(symbol: "ellipsis", text: "Loading…", strong: false)
             label = "Loading \(folder.name)"
         case .empty:
-            line.show(symbol: "tray", text: folder.emptyWording, strong: false)
+            if folder.noCycle != true, !folder.source.leftOut.isEmpty {
+                line.show(symbol: "tray", text: folder.source.nothingWording, detail: LiveWords.leftOut(folder.source.leftOut), strong: false)
+                label = "\(folder.emptyWording)"
+            } else {
+                line.show(symbol: "tray", text: folder.emptyWording, strong: false)
+            }
             if !folder.source.leftOut.isEmpty {
                 help = "This folder leaves out issues in \(LinearStatus.words(folder.source.leftOut)). Change it in the folder's settings."
             }
         case .paused:
             line.show(symbol: "pause.circle", text: "Not updating", strong: false)
         case .signIn:
-            line.show(symbol: "person.crop.circle", text: "Sign in to \(site)", strong: true)
+            if fits("Sign in to \(site)", strong: true) {
+                line.show(symbol: "person.crop.circle", text: "Sign in to \(site)", strong: true)
+            } else {
+                line.show(symbol: "person.crop.circle", text: "Sign in", detail: site, strong: true)
+            }
             action = { [weak browser, id] in browser?.signInToLive(id) }
             label = "Sign in to \(site)"
             help = "Opens \(site)'s sign-in page. The folder reads again once you're back."
-        case .sso:
-            line.show(symbol: "lock.shield", text: folder.signInWords, strong: true)
+        case .sso(let sso):
+            line.show(symbol: "lock.shield", text: "Single sign-on", detail: sso.org ?? site, strong: true)
             action = { [weak browser, id] in browser?.signInToLive(id) }
             label = folder.signInWords
             help = "Opens single sign-on. The folder reads again once you're back."
         case .failed:
             let offline = folder.why == .offline
-            line.show(symbol: offline ? "wifi.slash" : "exclamationmark.triangle",
-                      text: LiveWords.failure(folder, now: Date()) ?? "Couldn't read \(site)", strong: false)
-            failed = !offline
+            if folder.why == .limited {
+                let lines = LiveWords.limitedLines(site, until: folder.limitedUntil, now: Date())
+                let title = fits(lines.0, strong: false) ? lines.0 : LiveWords.limitedLines("this site", until: nil, now: Date()).0
+                line.show(symbol: "hourglass", text: title, detail: lines.1, strong: false)
+                label = "\(lines.0). \(lines.1)."
+            } else if offline {
+                line.show(symbol: "wifi.slash", text: LiveWords.failure(folder, now: Date()) ?? "You're offline", strong: false)
+            } else {
+                let words = LiveWords.failure(folder, now: Date()) ?? "Couldn't read \(site)"
+                let title = fits(words, strong: false) ? words : words.replacingOccurrences(of: site, with: "this site")
+                line.show(symbol: "exclamationmark.triangle", text: title, detail: "Try again", strong: false)
+                action = { [id] in LiveFolders.shared.update(id) }
+                label = "\(words). Try again."
+                failed = true
+            }
         }
         clock(folder.why == .limited)
         line.button = action != nil
-        line.enabled = interactive
+        line.enabled = interactive && !(failed && live.reading.contains(id))
         line.setAccessibilityLabel(label ?? line.text)
         line.setAccessibilityRole(action != nil ? .button : .staticText)
-        line.toolTip = help ?? (folder.state == .failed ? line.text : nil)
-        if failed {
-            let shown = retry ?? {
-                let made = LiveSignInPill("Try Again") { [id] in LiveFolders.shared.update(id) }
-                addSubview(made)
-                retry = made
-                return made
-            }()
-            shown.isEnabled = interactive && !live.reading.contains(id)
-        } else if let shown = retry {
-            shown.removeFromSuperview()
-            retry = nil
-        }
+        line.toolTip = help ?? (folder.state == .failed ? LiveWords.failure(folder, now: Date()) : folder.state == .signIn ? folder.signInWords : nil)
         paint(animated: false)
         needsLayout = true
+    }
+
+    private func fits(_ words: String, strong: Bool) -> Bool {
+        let font = NSFont.systemFont(ofSize: 12, weight: strong ? .medium : .regular)
+        let room = (bounds.width > 0 ? bounds.width : 214) - 31 - 6
+        return (words as NSString).size(withAttributes: [.font: font]).width <= room
+    }
+
+    private var laidWidth: CGFloat = 0
+
+    override func setFrameSize(_ size: NSSize) {
+        super.setFrameSize(size)
+        if size.width != laidWidth {
+            laidWidth = size.width
+            refresh()
+        }
     }
 
     private var ticking: Timer?
@@ -734,14 +763,7 @@ final class LiveNoteView: NSView, SideGrounded {
 
     override func layout() {
         super.layout()
-        if let retry {
-            let size = retry.intrinsicContentSize
-            let x = bounds.width - 6 - size.width
-            retry.frame = NSRect(x: x, y: ((bounds.height - size.height) / 2).rounded(), width: size.width, height: size.height)
-            line.frame = NSRect(x: 0, y: 0, width: max(0, x - 6), height: bounds.height)
-        } else {
-            line.frame = bounds
-        }
+        line.frame = bounds
     }
 }
 
@@ -806,7 +828,14 @@ private final class LiveNoteLine: KitHoverView {
     private let plate = KitPlate(radius: SideLook.cardRowRadius)
     private let symbol = KitSymbol("ellipsis", style: KitSymbol.Style(size: 12))
     private let label = KitLabel("", font: .systemFont(ofSize: 12))
+    private let second = KitLabel("", font: .systemFont(ofSize: SideLook.byline))
+    private(set) var detail: String?
     private var down = false
+
+    var cut: Bool {
+        label.intrinsicContentSize.width > label.frame.width + 0.5
+            || (detail != nil && second.intrinsicContentSize.width > second.frame.width + 0.5)
+    }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -814,6 +843,8 @@ private final class LiveNoteLine: KitHoverView {
         addSubview(plate)
         addSubview(symbol)
         addSubview(label)
+        addSubview(second)
+        second.setAccessibilityElement(false)
         label.setAccessibilityElement(false)
         symbol.setAccessibilityElement(false)
         setAccessibilityElement(true)
@@ -825,11 +856,14 @@ private final class LiveNoteLine: KitHoverView {
     override var isFlipped: Bool { true }
     override var mouseDownCanMoveWindow: Bool { !button }
 
-    func show(symbol name: String, text: String, strong: Bool) {
+    func show(symbol name: String, text: String, detail: String? = nil, strong: Bool) {
         self.text = text
+        self.detail = detail
         self.strong = strong
         if symbol.name != name { symbol.name = name }
         label.text = text
+        second.text = detail ?? ""
+        second.isHidden = detail == nil
         label.font = .systemFont(ofSize: 12, weight: strong ? .medium : .regular)
         paint(animated: false)
         needsLayout = true
@@ -848,11 +882,14 @@ private final class LiveNoteLine: KitHoverView {
 
     private func paint(animated: Bool) {
         let ink = ground.ink
-        let tone = strong ? KitTone.ink : KitTone.muted
+        let tone = strong || detail != nil ? KitTone.ink : KitTone.muted
         symbol.ink = ink
         symbol.tint = tone.base
         label.ink = ink
         label.color = tone.base
+        second.ink = ink
+        second.color = KitTone.muted.base
+        second.opacity = SideLook.bylineTone
         plate.ink = ink
         plate.isHidden = !button
         if animated { plate.layer?.kitTransition(LiveSignInPill.curve) }
@@ -865,7 +902,16 @@ private final class LiveNoteLine: KitHoverView {
         plate.kitSetFrame(bounds)
         symbol.kitSetFrame(NSRect(x: 10, y: 0, width: 14, height: bounds.height))
         let size = label.intrinsicContentSize
-        label.kitSetFrame(NSRect(x: 31, y: (bounds.height - size.height) / 2, width: max(0, bounds.width - 31), height: size.height))
+        let width = max(0, bounds.width - 31)
+        guard detail != nil else {
+            label.kitSetFrame(NSRect(x: 31, y: (bounds.height - size.height) / 2, width: width, height: size.height))
+            return
+        }
+        let top = ((bounds.height - SideLook.titleLine - SideLook.bylineLine) / 2).rounded()
+        symbol.kitSetFrame(NSRect(x: 10, y: top, width: 14, height: SideLook.titleLine))
+        label.kitSetFrame(NSRect(x: 31, y: top + (SideLook.titleLine - size.height) / 2, width: width, height: size.height))
+        let small = second.intrinsicContentSize
+        second.kitSetFrame(NSRect(x: 31, y: top + SideLook.titleLine + (SideLook.bylineLine - small.height) / 2, width: width, height: small.height))
     }
 
     override func mouseDown(with event: NSEvent) {

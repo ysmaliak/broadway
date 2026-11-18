@@ -91,6 +91,10 @@ struct LiveSource: Codable, Equatable {
 
     var emptyWording: String {
         if !leftOut.isEmpty { return "No issues outside \(LinearStatus.words(leftOut))" }
+        return nothingWording
+    }
+
+    var nothingWording: String {
         switch kind {
         case .pullRequests, .repository: return "No pull requests"
         case .issues, .linear: return "No issues"

@@ -134,4 +134,20 @@ struct LiveCausesTests {
         #expect(LinearAPI.limited(data))
         #expect(!LinearAPI.limited(Data(#"{"errors":[{"message":"Not authenticated"}]}"#.utf8)))
     }
+
+    @Test func aLimitedNoteIsTwoShortLines() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        let lines = LiveWords.limitedLines("GitHub", until: now.addingTimeInterval(600), now: now)
+
+        #expect(lines.0 == "Limited by GitHub")
+        #expect(lines.1 == "Trying again in 10 minutes")
+        #expect(LiveWords.limitedLines("Linear", until: nil, now: now) == ("Limited by Linear", "Trying again in a moment"))
+    }
+
+    @Test func statusesLeftOutAreNamedOrCounted() {
+        #expect(LiveWords.leftOut([.backlog]) == "Backlog left out")
+        #expect(LiveWords.leftOut([.triage, .backlog, .unstarted]) == "3 statuses left out")
+        #expect(LiveSource.linear(.assigned).nothingWording == "No issues")
+    }
 }

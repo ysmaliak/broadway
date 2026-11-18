@@ -3993,8 +3993,9 @@ final class Bench {
                 func walk(_ view: NSView) {
                     for sub in view.subviews where !sub.isHidden {
                         if let row = sub as? TabRowView, let tab = row.tab,
-                           let mark = row.subviews.flatMap(\.subviews).first(where: { $0 is RowMarkView && !$0.isHidden }) {
+                           let mark = row.kitSubviews(of: RowMarkView.self).first(where: { !$0.isHiddenOrHasHiddenAncestor }) {
                             icons[Bench.short(tab)] = placed(mark)
+                            chevrons += row.kitSubviews(of: StackFoldButton.self).filter { !$0.isHiddenOrHasHiddenAncestor }.map(placed)
                         } else if sub is StackFoldButton {
                             chevrons.append(placed(sub))
                         } else if let heading = sub as? GroupHeadingView, let group = heading.group {

@@ -45,6 +45,14 @@ enum LiveWords {
         "\(site) is limiting requests. Trying again \(soon(until, now: now))."
     }
 
+    static func leftOut(_ statuses: [LinearStatus]) -> String {
+        statuses.count == 1 ? "\(LinearStatus.words(statuses)) left out" : "\(statuses.count) statuses left out"
+    }
+
+    static func limitedLines(_ site: String, until: Date?, now: Date) -> (String, String) {
+        ("Limited by \(site)", "Trying again \(soon(until, now: now))")
+    }
+
     static func soon(_ until: Date?, now: Date) -> String {
         guard let until, until > now else { return "in a moment" }
         let minutes = Int((until.timeIntervalSince(now) / 60).rounded(.up))

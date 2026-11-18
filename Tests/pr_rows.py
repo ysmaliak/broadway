@@ -206,7 +206,7 @@ def shoot(name):
     if not SHOT.exists():
         TOOLS.mkdir(parents=True, exist_ok=True)
         subprocess.run(["swiftc", "-parse-as-library", str(Path(__file__).resolve().parent / "WindowShot.swift"), "-o", str(SHOT)], check=True)
-    number = sv.cmd({"do": "idle", "action": "unhide"})["number"]
+    number = sv.cmd({"do": "windowbehind"})["number"]
     time.sleep(0.8)
     pid = next(iter(sv.holding() & sv.running()))
     out = SHOTS / f"{name}.png"
@@ -250,12 +250,24 @@ def marks(prs):
 
 def column(prs):
     """In a card that holds a stack, every row's favicon shares one x, and
-    that x is clear of each fold chevron's hit target by at least 4 pt."""
+    each fold chevron is a chip on its own row's favicon: its centre within
+    the favicon's top-leading quarter and its frame clear of the title's x
+    (the favicon's maxX + 7)."""
     got = sv.cmd({"do": "rowframes"})
     icons, chevrons = got.get("icons", {}), got.get("chevrons", [])
-    xs = sorted({round(icons[tab["id"]][0], 1) for tab in prs["tabs"] if tab["id"] in icons})
-    gaps = [round(xs[0] - (c[0] + c[2]), 1) for c in chevrons] if xs else []
-    return xs, gaps
+    mine = [icons[tab["id"]] for tab in prs["tabs"] if tab["id"] in icons]
+    xs = sorted({round(icon[0], 1) for icon in mine})
+    chips = []
+    for c in chevrons:
+        cx, cy = c[0] + c[2] / 2, c[1] + c[3] / 2
+        icon = min(mine, key=lambda i: abs(cy - (i[1] + i[3] / 2)), default=None)
+        if icon is None or not (icon[1] - c[3] / 2 <= cy <= icon[1] + icon[3] + c[3] / 2):
+            chips.append(None)
+            continue
+        dx, dy = round(cx - icon[0], 1), round(cy - icon[1], 1)
+        clear = c[0] + c[2] <= icon[0] + icon[2] + 7
+        chips.append((dx, dy) if clear else ("over the title", dx, dy))
+    return xs, chips
 
 
 LOOKS = [("pale", {"custom": "FFD3E0", "intensity": 0.8}), ("vivid", {"custom": "3139FB", "intensity": 2.0}),
@@ -361,12 +373,12 @@ def world(name):
              placed and all(at and 7 < at[0] <= 15.5 and 7 < at[1] <= 15.5 for _, _, at in placed), placed)
         xs, gaps = column(prs)
         report["column"] = (xs, gaps)
-        t.ok(f"{name}: with a stack in the card, every favicon shares one x clear of the chevron",
-             len(xs) == 1 and gaps and all(g >= 4 for g in gaps), (xs, gaps))
+        t.ok(f"{name}: with a stack in the card, every favicon shares one x and the chevron is a chip on its favicon's top-leading corner",
+             len(xs) == 1 and gaps and all(g and len(g) == 2 and -2 <= g[0] <= 8 and -2 <= g[1] <= 8 for g in gaps), (xs, gaps))
         t.ok(f"{name}: a one-line row carries its mark too", any(not two and at for _, two, at in placed), placed)
         fold_stack(name)
         if SHOTS:
-            sv.cmd({"do": "idle", "action": "unhide"})
+            sv.cmd({"do": "windowbehind"})
             time.sleep(1)
             ids = [tab["id"] for tab in prs["tabs"]]
             sv.sp("select", id=ids[2])
