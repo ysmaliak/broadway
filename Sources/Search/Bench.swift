@@ -1931,7 +1931,9 @@ final class Bench {
                 reply["rows"] = rows.map(\.rowID)
                 if let row = rows.first(where: { $0.rowID == id }) {
                     let toggle = row.kitSubviews(of: KitSwitch.self).first
+                    let lineHeight = NSLayoutManager().defaultLineHeight(for: row.detail.font ?? SettingsMetrics.detailFont)
                     reply["row"] = ["detail": row.detail.stringValue, "alpha": Double(row.alphaValue), "on": toggle?.isOn ?? false,
+                                    "detailWidth": Double(row.detail.frame.width), "detailLines": Int((row.detail.frame.height / lineHeight).rounded()),
                                     "enabled": toggle?.isEnabled ?? false, "more": row.kitSubviews(of: NSButton.self).contains { $0.accessibilityLabel()?.hasPrefix("More about") == true }] as [String: Any]
                 }
             }

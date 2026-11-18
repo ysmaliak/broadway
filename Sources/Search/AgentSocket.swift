@@ -49,7 +49,19 @@ enum AgentCommand {
         checks.first { $0["name"] as? String == "command" }?["ok"] as? Bool == true
     }
 
-    static func summary(_ checks: [[String: Any]]) -> String {
+    static let extraAgents: Set<String> = ["cursor", "opencode", "gemini"]
+
+    static func optional(_ check: [String: Any]) -> Bool {
+        extraAgents.contains(check["name"] as? String ?? "") && check["ok"] as? Bool == false && check["absent"] as? Bool == true
+    }
+
+    static func tilde(_ text: String, home: String) -> String {
+        let trimmed = home.hasSuffix("/") ? String(home.dropLast()) : home
+        guard !trimmed.isEmpty, let pattern = try? NSRegularExpression(pattern: NSRegularExpression.escapedPattern(for: trimmed) + "(?=/|\\s|$)") else { return text }
+        return pattern.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text), withTemplate: "~")
+    }
+
+    static func summary(_ checks: [[String: Any]], home: String = AgentCommand.home(ProcessInfo.processInfo.environment)) -> String {
         guard !checks.isEmpty else { return "Run tasks, snapshot pages, click and more, from Terminal" }
         let agents = [("claude", "Claude Code"), ("codex", "Codex"), ("cursor", "Cursor"), ("opencode", "opencode"), ("gemini", "Gemini CLI")]
         let named = [("fish", "fish"), ("zsh", "zsh"), ("bash", "bash")] + agents
@@ -64,8 +76,8 @@ enum AgentCommand {
         }
         let hooks: Set<String> = ["claude hooks", "codex hooks"]
         let quiet: Set<String> = ["running", "agents", "plan"]
-        let broken = checks.first { $0["ok"] as? Bool == false && !quiet.union(hooks).contains($0["name"] as? String ?? "") }
-        if let broken { return "On your PATH, but \(broken["detail"] as? String ?? "something is off"). Run broadway doctor." }
+        let broken = checks.first { $0["ok"] as? Bool == false && !quiet.union(hooks).contains($0["name"] as? String ?? "") && !optional($0) }
+        if let broken { return "On your PATH, but \((broken["detail"] as? String).map { tilde($0, home: home) } ?? "something is off"). Run broadway doctor." }
         if checks.contains(where: { $0["ok"] as? Bool == false && hooks.contains($0["name"] as? String ?? "") }) {
             return "Run broadway setup again to let Broadway see when an agent has finished"
         }

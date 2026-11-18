@@ -203,6 +203,10 @@ final class SetupAgentsTests {
         #expect(named["gemini"]?.detail == paths.geminiSkill)
         #expect(named["opencode"]?.ok == false)
         #expect(named["opencode"]?.fix == "Run broadway setup opencode")
+        #expect(named["opencode"]?.absent == true)
+        #expect(named["opencode"]?.object["absent"] as? Bool == true)
+        #expect(named["gemini"]?.absent == false)
+        #expect(named["gemini"]?.object["absent"] == nil)
         #expect(named["cursor"]?.ok == true)
         #expect(named["cursor"]?.detail == "not used here")
     }

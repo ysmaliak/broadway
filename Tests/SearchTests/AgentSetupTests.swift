@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+@testable import BroadwayCLI
 @testable import Search
 
 private actor Heard {
@@ -11,7 +12,19 @@ private actor Heard {
 @Suite(.sharedWorld, .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct AgentSetupTests {
-    private func made(open: Bool = true, available: Bool = true, refreshes: Bool = false, linkTaken: Bool = true, staying: Bool = true) -> (AgentSetup, Heard, UserDefaults) {
+    private func invented() throws -> Setup.Paths {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("broadway-launch-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: folder) }
+        return Setup.Paths(home: folder.path)
+    }
+
+    private func earlier(_ store: UserDefaults) {
+        store.set(true, forKey: AgentCommand.setUpKey)
+    }
+
+    private func made(open: Bool = true, available: Bool = true, refreshes: Bool = false, linkTaken: Bool = true, staying: Bool = true,
+                      home: Setup.Paths? = nil) -> (AgentSetup, Heard, UserDefaults) {
         let name = "agent-setup-tests-\(UUID().uuidString)"
         let store = UserDefaults(suiteName: name)!
         addTeardownBlock { UserDefaults().removePersistentDomain(forName: name) }
@@ -19,6 +32,13 @@ struct AgentSetupTests {
         let setup = AgentSetup(store: store)
         setup.runner = { words in
             await heard.add(words)
+            guard let home else { return true }
+            let parts = words.filter { $0 != "setup" && $0 != "--refresh" }
+            if words.contains("--refresh") {
+                _ = Setup.refresh(parts, paths: home)
+            } else {
+                _ = Setup.install(parts, paths: home, binary: "/Applications/Broadway.app/Contents/Helpers/broadway")
+            }
             return true
         }
         setup.open = { open }
@@ -185,5 +205,125 @@ struct AgentSetupTests {
         prefs.agentsOn = true
         await setup.settled()
         #expect(await heard.words == [AgentCommand.setupWords, AgentCommand.setupWords])
+    }
+
+    @Test func onlyAMarkFromAnEarlierVersionWithAgentsOnBringsTheNewerAgents() {
+        #expect(AgentCommand.newlyCovered(isOn: true, marked: true, open: true, kept: nil) == ["cursor", "opencode", "gemini"])
+        #expect(AgentCommand.newlyCovered(isOn: true, marked: true, open: true, kept: AgentCommand.agentNames).isEmpty)
+        #expect(AgentCommand.newlyCovered(isOn: true, marked: true, open: true, kept: ["claude", "codex", "cursor"]) == ["opencode", "gemini"])
+        #expect(AgentCommand.newlyCovered(isOn: false, marked: true, open: true, kept: nil).isEmpty)
+        #expect(AgentCommand.newlyCovered(isOn: true, marked: false, open: true, kept: nil).isEmpty)
+        #expect(AgentCommand.newlyCovered(isOn: true, marked: true, open: false, kept: nil).isEmpty)
+    }
+
+    @Test func anUpdateBringsTheNewerAgentsOnceAtLaunch() async throws {
+        let home = try invented()
+        try FileManager.default.createDirectory(atPath: home.opencode, withIntermediateDirectories: true)
+        let (setup, heard, store) = made(refreshes: true, home: home)
+        earlier(store)
+
+        setup.launched(agentsOn: true)
+        await setup.settled()
+        setup.launched(agentsOn: true)
+        await setup.settled()
+
+        let newer = ["setup", "cursor", "opencode", "gemini"]
+        #expect(await heard.words == [newer, AgentCommand.refreshWords, AgentCommand.refreshWords])
+        #expect(FileManager.default.fileExists(atPath: home.opencodeSkill))
+        #expect(!FileManager.default.fileExists(atPath: home.cursor))
+        #expect(!FileManager.default.fileExists(atPath: home.gemini))
+        #expect(store.stringArray(forKey: AgentCommand.setUpForKey) == AgentCommand.agentNames)
+        #expect(setup.runs == 1)
+    }
+
+    @Test func anUpdateWithAgentsOffBringsNothing() async throws {
+        let home = try invented()
+        try FileManager.default.createDirectory(atPath: home.opencode, withIntermediateDirectories: true)
+        let (setup, heard, store) = made(home: home)
+        earlier(store)
+
+        setup.launched(agentsOn: false)
+        await setup.settled()
+
+        #expect(await heard.words.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: home.opencodeSkill))
+        #expect(store.stringArray(forKey: AgentCommand.setUpForKey) == nil)
+        #expect(setup.runs == 0)
+    }
+
+    @Test func aClosedGuardBringsNoNewerAgents() async throws {
+        let home = try invented()
+        try FileManager.default.createDirectory(atPath: home.opencode, withIntermediateDirectories: true)
+        let (setup, heard, store) = made(open: false, home: home)
+        earlier(store)
+
+        setup.launched(agentsOn: true)
+        await setup.settled()
+
+        #expect(await heard.words.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: home.opencodeSkill))
+    }
+
+    @Test func aSkillRemovedByHandAfterTheUpdateIsNotWrittenAgain() async throws {
+        let home = try invented()
+        try FileManager.default.createDirectory(atPath: home.opencode, withIntermediateDirectories: true)
+        let (setup, heard, store) = made(refreshes: true, home: home)
+        earlier(store)
+        setup.launched(agentsOn: true)
+        await setup.settled()
+        #expect(FileManager.default.fileExists(atPath: home.opencodeSkill))
+
+        try FileManager.default.removeItem(atPath: home.opencodeSkill)
+        setup.launched(agentsOn: true)
+        await setup.settled()
+
+        #expect(!FileManager.default.fileExists(atPath: home.opencodeSkill))
+        #expect(await heard.words.last == AgentCommand.refreshWords)
+        #expect(setup.runs == 1)
+    }
+
+    @Test func turningOnTheFirstTimeRecordsEveryAgentSoALaunchOnlyRefreshes() async throws {
+        let home = try invented()
+        try FileManager.default.createDirectory(atPath: home.opencode, withIntermediateDirectories: true)
+        let (setup, heard, store) = made(refreshes: true, home: home)
+
+        setup.turned(wasOn: false, isOn: true)
+        await setup.settled()
+        setup.launched(agentsOn: true)
+        await setup.settled()
+
+        #expect(await heard.words == [AgentCommand.setupWords, AgentCommand.refreshWords])
+        #expect(store.stringArray(forKey: AgentCommand.setUpForKey) == AgentCommand.agentNames)
+        #expect(FileManager.default.fileExists(atPath: home.opencodeSkill))
+        #expect(setup.runs == 1)
+    }
+
+    @Test func theRowCallsNoAbsentSkillOfTheNewerAgentsAFault() {
+        let ready: [[String: Any]] = [["name": "command", "ok": true, "detail": "/x"], ["name": "fish", "ok": true, "detail": "/f"],
+                                    ["name": "claude", "ok": true, "detail": "/c"]]
+        for (name, shown) in [("cursor", "Cursor"), ("opencode", "opencode"), ("gemini", "Gemini CLI")] {
+            let absent = ready + [["name": name, "ok": false, "absent": true, "detail": "/invented-home/.\(name)/skills/broadway/SKILL.md isn't there"]]
+            let stale = ready + [["name": name, "ok": false, "detail": "/invented-home/.\(name)/skills/broadway/SKILL.md is out of date"]]
+            let summary = AgentCommand.summary(absent, home: "/invented-home")
+
+            #expect(summary == "On your PATH, set up for fish, Claude Code. Try broadway doctor.")
+            #expect(!summary.contains(shown))
+            #expect(AgentCommand.summary(stale, home: "/invented-home") == "On your PATH, but ~/.\(name)/skills/broadway/SKILL.md is out of date. Run broadway doctor.")
+        }
+        let claude = [["name": "command", "ok": true, "detail": "/x"],
+                      ["name": "claude", "ok": false, "absent": true, "detail": "/invented-home/.claude/skills/broadway/SKILL.md isn't there"]] as [[String: Any]]
+        #expect(AgentCommand.summary(claude, home: "/invented-home") == "On your PATH, but ~/.claude/skills/broadway/SKILL.md isn't there. Run broadway doctor.")
+        let later = ready + [["name": "gemini", "ok": false, "absent": true, "detail": "gone"], ["name": "codex", "ok": false, "detail": "/invented-home/.codex/skills/broadway/SKILL.md isn't broadway's"]]
+        #expect(AgentCommand.summary(later, home: "/invented-home") == "On your PATH, but ~/.codex/skills/broadway/SKILL.md isn't broadway's. Run broadway doctor.")
+    }
+
+    @Test func theRowShowsTheHomeFolderAsATilde() {
+        let checks: [[String: Any]] = [["name": "command", "ok": true, "detail": "/x"],
+                                       ["name": "zsh", "ok": false, "detail": "/tmp/invented-home/.local/share/broadway/broadway.zsh isn't there"]]
+
+        #expect(AgentCommand.summary(checks, home: "/tmp/invented-home") == "On your PATH, but ~/.local/share/broadway/broadway.zsh isn't there. Run broadway doctor.")
+        #expect(AgentCommand.summary(checks, home: "/tmp/invented-home/") == "On your PATH, but ~/.local/share/broadway/broadway.zsh isn't there. Run broadway doctor.")
+        #expect(AgentCommand.summary(checks, home: "/tmp/invented") == "On your PATH, but /tmp/invented-home/.local/share/broadway/broadway.zsh isn't there. Run broadway doctor.")
+        #expect(AgentCommand.tilde("/tmp/invented-home is gone", home: "/tmp/invented-home") == "~ is gone")
     }
 }

@@ -7,10 +7,12 @@ struct Check {
     var required: Bool
     var detail: String
     var fix: String?
+    var absent = false
 
     var object: [String: Any] {
         var found: [String: Any] = ["name": name, "ok": ok, "required": required, "detail": detail]
         if let fix { found["fix"] = fix }
+        if absent { found["absent"] = true }
         return found
     }
 }
@@ -471,7 +473,7 @@ enum Setup {
             }
             let fix = "Run broadway setup \(name)"
             guard let here = text(path) else {
-                found.append(Check(name: name, ok: false, required: false, detail: "\(path) isn't there", fix: fix))
+                found.append(Check(name: name, ok: false, required: false, detail: "\(path) isn't there", fix: fix, absent: true))
                 return
             }
             guard here.contains("name: broadway"), ours(path) else {

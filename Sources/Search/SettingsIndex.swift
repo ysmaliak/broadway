@@ -90,7 +90,7 @@ enum SettingsIndex {
 
     static let items: [SettingsItem] = ([
         .init(id: "ai.agents", group: "agents", icon: "person.2.wave.2", title: "Let agents use Broadway",
-              detail: "Turning it on adds Broadway's skill and hooks to Claude Code and Codex", keys: ["agents.on"],
+              detail: "Turning it on adds Broadway's skill to the coding agents on this Mac, and hooks to Claude Code and Codex", keys: ["agents.on"],
               words: ["mcp", "agents", "master switch", "claude code", "codex", "cursor", "ai"]),
         .init(id: "agents.mode", group: "agents", icon: "hand.raised", title: "Agents ask first",
               detail: "What an agent needs your yes for: Ask, Auto or Bypass", keys: ["agents.mode"],

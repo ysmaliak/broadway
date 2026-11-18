@@ -2,10 +2,13 @@ import Foundation
 import Observation
 
 extension AgentCommand {
-    static let refreshWords = ["setup", "claude", "codex", "cursor", "opencode", "gemini", "--refresh"]
-    static let setupWords = ["setup", "claude", "codex", "cursor", "opencode", "gemini"]
-    static let setupAndLinkWords = ["setup", "command", "claude", "codex", "cursor", "opencode", "gemini"]
+    static let agentNames = ["claude", "codex", "cursor", "opencode", "gemini"]
+    static let earlierNames = ["claude", "codex"]
+    static let refreshWords = ["setup"] + agentNames + ["--refresh"]
+    static let setupWords = ["setup"] + agentNames
+    static let setupAndLinkWords = ["setup", "command"] + agentNames
     static let setUpKey = "agents.setUp"
+    static let setUpForKey = "agents.setUpFor"
 
     static var refreshesSkills: Bool { Store.world == nil && !Store.testing }
 
@@ -47,6 +50,12 @@ extension AgentCommand {
         case .turned(let wasOn): return !wasOn
         }
     }
+
+    static func newlyCovered(isOn: Bool, marked: Bool, open: Bool, kept: [String]?) -> [String] {
+        guard open, isOn, marked else { return [] }
+        let covered = kept ?? earlierNames
+        return agentNames.filter { !covered.contains($0) }
+    }
 }
 
 @MainActor
@@ -69,6 +78,7 @@ final class AgentSetup {
     }
 
     var marked: Bool { store.bool(forKey: AgentCommand.setUpKey) }
+    var covered: [String]? { store.stringArray(forKey: AgentCommand.setUpForKey) }
 
     func turned(wasOn: Bool, isOn: Bool) {
         guard AgentCommand.setsUp(.turned(wasOn: wasOn), isOn: isOn, marked: marked, open: open()) else { return }
@@ -76,7 +86,12 @@ final class AgentSetup {
     }
 
     func launched(agentsOn: Bool) {
-        if AgentCommand.setsUp(.launch, isOn: agentsOn, marked: marked, open: open()) { setUp() }
+        if AgentCommand.setsUp(.launch, isOn: agentsOn, marked: marked, open: open()) {
+            setUp()
+        } else {
+            let newer = AgentCommand.newlyCovered(isOn: agentsOn, marked: marked, open: open(), kept: covered)
+            if !newer.isEmpty { bring(newer) }
+        }
         if refreshes() { queue({ AgentCommand.refreshWords }, counts: false) }
     }
 
@@ -87,9 +102,17 @@ final class AgentSetup {
     private func setUp() {
         guard available() else { return }
         store.set(true, forKey: AgentCommand.setUpKey)
+        store.set(AgentCommand.agentNames, forKey: AgentCommand.setUpForKey)
         let linkTaken = linkTaken
         let staying = staying
         queue({ AgentCommand.setupWords(somethingAtLink: linkTaken(), staying: staying()) }, counts: true)
+    }
+
+    private func bring(_ names: [String]) {
+        guard available() else { return }
+        let kept = covered ?? AgentCommand.earlierNames
+        store.set(AgentCommand.agentNames.filter { kept.contains($0) || names.contains($0) }, forKey: AgentCommand.setUpForKey)
+        queue({ ["setup"] + names }, counts: true)
     }
 
     private func queue(_ words: @escaping () -> [String], counts: Bool) {

@@ -14,6 +14,9 @@ holds made-up ~/.claude and ~/.codex folders:
 4. After broadway remove claude codex, a relaunch adds nothing.
 5. Turning agents off leaves the files alone, and on again adds them again, leaving a
    link that points somewhere else as it is.
+6. An update for someone set up before Cursor, opencode and Gemini CLI were covered:
+   the first launch writes opencode's skill once, the Settings row reads no fault, a
+   relaunch runs nothing, and a skill then removed by hand stays removed.
 
 Nothing under the real home is opened. Its broadway files are compared by stat only.
 """
@@ -40,7 +43,8 @@ LINKED = "0a1b2c3d-0000-4000-8000-0000000005e8"
 ELSEWHERE = "/tmp/invented-elsewhere/broadway"
 FOREIGN = '{\n    "model": "opus",\n    "hooks": {\n        "Stop": [\n            {\n                "hooks": [{"type": "command", "command": "say done"}]\n            }\n        ]\n    }\n}'
 WATCHED = [".claude/settings.json", ".claude/skills/broadway/SKILL.md", ".codex/hooks.json",
-           ".codex/skills/broadway/SKILL.md", ".local/bin/broadway"]
+           ".codex/skills/broadway/SKILL.md", ".local/bin/broadway", ".cursor/skills/broadway/SKILL.md",
+           ".config/opencode/skills/broadway/SKILL.md", ".gemini/skills/broadway/SKILL.md"]
 
 failures = []
 passed = [0]
@@ -211,6 +215,58 @@ def command_row():
     return (settings(row="ai.command").get("row") or {}).get("detail", "")
 
 
+def open_agents_page():
+    bench({"do": "ui", "settings": True})
+    time.sleep(1.2)
+    bench({"do": "ui", "settingsPage": "agents"})
+
+
+def update_stage(home):
+    quit()
+    home.link.unlink()
+    os.symlink(BROADWAY, home.link)
+    opencode = home.folder / ".config/opencode"
+    opencode.mkdir(parents=True)
+    skill = opencode / "skills/broadway/SKILL.md"
+    subprocess.run(["defaults", "write", SUITE, "agents.setUp", "-bool", "true"], check=True)
+    subprocess.run(["defaults", "delete", SUITE, "agents.setUpFor"], capture_output=True)
+    launch(home.folder)
+    ran = wait_for(lambda: setup_state().get("runs") == 1, 20)
+    check("marked by an earlier version: the first launch brings the newer agents once", ran is not None, setup_state())
+    check("and opencode gets Broadway's skill", wait_for(skill.exists, 5) is not None, home.everything().keys())
+    check("and Cursor and Gemini CLI, with no folder here, get nothing",
+          not (home.folder / ".cursor").exists() and not (home.folder / ".gemini").exists(), home.everything().keys())
+    check("and the covered agents are kept", "opencode" in defaults("agents.setUpFor"), defaults("agents.setUpFor"))
+    open_agents_page()
+    row = wait_for(lambda: (lambda d: d if d.startswith("On your PATH") else None)(command_row()), 15)
+    print("     row now reads:", row, flush=True)
+    check("the Settings row calls no absent skill a fault", row is not None and "SKILL.md isn't there" not in row and "opencode/" not in row, row)
+    check("and shows no full home path", row is not None and str(home.folder) not in row, row)
+    switch = settings(row="ai.agents").get("row") or {}
+    print(f"     the switch's line takes {switch.get('detailLines')} lines at {switch.get('detailWidth')} pt:", switch.get("detail"), flush=True)
+    check("the switch says what it does",
+          switch.get("detail") == "Turning it on adds Broadway's skill to the coding agents on this Mac, and hooks to Claude Code and Codex", switch)
+    quit()
+
+    launch(home.folder)
+    time.sleep(3)
+    again = setup_state()
+    check("a relaunch after the update runs no setup", again.get("runs") == 0, again)
+    quit()
+
+    skill.unlink()
+    launch(home.folder)
+    time.sleep(3)
+    removed = setup_state()
+    check("a skill removed by hand after the update is not written again", removed.get("runs") == 0 and not skill.exists(),
+          (removed, home.everything().keys()))
+    open_agents_page()
+    row = wait_for(lambda: (lambda d: d if d.startswith("On your PATH") else None)(command_row()), 15)
+    print("     row now reads:", row, flush=True)
+    check("and the row still calls no absent skill a fault", row is not None and "SKILL.md isn't there" not in row and "opencode" not in row, row)
+    check("and shows no full home path", row is not None and str(home.folder) not in row, row)
+
+
 def main():
     if not os.access(BROADWAY, os.X_OK):
         sys.exit("build first: ./build.sh")
@@ -289,6 +345,7 @@ def main():
         check("and the skill and hooks are back", home.set_up(), home.everything().keys())
         check("a link that points somewhere else is left as it was", home.held_link() == elsewhere and elsewhere[0] == ELSEWHERE,
               (home.held_link(), elsewhere))
+        update_stage(home)
     finally:
         quit()
         shutil.rmtree(FOLDER, ignore_errors=True)
