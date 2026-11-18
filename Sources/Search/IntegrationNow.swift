@@ -80,7 +80,7 @@ extension Browser {
     }
 
     func openLiveItem(_ key: String) {
-        if let tab = tabs.first(where: { $0.liveKey == key }) {
+        if let tab = tabs.first(where: { $0.liveKey.map { LiveIdentity.same($0, key) } == true }) {
             select(tab)
             return
         }

@@ -300,10 +300,7 @@ enum LiveFolderRows {
     }
 
     static func read(_ folder: LiveFolder, reading: Bool, now: Date = Date()) -> String {
-        if reading { return "Reading now…" }
-        guard let read = folder.read else { return folder.paused ? "Not yet, and paused" : "Not yet" }
-        let ago = ago(read, now: now)
-        return ago.prefix(1).uppercased() + ago.dropFirst()
+        LiveWords.settings(folder, reading: reading, now: now)
     }
 
     static func statusesFooter(_ list: LinearAPI.List) -> String {
@@ -371,6 +368,11 @@ extension SettingsPageView {
         let folders = LiveFolderRows.folders(of: browser, space: space)
         let home = browser.spaces.first { $0.id == space }
         section("Your live folders") {
+            if live.lost {
+                let lost = SettingsRowView(id: "live.lost", symbol: "exclamationmark.triangle", title: LiveFolders.lostWords)
+                lost.title.textColor = .secondaryLabelColor
+                put(lost)
+            }
             if folders.isEmpty {
                 let none = SettingsRowView(id: "live.folders", symbol: nil,
                                            title: LiveFolderRows.none(in: home, offered: offersSpaces))

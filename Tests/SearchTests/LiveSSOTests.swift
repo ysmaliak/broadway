@@ -75,7 +75,8 @@ final class LiveSSOTests {
         let answer = LiveReader.answer(scanned: json, asked: asked, source: source)
 
         #expect(!html.contains("Single sign-on"))
-        #expect(answer == LiveReader.Answer.items([], nil))
+        #expect(answer?.found == [])
+        #expect(answer?.whole == true)
     }
 
     @Test func anOrganisationLinkWithoutTheBannerIsNotSingleSignOn() async throws {
@@ -84,7 +85,7 @@ final class LiveSSOTests {
 
         let answer = LiveReader.answer(scanned: json, asked: asked, source: source)
 
-        guard case .items(let items, _) = answer else { Issue.record("not items: \(String(describing: answer))"); return }
+        guard let items = answer?.found else { Issue.record("not items: \(String(describing: answer))"); return }
         #expect(items.count == 1)
     }
 

@@ -60,6 +60,14 @@ enum LiveRefs {
 
     @MainActor static var known: [String: Known] = [:]
 
+    static func slot(_ key: String, space: UUID?) -> String {
+        "\(space?.uuidString ?? "")\u{0}\(LiveIdentity.of(key))"
+    }
+
+    static func identity(of slot: String) -> String {
+        slot.split(separator: "\u{0}", maxSplits: 1, omittingEmptySubsequences: false).last.map(String.init) ?? slot
+    }
+
     static func place(of key: String) -> (repository: String, number: Int)? {
         guard let url = URL(string: key) else { return nil }
         let parts = url.path().split(separator: "/").map(String.init)
@@ -175,10 +183,11 @@ enum LiveRefs {
     private static func line(_ repository: String, _ branch: String) -> String { "\(repository.lowercased())\u{0}\(branch)" }
 
     @MainActor
-    static func filled(_ items: [LiveItem], previous: [LiveItem], host: String? = nil, also: String? = nil, limit: Int = .max, at now: Date = Date(), width: Int = width,
+    static func filled(_ items: [LiveItem], previous: [LiveItem], space: UUID? = nil, host: String? = nil, also: String? = nil, limit: Int = .max, at now: Date = Date(), width: Int = width,
                        budget: TimeInterval = budget, again: Set<String> = [],
                        fetch: @escaping @Sendable (URL) async -> (Data, Int)?) async -> [LiveItem] {
-        let before = Dictionary(previous.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
+        let before = Dictionary(previous.map { (LiveIdentity.of($0.key), $0) }, uniquingKeysWith: { first, _ in first })
+        func at(_ key: String) -> String { slot(key, space: space) }
         var out = items
         var listed: [Want] = []
         var held: [Int: Held] = [:]
@@ -189,13 +198,13 @@ enum LiveRefs {
             listed.append(Want(index: index, url: url, repository: place.repository))
             if again.contains(LiveIdentity.of(item.key)) {
                 hard.append(index)
-            } else if let known = known[item.key] {
+            } else if let known = known[at(item.key)] {
                 if current(known, for: item, at: now), !due(known, at: now) {
                     held[index] = Held(branch: known.branch, signs: known.signs, read: known.read, kept: false)
                 } else {
                     hard.append(index)
                 }
-            } else if let old = before[item.key], let branch = old.branch, branch.stackRead == true, let signs = kept(old),
+            } else if let old = before[LiveIdentity.of(item.key)], let branch = old.branch, branch.stackRead == true, let signs = kept(old),
                       let updated = item.updated, old.updated == updated, let read = old.pageRead {
                 held[index] = Held(branch: branch, signs: signs, read: read, kept: true)
             } else {
@@ -204,7 +213,7 @@ enum LiveRefs {
         }
         func reading(_ index: Int) -> LiveBranch? {
             let key = items[index].key
-            return held[index]?.branch ?? known[key]?.branch ?? before[key]?.branch
+            return held[index]?.branch ?? known[at(key)]?.branch ?? before[LiveIdentity.of(key)]?.branch
         }
         var heads: [String: Int] = [:]
         for want in listed {
@@ -242,7 +251,7 @@ enum LiveRefs {
             out[want.index].branch = reused.branch ?? out[want.index].branch
             signed(&out[want.index], reused.signs)
             out[want.index].pageRead = reused.read
-            if reused.kept { known[item.key] = Known(updated: item.updated, branch: reused.branch, signs: reused.signs, read: reused.read) }
+            if reused.kept { known[at(item.key)] = Known(updated: item.updated, branch: reused.branch, signs: reused.signs, read: reused.read) }
         }
         guard !order.isEmpty else { return out }
         let places = Dictionary(listed.map { ($0.index, $0) }, uniquingKeysWith: { first, _ in first })
@@ -254,17 +263,17 @@ enum LiveRefs {
             var missed: Set<Int> = []
             for want in wants {
                 let item = items[want.index]
-                let staleBranch = known[item.key]?.branch ?? before[item.key]?.branch
-                let staleSigns = known[item.key]?.signs ?? before[item.key].flatMap(kept)
+                let staleBranch = known[at(item.key)]?.branch ?? before[LiveIdentity.of(item.key)]?.branch
+                let staleSigns = known[at(item.key)]?.signs ?? before[LiveIdentity.of(item.key)].flatMap(kept)
                 let page = found[want.url]
                 out[want.index].branch = page?.branch ?? staleBranch
                 signed(&out[want.index], page?.signs ?? staleSigns)
                 guard let page, page.branch != nil || page.signs != nil || page.state != nil else {
-                    out[want.index].pageRead = known[item.key]?.read ?? before[item.key]?.pageRead
+                    out[want.index].pageRead = known[at(item.key)]?.read ?? before[LiveIdentity.of(item.key)]?.pageRead
                     missed.insert(want.index)
                     continue
                 }
-                known[item.key] = Known(updated: item.updated, branch: page.branch ?? staleBranch, signs: page.signs ?? staleSigns, read: now,
+                known[at(item.key)] = Known(updated: item.updated, branch: page.branch ?? staleBranch, signs: page.signs ?? staleSigns, read: now,
                                         state: page.state)
                 out[want.index].pageRead = now
                 if let fresh = page.branch, let old = staleBranch, old.stackRead == true,
@@ -283,7 +292,7 @@ enum LiveRefs {
         guard !members.isEmpty else { return out }
         let missed = (ContinuousClock.now - began).seconds < budget ? await take(members) : Set(members.map(\.index))
         for index in missed {
-            known[items[index].key]?.read = .distantPast
+            known[at(items[index].key)]?.read = .distantPast
             out[index].pageRead = nil
         }
         return out

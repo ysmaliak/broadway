@@ -185,6 +185,8 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
     private var tasks: [UUID: TaskFolderHeadingView] = [:]
     private var cards: [SideKey: KitPlate] = [:]
     private var notes: [UUID: NSView] = [:]
+    private var mores: [UUID: NSView] = [:]
+    private var seenMores = Set<UUID>()
     private var ghost: LiveGhostView?
     fileprivate var fillingFrom: (id: UUID, frame: NSRect)?
     private var splitRows: [UUID: (view: NSView, right: UUID)] = [:]
@@ -476,7 +478,16 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
     private var listItems: [Browser.ListItem] { scene.items }
 
     private func noteHeight(_ group: TabGroup) -> CGFloat {
-        group.live && !group.collapsed && LiveFolders.shared.folder(group.id)?.note != nil ? rowHeight + Self.gap : 0
+        let note = group.live && !group.collapsed && LiveFolders.shared.folder(group.id)?.note != nil ? rowHeight + Self.gap : 0
+        return note + moreHeight(group)
+    }
+
+    private func showsMore(_ group: TabGroup) -> Bool {
+        preview == nil && group.live && !group.collapsed && LiveFolders.shared.folder(group.id)?.more != nil
+    }
+
+    private func moreHeight(_ group: TabGroup) -> CGFloat {
+        showsMore(group) ? rowHeight + Self.gap : 0
     }
 
     private func folderHeight(_ group: TabGroup, depth: Int) -> CGFloat {
@@ -676,6 +687,7 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
         var seenTasks = Set<UUID>()
         var seenCards = Set<SideKey>()
         var seenNotes = Set<UUID>()
+        seenMores = []
         var seenDividers = Set<Int>()
 
         let squares = made.pins
@@ -913,6 +925,10 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
         for (id, view) in notes where !seenNotes.contains(id) {
             retire(view)
             notes[id] = nil
+        }
+        for (id, view) in mores where !seenMores.contains(id) {
+            retire(view)
+            mores[id] = nil
         }
         for (index, view) in dividers where !seenDividers.contains(index) {
             retire(view)
@@ -1380,6 +1396,16 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
             laid[tab.id] = SideLaid(frame: frame, parent: parent, block: .folder(group.id), index: index, count: members.count)
             seenRows.insert(tab.id)
             if leaving(tab) { rows[tab.id]?.alphaValue = 0; at -= rowHeight + Self.gap }
+            at += rowHeight
+        }
+        if showsMore(group) {
+            at += Self.gap
+            let more = mores[group.id] ?? SideSigns.liveMore(browser: browser, id: group.id)
+            if mores[group.id] == nil { mores[group.id] = more }
+            if more.superview !== parent { parent.addSubview(more) }
+            SideSigns.update(more, colour: .ink, ground: ground)
+            put(more, NSRect(x: x + pad + indent, y: at, width: inner - indent, height: rowHeight))
+            seenMores.insert(group.id)
             at += rowHeight
         }
         return height

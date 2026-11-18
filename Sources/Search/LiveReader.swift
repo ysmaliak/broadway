@@ -13,13 +13,25 @@ final class FeedParser: NSObject, XMLParserDelegate {
     private var text = ""
     private var sawFeed = false
 
-    static func parse(_ data: Data) -> [Entry]? {
+    enum Outcome: Equatable {
+        case feed([Entry])
+        case broken
+        case notFeed
+    }
+
+    static func read(_ data: Data) -> Outcome {
         let reader = FeedParser()
         let parser = XMLParser(data: data)
         parser.delegate = reader
         parser.shouldResolveExternalEntities = false
-        _ = parser.parse()
-        return reader.sawFeed ? reader.entries : nil
+        let whole = parser.parse()
+        guard reader.sawFeed else { return .notFeed }
+        return whole ? .feed(reader.entries) : .broken
+    }
+
+    static func parse(_ data: Data) -> [Entry]? {
+        guard case .feed(let entries) = read(data) else { return nil }
+        return entries
     }
 
     private func bare(_ name: String) -> String {
@@ -138,6 +150,8 @@ final class LiveReader: NSObject, WKNavigationDelegate {
         case signIn
         case sso(LiveSSO, [LiveItem])
         case failed
+        case read(LiveRead)
+        case missed(LiveMiss)
     }
 
     private struct Scan: Decodable {
@@ -162,10 +176,13 @@ final class LiveReader: NSObject, WKNavigationDelegate {
         var signInLink: Bool? = nil
         var pending: Int? = nil
         var sso: LiveSSO? = nil
+        var nothing: Bool? = nil
+        var limit: Bool? = nil
+        var more: Bool? = nil
     }
 
     static let script = #"""
-    (function (pattern, cap) {
+    (function (pattern, cap, marker) {
       const re = pattern ? new RegExp(pattern) : null;
       const here = location.host, seen = {}, links = [], stamps = {};
       let pending = 0;
@@ -226,15 +243,25 @@ final class LiveReader: NSObject, WKNavigationDelegate {
         sso = { org, url: u.href };
         break;
       }
+      let nothing = false;
+      if (marker) {
+        for (const el of document.querySelectorAll(marker.selector)) {
+          const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+          if (!marker.words || new RegExp(marker.words, 'i').test(text)) { nothing = true; break; }
+        }
+      }
+      const limit = !links.length && /rate limit|too many requests/i.test(((document.body && document.body.innerText) || '').slice(0, 4000));
+      const more = !!document.querySelector('a[rel="next"], a.next_page, a[aria-label="Next Page" i], a[aria-label="Next" i][href*="page="]');
       const login = document.querySelector('meta[name="user-login"]');
       const signInLink = !!document.querySelector('a[href*="ServiceLogin"], a[href*="/login"], a[href*="/signin"], a[href*="/sign_in"]');
       return JSON.stringify({ links, password: !!document.querySelector('input[type=password]'), href: location.href,
-                              user: login ? login.getAttribute('content') || '' : null, signInLink, pending, sso });
+                              user: login ? login.getAttribute('content') || '' : null, signInLink, pending, sso, nothing, limit, more });
     })
     """#
 
     private var view: WKWebView?
     private var status: Int?
+    private var headers: [String: String] = [:]
     private var finished: CheckedContinuation<Bool, Never>?
     private static var running: [LiveReader] = []
 
@@ -246,19 +273,27 @@ final class LiveReader: NSObject, WKNavigationDelegate {
             return await readFeed(asked, source: folder.source, store: store)
         }
         let url = staged(asked)
+        let known = LiveFolders.shared.explained(folder)
         let answer = folder.source.pullLists != nil
-            ? await readLists(folder.source) { await readPage(staged($0), source: folder.source, store: store) }
-            : await readPage(url, source: folder.source, store: store)
-        guard folder.source.kind == .pullRequests || folder.source.kind == .repository,
-              case .items(let items, let moved) = answer else { return answer }
+            ? await readLists(folder.source, before: folder.items, known: known) { await readPage(staged($0), source: folder.source, store: store) }
+            : await LiveTrust.looked(folder.items, known: known) { await readPage(url, source: folder.source, store: store) }.more(asked)
+        guard folder.source.kind == .pullRequests || folder.source.kind == .repository, let items = answer.found else { return answer }
         let page = folder.source.pullLists?.first.map { staged($0.page) } ?? url
         let root = Integrations.fixture(.gitHub)
         let fetch = await branchFetch(page, store: store, staging: root)
         let also = root == nil ? nil : (folder.source.pullLists?.first?.page ?? asked).host()
-        let branched = await LiveRefs.filled(items, previous: folder.items, host: page.host(), also: also, limit: folder.source.cap,
+        let branched = await LiveRefs.filled(items, previous: folder.items, space: folder.space, host: page.host(), also: also, limit: folder.source.cap,
                                              again: LiveFolders.shared.rereads, fetch: fetch)
         LiveFolders.shared.pagesRead()
-        return .items(LiveStacks.arranged(branched), moved)
+        switch answer {
+        case .read(var read):
+            read.items = LiveStacks.arranged(branched)
+            return .read(read)
+        case .items(_, let moved):
+            return .items(LiveStacks.arranged(branched), moved)
+        default:
+            return answer
+        }
     }
 
     @MainActor static func staged(_ url: URL) -> URL {
@@ -288,44 +323,89 @@ final class LiveReader: NSObject, WKNavigationDelegate {
         }
     }
 
-    static func readLists(_ source: LiveSource, page: (URL) async -> Answer) async -> Answer {
+    static func readLists(_ source: LiveSource, before: [LiveItem] = [], known: Set<String> = [], pause: Duration = LiveTrust.pause,
+                          page: (URL) async -> Answer) async -> Answer {
         var found: [(PullList, [LiveItem])] = []
-        var signIn = false
+        var missed: [PullList: LiveMiss] = [:]
+        var signedOut: Set<PullList> = []
+        var whole = true
+        var more: String?
         var sso: LiveSSO?
-        for list in source.pullLists ?? [] {
-            switch await page(list.page) {
+        let lists = source.pullLists ?? []
+        for list in lists {
+            let had = before.filter { LiveTrust.on($0, list) }
+            switch await LiveTrust.looked(had, known: known, pause: pause, read: { await page(list.page) }) {
             case .items(let items, _): found.append((list, items))
-            case .signIn: signIn = true
+            case .read(let read):
+                if LiveTrust.unproved(had, read) {
+                    missed[list] = LiveMiss(cause: .unread)
+                } else {
+                    found.append((list, read.items))
+                    whole = whole && read.whole
+                    if read.more != nil, more == nil { more = list.page.absoluteString }
+                }
+            case .signIn: signedOut.insert(list)
             case .sso(let asked, let items):
                 sso = sso ?? asked
                 found.append((list, items))
-            case .failed: break
+            case .failed: missed[list] = LiveMiss()
+            case .missed(let miss): missed[list] = miss
             }
-            if signIn, found.isEmpty, sso == nil { return .signIn }
+            if !signedOut.isEmpty, found.isEmpty, sso == nil { return .signIn }
         }
         if let sso { return .sso(sso, PullList.merged(found, keepsState: true)) }
-        if found.isEmpty { return signIn ? .signIn : .failed }
-        return .items(PullList.merged(found, keepsState: true), nil)
+        if found.isEmpty {
+            if !signedOut.isEmpty { return .signIn }
+            return .missed(lists.lazy.compactMap { missed[$0] }.first ?? LiveMiss())
+        }
+        let shared = PullList.shared(found, cap: source.cap)
+        if more == nil, let cut = shared.cut.first { more = cut.page.absoluteString }
+        return .read(LiveRead(items: PullList.merged(shared.answers, keepsState: true), missed: missed, signedOut: signedOut, whole: whole,
+                              marked: true, more: more))
     }
 
     private static func readFeed(_ url: URL, source: LiveSource, store: WKWebsiteDataStore) async -> Answer {
-        guard let (data, status) = await fetch(url, store: store) else { return .failed }
+        guard let (data, status, headers) = await exchange(url, store: store) else { return .failed }
+        if let miss = LiveLimit.miss(status: status, headers: headers, page: false) { return .missed(miss) }
         if status == 401 || status == 403 { return .signIn }
-        if let entries = FeedParser.parse(data) { return .items(items(entries, base: url), nil) }
+        if status >= 400 { return .failed }
+        return await feedAnswer(data, url: url, source: source,
+                                fetch: { await fetch($0, store: store).map { $0.0 } },
+                                page: { await readPage(url, source: $0, store: store) })
+    }
+
+    static func feedAnswer(_ data: Data, url: URL, source: LiveSource, fetch: (URL) async -> Data?,
+                           page: (LiveSource) async -> Answer) async -> Answer {
+        switch FeedParser.read(data) {
+        case .feed(let entries): return feedRead(entries, base: url, source: nil)
+        case .broken: return .missed(LiveMiss(cause: .unread))
+        case .notFeed: break
+        }
         let html = String(decoding: data, as: UTF8.self)
-        if let found = FeedParser.discover(html, base: url),
-           let (next, _) = await fetch(found, store: store),
-           let entries = FeedParser.parse(next) {
+        if let found = FeedParser.discover(html, base: url), let next = await fetch(found) {
             var moved = source
             moved.address = found.absoluteString
-            return .items(items(entries, base: found), moved)
+            switch FeedParser.read(next) {
+            case .feed(let entries): return feedRead(entries, base: found, source: moved)
+            case .broken: return .missed(LiveMiss(cause: .unread))
+            case .notFeed: break
+            }
         }
-        var page = source
-        page.kind = .page
-        switch await readPage(url, source: page, store: store) {
-        case .items(let items, _): return .items(items, page)
+        var shown = source
+        shown.kind = .page
+        switch await page(shown) {
+        case .items(let items, _): return .read(LiveRead(items: items, source: shown, feed: .notFeed))
+        case .read(var read):
+            read.source = shown
+            read.feed = .notFeed
+            return .read(read)
         case let other: return other
         }
+    }
+
+    private static func feedRead(_ entries: [FeedParser.Entry], base: URL, source: LiveSource?) -> Answer {
+        let found = items(entries, base: base)
+        return .read(LiveRead(items: found, source: source, feed: entries.isEmpty ? .empty : .entries))
     }
 
     static func items(_ entries: [FeedParser.Entry], base: URL) -> [LiveItem] {
@@ -350,6 +430,10 @@ final class LiveReader: NSObject, WKNavigationDelegate {
     }
 
     private static func fetch(_ url: URL, store: WKWebsiteDataStore) async -> (Data, Int)? {
+        await exchange(url, store: store).map { ($0.0, $0.1) }
+    }
+
+    private static func exchange(_ url: URL, store: WKWebsiteDataStore) async -> (Data, Int, [String: String])? {
         var request = URLRequest(url: url, timeoutInterval: 20)
         request.httpShouldHandleCookies = false
         if url.scheme?.hasPrefix("http") == true {
@@ -358,10 +442,10 @@ final class LiveReader: NSObject, WKNavigationDelegate {
                 request.setValue(value, forHTTPHeaderField: field)
             }
         }
-        return await LiveConditional.send(request, delegate: LiveRedirects())
+        return await LiveConditional.exchange(request, delegate: LiveRedirects())
     }
 
-    private static func readPage(_ url: URL, source: LiveSource, store: WKWebsiteDataStore) async -> Answer {
+    static func readPage(_ url: URL, source: LiveSource, store: WKWebsiteDataStore) async -> Answer {
         let reader = LiveReader()
         running.append(reader)
         defer { running.removeAll { $0 === reader } }
@@ -387,32 +471,42 @@ final class LiveReader: NSObject, WKNavigationDelegate {
         guard loaded else { return .failed }
         var found = 0
         var last: Scan?
+        var counts: [Int] = []
         for wait in [0.4, 1.2, 2.5, 4.0] {
             try? await Task.sleep(for: .seconds(wait))
             guard let scan = await scan(web, source: source) else { continue }
             let again = last != nil
             last = scan
+            counts.append(scan.links.count)
             if scan.sso != nil, again, scan.links.count == found, (scan.pending ?? 0) == 0 { break }
-            if signedOut(scan, asked: url, source: source) || LiveLabels.broken(status: status, found: scan.links.count) { break }
+            if scan.limit == true || signedOut(scan, asked: url, source: source) || LiveLabels.broken(status: status, found: scan.links.count) { break }
             if !scan.links.isEmpty, scan.links.count == found, (scan.pending ?? 0) == 0 { break }
             found = scan.links.count
         }
         guard let last else { return .failed }
-        return LiveReader.answer(last, asked: url, status: status, source: source)
+        return LiveReader.answer(last, asked: url, status: status, headers: headers, source: source, growing: LiveReader.growing(counts))
     }
 
-    private static func answer(_ scan: Scan, asked: URL, status: Int?, source: LiveSource) -> Answer {
+    static func growing(_ counts: [Int]) -> Bool {
+        guard counts.count >= 2 else { return false }
+        return counts[counts.count - 1] > counts[counts.count - 2]
+    }
+
+    private static func answer(_ scan: Scan, asked: URL, status: Int?, headers: [String: String] = [:], source: LiveSource,
+                               growing: Bool = false) -> Answer {
         let pulls = source.kind == .pullRequests || source.kind == .repository
         let items = scan.links.map { item(from: $0, pulls: pulls) }
         if let sso = scan.sso { return .sso(sso, items) }
+        if items.isEmpty, let miss = LiveLimit.miss(status: status, headers: headers, page: scan.limit == true) { return .missed(miss) }
         if signedOut(scan, asked: asked, status: status, source: source) { return .signIn }
         if LiveLabels.broken(status: status, found: scan.links.count) { return .failed }
-        return .items(items, nil)
+        return .read(LiveRead(items: items, whole: !growing, marked: scan.nothing == true, more: scan.more == true ? asked.absoluteString : nil))
     }
 
-    static func answer(scanned json: String, asked: URL, status: Int? = 200, source: LiveSource) -> Answer? {
+    static func answer(scanned json: String, asked: URL, status: Int? = 200, headers: [String: String] = [:], source: LiveSource,
+                       growing: Bool = false) -> Answer? {
         guard let scan = try? JSONDecoder().decode(Scan.self, from: Data(json.utf8)) else { return nil }
-        return answer(scan, asked: asked, status: status, source: source)
+        return answer(scan, asked: asked, status: status, headers: headers, source: source, growing: growing)
     }
 
     private static func item(from link: Scan.Link, pulls: Bool) -> LiveItem {
@@ -442,7 +536,7 @@ final class LiveReader: NSObject, WKNavigationDelegate {
 
     private func scan(_ web: WKWebView, source: LiveSource) async -> Scan? {
         let pattern = source.pattern.map { #"'\#($0.replacingOccurrences(of: #"\"#, with: #"\\"#))'"#} ?? "null"
-        let call = "\(LiveReader.script)(\(pattern), \(source.cap * 3))"
+        let call = "\(LiveReader.script)(\(pattern), \(source.cap * 3), \(LiveEmptyMarker.json(for: source)))"
         guard let text = try? await web.evaluateJavaScript(call, contentWorld: .defaultClient) as? String else { return nil }
         return try? JSONDecoder().decode(Scan.self, from: Data(text.utf8))
     }
@@ -453,7 +547,13 @@ final class LiveReader: NSObject, WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse) async -> WKNavigationResponsePolicy {
-        if navigationResponse.isForMainFrame { status = (navigationResponse.response as? HTTPURLResponse)?.statusCode }
+        if navigationResponse.isForMainFrame, let http = navigationResponse.response as? HTTPURLResponse {
+            status = http.statusCode
+            headers = Dictionary(http.allHeaderFields.compactMap { key, value in (key as? String).map { ($0, "\(value)") } },
+                                 uniquingKeysWith: { a, _ in a })
+        } else if navigationResponse.isForMainFrame {
+            status = nil
+        }
         return .allow
     }
 

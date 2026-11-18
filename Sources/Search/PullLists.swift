@@ -63,19 +63,47 @@ enum PullList: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    static func shared(_ answers: [(PullList, [LiveItem])], cap: Int) -> (answers: [(PullList, [LiveItem])], cut: [PullList]) {
+        var chosen = Set<String>()
+        var all = Set<String>()
+        for (_, found) in answers { for item in found { all.insert(LiveIdentity.of(item.key)) } }
+        guard all.count > cap else { return (answers, []) }
+        var round = 0
+        let longest = answers.map(\.1.count).max() ?? 0
+        while chosen.count < cap, round < longest {
+            for (_, found) in answers where round < found.count && chosen.count < cap {
+                chosen.insert(LiveIdentity.of(found[round].key))
+            }
+            round += 1
+        }
+        var cut: [PullList] = []
+        let kept = answers.map { list, found in
+            let left = found.filter { chosen.contains(LiveIdentity.of($0.key)) }
+            if left.count < found.count { cut.append(list) }
+            return (list, left)
+        }
+        return (kept, cut)
+    }
+
     static func ordered(_ lists: [PullList]) -> [PullList] {
         allCases.filter(lists.contains)
     }
 
     static func merged(_ answers: [(PullList, [LiveItem])], keepsState: Bool = false) -> [LiveItem] {
-        var seen = Set<String>()
+        var seen: [String: Int] = [:]
         var items: [LiveItem] = []
         for (list, found) in answers {
-            for var item in found where seen.insert(item.key).inserted {
+            for var item in found {
+                if let at = seen[LiveIdentity.of(item.key)] {
+                    if items[at].on?.contains(list) == false { items[at].on?.append(list) }
+                    continue
+                }
                 if let label = list.label {
                     if !keepsState || PullState.rank(label) < PullState.rank(item.label) { item.label = label }
                 }
                 item.list = list
+                item.on = [list]
+                seen[LiveIdentity.of(item.key)] = items.count
                 items.append(item)
             }
         }

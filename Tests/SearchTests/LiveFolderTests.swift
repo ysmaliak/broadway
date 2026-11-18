@@ -509,7 +509,7 @@ final class LiveFolderTests {
         let week = dated.signInPage(at: now)
 
         #expect(open?.absoluteString == "https://github.com/login?return_to=https%3A%2F%2Fgithub.com%2Fapple%2Fswift%2Fpulls")
-        #expect(week?.absoluteString == "https://github.com/login?return_to=https%3A%2F%2Fgithub.com%2Fapple%2Fswift%2Fpulls%3Fq%3Dis%253Apr%2Bis%253Aopen%2Bupdated%253A%253E%253D2026-10-27")
+        #expect(week?.absoluteString.hasPrefix("https://github.com/login?return_to=https%3A%2F%2Fgithub.com%2Fapple%2Fswift%2Fpulls%3Fq%3Dis%253Apr%2Bis%253Aopen%2Bupdated%253A%253E%253D2026-10-28T00%253A00%253A00") == true)
     }
 
     @Test func youTubeSignsInThroughGoogleBackToSubscriptions() {

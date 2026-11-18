@@ -134,7 +134,7 @@ final class MergedStackTests {
         LiveFolders.shared.settles = LiveFolders.settles
         LiveFolders.shared.reader = reader
         for folder in LiveFolders.shared.folders { LiveFolders.shared.remove(folder.id) }
-        for number in [61, 62, 63, 64, 70] { LiveRefs.known[key(number)] = nil }
+        LiveRefs.known = [:]
         browser.prefs.liveFolders = false
         browser.closeAll()
         browser = nil
@@ -173,7 +173,7 @@ final class MergedStackTests {
     }
 
     private func pageSaid(_ number: Int, _ state: PullPageState) {
-        LiveRefs.known[key(number)] = LiveRefs.Known(updated: nil, branch: pull(number).branch, read: Date(), state: state)
+        LiveRefs.known[LiveRefs.slot(key(number), space: browser.spaceID)] = LiveRefs.Known(updated: nil, branch: pull(number).branch, read: Date(), state: state)
     }
 
     @Test func mergingTheThirdOfFourTurnsTheTwoBelowAndLeavesTheTop() {

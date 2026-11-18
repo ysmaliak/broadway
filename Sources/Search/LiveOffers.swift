@@ -334,14 +334,14 @@ final class LiveOffers {
     }
 
     func read(_ answer: LiveReader.Answer, for offer: LiveOffer) {
-        if case .items(let items, _) = answer, !items.isEmpty {
+        if let items = answer.found, !items.isEmpty {
             found[offer.key] = (items, now())
             change(offer.space, offer.id) { $0.tried = nil; $0.empty = nil }
             return
         }
         found[offer.key] = nil
         var empty = false
-        if case .items = answer { empty = true }
+        if answer.found != nil { empty = true }
         let at = now()
         change(offer.space, offer.id) { $0.tried = at; $0.empty = empty ? true : nil }
     }

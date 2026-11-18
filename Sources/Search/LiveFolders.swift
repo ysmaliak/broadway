@@ -113,16 +113,25 @@ struct LiveSource: Codable, Equatable {
         }
     }
 
-    func reading(at now: Date = Date()) -> URL? {
+    func reading(at now: Date = Date(), zone: TimeZone = .current) -> URL? {
         guard kind == .repository, let days = range?.days, var parts = URLComponents(string: address) else {
             return URL(string: address)
         }
+        parts.percentEncodedQuery = "q=is%3Apr+is%3Aopen+updated%3A%3E%3D\(LiveSource.escaped(LiveSource.since(days, now: now, zone: zone)))"
+        return parts.url
+    }
+
+    static func since(_ days: Int, now: Date, zone: TimeZone) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        let today = calendar.startOfDay(for: now)
+        let start = calendar.date(byAdding: .day, value: -(max(days, 1) - 1), to: today) ?? today
         let format = DateFormatter()
         format.locale = Locale(identifier: "en_US_POSIX")
-        format.dateFormat = "yyyy-MM-dd"
-        let since = now.addingTimeInterval(-Double(days) * 86_400)
-        parts.percentEncodedQuery = "q=is%3Apr+is%3Aopen+updated%3A%3E%3D\(format.string(from: since))"
-        return parts.url
+        format.calendar = calendar
+        format.timeZone = zone
+        format.dateFormat = "yyyy-MM-dd'T'HH:mm:ssxxxxx"
+        return format.string(from: start)
     }
 
     enum Service { case gitHub, youTube, linear, own }
@@ -310,7 +319,7 @@ enum LiveStackWalk {
             guard let branch = item.branch, branch.repository.lowercased() == repository, branch.stack == stack,
                   let at = branch.position, at < position else { continue }
             let lower = LiveIdentity.of(item.key)
-            guard lower != identity, lower != item.key else { continue }
+            guard lower != identity, LiveIdentity.typed(lower) else { continue }
             if item.label == PullState.merged || item.label == PullState.closed {
                 found[lower] = -1
             } else if found[lower] == nil {
@@ -340,6 +349,7 @@ struct LiveItem: Codable, Equatable {
     var signsRead: Bool? = nil
     var pageRead: Date? = nil
     var status: String? = nil
+    var on: [PullList]? = nil
 
     var fresh: Bool {
         guard let activity else { return false }
@@ -363,6 +373,8 @@ struct LiveItem: Codable, Equatable {
 }
 
 enum LiveIdentity {
+    static let tracking: Set<String> = ["fbclid", "gclid", "dclid", "msclkid", "mc_cid", "mc_eid", "igshid", "ref_src", "_hsenc", "_hsmi"]
+
     static func of(_ key: String) -> String {
         guard let url = URL(string: key), let host = url.host()?.lowercased() else { return key }
         let path = url.path().split(separator: "/").map(String.init)
@@ -373,10 +385,42 @@ enum LiveIdentity {
             }
         case "linear.app":
             if let at = path.firstIndex(of: "issue"), path.count > at + 1 { return "linear:\(path[at + 1].uppercased())" }
+        case "youtube.com", "m.youtube.com":
+            if path == ["watch"], let video = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+                .first(where: { $0.name == "v" })?.value, !video.isEmpty {
+                return "youtube:\(video)"
+            }
+            if path.count == 2, path[0] == "shorts" || path[0] == "live" { return "youtube:\(path[1])" }
+        case "youtu.be":
+            if path.count == 1 { return "youtube:\(path[0])" }
         default:
             break
         }
-        return key
+        return plain(url) ?? key
+    }
+
+    static func typed(_ identity: String) -> Bool {
+        identity.hasPrefix("github:") || identity.hasPrefix("linear:") || identity.hasPrefix("youtube:")
+    }
+
+    static func same(_ one: String, _ other: String) -> Bool { one == other || of(one) == of(other) }
+
+    static func plain(_ url: URL) -> String? {
+        guard var parts = URLComponents(url: url, resolvingAgainstBaseURL: false), let host = parts.host else { return nil }
+        parts.scheme = parts.scheme?.lowercased()
+        parts.host = Address.withoutWWW(host.lowercased())
+        parts.fragment = nil
+        if let items = parts.percentEncodedQueryItems {
+            let kept = items.filter { item in
+                let name = item.name.lowercased()
+                return !name.hasPrefix("utm_") && !tracking.contains(name)
+            }
+            parts.percentEncodedQueryItems = kept.isEmpty ? nil : kept
+        }
+        if parts.percentEncodedPath.count > 1, parts.percentEncodedPath.hasSuffix("/") {
+            parts.percentEncodedPath = String(parts.percentEncodedPath.dropLast())
+        }
+        return parts.string
     }
 }
 
@@ -423,6 +467,16 @@ struct LiveFolder: Codable, Identifiable, Equatable {
     var noticing: Bool? = nil
     var sso: LiveSSO? = nil
     var order: [String]? = nil
+    var notFeeds: Int? = nil
+    var emptyFeeds: Int? = nil
+    var good: Date? = nil
+    var cause: String? = nil
+    var limitedUntil: Date? = nil
+    var limitWait: Double? = nil
+    var more: String? = nil
+    var noCycle: Bool? = nil
+
+    var why: LiveCause? { state == .failed ? cause.flatMap(LiveCause.init(rawValue:)) : nil }
 
     var freshCount: Int { items.filter(\.fresh).count }
 
@@ -451,10 +505,17 @@ struct LiveFolder: Codable, Identifiable, Equatable {
         if paused { return "Paused" }
         switch state {
         case .signIn: return sso == nil ? "Sign in" : "Single sign-on"
-        case .failed: return "Can't read"
+        case .failed:
+            switch why {
+            case .offline: return "Offline"
+            case .limited: return "Limited"
+            case .unread, .other, nil: return "Can't read"
+            }
         case .waiting, .fine: return nil
         }
     }
+
+    var emptyWording: String { noCycle == true ? "No active cycle" : source.emptyWording }
 
     var signInWords: String {
         guard let sso else { return "Sign in to \(source.siteName)" }
@@ -527,28 +588,30 @@ enum LiveMerge {
         var next = folder
         var hidden: [String] = []
         for entry in folder.hidden.map(LiveIdentity.of) where !hidden.contains(entry) { hidden.append(entry) }
-        let opened = Dictionary(folder.items.compactMap { item in item.opened.map { (item.key, $0) } }, uniquingKeysWith: { a, _ in a })
-        let arrived = Dictionary(folder.items.compactMap { item in item.arrived.map { (item.key, $0) } }, uniquingKeysWith: { a, _ in a })
-        let known = Set(folder.items.map(\.key))
+        let id = { (item: LiveItem) in LiveIdentity.of(item.key) }
+        let opened = Dictionary(folder.items.compactMap { item in item.opened.map { (id(item), $0) } }, uniquingKeysWith: { a, _ in a })
+        let arrived = Dictionary(folder.items.compactMap { item in item.arrived.map { (id(item), $0) } }, uniquingKeysWith: { a, _ in a })
+        let known = Set(folder.items.map(id))
         let first = folder.items.isEmpty && folder.state != .fine
         let baseline = first || folder.noticing != true
-        let noticed = Dictionary(folder.items.compactMap { item in item.noticed.map { (item.key, $0) } }, uniquingKeysWith: { a, _ in a })
-        let unsigned = Set(folder.items.filter { $0.signsRead != true }.map(\.key))
+        let noticed = Dictionary(folder.items.compactMap { item in item.noticed.map { (id(item), $0) } }, uniquingKeysWith: { a, _ in a })
+        let unsigned = Set(folder.items.filter { $0.signsRead != true }.map(id))
         if folder.source.keepsFew {
-            for (key, date) in opened where now.timeIntervalSince(date) >= gone && !hidden.contains(LiveIdentity.of(key)) {
-                hidden.append(LiveIdentity.of(key))
+            for (identity, date) in opened where now.timeIntervalSince(date) >= gone && !hidden.contains(identity) {
+                hidden.append(identity)
             }
         }
         let refused = Set(hidden)
         var seen = Set<String>()
         var items: [LiveItem] = []
-        for var item in fetched where !refused.contains(LiveIdentity.of(item.key)) && !folder.source.leavesOut(item)
-            && seen.insert(item.key).inserted {
-            item.opened = opened[item.key]
-            item.arrived = arrived[item.key] ?? (first || known.contains(item.key) ? nil : now)
-            item.noticed = baseline ? item.activity : noticed[item.key]
-            if !baseline, item.noticed == nil, item.signsRead == true, unsigned.contains(item.key),
-               let activity = item.activity, let seen = opened[item.key], seen >= activity {
+        for var item in fetched where !refused.contains(id(item)) && !folder.source.leavesOut(item)
+            && seen.insert(id(item)).inserted {
+            let identity = id(item)
+            item.opened = opened[identity]
+            item.arrived = arrived[identity] ?? (first || known.contains(identity) ? nil : now)
+            item.noticed = baseline ? item.activity : noticed[identity]
+            if !baseline, item.noticed == nil, item.signsRead == true, unsigned.contains(identity),
+               let activity = item.activity, let seen = opened[identity], seen >= activity {
                 item.noticed = activity
             }
             items.append(item)
@@ -574,6 +637,15 @@ enum LiveMerge {
         next.read = now
         next.noticing = true
         return next
+    }
+
+    static func cuts(_ folder: LiveFolder, fetched: [LiveItem]) -> Bool {
+        var seen = Set<String>()
+        let shown = fetched.filter { item in
+            let identity = LiveIdentity.of(item.key)
+            return !folder.hides(item.key) && !folder.source.leavesOut(item) && seen.insert(identity).inserted
+        }
+        return shown.count > folder.source.cap
     }
 
     static func without(_ identity: String, in items: [LiveItem]) -> [LiveItem] {
@@ -608,10 +680,16 @@ final class LiveFolders {
     @ObservationIgnored private var departed: [UUID: Set<String>] = [:]
     @ObservationIgnored private var said: [String: (state: PullPageState, until: Date, folders: Set<UUID>)] = [:]
     @ObservationIgnored private var early: Set<UUID> = []
-    @ObservationIgnored var reader: @MainActor (LiveFolder) async -> LiveReader.Answer = { await LiveReader.read($0) }
+    @ObservationIgnored var reader: @MainActor (LiveFolder) async -> LiveReader.Answer = { await LiveReader.read($0) } {
+        didSet { shared.forget() }
+    }
     @ObservationIgnored private var again: Set<UUID> = []
     @ObservationIgnored private var held: [UUID: UUID] = [:]
     @ObservationIgnored private var began: [UUID: Date] = [:]
+    @ObservationIgnored private var pauses: [UUID: Int] = [:]
+    @ObservationIgnored private var reads: [UUID: Int] = [:]
+    @ObservationIgnored private var waiters: [UUID: [CheckedContinuation<Void, Never>]] = [:]
+    @ObservationIgnored let shared = LiveShared()
     @ObservationIgnored private var signOns: [UUID: Date] = [:]
     @ObservationIgnored private var retries: [UUID: Int] = [:]
     @ObservationIgnored private var signOnTabs: [UUID: (folder: UUID, away: Bool)] = [:]
@@ -640,6 +718,10 @@ final class LiveFolders {
     @ObservationIgnored private var pageSoon: [UUID: UUID] = [:]
     @ObservationIgnored private var watchers: [(NotificationCenter, NSObjectProtocol)] = []
     @ObservationIgnored private var path: UUID?
+    @ObservationIgnored private(set) var foreign: [Data] = []
+    @ObservationIgnored var foreignIDs: Set<UUID> = []
+    @ObservationIgnored private var lastSaved: [LiveFolder]?
+    var lost = false
 
     private static var file: URL { Store.file("live-folders.json") }
 
@@ -650,11 +732,16 @@ final class LiveFolders {
         loaded = true
         retired = Set((Store.settings.stringArray(forKey: LiveFolders.retiredKey) ?? []).compactMap(UUID.init(uuidString:)))
         guard let data = try? Data(contentsOf: LiveFolders.file) else { return }
-        guard let (saved, gone) = LiveFolders.sorted(data) else {
+        guard let read = LiveFile.read(data, retiredKinds: LiveFolders.retiredKinds) else {
             Store.quarantine(LiveFolders.file)
+            lost = true
             return
         }
+        let saved = read.kept, gone = read.retired
+        foreign = read.foreign
+        foreignIDs = read.foreignIDs
         folders = LiveFolders.woken(saved)
+        lastSaved = folders
         if !gone.isEmpty {
             retired.formUnion(gone)
             Store.settings.set(retired.map(\.uuidString).sorted(), forKey: LiveFolders.retiredKey)
@@ -674,32 +761,15 @@ final class LiveFolders {
     static let retiredKey = "live.retired"
     static let retiredKinds: Set<String> = ["actions", "deployments", "mergeRequests"]
 
-    private struct Saved: Decodable {
-        struct Peek: Decodable {
-            struct Source: Decodable { let kind: String }
-            let id: UUID
-            let source: Source
-        }
-
-        let folder: LiveFolder?
-        let retired: UUID?
-
-        init(from decoder: Decoder) throws {
-            let peek = try Peek(from: decoder)
-            let gone = LiveFolders.retiredKinds.contains(peek.source.kind)
-            retired = gone ? peek.id : nil
-            folder = gone ? nil : try LiveFolder(from: decoder)
-        }
-    }
-
     static func sorted(_ data: Data) -> (kept: [LiveFolder], retired: [UUID])? {
-        guard let saved = try? JSONDecoder().decode([Saved].self, from: data) else { return nil }
-        return (saved.compactMap(\.folder), saved.compactMap(\.retired))
+        LiveFile.read(data, retiredKinds: retiredKinds).map { ($0.kept, $0.retired) }
     }
+
 
     static func woken(_ folders: [LiveFolder]) -> [LiveFolder] {
         folders.map { folder in
             var folder = folder
+            if folder.good == nil, folder.state == .fine { folder.good = folder.read }
             if folder.state == .waiting { folder.read = nil }
             return folder
         }
@@ -716,8 +786,10 @@ final class LiveFolders {
     }
 
     private func save() {
-        let folders = folders
-        Disk.write(LiveFolders.file) { try? JSONEncoder().encode(folders) }
+        guard folders != lastSaved else { return }
+        lastSaved = folders
+        let folders = folders, foreign = foreign
+        Disk.write(LiveFolders.file) { LiveFile.written(folders, foreign: foreign) }
     }
 
     private func change(_ id: UUID, _ edit: (inout LiveFolder) -> Void) {
@@ -762,7 +834,30 @@ final class LiveFolders {
     }
 
     func rename(_ id: UUID, to name: String) { change(id) { $0.name = name } }
-    func pause(_ id: UUID, _ paused: Bool) { change(id) { $0.paused = paused } }
+    func pause(_ id: UUID, _ paused: Bool) {
+        pauses[id, default: 0] += 1
+        change(id) { $0.paused = paused }
+    }
+
+    func ticket(_ folder: LiveFolder) -> LiveReadTicket {
+        LiveReadTicket(space: folder.space, source: folder.source, paused: pauses[folder.id] ?? 0, applied: reads[folder.id] ?? 0)
+    }
+
+    func settled(_ id: UUID) async {
+        guard reading.contains(id) else { return }
+        await withCheckedContinuation { waiters[id, default: []].append($0) }
+    }
+
+    func readNow(_ id: UUID) async {
+        if reading.contains(id) { return await settled(id) }
+        guard let folder = begin(id) else { return }
+        await read(folder)
+    }
+
+    private func finished(_ id: UUID) {
+        reading.remove(id)
+        for waiter in waiters.removeValue(forKey: id) ?? [] { waiter.resume() }
+    }
     func move(_ id: UUID, to address: String) { change(id) { $0.source.address = address } }
     func setOrder(_ id: UUID, _ order: [String]?) { change(id) { $0.order = order } }
 
@@ -835,10 +930,11 @@ final class LiveFolders {
     }
 
     func opened(_ key: String, space: UUID? = nil, at date: Date = Date()) {
+        let identity = LiveIdentity.of(key)
         for folder in folders where space == nil || folder.space == space {
-            guard folder.items.contains(where: { $0.key == key && ($0.opened == nil || $0.fresh) }) else { continue }
+            guard folder.items.contains(where: { LiveIdentity.of($0.key) == identity && ($0.opened == nil || $0.fresh) }) else { continue }
             change(folder.id) { folder in
-                for index in folder.items.indices where folder.items[index].key == key {
+                for index in folder.items.indices where LiveIdentity.of(folder.items[index].key) == identity {
                     if folder.items[index].opened == nil { folder.items[index].opened = date }
                     if let activity = folder.items[index].activity { folder.items[index].noticed = activity }
                 }
@@ -856,31 +952,12 @@ final class LiveFolders {
     }
 
     func apply(_ result: LiveReader.Answer, to id: UUID, now: Date = Date()) {
+        reads[id, default: 0] += 1
         let before = folder(id)
         var begun: [(String, UUID)] = []
         let verdicts = judged(result, in: id)
         change(id) { folder in
-            switch result {
-            case .items(let items, let source):
-                if let source { folder.source = source }
-                folder = LiveMerge.merged(folder, fetched: items, now: now)
-            case .signIn:
-                folder.state = .signIn
-                folder.sso = nil
-                folder.read = now
-            case .sso(let sso, let seen):
-                if !seen.isEmpty {
-                    let keys = Set(seen.map(\.key))
-                    folder = LiveMerge.merged(folder, fetched: seen + folder.items.filter { !keys.contains($0.key) }, now: now, complete: false)
-                }
-                folder.state = .signIn
-                folder.sso = sso
-                folder.read = now
-            case .failed:
-                folder.state = .failed
-                folder.sso = nil
-                folder.read = now
-            }
+            folder = LiveTrust.after(folder, result, now: now, online: online)
             guard let before else { return }
             folder.items = holding(folder.items, before: before.items, in: id)
             folder.items = keeping(folder.items, in: id, now: now)
@@ -914,7 +991,7 @@ final class LiveFolders {
 
     func pageShown(_ url: URL, space: UUID, now: Date = Date()) {
         let identity = LiveIdentity.of(url.absoluteString)
-        guard identity != url.absoluteString, !LiveRefs.young(pageAsked[identity], at: now, within: LiveRefs.fresh) else { return }
+        guard LiveIdentity.typed(identity), !LiveRefs.young(pageAsked[identity], at: now, within: LiveRefs.fresh) else { return }
         let ids = folders.filter { folder in
             folder.space == space && !folder.paused && (folder.source.kind == .pullRequests || folder.source.kind == .repository)
                 && folder.items.contains { LiveIdentity.of($0.key) == identity && LiveRefs.open($0) }
@@ -928,8 +1005,8 @@ final class LiveFolders {
     func pagesRead() {
         guard !pageAsks.isEmpty else { return }
         var read: [String: Date] = [:]
-        for (key, known) in LiveRefs.known {
-            let identity = LiveIdentity.of(key)
+        for (slot, known) in LiveRefs.known {
+            let identity = LiveRefs.identity(of: slot)
             guard pageAsks[identity] != nil else { continue }
             read[identity] = max(read[identity] ?? .distantPast, known.read)
         }
@@ -960,8 +1037,23 @@ final class LiveFolders {
 
     func leads(_ key: String) -> Bool { turning(key) && !claimedRow(key) }
 
+    func explained(_ folder: LiveFolder) -> Set<String> {
+        var out = Set(folder.hidden.map(LiveIdentity.of))
+        out.formUnion(departed[folder.id] ?? [])
+        out.formUnion(turned.keys)
+        out.formUnion(claims.keys)
+        for item in folder.items {
+            let identity = LiveIdentity.of(item.key)
+            if let state = LiveRefs.known[LiveRefs.slot(item.key, space: folder.space)]?.state, state == .merged || state == .closed {
+                out.insert(identity)
+            }
+            if let word = said[identity], word.state == .merged || word.state == .closed { out.insert(identity) }
+        }
+        return out
+    }
+
     private func judged(_ result: LiveReader.Answer, in id: UUID) -> [String: Verdict] {
-        guard case .items(let fetched, _) = result else { return [:] }
+        guard result.whole, let fetched = result.found else { return [:] }
         var out: [String: Verdict] = [:]
         for (identity, claim) in claims where !claim.confirmed && claim.rows.contains(where: { $0.folder == id }) {
             guard let item = fetched.first(where: { LiveIdentity.of($0.key) == identity }) else {
@@ -970,7 +1062,7 @@ final class LiveFolders {
             }
             if item.label == PullState.merged {
                 out[identity] = .merged
-            } else if let known = LiveRefs.known[item.key], known.read >= claim.since, let state = known.state,
+            } else if let known = LiveRefs.known[LiveRefs.slot(item.key, space: claim.space)], known.read >= claim.since, let state = known.state,
                       state == .merged || known.read >= claim.since.addingTimeInterval(settles) {
                 out[identity] = state == .merged ? .merged : .still(state, item)
             } else {
@@ -1095,7 +1187,7 @@ final class LiveFolders {
 
     func pageMerged(_ url: URL, space: UUID, now: Date = Date()) {
         let identity = LiveIdentity.of(url.absoluteString)
-        guard identity != url.absoluteString else { return }
+        guard LiveIdentity.typed(identity) else { return }
         if claims[identity] != nil { confirm(identity) }
         let ids = folders.filter { folder in
             folder.space == space && folder.items.contains { LiveIdentity.of($0.key) == identity && $0.label != PullState.merged }
@@ -1108,7 +1200,7 @@ final class LiveFolders {
         guard state != .merged else { return pageMerged(url, space: space, now: now) }
         let identity = LiveIdentity.of(url.absoluteString)
         if claims[identity] != nil { refute(identity, state) }
-        guard identity != url.absoluteString, turned[identity] == nil else { return }
+        guard LiveIdentity.typed(identity), turned[identity] == nil else { return }
         said = said.filter { $0.value.until > now }
         let ids = folders.filter { folder in
             folder.space == space && LiveFolders.follows(folder.source)
@@ -1235,6 +1327,12 @@ final class LiveFolders {
             folder.state = .waiting
             folder.sso = nil
             folder.read = nil
+            folder.good = nil
+            folder.cause = nil
+            folder.limitedUntil = nil
+            folder.limitWait = nil
+            folder.notFeeds = nil
+            folder.emptyFeeds = nil
         }
     }
 
@@ -1302,7 +1400,7 @@ final class LiveFolders {
 
     func touch(_ url: URL, space: UUID, cause: LiveTouch.Cause, now: Date = Date()) {
         let identity = LiveIdentity.of(url.absoluteString)
-        guard identity != url.absoluteString else { return }
+        guard LiveIdentity.typed(identity) else { return }
         let matches = folders.filter { $0.space == space && !$0.paused && LiveTouch.follows($0.source) }.compactMap { folder in
             folder.items.first { LiveIdentity.of($0.key) == identity }.map { (folder.id, $0.key) }
         }
@@ -1403,24 +1501,25 @@ final class LiveFolders {
     private func read(_ folder: LiveFolder) async {
         let start = Date()
         began[folder.id] = start
-        let answer = await reader(folder)
+        let asked = ticket(folder)
+        let answer = await shared.answer(folder, reader: reader)
         guard let current = self.folder(folder.id) else {
-            reading.remove(folder.id)
             again.remove(folder.id)
             early.remove(folder.id)
+            finished(folder.id)
             return
         }
-        guard current.source == folder.source else {
-            reading.remove(folder.id)
+        guard asked.holds(ticket(current), paused: current.paused) else {
             again.remove(folder.id)
             early.remove(folder.id)
-            if !current.paused { update(folder.id) }
+            finished(folder.id)
+            if !current.paused, current.source != folder.source || current.space != folder.space { update(folder.id) }
             return
         }
         let before = signedAt[folder.id].map { start < $0 } ?? false
         if !(before && again.contains(folder.id) && LiveFolders.asks(answer)) { apply(answer, to: folder.id) }
         if !before { signedAt[folder.id] = nil }
-        reading.remove(folder.id)
+        finished(folder.id)
         let waiting = self.folder(folder.id)?.state == .signIn
         if !waiting {
             signOns[folder.id] = nil
@@ -1437,7 +1536,7 @@ final class LiveFolders {
     static func asks(_ answer: LiveReader.Answer) -> Bool {
         switch answer {
         case .signIn, .sso: return true
-        case .items, .failed: return false
+        case .items, .failed, .read, .missed: return false
         }
     }
 
@@ -1516,7 +1615,7 @@ final class LiveFolders {
     }
 
     private func recheck(_ id: UUID, early soon: Bool = false) {
-        guard let folder = folder(id), soon || folder.state == .signIn, !folder.paused else { return }
+        guard let folder = folder(id), soon || folder.state == .signIn, !folder.paused, !LiveLimit.holds(folder, at: Date()) else { return }
         if reading.contains(id) {
             again.insert(id)
             if soon { early.insert(id) }
@@ -1712,14 +1811,23 @@ extension Browser {
         live.syncing = true
         defer { live.syncing = false }
         for group in tabGroups where group.live && !wanted.contains(where: { $0.id == group.id }) {
+            if live.foreignIDs.contains(group.id) { continue }
             if let index = tabGroups.firstIndex(where: { $0.id == group.id }) { tabGroups[index].held = false }
-            for tab in tabs where tab.groupID == group.id {
-                if visibleTabIDs.contains(tab.id) {
-                    tab.groupID = nil
+            if live.lost, !live.folders.contains(where: { $0.id == group.id }), let index = tabGroups.firstIndex(where: { $0.id == group.id }) {
+                tabGroups[index].live = false
+                for tab in tabs where tab.groupID == group.id {
                     tab.liveKey = nil
                     tab.liveItem = nil
-                } else {
-                    close(tab)
+                    tab.cheer = false
+                    tab.arrives = false
+                }
+                changed = true
+                continue
+            }
+            for tab in tabs where tab.groupID == group.id {
+                switch liveFate(tab) {
+                case .close: closeLiveTab(tab)
+                case .keep, .ask: freeLiveTab(tab)
                 }
             }
             tabGroups.removeAll { $0.id == group.id }
@@ -1737,28 +1845,31 @@ extension Browser {
                 tabGroups.append(TabGroup(id: folder.id, name: folder.name, collapsed: true, held: true, live: true))
                 changed = true
             }
-            let keys = Set(folder.items.map(\.key))
+            let keys = Set(folder.items.map { LiveIdentity.of($0.key) })
             for tab in row where tab.groupID == folder.id {
-                guard let key = tab.liveKey, !keys.contains(key) else { continue }
-                if visibleTabIDs.contains(tab.id) {
-                    guard live.departed(key, from: folder.id) else { continue }
-                    tab.groupID = nil
-                    tab.liveKey = nil
-                    tab.liveItem = nil
-                    tab.cheer = false
-                    tab.arrives = false
+                guard let key = tab.liveKey, !keys.contains(LiveIdentity.of(key)) else { continue }
+                switch liveFate(tab) {
+                case .ask:
+                    continue
+                case .keep:
+                    freeLiveTab(tab)
                     row.removeAll { $0.id == tab.id }
                     row.insert(tab, at: row.firstIndex { $0.pin == nil && $0.groupID == nil } ?? row.count)
                     changed = true
-                    continue
+                case .close:
+                    closeLiveTab(tab)
+                    row.removeAll { $0.id == tab.id }
+                    changed = true
                 }
-                close(tab)
-                row.removeAll { $0.id == tab.id }
-                changed = true
             }
             row = row.filter { tab in made.contains(tab.id) || tabs.contains { $0.id == tab.id } }
             for item in folder.items {
-                if let tab = row.first(where: { $0.groupID == folder.id && $0.liveKey == item.key }) {
+                let identity = LiveIdentity.of(item.key)
+                if let tab = row.first(where: { $0.groupID == folder.id && $0.liveKey.map(LiveIdentity.of) == identity }) {
+                    if tab.liveKey != item.key {
+                        tab.liveKey = item.key
+                        changed = true
+                    }
                     if tab.liveItem != item {
                         if item.label == PullState.merged, tab.liveItem?.label != PullState.merged, live.turning(item.key),
                            !Motion.reduced, windowSeen {
@@ -1780,9 +1891,9 @@ extension Browser {
                 made.insert(tab.id)
                 changed = true
             }
-            let order = LiveOrder.shown(folder.items, by: folder.order).map(\.key)
-            let inside = row.filter { $0.groupID == folder.id }
-                .sorted { (order.firstIndex(of: $0.liveKey ?? "") ?? order.count) < (order.firstIndex(of: $1.liveKey ?? "") ?? order.count) }
+            let order = LiveOrder.shown(folder.items, by: folder.order).map { LiveIdentity.of($0.key) }
+            let place = { (tab: Tab) in tab.liveKey.flatMap { order.firstIndex(of: LiveIdentity.of($0)) } ?? order.count }
+            let inside = row.filter { $0.groupID == folder.id }.sorted { place($0) < place($1) }
             var next = inside.makeIterator()
             row = row.map { tab in tab.groupID == folder.id ? next.next() ?? tab : tab }
         }

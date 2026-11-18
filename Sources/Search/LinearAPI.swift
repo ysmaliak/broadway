@@ -126,9 +126,18 @@ enum LinearAPI {
     }
 
     static func pick(_ users: [SessionUser], workspace: String?) -> SessionUser? {
-        guard let wanted = workspace?.lowercased(), let match = users.first(where: { $0.workspace == wanted }) else { return users.first }
-        return match
+        guard let wanted = workspace?.lowercased(), !wanted.isEmpty else { return users.first }
+        return users.first { $0.workspace == wanted }
     }
+
+    struct Page: Equatable {
+        var items: [LiveItem]
+        var more = false
+        var cursor: String? = nil
+        var noCycle = false
+    }
+
+    static let pages = 3
 
     private static let issue = """
     fragment Row on Issue {
@@ -152,22 +161,47 @@ enum LinearAPI {
         return "issues(first: 50, orderBy: updatedAt, filter: { state: { type: { nin: \(types(left.map(\.rawValue))) } } })"
     }
 
-    static func body(for list: List, leaving: [LinearStatus] = []) -> Data {
+    private static let paged = "pageInfo { hasNextPage endCursor }"
+
+    static func body(for list: List, leaving: [LinearStatus] = [], after cursor: String? = nil) -> Data {
         switch list {
         case .assigned:
-            return GraphQL.body("query { viewer { id assignedIssues(first: 30, orderBy: updatedAt, \(open(leaving: leaving))) { nodes { ...Row } } } }\n\(issue)")
+            return GraphQL.body("query { viewer { id assignedIssues(first: 30, orderBy: updatedAt, \(open(leaving: leaving))) { nodes { ...Row } \(paged) } } }\n\(issue)")
         case .created:
-            return GraphQL.body("query { viewer { id createdIssues(first: 30, orderBy: updatedAt, \(open(leaving: leaving))) { nodes { ...Row } } } }\n\(issue)")
+            return GraphQL.body("query { viewer { id createdIssues(first: 30, orderBy: updatedAt, \(open(leaving: leaving))) { nodes { ...Row } \(paged) } } }\n\(issue)")
         case .inbox, .mentions:
             return GraphQL.body("""
-            query { viewer { id } notifications(first: 50) { nodes { id type createdAt readAt archivedAt ... on IssueNotification { issue { ...Row } } } } }
+            query($after: String) { viewer { id } notifications(first: 50, after: $after) { nodes { id type createdAt readAt archivedAt ... on IssueNotification { issue { ...Row } } } \(paged) } }
             \(issue)
-            """)
+            """, variables: cursor.map { ["after": $0] } ?? [:])
         case .cycle(let team):
             return GraphQL.body("""
-            query($key: String!) { viewer { id } teams(first: 1, filter: { key: { eq: $key } }) { nodes { activeCycle { \(cycleIssues(leaving: leaving)) { nodes { ...Row } } } } } }
+            query($key: String!) { viewer { id } teams(first: 1, filter: { key: { eq: $key } }) { nodes { id activeCycle { \(cycleIssues(leaving: leaving)) { nodes { ...Row } \(paged) } } } } }
             \(issue)
             """, variables: ["key": team])
+        }
+    }
+
+    private static func next(_ value: Any?) -> (more: Bool, cursor: String?) {
+        let info = (value as? [String: Any])?["pageInfo"] as? [String: Any]
+        return (info?["hasNextPage"] as? Bool ?? false, info?["endCursor"] as? String)
+    }
+
+    static func page(from data: Data, list: List) -> Page? {
+        guard let answer = GraphQL.data(data), let items = items(from: data, list: list) else { return nil }
+        switch list {
+        case .assigned, .created:
+            let field = list == .assigned ? "assignedIssues" : "createdIssues"
+            let after = next((answer["viewer"] as? [String: Any])?[field])
+            return Page(items: items, more: after.more, cursor: after.cursor)
+        case .inbox, .mentions:
+            let after = next(answer["notifications"])
+            return Page(items: items, more: after.more, cursor: after.cursor)
+        case .cycle:
+            let cycle = nodes(answer["teams"])?.first?["activeCycle"]
+            guard let cycle = cycle as? [String: Any] else { return Page(items: [], noCycle: true) }
+            let after = next(cycle["issues"])
+            return Page(items: items, more: after.more, cursor: after.cursor)
         }
     }
 
@@ -204,6 +238,13 @@ enum LinearAPI {
         GraphQL.errors(data).contains { error in
             let said = error.lowercased()
             return said.contains("authentication") || said.contains("unauthenticated")
+        }
+    }
+
+    static func limited(_ data: Data) -> Bool {
+        GraphQL.errors(data).contains { error in
+            let said = error.lowercased().replacingOccurrences(of: " ", with: "")
+            return said.contains("ratelimit")
         }
     }
 
@@ -253,7 +294,7 @@ enum LinearAPI {
         }.map(\.element)
     }
 
-    private static func nodes(_ value: Any?) -> [[String: Any]]? {
+    static func nodes(_ value: Any?) -> [[String: Any]]? {
         (value as? [String: Any])?["nodes"] as? [[String: Any]]
     }
 
@@ -279,8 +320,8 @@ enum LinearAPI {
                 return made
             }
         case .cycle:
-            guard let teams = nodes(answer["teams"]) else { return nil }
-            guard let cycle = teams.first?["activeCycle"] as? [String: Any] else { return [] }
+            guard let teams = nodes(answer["teams"]), let team = teams.first else { return nil }
+            guard let cycle = team["activeCycle"] as? [String: Any] else { return [] }
             return byStatus(nodes(cycle["issues"]) ?? []).compactMap { row($0, viewer: me) }
         }
     }

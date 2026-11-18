@@ -209,7 +209,7 @@ final class IntegrationTests {
 
         let answer = await IntegrationReader.read(folder(.linear(.inbox, workspace: "acme")), with: made)
 
-        guard case .items(let items, _)? = answer else { Issue.record("\(String(describing: answer))"); return }
+        guard let items = answer?.found else { Issue.record("\(String(describing: answer))"); return }
         #expect(items.count == 2)
         #expect(asked.count == 2)
         let lookup = try #require(session.lookups.first)
@@ -269,7 +269,7 @@ final class IntegrationTests {
         #expect(asked.count == 2)
     }
 
-    @Test func linearSessionPicksTheFolderWorkspaceAndFallsBackToTheFirst() async throws {
+    @Test func linearSessionReadsOnlyTheFolderWorkspace() async throws {
         let made = integrations(answering: ["/graphql": ("linear-assigned", 200)])
         IntegrationReader.cookies = { _ in [HTTPCookie(properties: [.domain: ".linear.app", .path: "/", .name: "session", .value: "fixture"])!] }
 
@@ -278,12 +278,13 @@ final class IntegrationTests {
         let gone = await IntegrationReader.read(folder(.linear(.assigned, workspace: "gone")), with: made)
         let typed = await IntegrationReader.read(folder(LiveSource(kind: .linear, address: "https://linear.app/acme/team/ENG/active")), with: made)
 
-        for answer in [acme, plain, gone] {
-            guard case .items? = answer else { Issue.record("\(String(describing: answer))"); return }
+        for answer in [acme, plain] {
+            guard answer?.found != nil else { Issue.record("\(String(describing: answer))"); return }
         }
+        #expect(gone == .signIn)
         #expect(typed != .signIn)
-        #expect(session.real.map { $0.value(forHTTPHeaderField: "user") } == ["u-acme", "u-north", "u-north", "u-acme"])
-        #expect(session.real.map { $0.value(forHTTPHeaderField: "organization") } == ["o-acme", "o-north", "o-north", "o-acme"])
+        #expect(session.real.map { $0.value(forHTTPHeaderField: "user") } == ["u-acme", "u-north", "u-acme"])
+        #expect(session.real.map { $0.value(forHTTPHeaderField: "organization") } == ["o-acme", "o-north", "o-acme"])
     }
 
     @Test func linearWorkspaceComesFromTheAddressWhenItHasOne() {
@@ -304,7 +305,7 @@ final class IntegrationTests {
         let first = asked.count
         let again = await IntegrationReader.read(mine, with: made)
 
-        guard case .items? = again else { Issue.record("\(String(describing: again))"); return }
+        guard again?.found != nil else { Issue.record("\(String(describing: again))"); return }
         #expect(first == 2)
         #expect(asked.count == 3)
         #expect(session.lookups.count == 1)
@@ -325,11 +326,11 @@ final class IntegrationTests {
         #expect(refused == .signIn)
         #expect(afterRefusal == 5)
         #expect(session.lookups.count == 3)
-        guard case .items? = back else { Issue.record("\(String(describing: back))"); return }
+        guard back?.found != nil else { Issue.record("\(String(describing: back))"); return }
         #expect(asked.count == 7)
     }
 
-    @Test func aSwitchedLinearAccountIsFoundAgain() async throws {
+    @Test func aLinearWorkspaceSignedOutAsksToSignInRatherThanReadAnother() async throws {
         let made = integrations(answering: ["/graphql": ("linear-assigned", 200)])
         IntegrationReader.cookies = { _ in [HTTPCookie(properties: [.domain: ".linear.app", .path: "/", .name: "session", .value: "fixture"])!] }
         let mine = folder(.linear(.assigned, workspace: "acme"))
@@ -338,9 +339,37 @@ final class IntegrationTests {
 
         let answer = await IntegrationReader.read(mine, with: made)
 
-        guard case .items? = answer else { Issue.record("\(String(describing: answer))"); return }
-        #expect(asked.count == 5)
-        #expect(session.real.map { $0.value(forHTTPHeaderField: "user") } == ["u-acme", "u-acme", "u-north"])
+        #expect(answer == .signIn)
+        #expect(session.real.map { $0.value(forHTTPHeaderField: "user") } == ["u-acme", "u-acme"])
+    }
+
+    @Test func unreadNotificationsAreFoundPastTheFirstPage() async throws {
+        let made = Integrations()
+        var pages = 0
+        made.transport = { [weak self] request in
+            guard let self else { return nil }
+            return session.answer(request) { asked in
+                let body = (try? JSONSerialization.jsonObject(with: asked.httpBody ?? Data()) as? [String: Any]) ?? [:]
+                pages += 1
+                let after = (body["variables"] as? [String: Any])?["after"] as? String
+                let id = after == nil ? "p1" : after!
+                let node: [String: Any] = ["id": "n-\(id)", "type": "issueMention", "createdAt": "2027-01-15T08:00:00.000Z", "readAt": NSNull(),
+                                           "archivedAt": NSNull(),
+                                           "issue": ["identifier": "ENG-\(pages)", "title": "Issue \(pages)", "url": "https://linear.app/acme/issue/ENG-\(pages)/x",
+                                                     "updatedAt": "2027-01-15T08:00:00.000Z", "state": ["name": "Todo", "type": "unstarted", "position": 1]]]
+                let info: [String: Any] = ["hasNextPage": true, "endCursor": "p\(pages + 1)"]
+                let data = try? JSONSerialization.data(withJSONObject: ["data": ["viewer": ["id": "me"], "notifications": ["nodes": [node], "pageInfo": info]]])
+                return (data ?? Data(), 200)
+            }
+        }
+        IntegrationReader.cookies = { _ in [HTTPCookie(properties: [.domain: ".linear.app", .path: "/", .name: "session", .value: "fixture"])!] }
+
+        let answer = await IntegrationReader.read(folder(.linear(.inbox, workspace: "acme")), with: made)
+
+        #expect(pages == LinearAPI.pages)
+        #expect(answer?.found?.count == LinearAPI.pages)
+        guard case .read(let read)? = answer else { Issue.record("\(String(describing: answer))"); return }
+        #expect(read.more == "https://linear.app/acme/inbox")
     }
 
     @Test func shorthandsMakeTheRightFolders() {

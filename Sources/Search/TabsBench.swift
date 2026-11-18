@@ -207,6 +207,9 @@ enum TabsBench {
                                               "fresh": $0.fresh, "merging": live.turning($0.key), "claimed": live.claimedRow($0.key), "draft": $0.draft == true,
                                               "unanswered": $0.unanswered ?? 0, "signsRead": $0.signsRead == true] as [String: Any] },
                  "fresh": folder.freshCount,
+                 "age": LiveAge.words(folder, at: Date()) ?? "", "cause": folder.cause ?? "", "more": folder.more ?? "",
+                 "failure": folder.state == .failed ? LiveWords.failure(folder, now: Date()) : "",
+                 "good": folder.good.map { $0.timeIntervalSince1970 } ?? 0, "lost": live.lost,
                  "order": folder.order ?? [],
                  "stacks": stacks(folder.id),
                  "tabs": browser.tabs(in: folder.id).map { ["id": Bench.short($0), "label": $0.label, "key": $0.liveKey ?? "", "badge": $0.liveItem?.label ?? "", "asleep": $0.asleep, "fresh": $0.liveItem?.fresh == true,
@@ -266,7 +269,18 @@ enum TabsBench {
             case "sso": live.apply(.sso(LiveSSO(org: "Acme", url: "https://github.com/orgs/acme/sso?return_to=%2Fpulls"), []), to: folder.id)
             case "failed": live.apply(.failed, to: folder.id)
             case "waiting": live.forget(folder.id)
-            default: answer(["error": "live force NAME waiting|fine|signIn|failed"]); return
+            case "offline": live.apply(.missed(LiveMiss(cause: .offline)), to: folder.id)
+            case "limited": live.apply(.missed(LiveMiss(cause: .limited, wait: 600)), to: folder.id)
+            case "unread": live.apply(.missed(LiveMiss(cause: .unread)), to: folder.id)
+            case "old": live.apply(.items(folder.items, nil), to: folder.id, now: Date().addingTimeInterval(-3 * 3600))
+            case "more":
+                live.apply(.read(LiveRead(items: folder.items, marked: true, more: folder.source.address)), to: folder.id)
+            case "rows":
+                let rows = [(41, "Cache the build graph", "dana"), (52, "Retry uploads on 502", "lee"), (57, "Teach the rocket to count", "sam")]
+                live.apply(.items(rows.map { number, title, author in
+                    LiveItem(key: "https://github.com/acme/rocket/pull/\(number)", title: title, author: author, list: .created)
+                }, nil), to: folder.id)
+            default: answer(["error": "live force NAME waiting|fine|signIn|failed|offline|limited|unread|old|more|rows"]); return
             }
             browser.syncLive()
         case "unfold":

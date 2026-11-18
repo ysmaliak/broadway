@@ -53,7 +53,7 @@ enum LivePace {
 
     static func wanted(_ folders: [LiveFolder], moment: LiveMoment, looked: Set<UUID>?, returned: Bool, now: Date) -> [UUID] {
         folders.filter { folder in
-            guard !folder.paused else { return false }
+            guard !folder.paused, !LiveLimit.holds(folder, at: now) else { return false }
             let seen = looked?.contains(folder.space) ?? true
             if LivePace.due(folder.read, now: now, every: interval(moment, looked: seen)) { return true }
             return returned && seen && (stale(folder.read, now: now) || folder.state == .failed)
@@ -176,13 +176,21 @@ struct LiveConditional {
 
     @MainActor
     static func send(_ request: URLRequest, delegate: URLSessionTaskDelegate) async -> (Data, Int)? {
+        await exchange(request, delegate: delegate).map { ($0.0, $0.1) }
+    }
+
+    @MainActor
+    static func exchange(_ request: URLRequest, delegate: URLSessionTaskDelegate) async -> (Data, Int, [String: String])? {
         let asked = shared.asking(request)
         let session = URLSession(configuration: .ephemeral)
         defer { session.finishTasksAndInvalidate() }
         guard let (data, response) = try? await session.data(for: asked, delegate: delegate) else { return nil }
         let http = response as? HTTPURLResponse
-        return shared.answered(request, data: data, status: http?.statusCode ?? 200,
-                               tag: http?.value(forHTTPHeaderField: "ETag"), modified: http?.value(forHTTPHeaderField: "Last-Modified"))
+        let headers = Dictionary((http?.allHeaderFields ?? [:]).compactMap { key, value in (key as? String).map { ($0, "\(value)") } },
+                                 uniquingKeysWith: { a, _ in a })
+        let (body, status) = shared.answered(request, data: data, status: http?.statusCode ?? 200,
+                                             tag: http?.value(forHTTPHeaderField: "ETag"), modified: http?.value(forHTTPHeaderField: "Last-Modified"))
+        return (body, status, headers)
     }
 }
 

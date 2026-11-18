@@ -42,6 +42,10 @@ enum IntegrationReader {
 
     private static var askers: [Asking: LinearAPI.SessionUser] = [:]
 
+    static func asker(space: UUID, workspace: String?) -> LinearAPI.SessionUser? {
+        askers[Asking(space: space, workspace: workspace?.lowercased() ?? "")]
+    }
+
     static func sessionRequest(_ body: Data, cookies: [HTTPCookie], user: LinearAPI.SessionUser?, endpoint: URL) -> URLRequest {
         var request = URLRequest(url: endpoint, timeoutInterval: 20)
         request.httpMethod = "POST"
@@ -98,11 +102,35 @@ enum IntegrationReader {
     }
 
     static func session(_ folder: LiveFolder, list: LinearAPI.List, with integrations: Integrations) async -> LiveReader.Answer {
-        let answer = await sessionCall(LinearAPI.body(for: list, leaving: folder.source.leftOut), space: folder.space, workspace: LinearAPI.workspace(in: folder.source.address),
-                                       cookies: await cookies(folder.space), transport: integrations.transport)
-        guard let answer else { return .failed }
-        guard case .answered(let data, let status) = answer else { return .signIn }
-        guard (200..<300).contains(status), let items = LinearAPI.items(from: data, list: list) else { return .failed }
-        return .items(items, nil)
+        let workspace = LinearAPI.workspace(in: folder.source.address)
+        let jar = await cookies(folder.space)
+        var items: [LiveItem] = []
+        var seen = Set<String>()
+        var cursor: String?
+        var more = false
+        var noCycle = false
+        let unread = list == .inbox || list == .mentions
+        for step in 0..<(unread ? LinearAPI.pages : 1) {
+            let answer = await sessionCall(LinearAPI.body(for: list, leaving: folder.source.leftOut, after: cursor), space: folder.space,
+                                           workspace: workspace, cookies: jar, transport: integrations.transport)
+            guard let answer else { return .failed }
+            guard case .answered(let data, let status) = answer else { return .signIn }
+            if status == 429 || LinearAPI.limited(data) { return .missed(LiveMiss(cause: .limited)) }
+            guard (200..<300).contains(status) else { return .failed }
+            guard let page = LinearAPI.page(from: data, list: list) else { return .missed(LiveMiss(cause: .unread)) }
+            for item in page.items where seen.insert(LiveIdentity.of(item.key)).inserted { items.append(item) }
+            noCycle = page.noCycle
+            more = page.more
+            cursor = page.cursor
+            guard unread, page.more, page.cursor != nil, step + 1 < LinearAPI.pages else { break }
+        }
+        var moved: LiveSource?
+        if workspace == nil, let user = asker(space: folder.space, workspace: nil), !user.workspace.isEmpty {
+            var pinned = folder.source
+            pinned.address = LinearAPI.address(for: list, workspace: user.workspace)
+            moved = pinned
+        }
+        let page = (moved ?? folder.source).address
+        return .read(LiveRead(items: items, source: moved, marked: true, more: more ? page : nil, noCycle: noCycle))
     }
 }

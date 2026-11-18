@@ -282,7 +282,7 @@ extension Browsers {
     }
 
     static func show(row key: String, folder: UUID, space: UUID, at url: URL, background: Bool, from browser: Browser) -> LinkLanding? {
-        func row(_ tabs: [Tab]) -> Tab? { tabs.first { $0.groupID == folder && $0.liveKey == key } }
+        func row(_ tabs: [Tab]) -> Tab? { tabs.first { $0.groupID == folder && $0.liveKey.map { LiveIdentity.same($0, key) } == true } }
         func point(_ tab: Tab) {
             if !LiveLinks.shows(tab.address, url) { tab.go(to: url) }
         }

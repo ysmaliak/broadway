@@ -33,6 +33,10 @@ enum SideSigns {
         SplitSignView(browser: browser, left: left, right: right, height: height)
     }
 
+    static func liveMore(browser: Browser, id: UUID) -> NSView {
+        LiveMoreView(browser: browser, id: id)
+    }
+
     static func liveNote(browser: Browser, id: UUID, height: CGFloat, interactive: Bool) -> NSView {
         LiveNoteView(browser: browser, id: id, height: height, interactive: interactive)
     }
@@ -495,7 +499,8 @@ final class LiveStatusView: NSView, SideGrounded {
         let had = (asks, asked)
         let folder = LiveFolders.shared.folder(id)
         let loads = folder.map { LiveLoading.shows($0, collapsed: collapsed) } ?? false
-        let fresh = folder.flatMap { !loads && collapsed && $0.status == nil && $0.freshCount > 0 ? $0.freshCount : nil }
+        let age = folder.flatMap { !loads && $0.status == nil ? LiveAge.words($0, at: Date()) : nil }
+        let fresh = folder.flatMap { !loads && age == nil && collapsed && $0.status == nil && $0.freshCount > 0 ? $0.freshCount : nil }
         count.isHidden = fresh == nil
         dot.isHidden = fresh == nil
         var made = NSSize.zero
@@ -520,7 +525,10 @@ final class LiveStatusView: NSView, SideGrounded {
             } else {
                 text = status
             }
+        } else if let age {
+            text = age
         }
+        clock(age != nil)
         asked = button == nil ? nil : folder?.status
         if loads, let folder {
             let shown = loading ?? {
@@ -567,6 +575,26 @@ final class LiveStatusView: NSView, SideGrounded {
             if poke { superview?.needsLayout = true }
         }
         needsLayout = true
+    }
+
+    private var ticking: Timer?
+
+    private func clock(_ on: Bool) {
+        guard on != (ticking != nil) else { return }
+        ticking?.invalidate()
+        ticking = nil
+        guard on else { return }
+        let made = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refresh() }
+        }
+        made.tolerance = 10
+        RunLoop.main.add(made, forMode: .common)
+        ticking = made
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { clock(false) } else { refresh() }
     }
 
     override func layout() {
@@ -619,6 +647,7 @@ final class LiveNoteView: NSView, SideGrounded {
     private func refresh() {
         let live = LiveFolders.shared
         guard let folder = live.folder(id), let note = folder.note else {
+            clock(false)
             line.isHidden = true
             retry?.removeFromSuperview()
             retry = nil
@@ -635,7 +664,7 @@ final class LiveNoteView: NSView, SideGrounded {
             line.show(symbol: "ellipsis", text: "Loading…", strong: false)
             label = "Loading \(folder.name)"
         case .empty:
-            line.show(symbol: "tray", text: folder.source.emptyWording, strong: false)
+            line.show(symbol: "tray", text: folder.emptyWording, strong: false)
             if !folder.source.leftOut.isEmpty {
                 help = "This folder leaves out issues in \(LinearStatus.words(folder.source.leftOut)). Change it in the folder's settings."
             }
@@ -652,14 +681,17 @@ final class LiveNoteView: NSView, SideGrounded {
             label = folder.signInWords
             help = "Opens single sign-on. The folder reads again once you're back."
         case .failed:
-            line.show(symbol: "exclamationmark.triangle", text: "Couldn't read \(site)", strong: false)
-            failed = true
+            let offline = folder.why == .offline
+            line.show(symbol: offline ? "wifi.slash" : "exclamationmark.triangle",
+                      text: LiveWords.failure(folder, now: Date()) ?? "Couldn't read \(site)", strong: false)
+            failed = !offline
         }
+        clock(folder.why == .limited)
         line.button = action != nil
         line.enabled = interactive
         line.setAccessibilityLabel(label ?? line.text)
         line.setAccessibilityRole(action != nil ? .button : .staticText)
-        line.toolTip = help
+        line.toolTip = help ?? (folder.state == .failed ? line.text : nil)
         if failed {
             let shown = retry ?? {
                 let made = LiveSignInPill("Try Again") { [id] in LiveFolders.shared.update(id) }
@@ -676,6 +708,26 @@ final class LiveNoteView: NSView, SideGrounded {
         needsLayout = true
     }
 
+    private var ticking: Timer?
+
+    private func clock(_ on: Bool) {
+        guard on != (ticking != nil) else { return }
+        ticking?.invalidate()
+        ticking = nil
+        guard on else { return }
+        let made = Timer(timeInterval: 20, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refresh() }
+        }
+        made.tolerance = 5
+        RunLoop.main.add(made, forMode: .common)
+        ticking = made
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { clock(false) } else { refresh() }
+    }
+
     private func paint(animated: Bool) {
         line.ground = ground
     }
@@ -690,6 +742,57 @@ final class LiveNoteView: NSView, SideGrounded {
         } else {
             line.frame = bounds
         }
+    }
+}
+
+final class LiveMoreView: NSView, SideGrounded {
+    let browser: Browser
+    let id: UUID
+    var ground = RowGround() { didSet { if ground != oldValue { line.ground = ground } } }
+    private let line = LiveNoteLine()
+    private var watch: AnyCancellable?
+
+    init(browser: Browser, id: UUID) {
+        self.browser = browser
+        self.id = id
+        super.init(frame: .zero)
+        wantsLayer = true
+        addSubview(line)
+        line.press = { [weak self] in self?.pressed() }
+        watch = kitTrack { [weak self] in self?.refresh() }
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var isFlipped: Bool { true }
+
+    static func words(_ folder: LiveFolder) -> String { "More on \(folder.source.siteName)" }
+
+    private func pressed() {
+        guard let page = LiveFolders.shared.folder(id)?.more.flatMap(URL.init(string:)) else { return }
+        browser.open(page, foreground: true)
+    }
+
+    private func refresh() {
+        guard let folder = LiveFolders.shared.folder(id), folder.more != nil else {
+            line.isHidden = true
+            return
+        }
+        line.isHidden = false
+        let words = Self.words(folder)
+        line.show(symbol: "arrow.up.right", text: words, strong: false)
+        line.button = true
+        line.enabled = true
+        line.setAccessibilityLabel(words)
+        line.setAccessibilityRole(.button)
+        line.toolTip = "Opens the rest of this list on \(folder.source.siteName)"
+        needsLayout = true
+    }
+
+    override func layout() {
+        super.layout()
+        line.frame = bounds
     }
 }
 

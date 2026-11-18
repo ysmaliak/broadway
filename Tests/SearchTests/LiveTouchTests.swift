@@ -125,7 +125,7 @@ final class LiveTouchTests {
         try await settle()
         let asked = live.rereads
         let readThen = reads
-        LiveRefs.known[pull(1).key] = LiveRefs.Known(updated: nil, branch: nil, read: now.addingTimeInterval(1))
+        LiveRefs.known[LiveRefs.slot(pull(1).key, space: space)] = LiveRefs.Known(updated: nil, branch: nil, read: now.addingTimeInterval(1))
         live.pagesRead()
         let afterRead = live.rereads
         live.pageShown(url(1), space: space, now: now.addingTimeInterval(120))
@@ -208,7 +208,7 @@ final class LiveTouchTests {
 
     @Test func theFirstTickCatchesUpTheSpaceOnScreenThenWaitsForTheInterval() async throws {
         let old = folder([pull(1)], read: Date().addingTimeInterval(-6 * 60))
-        let recent = folder([pull(2)], read: Date().addingTimeInterval(-2 * 60))
+        let recent = folder([pull(2)], source: .reviewRequests, read: Date().addingTimeInterval(-2 * 60))
         _ = folder([pull(3)], read: Date().addingTimeInterval(-6 * 60), in: UUID())
         _ = folder([pull(4)], read: Date().addingTimeInterval(-30))
 
