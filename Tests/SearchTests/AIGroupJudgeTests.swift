@@ -203,6 +203,19 @@ final class AIGroupJudgeTests {
         #expect(cafes.groupID == id)
     }
 
+    @Test func aFolderThatSaysYesOnOpenRouterKeepsTheTabWhenItsTabsSayNo() async {
+        let browser = lisbon()
+        DecisionsStub.answer("split.test", DecisionsStub.chances { _, about in about == "Lisbon" ? 0.9 : 0.4 })
+        AIGroups.shared.standIn = RemoteJudge(OpenRouterDeciderTests.decider("split.test"))
+        let id = folder(browser, ["Lisbon flights", "Lisbon hotels", "Lisbon museums"])
+
+        let trams = born(browser, "Tram 28 times", "https://carris.example/28", from: "Lisbon flights")
+        await settle()
+
+        #expect(DecisionsStub.seen("split.test").count == 1)
+        #expect(trams.groupID == id)
+    }
+
     @Test func thisMacsFailureIsNotCachedAsANo() async throws {
         MacGroupEngine.forget()
         let group = AIGroupInfo(id: UUID(), name: "Lisbon", members: [OpenRouterDeciderTests.tab("Lisbon flights", "booking.com"),
@@ -504,13 +517,65 @@ final class AIGroupJudgeTests {
         let group = AIGroupInfo(id: UUID(), name: "Lisbon trip", members: [OpenRouterDeciderTests.tab("Flights to Lisbon", "skyscanner.net"),
                                                                             OpenRouterDeciderTests.tab("Hotels in Lisbon", "booking.com")])
         let tab = OpenRouterDeciderTests.tab("Cafés near Rossio", "timeout.com")
-        var said: [Double: AIGroupFit] = [:]
-        for chance in [0.1, 0.49, 0.5, 0.59, 0.6, 0.9] {
-            DecisionsStub.answer("bars.test", DecisionsStub.chances { _, _ in chance })
-            said[chance] = try await decider.fits(tab, in: group)
+        let wanted: [(folder: Double, tabs: Double, fit: AIGroupFit)] = [
+            (0.1, 0.1, .no), (0.49, 0.49, .no), (0.5, 0.5, .unsure), (0.59, 0.59, .unsure), (0.6, 0.6, .yes), (0.9, 0.9, .yes),
+            (0.5, 0.49, .unsure), (0.49, 0.5, .unsure),
+        ]
+        for (folder, tabs, fit) in wanted {
+            DecisionsStub.answer("bars.test", DecisionsStub.chances { _, about in about == "Lisbon trip" ? folder : tabs })
+            #expect(try await decider.fits(tab, in: group) == fit, "folder \(folder), tabs \(tabs)")
         }
+    }
 
-        #expect(said == [0.1: .no, 0.49: .no, 0.5: .unsure, 0.59: .unsure, 0.6: .yes, 0.9: .yes])
+    private func judged(_ host: String, folder: Double?, tabs: [Double?]) async throws -> AIGroupFit {
+        let members = [OpenRouterDeciderTests.tab("Flights to Lisbon", "skyscanner.net"),
+                       OpenRouterDeciderTests.tab("Hotels in Lisbon", "booking.com"),
+                       OpenRouterDeciderTests.tab("Tram 28", "carris.pt")]
+        var chances: [String: Double?] = ["Lisbon trip": folder]
+        for (member, chance) in zip(members, tabs) { chances[member.title] = chance }
+        let said = chances
+        DecisionsStub.answer(host) { _, body in
+            var answers: [String: Any] = [:]
+            for (id, about) in DecisionsStub.asked(body).questions {
+                if let chance = said[about] ?? nil {
+                    answers[id] = ["type": "noul", "noul": chance]
+                } else {
+                    answers[id] = ["type": "refusal"]
+                }
+            }
+            return DecisionsStub.Reply(body: DecisionsStub.nouls(answers))
+        }
+        let group = AIGroupInfo(id: UUID(), name: "Lisbon trip", members: Array(members.prefix(tabs.count)))
+        let tab = OpenRouterDeciderTests.tab("Cafés near Rossio", "timeout.com")
+        return try await OpenRouterDeciderTests.decider(host).fits(tab, in: group)
+    }
+
+    @Test func aFolderThatSaysYesKeepsTheTabWhenItsClosestTabSaysNo() async throws {
+        #expect(try await judged("folder-yes.test", folder: 0.9, tabs: [0.4, 0.2, 0.1]) == .unsure)
+    }
+
+    @Test func aTabThatSaysYesKeepsTheTabWhenTheFolderSaysNo() async throws {
+        #expect(try await judged("tab-yes.test", folder: 0.4, tabs: [0.7, 0.3, 0.2]) == .unsure)
+    }
+
+    @Test func aFolderJustUnderAndATabJustOverKeepTheTab() async throws {
+        #expect(try await judged("between.test", folder: 0.45, tabs: [0.55, 0.3, 0.2]) == .unsure)
+    }
+
+    @Test func everyAnswerFarUnderPutsTheTabOut() async throws {
+        #expect(try await judged("all-low.test", folder: 0.1, tabs: [0.1, 0.1, 0.1]) == .no)
+    }
+
+    @Test func everyAnswerJustUnderPutsTheTabOut() async throws {
+        #expect(try await judged("all-under.test", folder: 0.45, tabs: [0.3, 0.3, 0.3]) == .no)
+    }
+
+    @Test func aFolderNoWithEveryTabQuestionRefusedKeepsTheTab() async throws {
+        #expect(try await judged("tabs-refused.test", folder: 0.1, tabs: [nil, nil, nil]) == .unsure)
+    }
+
+    @Test func aRefusedFolderQuestionKeepsTheTab() async throws {
+        #expect(try await judged("folder-refused.test", folder: nil, tabs: [0.1, 0.1, 0.1]) == .unsure)
     }
 
     @Test func aRefusalOnOpenRouterIsNotANo() async throws {

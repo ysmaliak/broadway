@@ -220,12 +220,25 @@ final class OpenRouterDecider: AIGroupDecider {
         for (id, candidate) in made.asked where !said.refused.contains(id) {
             heard[candidate] = max(heard[candidate] ?? 0, said.yes[id] ?? 0)
         }
-        guard let chance = Self.chance([tab.id: heard], tab.id, .group(group.id), thresholds: thresholds) else {
+        guard let own = heard[.group(group.id)], let chance = Self.chance([tab.id: heard], tab.id, .group(group.id), thresholds: thresholds) else {
             AIGroupTrace.note("fits", ["tab": tab.title, "folder": group.name, "fit": AIGroupFit.unsure.rawValue, "why": "no answer about the folder"])
             return .unsure
         }
-        let fit: AIGroupFit = chance < thresholds.no ? .no : chance >= thresholds.yes ? .yes : .unsure
-        AIGroupTrace.note("fits", ["tab": tab.title, "folder": group.name, "chance": chance, "fit": fit.rawValue])
+        let closest = heard.compactMap { candidate, said -> Double? in
+            if case .member = candidate { return said }
+            return nil
+        }.max()
+        let fit: AIGroupFit
+        if chance >= thresholds.yes {
+            fit = .yes
+        } else if let closest, own < thresholds.no, closest < thresholds.no {
+            fit = .no
+        } else {
+            fit = .unsure
+        }
+        var fields: [String: Any] = ["tab": tab.title, "folder": group.name, "chance": chance, "said": own, "fit": fit.rawValue]
+        if let closest { fields["closest"] = closest } else { fields["why"] = "no answer about its tabs" }
+        AIGroupTrace.note("fits", fields)
         return fit
     }
 
