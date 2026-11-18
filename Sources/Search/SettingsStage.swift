@@ -91,6 +91,7 @@ enum SettingsStageMap {
         ("video.", .spot(.page)),
         ("mini.", .spot(.side)),
         ("agents.link.", .spot(.agents)),
+        ("agents.hook", .rest),
         ("agents.site.", .spot(.page)),
         ("shield.paused.", .spot(.page)),
         ("autofill.address.", .spot(.page)),
