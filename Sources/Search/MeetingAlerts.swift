@@ -1059,17 +1059,13 @@ private final class MeetingServiceBadge: NSView {
 @MainActor
 private final class MeetingFacesView: NSView {
     private var circles: [NSView] = []
+    private let names: [String]
     private let summary: KitLabel
     private let invited: MeetingInvitedView?
 
     init(people: [MeetingPerson], pending: Bool) {
-        let names = people.map { $0.name.isEmpty ? $0.email : $0.name.split(separator: " ").first.map(String.init) ?? $0.name }
-        let said = switch names.count {
-        case 1: "With \(names[0])"
-        case 2: "With \(names[0]) and \(names[1])"
-        default: "With \(names[0]) and \(names.count - 1) others"
-        }
-        summary = KitLabel(said, font: .systemFont(ofSize: 12), color: KitColor.muted)
+        names = people.map(MeetingGuests.name)
+        summary = KitLabel(MeetingGuests.line(names), font: .systemFont(ofSize: 12), color: KitColor.muted)
         invited = pending ? MeetingInvitedView() : nil
         super.init(frame: .zero)
         for person in people.prefix(5) {
@@ -1115,6 +1111,8 @@ private final class MeetingFacesView: NSView {
             invited.frame = kitSnap(NSRect(x: right - size.width, y: middle - size.height / 2, width: size.width, height: size.height))
             right -= size.width + 8
         }
+        summary.text = MeetingGuests.line(names, font: summary.font, width: max(0, right - x - 8))
+        summary.setAccessibilityValue(MeetingGuests.line(names))
         let size = summary.intrinsicContentSize
         summary.frame = kitSnap(NSRect(x: x, y: middle - size.height / 2, width: max(0, min(size.width, right - x - 8)), height: size.height))
     }

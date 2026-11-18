@@ -15,6 +15,13 @@ class KitButton: KitHoverView {
     var content: NSView? { didSet { place(replacing: oldValue) } }
     var padding: CGFloat = 0 { didSet { invalidateIntrinsicContentSize(); needsLayout = true } }
     var height: CGFloat? { didSet { invalidateIntrinsicContentSize() } }
+    var reach: CGFloat?
+
+    var reaching: CGFloat {
+        if let reach { return reach }
+        if case .keycap = look { return KitReach.least }
+        return 0
+    }
 
     private(set) var pressed = false { didSet { if pressed != oldValue { press() } } }
     private let track = KitBox(fill: nil, corners: .capsule)
@@ -63,7 +70,10 @@ class KitButton: KitHoverView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        guard let hit = super.hitTest(point) else { return nil }
+        guard let hit = super.hitTest(point) else {
+            guard KitReach.takes(point, for: self, reach: reaching) else { return nil }
+            return glassCatcher ?? self
+        }
         if let catcher = glassCatcher { return catcher }
         if let face = faceGlass, hit === face || hit.isDescendant(of: face) { return self }
         return hit
@@ -96,7 +106,7 @@ class KitButton: KitHoverView {
 
     override func mouseDragged(with event: NSEvent) {
         guard isEnabled else { return }
-        pressed = bounds.contains(convert(event.locationInWindow, from: nil))
+        pressed = KitReach.rect(bounds, reach: reaching).contains(convert(event.locationInWindow, from: nil))
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -224,8 +234,49 @@ enum KitPill {
     }
 }
 
+enum KitReach {
+    static let least: CGFloat = 24
+
+    static func rect(_ bounds: NSRect, reach: CGFloat) -> NSRect {
+        bounds.insetBy(dx: -max(0, reach - bounds.width) / 2, dy: -max(0, reach - bounds.height) / 2)
+    }
+
+    @MainActor static func takes(_ point: NSPoint, for view: NSView, reach: CGFloat) -> Bool {
+        guard reach > 0, !view.isHidden, let above = view.superview else { return false }
+        guard rect(view.bounds, reach: reach).contains(view.convert(point, from: above)) else { return false }
+        return !above.subviews.contains { other in
+            other !== view && !other.isHidden && other.frame.contains(point) && pressable(other.hitTest(point), under: other)
+        }
+    }
+
+    @MainActor static func pressable(_ hit: NSView?, under top: NSView) -> Bool {
+        var at = hit
+        while let here = at {
+            if here is KitButton || here is NSControl { return true }
+            if here.isAccessibilityElement(), here.accessibilityRole() == .button || here.accessibilityRole() == .slider { return true }
+            if here === top { return false }
+            at = here.superview
+        }
+        return false
+    }
+
+    @MainActor static func field(_ field: NSTextField) -> NSView {
+        (field.currentEditor() as? NSView) ?? field
+    }
+}
+
 final class KitPushButton: NSButton {
     private var handler: (() -> Void)?
+    var reach = KitReach.least
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        super.hitTest(point) ?? (KitReach.takes(point, for: self, reach: reach) ? self : nil)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard isEnabled, !bounds.contains(convert(event.locationInWindow, from: nil)) else { return super.mouseDown(with: event) }
+        performClick(nil)
+    }
 
     convenience init(_ title: String, prominent: Bool = false, size: NSControl.ControlSize = .regular, action: @escaping () -> Void) {
         self.init(frame: .zero)

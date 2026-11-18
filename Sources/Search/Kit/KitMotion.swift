@@ -50,6 +50,15 @@ enum KitCurve: Equatable {
 }
 
 extension Motion {
+    static let reducedFade: TimeInterval = 0.2
+
+    static func staysUnderReduce(_ animation: CAAnimation) -> Bool {
+        if let group = animation as? CAAnimationGroup { return (group.animations ?? []).allSatisfy(staysUnderReduce) }
+        guard animation.duration <= reducedFade + 0.0001 else { return false }
+        if let change = animation as? CATransition { return change.type == .fade }
+        return (animation as? CAPropertyAnimation)?.keyPath == "opacity"
+    }
+
     static var kitGlide: KitCurve { reduced ? .none : light ? .easeOut(0.16) : .spring(.glide) }
     static var kitSettle: KitCurve { reduced ? .none : light ? .easeOut(0.16) : .spring(.settle) }
     static var kitRoll: KitCurve { reduced ? .none : light ? .easeOut(0.16) : .spring(.roll) }

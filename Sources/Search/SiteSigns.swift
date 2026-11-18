@@ -32,7 +32,7 @@ class SignView: KitHoverView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        super.hitTest(point) == nil ? nil : self
+        super.hitTest(point) != nil || KitReach.takes(point, for: self, reach: KitReach.least) ? self : nil
     }
 
     var lit: Bool { hovering || popup != nil || shown }

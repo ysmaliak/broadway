@@ -393,7 +393,6 @@ final class CallFloat {
     static let size = NSSize(width: 340, height: 214)
     static let stage = NSEdgeInsets(top: 8, left: 8, bottom: 58, right: 8)
     static let radius: CGFloat = 14
-    private static let shrunk: CGFloat = 0.5
     private static let spotKey = "call.spot"
 
     private(set) var status = CallButtons.Status()
@@ -410,6 +409,7 @@ final class CallFloat {
     @ObservationIgnored private weak var awayTab: Tab?
     @ObservationIgnored private var awayWatch: Timer?
     @ObservationIgnored var tilesOnly = true { didSet { if tilesOnly != oldValue { tiles() } } }
+    @ObservationIgnored let sizing = CallSizing()
 
     var showing: Bool { panel != nil }
     var frame: NSRect { panel?.frame ?? .zero }
@@ -418,10 +418,10 @@ final class CallFloat {
     func lift(_ tab: Tab, from browser: Browser) -> Bool {
         guard panel == nil else { return false }
         let web = tab.web
-        let size = Self.size
+        let size = sizing.opening(on: browser.window?.screen)
         let panel = Panel(
             contentRect: NSRect(origin: spot(for: size, window: browser.window), size: size),
-            styleMask: [.borderless, .nonactivatingPanel],
+            styleMask: [.borderless, .resizable, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
@@ -449,7 +449,7 @@ final class CallFloat {
         web.alphaValue = 1
         web.frame = ground.bounds
         web.autoresizingMask = [.width, .height]
-        web.pageZoom = zoom * Self.shrunk
+        web.pageZoom = zoom * CallShape.zoom(width: size.width)
         ground.addSubview(web)
 
         let cover = Cover(frame: ground.bounds)
@@ -473,6 +473,8 @@ final class CallFloat {
         ground.addSubview(corners)
 
         panel.contentView = ground
+        sizing.attach(panel)
+        sizing.resized = { [weak self] width in self?.scale(to: width) }
         panel.makeFirstResponder(cover)
         panel.orderFrontRegardless()
 
@@ -492,6 +494,7 @@ final class CallFloat {
     func drop() {
         ticking?.invalidate()
         ticking = nil
+        sizing.detach()
         keepSpot()
         tab?.built?.evaluateInSearch(CallTiles.leave)
         if let web = tab?.built, web.superview === ground {
@@ -553,10 +556,19 @@ final class CallFloat {
         max(0, radius - stage.top) / max(zoom, 0.01)
     }
 
+    private func scale(to width: CGFloat) {
+        guard let web = tab?.built, web.superview === ground else { return }
+        let wanted = zoom * CallShape.zoom(width: width)
+        guard abs(web.pageZoom - wanted) > 0.001 else { return }
+        web.pageZoom = wanted
+        tiles()
+    }
+
     private func tiles() {
         guard let web = tab?.built, web.superview === ground else { return }
         let zoom = web.pageZoom
         web.evaluateInSearch(tilesOnly ? CallTiles.enter(room: Self.room(zoom: zoom), corner: Self.corner(zoom: zoom)) : CallTiles.leave)
+        sizing.follow(web, tilesOnly: tilesOnly)
     }
 
     private func end() {

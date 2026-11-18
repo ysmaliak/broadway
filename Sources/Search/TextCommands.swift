@@ -899,6 +899,14 @@ final class SelectionResultPanel: NSView, NSTextFieldDelegate {
 
     @objc private func submit() { run.followUp() }
 
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let hit = super.hitTest(point), let superview else { return nil }
+        let onDraft = hit === draft || hit.isDescendant(of: draft)
+        let row = KitReach.rect(draft.frame, reach: KitReach.least)
+        guard !onDraft, !KitReach.pressable(hit, under: self), row.contains(stage.convert(point, from: superview)) else { return hit }
+        return KitReach.field(draft)
+    }
+
     func controlTextDidChange(_ notification: Notification) {
         run.draft = draft.stringValue
     }

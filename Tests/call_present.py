@@ -233,20 +233,87 @@ def launch_shown():
     sv.started.update(sv.running() - before)
 
 
+BLIND = []
+
+
 def shoot(path):
-    shot = vd.tool("shot", "WindowShot.swift")
-    pid = next(iter(sv.holding() & sv.running()))
-    number = call("show")["window"]
-    time.sleep(0.8)
-    ran = subprocess.run([str(shot), str(pid), str(number), str(path)], capture_output=True, text=True)
-    call("hide")
-    print("  ", ran.stdout.strip(), ran.stderr.strip()[-300:])
-    return path.exists()
+    path = Path(path)
+    path.unlink(missing_ok=True)
+    if not BLIND:
+        shot = vd.tool("shot", "WindowShot.swift")
+        pid = next(iter(sv.holding() & sv.running()))
+        number = call("show")["window"]
+        time.sleep(0.8)
+        ran = subprocess.run([str(shot), str(pid), str(number), str(path)], capture_output=True, text=True)
+        call("hide")
+        print("  ", ran.stdout.strip(), ran.stderr.strip()[-300:])
+        if path.exists():
+            return True
+        BLIND.append(True)
+        print("   note  the screen cannot be recorded now, so the call's page is drawn off the screen, without the window's bar, corners and edge")
+    drawn = path.with_name(path.stem + "-drawn.png")
+    drawn.unlink(missing_ok=True)
+    try:
+        call("draw", str(drawn.resolve()))
+    except RuntimeError as error:
+        print("  ", str(error)[-300:])
+    return drawn.exists()
 
 
 def room(width, height):
-    k = width / FLOAT_WIDTH
+    k = width / (call().get("width") or FLOAT_WIDTH)
     return ROOM["side"] * k, ROOM["top"] * k, width - ROOM["side"] * k, height - ROOM["bottom"] * k
+
+
+def resting(wide):
+    return round((wide - 2 * ROOM["side"]) * 148 / 324 + ROOM["top"] + ROOM["bottom"])
+
+
+def rests(wide=FLOAT_WIDTH):
+    state = call()
+    return abs(state["width"] - wide) < 1 and abs(state["height"] - resting(wide)) <= 1
+
+
+def held(name, was):
+    now = call()
+    room = now.get("room") or []
+    t.ok(f"{name}: the window is on a screen", len(room) == 4 and len(was.get("room") or []) == 4, (was, now))
+    if len(room) != 4:
+        return
+    t.ok(f"{name}: the window changed its height", abs(now["height"] - was["height"]) > 1, (was["height"], now["height"]))
+    right = was["x"] + was["width"] / 2 >= room[0] + room[2] / 2
+    up = was["y"] + was["height"] / 2 >= room[1] + room[3] / 2
+    across = abs(now["x"] + now["width"] - was["x"] - was["width"]) < 1 if right else abs(now["x"] - was["x"]) < 1
+    down = abs(now["y"] + now["height"] - was["y"] - was["height"]) < 1 if up else abs(now["y"] - was["y"]) < 1
+    corner = across and down
+    t.ok(f"{name}: it grew from the corner it sits in", corner, (was["x"], was["y"], was["height"], now["x"], now["y"], now["height"]))
+    inside = (now["x"] >= room[0] - 1 and now["y"] >= room[1] - 1 and now["x"] + now["width"] <= room[0] + room[2] + 1
+              and now["y"] + now["height"] <= room[1] + room[3] + 1)
+    t.ok(f"{name}: it is whole inside the screen", inside, (now["x"], now["y"], now["width"], now["height"], room))
+
+
+def shaped(name, page, wide=FLOAT_WIDTH):
+    if "picture" not in call():
+        t.ok(f"{name}: the window takes the shared screen's shape", False, "this build keeps the window at one size")
+        return
+    found = sv.ev(page, "picture()")
+    if found in (None, "null"):
+        t.ok(f"{name}: there is a shared screen to take the shape of", False, found)
+        return
+    iw, ih = json.loads(found)[6:8]
+    want = min(max(iw / ih, 0.75), 4)
+
+    def fits():
+        state = call()
+        stage = (state["width"] - 2 * ROOM["side"]) / max(state["height"] - ROOM["top"] - ROOM["bottom"], 1)
+        return abs(state["width"] - wide) < 1 and abs(stage - want) <= want * 0.02
+
+    t.ok(f"{name}: the window's stage takes the picture's shape at {wide:g} wide", until(fits), (call(), want))
+    time.sleep(1.5)
+    x0, y0, x1, y1, width, height = json.loads(sv.ev(page, "picture()"))[:6]
+    left, top, right, bottom = room(width, height)
+    both = min(x0 - left, right - x1) <= 3 and min(y0 - top, bottom - y1) <= 3
+    t.ok(f"{name}: the picture fills the stage both ways, with no band beside it", both, (x0, y0, x1, y1, left, top, right, bottom))
 
 
 def alone(name, page):
@@ -275,7 +342,8 @@ def alone(name, page):
     t.ok(f"{name}: its picture reaches all four corners", orange, corners)
     first = sv.ev(page, "frames()")
     time.sleep(0.8)
-    t.ok(f"{name}: the shared screen is live", sv.ev(page, "frames()") > first, (first, sv.ev(page, "frames()")))
+    t.ok(f"{name}: the shared screen is live", sv.ev(page, "frames()") > first,
+         (first, sv.ev(page, "frames()"), sv.ev(page, "document.visibilityState")))
 
 
 def pressed(name, page):
@@ -286,6 +354,21 @@ def pressed(name, page):
     t.ok(f"{name}: the bar follows the page", until(lambda: call()["mic"] is False), call())
     t.ok(f"{name}: the shared screen is still alone", sv.ev(page, "seen('.screen')") == "shown"
          and sv.ev(page, "seen(\"[aria-label='Call controls']\")") == "hidden")
+
+
+def larger(name, page, out, tag):
+    state = call()
+    if "largest" not in state:
+        t.ok(f"{name}: the call window can be made larger", False, "this build keeps the window at one size")
+        return
+    largest = state["largest"]
+    for label, wide in (("middle", round((FLOAT_WIDTH + largest) / 2)), ("largest", largest)):
+        call("size", str(wide))
+        shaped(f"{name} at the {label} size", page, wide)
+        t.ok(f"{name} at the {label} size: shot", shoot(out / f"{name}-{label}-{tag}.png"))
+        alone(f"{name} at the {label} size", page)
+    call("edge")
+    shaped(f"{name} back at the smallest size", page)
 
 
 def tiled(name, page):
@@ -343,11 +426,14 @@ def main():
             if only and name not in only:
                 continue
             page = float_it(name, query, idle)
+            if not shots_only:
+                shaped(name, page)
             t.ok(f"{name}: shot", shoot(out / f"{name}-{tag}.png"))
             if not shots_only:
                 alone(name, page)
                 if name == PRESENTING[0][0]:
                     pressed(name, page)
+                    larger(name, page, out, tag)
             land(page, idle)
             if not shots_only:
                 clean(name, page)
@@ -361,6 +447,7 @@ def main():
             t.ok(f"{name}: shot", shoot(out / f"{name}-{tag}.png"))
             if not shots_only:
                 tiled(name, page)
+                t.ok(f"{name}: with nobody presenting the window keeps its resting shape", rests(), call())
             land(page, idle)
             sv.ev(page, "end(), 1")
             sv.cmd({"do": "select", "id": idle})
@@ -368,18 +455,40 @@ def main():
         name = "starts-and-stops"
         if not only or name in only:
             page = float_it(name, "mark=1&kind=video&present=0", idle)
+            sizable = "largest" in call()
+            chosen = FLOAT_WIDTH
             if not shots_only:
                 tiled(f"{name}, before", page)
+                t.ok(f"{name}, before: the window rests at today's size", rests(), call())
+                if sizable:
+                    chosen = round((FLOAT_WIDTH + call()["largest"]) / 2)
+                    call("size", str(chosen))
+                    t.ok(f"{name}, before: a chosen width holds with nobody presenting", until(lambda: rests(chosen)), call())
+            seen = None
+            if not shots_only and sizable and not BLIND and "room" in call():
+                call("show")
+                time.sleep(0.8)
+                seen = call()
             sv.ev(page, "present()")
             time.sleep(3)
+            if not shots_only:
+                shaped(f"{name}, presenting", page, chosen)
+            if seen:
+                held(f"{name}, presenting, on the screen", seen)
             t.ok(f"{name}: shot while presenting", shoot(out / f"{name}-presenting-{tag}.png"))
             if not shots_only:
                 alone(f"{name}, presenting", page)
             sv.ev(page, "stopPresenting()")
             time.sleep(3)
+            if not shots_only:
+                t.ok(f"{name}, after: the window goes back to its resting shape at the chosen width", until(lambda: rests(chosen)), call())
+                time.sleep(1.5)
             t.ok(f"{name}: shot after it stops", shoot(out / f"{name}-stopped-{tag}.png"))
             if not shots_only:
                 tiled(f"{name}, after", page)
+                if sizable:
+                    call("edge")
+                    t.ok(f"{name}, after: a double-click on the edge goes back to the smallest", until(rests), call())
             land(page, idle)
             if not shots_only:
                 clean(name, page)

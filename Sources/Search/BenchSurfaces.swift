@@ -21,6 +21,12 @@ enum BenchSurfaces {
             for window in windows { window.orderOut(nil) }
             windows.removeAll()
             answer(["closed": true])
+        case "draw":
+            guard let stage = windows.last?.contentView, let path = request["path"] as? String else {
+                answer(["error": "no surface to draw"])
+                return
+            }
+            answer(draw(stage, to: path))
         case "list":
             answer(["surfaces": names])
         default:
@@ -157,7 +163,93 @@ enum BenchSurfaces {
         windows.append(window)
         var said: [String: Any] = ["number": window.windowNumber, "size": [size.width, size.height], "dark": dark]
         if request["controls"] as? Bool == true { said["controls"] = controls(in: view) }
+        if request["moving"] as? Bool == true { said["moving"] = moving(in: stage) }
         return said
+    }
+
+    private static func moving(in view: NSView) -> [[String: Any]] {
+        view.layoutSubtreeIfNeeded()
+        view.displayIfNeeded()
+        var found: [[String: Any]] = []
+        func walk(_ layer: CALayer, _ owner: String) {
+            let owner = (layer.delegate as? NSView).map { String(describing: type(of: $0)) } ?? owner
+            for key in layer.animationKeys() ?? [] {
+                guard let animation = layer.animation(forKey: key), !Motion.staysUnderReduce(animation) else { continue }
+                found.append(["view": owner, "key": key, "seconds": animation.duration,
+                              "path": (animation as? CAPropertyAnimation)?.keyPath ?? String(describing: type(of: animation))])
+            }
+            layer.sublayers?.forEach { walk($0, owner) }
+        }
+        if let layer = view.layer { walk(layer, String(describing: type(of: view))) }
+        return found
+    }
+
+    private static func draw(_ stage: NSView, to path: String) -> [String: Any] {
+        stage.layoutSubtreeIfNeeded()
+        stage.displayIfNeeded()
+        CATransaction.flush()
+        let scale: CGFloat = 2
+        let size = stage.bounds.size
+        guard size.width >= 1, size.height >= 1,
+              let whole = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(ceil(size.width * scale)), pixelsHigh: Int(ceil(size.height * scale)),
+                                           bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                                           bytesPerRow: 0, bitsPerPixel: 0), let context = NSGraphicsContext(bitmapImageRep: whole) else {
+            return ["error": "the surface gave no picture"]
+        }
+        let pen = context.cgContext
+        pen.scaleBy(x: scale, y: scale)
+        let ground = ((stage as? KitBox)?.fill ?? .white).kitResolved(dark: stage.kitDark).usingColorSpace(.deviceRGB) ?? .white
+        pen.setFillColor(red: ground.redComponent, green: ground.greenComponent, blue: ground.blueComponent, alpha: 1)
+        pen.fill(CGRect(origin: .zero, size: size))
+        func glassy(_ view: NSView) -> Bool { view is NSGlassEffectView || view.subviews.contains(where: glassy) }
+        func rounded(_ rect: CGRect, _ radius: CGFloat) -> CGPath {
+            let r = max(0, min(radius, min(rect.width, rect.height) / 2))
+            return CGPath(roundedRect: rect, cornerWidth: r, cornerHeight: r, transform: nil)
+        }
+        func paint(_ view: NSView, _ alpha: CGFloat) {
+            guard !view.isHidden, view.alphaValue > 0.01, view.bounds.width > 0, view.bounds.height > 0 else { return }
+            let rect = stage.isFlipped
+                ? { () -> CGRect in let r = view.convert(view.bounds, to: stage); return CGRect(x: r.minX, y: size.height - r.maxY, width: r.width, height: r.height) }()
+                : view.convert(view.bounds, to: stage)
+            let alpha = alpha * view.alphaValue
+            if let glass = view as? NSGlassEffectView {
+                pen.saveGState()
+                pen.setAlpha(alpha)
+                pen.setStrokeColor(red: 0.5, green: 0.5, blue: 0.5, alpha: 0.6)
+                pen.setLineWidth(0.5)
+                pen.addPath(rounded(rect.insetBy(dx: 0.25, dy: 0.25), glass.cornerRadius))
+                pen.strokePath()
+                pen.restoreGState()
+                if let content = glass.contentView { paint(content, alpha) }
+                return
+            }
+            guard let layer = view.layer else { return view.subviews.forEach { paint($0, alpha) } }
+            pen.saveGState()
+            pen.setAlpha(alpha)
+            if glassy(view) {
+                if let fill = layer.backgroundColor, fill.alpha > 0 {
+                    pen.setFillColor(fill)
+                    pen.addPath(rounded(rect, layer.cornerRadius))
+                    pen.fillPath()
+                }
+                pen.restoreGState()
+                view.subviews.forEach { paint($0, alpha) }
+                return
+            }
+            pen.clip(to: rect.insetBy(dx: -24, dy: -24))
+            pen.translateBy(x: rect.minX, y: rect.minY)
+            if view.isFlipped {
+                pen.translateBy(x: 0, y: rect.height)
+                pen.scaleBy(x: 1, y: -1)
+            }
+            layer.render(in: pen)
+            pen.restoreGState()
+        }
+        stage.subviews.forEach { paint($0, 1) }
+        guard let png = whole.representation(using: .png, properties: [:]), (try? png.write(to: URL(fileURLWithPath: path))) != nil else {
+            return ["error": "could not write the picture"]
+        }
+        return ["drawn": path, "width": whole.pixelsWide, "height": whole.pixelsHigh]
     }
 
     private static func control(of view: NSView?, under top: NSView) -> NSView? {

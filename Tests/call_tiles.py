@@ -138,15 +138,31 @@ def launch_shown():
     sv.started.update(sv.running() - before)
 
 
+BLIND = []
+
+
 def shoot(path):
-    shot = vd.tool("shot", "WindowShot.swift")
-    pid = next(iter(sv.holding() & sv.running()))
-    number = call("show")["window"]
-    time.sleep(0.8)
-    ran = subprocess.run([str(shot), str(pid), str(number), str(path)], capture_output=True, text=True)
-    call("hide")
-    print("  ", ran.stdout.strip(), ran.stderr.strip()[-300:])
-    return path.exists()
+    path = Path(path)
+    path.unlink(missing_ok=True)
+    if not BLIND:
+        shot = vd.tool("shot", "WindowShot.swift")
+        pid = next(iter(sv.holding() & sv.running()))
+        number = call("show")["window"]
+        time.sleep(0.8)
+        ran = subprocess.run([str(shot), str(pid), str(number), str(path)], capture_output=True, text=True)
+        call("hide")
+        print("  ", ran.stdout.strip(), ran.stderr.strip()[-300:])
+        if path.exists():
+            return True
+        BLIND.append(True)
+        print("   note  the screen cannot be recorded now, so the call's page is drawn off the screen, without the window's bar, corners and edge")
+    drawn = path.with_name(path.stem + "-drawn.png")
+    drawn.unlink(missing_ok=True)
+    try:
+        call("draw", str(drawn.resolve()))
+    except RuntimeError as error:
+        print("  ", str(error)[-300:])
+    return drawn.exists()
 
 
 def main():

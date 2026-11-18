@@ -132,7 +132,10 @@ enum BenchPage {
                     "inPanel": web?.superview?.window === float.window && float.window != nil, "zoom": web?.pageZoom ?? browser.active?.built?.pageZoom ?? 1,
                     "mic": float.status.mic as Any, "camera": float.status.camera as Any, "leaves": float.status.leaves,
                     "window": float.window?.windowNumber ?? 0, "tilesOnly": float.tilesOnly,
-                    "away": float.away.tab?.uuidString.lowercased() ?? "", "corners": float.cornersShown]
+                    "away": float.away.tab?.uuidString.lowercased() ?? "", "corners": float.cornersShown,
+                    "width": float.frame.width, "height": float.frame.height, "picture": float.sizing.picture ?? 0,
+                    "largest": CallShape.largest(screen: (float.window?.screen ?? NSScreen.main)?.frame), "y": float.frame.minY,
+                    "room": (float.window?.screen?.visibleFrame).map { [$0.minX, $0.minY, $0.width, $0.height] } ?? []]
         }
         switch action {
         case "state": break
@@ -144,15 +147,35 @@ enum BenchPage {
         case "hover": float.hover(values.first != "off")
         case "global": browser.muteCall()
         case "tiles": float.tilesOnly = values.first != "off"
+        case "draw":
+            guard let web = float.tab?.built, web.superview?.window === float.window, let path = values.first else {
+                return answer(["error": "call draw PATH: no call is floating"])
+            }
+            web.takeSnapshot(with: nil) { image, _ in
+                MainActor.assumeIsolated {
+                    guard let data = image?.tiffRepresentation, let picture = NSBitmapImageRep(data: data),
+                          let png = picture.representation(using: .png, properties: [:]),
+                          (try? png.write(to: URL(fileURLWithPath: path))) != nil else {
+                        return answer(["error": "the call gave no picture"])
+                    }
+                    answer(state().merging(["drawn": path]) { _, new in new })
+                }
+            }
+            return
+        case "size": float.sizing.choose(width: CGFloat(Double(values.first ?? "") ?? 0))
+        case "edge": float.sizing.shrink()
         case "show", "hide":
             let area = NSScreen.main?.visibleFrame ?? .zero
             let size = float.window?.frame.size ?? .zero
-            float.window?.setFrameOrigin(action == "show" ? NSPoint(x: area.minX + 40, y: area.maxY - 200 - size.height) : NSPoint(x: -20000, y: -20000))
+            let shown = action == "show"
+            float.window?.level = shown ? NSWindow.Level(rawValue: NSWindow.Level.normal.rawValue - 1) : KeepOnTop.panelLevel
+            float.window?.setFrameOrigin(shown ? NSPoint(x: area.minX + 40, y: area.maxY - 200 - size.height) : NSPoint(x: -20000, y: -20000))
+            if shown { float.window?.orderBack(nil) }
         case "close": browser.closeFront()
         case "key":
             if values.first == "d" { float.toggleMic() } else { float.toggleCamera() }
         default:
-            answer(["error": "call state|mute|camera|leave|return|away|hover on|off|global|key d|e"])
+            answer(["error": "call state|mute|camera|leave|return|away|hover on|off|global|key d|e|size WIDTH|edge"])
             return
         }
         answer(state())

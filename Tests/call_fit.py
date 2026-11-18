@@ -170,15 +170,31 @@ def launch_shown():
     sv.started.update(sv.running() - before)
 
 
+BLIND = []
+
+
 def shoot(path):
-    shot = vd.tool("shot", "WindowShot.swift")
-    pid = next(iter(sv.holding() & sv.running()))
-    number = call("show")["window"]
-    time.sleep(0.8)
-    ran = subprocess.run([str(shot), str(pid), str(number), str(path)], capture_output=True, text=True)
-    call("hide")
-    print("  ", ran.stdout.strip(), ran.stderr.strip()[-300:])
-    return path.exists()
+    path = Path(path)
+    path.unlink(missing_ok=True)
+    if not BLIND:
+        shot = vd.tool("shot", "WindowShot.swift")
+        pid = next(iter(sv.holding() & sv.running()))
+        number = call("show")["window"]
+        time.sleep(0.8)
+        ran = subprocess.run([str(shot), str(pid), str(number), str(path)], capture_output=True, text=True)
+        call("hide")
+        print("  ", ran.stdout.strip(), ran.stderr.strip()[-300:])
+        if path.exists():
+            return True
+        BLIND.append(True)
+        print("   note  the screen cannot be recorded now, so the call's page is drawn off the screen, without the window's bar, corners and edge")
+    drawn = path.with_name(path.stem + "-drawn.png")
+    drawn.unlink(missing_ok=True)
+    try:
+        call("draw", str(drawn.resolve()))
+    except RuntimeError as error:
+        print("  ", str(error)[-300:])
+    return drawn.exists()
 
 
 def check(name, page, query):
@@ -186,7 +202,7 @@ def check(name, page, query):
     selector = "video" if "kind=video" in query else "[data-participant-id], .others"
     found = json.loads(sv.ev(page, f"boxes({selector!r})"))
     width, height = found.pop()[:2]
-    k = width / FLOAT_WIDTH
+    k = width / (call().get("width") or FLOAT_WIDTH)
     left, top = ROOM["side"] * k, ROOM["top"] * k
     right, bottom = width - ROOM["side"] * k, height - ROOM["bottom"] * k
     slack = 1.0
@@ -201,6 +217,86 @@ def check(name, page, query):
     first = sv.ev(page, "frames()")
     time.sleep(0.6)
     t.ok(f"{name}: the videos are live", sv.ev(page, "frames()") > first, (first, sv.ev(page, "frames()")))
+
+
+SIZES = [("sizes-4", "n=4"), ("sizes-9", "n=9")]
+
+
+def resting(wide):
+    return round((wide - 2 * ROOM["side"]) * 148 / 324 + ROOM["top"] + ROOM["bottom"])
+
+
+def sized(wide):
+    state = call()
+    return abs(state["width"] - wide) < 1 and abs(state["height"] - resting(wide)) <= 1
+
+
+def floated(name, query, idle):
+    page = sv.page(f"call?{query}")
+    sv.cmd({"do": "select", "id": page})
+    t.ok(f"{name}: the call starts", until(lambda: sv.ev(page, "window.state") == "started"), sv.ev(page, "window.state"))
+    sv.cmd({"do": "select", "id": idle})
+    t.ok(f"{name}: leaving the tab floats it", until(lambda: call()["showing"]), call())
+    time.sleep(2.5)
+    return page
+
+
+def sizes(out, idle, only, shots_only):
+    for name, query in SIZES:
+        if only and name not in only:
+            continue
+        page = floated(name, query, idle)
+        state = call()
+        if "largest" not in state:
+            t.ok(f"{name}: the call window can be made larger", False, "this build keeps the window at one size")
+            shoot(out / f"{name}-smallest.png")
+            call("return")
+            until(lambda: not call()["showing"])
+            sv.ev(page, "end(), 1")
+            sv.cmd({"do": "select", "id": idle})
+            time.sleep(1)
+            continue
+        largest = state["largest"]
+        t.ok(f"{name}: it opens at the smallest size", sized(FLOAT_WIDTH), state)
+        t.ok(f"{name}: the largest is half the screen's width and more than the smallest", largest > FLOAT_WIDTH, largest)
+        for label, wide in (("smallest", FLOAT_WIDTH), ("middle", round((FLOAT_WIDTH + largest) / 2)), ("largest", largest)):
+            call("size", str(wide))
+            t.ok(f"{name} at the {label} size: the window is {wide:g} wide and keeps its shape", until(lambda: sized(wide)), call())
+            scale = min(1, 0.5 * (wide / FLOAT_WIDTH) ** 0.5)
+            t.ok(f"{name} at the {label} size: the page is drawn at {scale:.2f} of its size", until(lambda: abs(call()["zoom"] - scale) < 0.01),
+                 call()["zoom"])
+            time.sleep(2.5)
+            t.ok(f"{name} at the {label} size: shot", shoot(out / f"{name}-{label}.png"))
+            if not shots_only:
+                check(f"{name} at the {label} size", page, query)
+        call("size", str(largest + 400))
+        t.ok(f"{name}: it grows no wider than the largest", until(lambda: sized(largest)), call())
+        call("size", "120")
+        t.ok(f"{name}: it shrinks no smaller than today's size", until(lambda: sized(FLOAT_WIDTH)), call())
+        middle = round((FLOAT_WIDTH + largest) / 2)
+        call("size", str(middle))
+        until(lambda: sized(middle))
+        call("return")
+        until(lambda: not call()["showing"])
+        sv.cmd({"do": "select", "id": page})
+        time.sleep(1)
+        sv.cmd({"do": "select", "id": idle})
+        t.ok(f"{name}: it floats again", until(lambda: call()["showing"]), call())
+        t.ok(f"{name}: the chosen size is remembered for the next call", until(lambda: sized(middle)), call())
+        call("edge")
+        t.ok(f"{name}: a double-click on the edge goes back to the smallest", until(lambda: sized(FLOAT_WIDTH)), call())
+        call("return")
+        until(lambda: not call()["showing"])
+        sv.cmd({"do": "select", "id": page})
+        time.sleep(1)
+        sv.cmd({"do": "select", "id": idle})
+        t.ok(f"{name}: it floats once more", until(lambda: call()["showing"]), call())
+        t.ok(f"{name}: and the smallest is remembered too", until(lambda: sized(FLOAT_WIDTH)), call())
+        call("return")
+        until(lambda: not call()["showing"])
+        sv.ev(page, "end(), 1")
+        sv.cmd({"do": "select", "id": idle})
+        time.sleep(1)
 
 
 def main():
@@ -237,6 +333,7 @@ def main():
             sv.ev(page, "end(), 1")
             sv.cmd({"do": "select", "id": idle})
             time.sleep(1)
+        sizes(out, idle, only, shots_only)
     finally:
         sv.quit()
         sv.finish()

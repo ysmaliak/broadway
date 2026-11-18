@@ -68,12 +68,12 @@ enum SiteSurfaces {
             tab.blockedPopups = [BlockedPopup(url: URL(string: "https://ads.example.com/pop"))]
             let sign = PopupSignView(browser: browser, tab: tab)
             sign.shown = shown
-            return Surface(sign, pad: 4)
+            return Surface(sign, pad: 5)
         case "translate-sign":
             tab.translation = TranslationMark(from: "fr", to: "en", phase: request["working"] as? Bool == true ? .working : .done)
             let sign = TranslateSignView(tab: tab)
             sign.shown = shown
-            return Surface(sign, pad: 4)
+            return Surface(sign, pad: 5)
         case "capture-question":
             let wants = request["wants"] as? String ?? "camera"
             let ask = Browser.CaptureAsk(host: "meet.example.com", wants: wants, once: wants == "location", keeps: true)

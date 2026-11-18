@@ -101,13 +101,15 @@ SURFACES = [
 ]
 
 
-FIELD_BARS = ("find-bar", "find-bar-empty", "find-bar-narrow")
-SMALL_KEY = 20
-KNOWN_SHORT = {
-    "mini-player": "Position",
-    "popup-sign": "",
-    "translate-sign": "",
+DRAWN = "--drawn" in sys.argv
+STILL = "--still" in sys.argv
+FAMILY = {
+    "float-feedback", "call-bar", "link-bubble", "driving-bar", "agent-card", "capture-question", "screen-question", "password-offer",
+    "shield-offer", "find-bar", "find-bar-empty", "find-bar-narrow", "find-count", "form-fill-card", "form-fill-done", "form-fill-offer",
+    "form-drafts-working", "form-drafts-card", "form-drafts-warned", "meeting-alert", "meeting-alert-two", "meeting-alert-faces",
+    "meeting-alert-long", "selection-result",
 }
+FIELD_BARS = ("find-bar", "find-bar-empty", "find-bar-narrow", "selection-result", "form-drafts-card", "form-drafts-warned")
 
 
 def judge(where, control, short):
@@ -117,15 +119,31 @@ def judge(where, control, short):
     row = control["kind"].endswith("Cell")
     surface = where.split(" ")[0]
     least = min(wide, tall)
-    known = surface in KNOWN_SHORT and named.startswith(KNOWN_SHORT[surface])
     if control["enabled"] and wide and tall and not row and (not field or surface in FIELD_BARS):
-        if least < 24 and (known or (least >= SMALL_KEY and not field)):
+        if least < 24:
             short.append(f"{where}: {named} reach {wide:g} by {tall:g}")
-        else:
-            t.ok(f"{where}: {named} can be hit over at least 24 points", least >= 24, f"reach {wide:g} by {tall:g}, drawn {control['size']}")
+        t.ok(f"{where}: {named} can be hit over at least 24 points", least >= 24, f"reach {wide:g} by {tall:g}, drawn {control['size']}")
     t.ok(f"{where}: {named} has a name for VoiceOver", bool(control["label"] or control["title"]), str(control))
     if not control["title"] and not field and not row and "Slider" not in control["kind"] and max(control["size"]) < 60:
         t.ok(f"{where}: {named} is only a symbol and has a tooltip", bool(control["help"]), str(control))
+
+
+def picture(shot, pid, number, path):
+    path.unlink(missing_ok=True)
+    said = ""
+    for _ in range(3):
+        if DRAWN:
+            try:
+                said = str(sv.cmd({"do": "surface", "action": "draw", "path": str(path.resolve())}))
+            except RuntimeError as error:
+                said = str(error)
+        else:
+            ran = subprocess.run([str(shot), str(pid), str(number), str(path)], capture_output=True, text=True)
+            said = ran.stdout.strip() + ran.stderr.strip()
+        if path.exists() or "screen recording permission unavailable" in said or "capture failure" in said:
+            break
+        time.sleep(0.5)
+    return said[-200:]
 
 
 LONG_TITLE = "a-page-whose-title-goes-on-and-on-well-past-the-width-of-any-card-the-switcher-could-ever-draw"
@@ -186,20 +204,52 @@ def window(out, tag, shot):
     sys.exit(1 if t.failed else 0)
 
 
+def still(only):
+    sv.setup(**{"motion.testReduced": "--with-motion" not in sys.argv})
+    sv.launch()
+    try:
+        seen = 0
+        for name, state, request in SURFACES:
+            if name not in FAMILY or (only and name not in only):
+                continue
+            for look in ("light", "dark"):
+                label = f"{name} {state}, {look}, with Reduce Motion"
+                try:
+                    made = sv.cmd({"do": "surface", "name": name, "look": look, "ground": GROUNDS[look], "pad": 24, "moving": True,
+                                   **{k: v for k, v in request.items() if v is not None}})
+                except RuntimeError as error:
+                    t.ok(f"{label}: drawn", False, str(error)[:200])
+                    continue
+                seen += 1
+                t.ok(f"{label}: nothing moves, and no fade is longer than 0.2 seconds", made.get("moving") == [], made.get("moving"))
+                sv.cmd({"do": "surface", "action": "close"})
+        t.ok("the family was drawn", seen > 0, seen)
+    finally:
+        sv.quit()
+        sv.finish()
+    t.done()
+    sys.exit(1 if t.failed else 0)
+
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     only = next((a.split("=", 1)[1].split(",") for a in sys.argv if a.startswith("--only=")), None)
     tag = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--tag=")), "after")
-    out = Path(args[0] if args else ".context/float-review")
-    shot = vd.tool("shot", "WindowShot.swift")
+    out = Path(args[0] if args else ".context/float-fixes")
+    shot = None if STILL or (DRAWN and "--window" not in sys.argv) else vd.tool("shot", "WindowShot.swift")
+    if DRAWN:
+        print("  note  each surface is drawn by the bench off the screen, so glass shows without what is behind it")
     if "--window" in sys.argv:
         return window(out, tag, shot)
+    if STILL:
+        return still(only)
     sv.setup()
     sv.launch()
     try:
         pid = next(iter(sv.holding() & sv.running()))
         audit = {}
         short = []
+        bare = "--no-shots" in sys.argv
         for name, state, request in SURFACES:
             if only and name not in only:
                 continue
@@ -209,21 +259,19 @@ def main():
                 for ground, colour in GROUNDS.items():
                     label = f"{name} {state}, {look} on {ground}"
                     first = look == "light" and ground == "light"
+                    if bare and not first:
+                        continue
                     try:
                         made = sv.cmd({"do": "surface", "name": name, "look": look, "ground": colour, "pad": 24, "controls": first,
                                        **{k: v for k, v in request.items() if v is not None}})
                     except RuntimeError as error:
                         t.ok(f"{label}: drawn", False, str(error)[:200])
                         continue
-                    time.sleep(0.6)
-                    path = folder / f"{state}-{look}-{ground}-{tag}.png"
-                    path.unlink(missing_ok=True)
-                    for _ in range(3):
-                        ran = subprocess.run([str(shot), str(pid), str(made["number"]), str(path)], capture_output=True, text=True)
-                        if path.exists():
-                            break
-                        time.sleep(0.5)
-                    t.ok(f"{label}: pictured", path.exists(), (ran.stdout.strip() + ran.stderr.strip())[-200:])
+                    if not bare:
+                        time.sleep(0.6)
+                        path = folder / f"{state}-{look}-{ground}-{tag}{'-drawn' if DRAWN else ''}.png"
+                        said = picture(shot, pid, made["number"], path)
+                        t.ok(f"{label}: pictured", path.exists(), said)
                     if first:
                         audit[f"{name} {state}"] = made.get("controls", [])
                         for control in made.get("controls", []):
@@ -233,9 +281,7 @@ def main():
         if only and kept.exists():
             audit = {**json.loads(kept.read_text()), **audit}
         kept.write_text(json.dumps(audit, indent=1, sort_keys=True))
-        for line in short:
-            print("  note ", line)
-        print(f"{len(short)} controls with a reach under 24 points are known and noted")
+        print(f"{len(short)} controls have a reach under 24 points")
     finally:
         sv.quit()
         sv.finish()

@@ -224,7 +224,7 @@ final class FormDraftCard: NSView, NSTextFieldDelegate {
     private let title = KitLabel("Draft answers", font: SurfaceLook.title)
     private let place = KitLabel("", font: .systemFont(ofSize: 12), color: KitColor.muted)
     private let scroll = NSScrollView()
-    private let list = KitBox(fill: nil)
+    private let list = KitFieldRows(fill: nil)
     private let caption = KitLabel("", font: .systemFont(ofSize: 12), color: KitColor.muted)
     private let notNow: KitGlassKey
     private let fill: KitGlassKey
@@ -291,6 +291,7 @@ final class FormDraftCard: NSView, NSTextFieldDelegate {
                 list.addSubview(field)
                 return (answer.id, label, field)
             }
+            list.rows = rows.map { ($0.title, $0.field) }
         }
         invalidateIntrinsicContentSize()
         needsLayout = true

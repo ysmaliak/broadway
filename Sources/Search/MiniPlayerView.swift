@@ -389,8 +389,16 @@ final class MiniPlayerView: KitHoverView, NSViewToolTipOwner {
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard item != nil, share > 0.5, !leaving, let superview else { return nil }
         let local = convert(point, from: superview)
+        if grabsLine(local) { return progress }
         guard card.frame.contains(local) else { return nil }
         return super.hitTest(point) ?? self
+    }
+
+    var lineGrab: NSRect { KitReach.rect(convert(progress.frame, from: card), reach: KitReach.least).intersection(bounds) }
+
+    private func grabsLine(_ local: NSPoint) -> Bool {
+        guard !progress.isHidden, progress.seekable, lineGrab.contains(local) else { return false }
+        return ![back, toggle, ahead].contains { !$0.isHidden && convert($0.frame, from: card).contains(local) }
     }
 
     override func layout() {
