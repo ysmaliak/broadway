@@ -161,7 +161,7 @@ public enum BroadwayCommand {
 
     private static func reads(_ words: [String], context: Context) -> Bool {
         guard let first = words.first else { return true }
-        return ["tabs", "snapshot", "read", "shot", "console", "network", "wait", "history", "status", "help", "guide", "find", "locate"].contains(first)
+        return ["tabs", "snapshot", "read", "shot", "console", "network", "wait", "history", "status", "help", "guide", "find", "locate", "audit", "timings", "styles"].contains(first)
             || words.dropFirst().first.map { ["list", "get", "find", "show"].contains($0) } == true
     }
 

@@ -126,7 +126,7 @@ final class AgentTests {
         let names = Set(BrowserToolbox().tools.map(\.name))
 
         #expect(names == ["tabs", "open", "navigate", "close", "snapshot", "text", "screenshot", "console", "network", "pdf", "hover", "choose", "dialog", "click", "type", "upload", "download", "locate", "fill_form", "drag", "select", "resize", "press", "scroll", "wait", "history", "sign_in", "autofill", "ask", "helper_start", "helper_wait", "mac_read", "mac_run",
-                               "skills", "skill", "handoff", "tab"])
+                               "skills", "skill", "handoff", "tab", "audit", "timings", "styles"])
     }
 
     @Test func waitRefusesSelectorsThatCouldReadAField() {
@@ -216,7 +216,7 @@ final class AgentTests {
 
         let names = AgentCatalog.commands(tools).compactMap { $0["name"] as? String }
 
-        #expect(names == ["tabs", "open", "go", "close", "snapshot", "read", "shot", "find", "click", "type", "upload", "download", "fill", "drag", "select", "resize", "press", "scroll", "wait", "history", "ask", "handoff", "tab", "console", "network", "pdf", "hover", "choose", "dialog", "skills", "skill"])
+        #expect(names == ["tabs", "open", "go", "close", "snapshot", "read", "shot", "find", "click", "type", "upload", "download", "fill", "drag", "select", "resize", "press", "scroll", "wait", "history", "ask", "handoff", "tab", "console", "network", "pdf", "hover", "choose", "dialog", "audit", "timings", "styles", "skills", "skill"])
     }
 
     @Test func aCommandCarriesItsShape() throws {

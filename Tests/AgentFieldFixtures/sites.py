@@ -43,6 +43,10 @@ MESSAGES = [("m1", "Iver Holm", "Invoice copy"), ("m2", "Pell Okoro", "Change of
             ("m7", "Ansel Brack", "Bulk order question"), ("m8", "Juno Abbing", "Catalogue request")]
 CONNECTIONS = [("copperline", "Copperline", "stock counts"), ("gullwing", "Gullwing Freight", "shipments"), ("tallyho", "Tallyho Books", "invoices")]
 TICKET_FROM = {f"T-{n}": CUSTOMERS[i % len(CUSTOMERS)] for i, n in enumerate(range(381, 397))}
+DISPATCH_TO = ["Aldermoor", "Brackwater", "Corrin Bay", "Dunmere", "Garrow", "Lowmoor", "Ruthven", "Southby", "Upwell", "Westerly"]
+STOCKROOM_SHADES = ["Amber", "Birch", "Cobalt", "Dove", "Ember", "Fern", "Granite", "Heather", "Indigo", "Juniper", "Kelp", "Linen"]
+STOCKROOM_THINGS = ["binder", "clipboard", "desk tray", "folder", "notebook", "pen case", "ruler", "stapler"]
+LEDGER_STATES = ["Paid", "Due", "Paid", "Held"]
 
 
 def words(seed, count):
@@ -108,6 +112,15 @@ class Field:
         self.prices = {item: f"{chooser.randint(3, 40)}.{chooser.randint(0, 99):02d}" for item in ITEMS}
         self.paid = []
         self.grants = []
+        self.ledger = [{"entry": f"LG-{1001 + n}", "supplier": SUPPLIERS[chooser.randrange(len(SUPPLIERS))][1],
+                        "amount": f"{chooser.randint(20, 1900)}.{chooser.randint(0, 99):02d}", "status": LEDGER_STATES[n % 4]}
+                       for n in range(60)]
+        self.dispatch = [{"parcel": f"DP-{n + 1:04d}", "to": chooser.choice(DISPATCH_TO), "kg": f"{chooser.randint(2, 240) / 10:.1f}"}
+                         for n in range(400)]
+        names = [f"{shade} {thing}" for shade in STOCKROOM_SHADES for thing in STOCKROOM_THINGS]
+        chooser.shuffle(names)
+        units = chooser.sample(range(3, 900), 96)
+        self.stockroom = [{"name": names[n], "bin": f"B{chooser.randint(1, 40):02d}-{chooser.choice('ABCDEF')}", "units": units[n]} for n in range(96)]
         self.acts = []
         self.written = []
         self.hooks = []
@@ -192,6 +205,9 @@ class Field:
                 "messages": json.loads(json.dumps(self.messages)),
                 "prices": dict(self.prices),
                 "paid": list(self.paid),
+                "ledger": json.loads(json.dumps(self.ledger)),
+                "dispatch": json.loads(json.dumps(self.dispatch)),
+                "stockroom": json.loads(json.dumps(self.stockroom)),
                 "grants": list(self.grants),
                 "acts": list(self.acts),
                 "written": list(self.written),
@@ -371,6 +387,14 @@ class Copperline(Handler):
             return self.settings()
         if path == "/tally":
             return self.tally()
+        if path == "/ledger":
+            return self.ledger()
+        if path == "/dispatch":
+            return self.dispatch()
+        if path == "/stockroom":
+            return self.stockroom()
+        if path == "/api/stockroom":
+            return self.stockroom_page(query)
         if path == "/products":
             return self.products()
         if path.startswith("/products/"):
@@ -398,6 +422,79 @@ class Copperline(Handler):
 <button type="button" onclick="send('/api/tally', {{sum: document.getElementById('sum').value}}, function () {{ document.getElementById('said').textContent = 'Tally saved' }})">Save tally</button>
 <p id="said" role="status" class="ok"></p>"""
         return self.reply(200, copper("Tally", body))
+
+    def ledger(self):
+        rows = "".join(f'<tr><td>{row["entry"]}</td><td>{html.escape(row["supplier"])}</td><td>{row["amount"]}</td><td>{row["status"]}</td></tr>'
+                       for row in self.field.ledger)
+        body = f"""<h1>Ledger</h1><p class="muted">Every supplier payment booked this quarter.</p>
+<table><thead><tr><th>Entry</th><th>Supplier</th><th>Amount</th><th>Status</th></tr></thead><tbody>{rows}</tbody></table>"""
+        return self.reply(200, copper("Ledger", body))
+
+    def dispatch(self):
+        rows = json.dumps([[row["parcel"], row["to"], row["kg"]] for row in self.field.dispatch])
+        body = f"""<h1>Dispatch log</h1><p class="muted">Every parcel that left the packing room this month, newest last.</p>
+<div style="display:flex;padding:6px 8px;font-weight:600;background:#fff;border-bottom:1px solid #ccc"><span style="width:140px">Parcel</span><span style="width:200px">Bound for</span><span>Weight</span></div>
+<div id="log" role="list" aria-label="Dispatch log" style="height:420px;overflow-y:auto;position:relative;background:#fff">
+<div id="room" style="position:relative"></div></div>
+<script>
+var parcels = {rows};
+var tall = 34, box = document.getElementById('log'), room = document.getElementById('room');
+room.style.height = (parcels.length * tall) + 'px';
+function draw() {{
+  var first = Math.max(0, Math.floor(box.scrollTop / tall) - 4), last = Math.min(parcels.length, Math.ceil((box.scrollTop + box.clientHeight) / tall) + 4);
+  room.textContent = '';
+  for (var i = first; i < last; i++) {{
+    var row = document.createElement('div'), p = parcels[i];
+    row.setAttribute('role', 'listitem');
+    row.style.cssText = 'position:absolute;left:0;right:0;height:' + tall + 'px;top:' + (i * tall) + 'px;display:flex;align-items:center;padding:0 8px;border-bottom:1px solid #eee';
+    row.innerHTML = '<span style="width:140px"></span><span style="width:200px"></span><span></span>';
+    row.children[0].textContent = p[0]; row.children[1].textContent = p[1]; row.children[2].textContent = p[2] + ' kg';
+    room.appendChild(row);
+  }}
+}}
+box.addEventListener('scroll', draw);
+draw();
+</script>"""
+        return self.reply(200, copper("Dispatch log", body))
+
+    def stockroom(self):
+        body = """<h1>Stockroom</h1><p class="muted">Everything on the shelves. More cards load as you scroll.</p>
+<div id="cards" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px"></div>
+<p id="more" class="muted" style="padding:30px 0">Loading…</p>
+<script>
+var page = 0, busy = false, done = false, cards = document.getElementById('cards'), more = document.getElementById('more');
+function card(item) {
+  var el = document.createElement('article');
+  el.style.cssText = 'background:#fff;border-radius:8px;padding:12px;min-height:120px';
+  el.innerHTML = '<h3 style="margin:0 0 6px;font-size:16px"></h3><p class="muted" style="margin:0"></p><p style="margin:6px 0 0"></p>';
+  el.children[0].textContent = item.name; el.children[1].textContent = 'Bin ' + item.bin; el.children[2].textContent = item.units + ' units';
+  return el;
+}
+function next() {
+  if (busy || done) return;
+  busy = true;
+  fetch('/api/stockroom?page=' + page, {headers: {'x-stockroom': '1'}}).then(function (r) { return r.json() }).then(function (answer) {
+    answer.items.forEach(function (item) { cards.appendChild(card(item)) });
+    page += 1; busy = false; done = !answer.more;
+    more.textContent = done ? 'That is everything on the shelves' : 'Loading…';
+    check();
+  });
+}
+function check() {
+  if (window.scrollY + window.innerHeight > document.documentElement.scrollHeight - 300) next();
+}
+window.addEventListener('scroll', check);
+next();
+</script>"""
+        return self.reply(200, copper("Stockroom", body))
+
+    def stockroom_page(self, query):
+        if self.headers.get("x-stockroom") != "1":
+            return False
+        time.sleep(0.4)
+        number = int(query.get("page", "0")) if query.get("page", "0").isdigit() else 0
+        items = self.field.stockroom[number * 24:(number + 1) * 24]
+        return self.json({"items": items, "more": (number + 1) * 24 < len(self.field.stockroom)})
 
     def products(self):
         rows = "".join(f'<tr><td><a href="/products/{slug}">{html.escape(p["name"])}</a></td><td>{html.escape(p["kind"])}</td></tr>'

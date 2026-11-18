@@ -70,7 +70,7 @@ final class MCPServer {
         "tabs": "Your tabs, or all tabs",
         "close": "Close your current tab, or tab, or others, or all",
         "snapshot": "The page's controls and headings with refs. Use in, role or find to keep it short, and since for only what changed.",
-        "read": "The page's visible text. Use find for matching lines.",
+        "read": "Visible page text, or lines with find",
         "shot": "A picture of the page or of one element. Secret fields and frames are blanked.",
         "find": "Refs by an element's words or role, with nearby text, without a whole snapshot",
         "click": "Click by ref (e12) or by the element's words. Set final when it sends, pays, deletes or uploads. Answers with what changed. A refusal means stop.",
@@ -90,6 +90,9 @@ final class MCPServer {
         "handoff": "Hand your tab to the person for a captcha or a code, and wait until they give it back",
         "console": "Recent console messages of the page",
         "network": "Recent network requests of the page",
+        "audit": "Accessibility problems on the page from a short rule set, each with its rule, a ref and its words. A first pass, not a full audit.",
+        "timings": "How the page came up: first byte, ready, load, largest paint, layout shift, main thread stalls and the slowest requests",
+        "styles": "One element's box, the computed styles that explain its look, and the ancestors that clip or hide it",
         "pdf": "The page as a PDF file. Secret fields are blanked.",
         "resize": "Set the page size of your own tab",
         "skills": "Notes Broadway keeps about sites, for this page's site or an address",
@@ -134,7 +137,7 @@ final class MCPServer {
         "inputSchema": ["type": "object", "properties": ["query": ["type": "string"]]] as [String: Any],
         "annotations": ["readOnlyHint": true, "openWorldHint": false],
     ]
-    static let readOnly: Set<String> = ["tab", "tabs", "snapshot", "read", "shot", "find", "wait", "console", "network", "pdf", "skills", "skill", "history"]
+    static let readOnly: Set<String> = ["tab", "tabs", "snapshot", "read", "shot", "find", "wait", "console", "network", "pdf", "skills", "skill", "history", "audit", "timings", "styles"]
     static let gentle: Set<String> = ["open", "go", "scroll", "hover", "select", "resize", "handoff", "download", "ask"]
     static let closed: Set<String> = ["tab", "tabs", "skills", "skill", "history", "ask"]
 

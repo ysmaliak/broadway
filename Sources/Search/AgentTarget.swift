@@ -108,7 +108,7 @@ struct AgentTarget: Equatable {
 }
 
 extension BrowserToolbox {
-    static let targeted: Set<String> = ["click", "type", "choose", "hover", "drag", "upload", "download", "select", "scroll", "screenshot", "press"]
+    static let targeted: Set<String> = ["click", "type", "choose", "hover", "drag", "upload", "download", "select", "scroll", "screenshot", "press", "styles"]
 
     static func prefer(_ tool: String) -> [String] {
         switch tool {

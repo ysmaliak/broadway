@@ -126,6 +126,7 @@ A session's heading shows the strongest state over its tabs: waving, then drivin
 - `Sources/BroadwayCLI/Ancestor.swift`: the ancestor walk and the names sent with each request.
 - `Sources/Search/AgentLinks.swift`: sessions, their keys, ends and states. `AgentLinkCommands.swift`: how a request finds its session, and the `agents` verbs.
 - `Sources/Search/AgentGate.swift`: the modes, the acts and the verdict for each.
+- `Sources/Search/AgentRows.swift`: `read --rows`, which gathers every row of a list, table or grid. `AgentChecks.swift`: `audit`, `timings` and `styles`.
 - `Sources/Search/AgentCommands.swift`: the error codes (`ToolCode`) and the reply envelope. `MCPServer.swift`: the MCP server, its tool names, instructions and short list. `AgentHandoff.swift`: `handoff`. `AgentAskOutside.swift`: `ask` for outside agents, its limits and its card words. `Sources/BroadwayCLI/MCPRelay.swift`: `broadway mcp` and its hand-over after an update.
 - `Sources/Search/AgentsArea.swift`, `AgentCharacter.swift`, `AgentPointer.swift`, `AgentDriving.swift`: the area, the face, the pointer and take over.
-- Tests: `Tests/SearchTests/AgentLinksTests.swift`, and the hidden-world probe `Tests/agent_mode.py`.
+- Tests: `Tests/SearchTests/AgentLinksTests.swift`, `AgentRowsTests.swift`, `AgentChecksTests.swift`, and the hidden-world probes `Tests/agent_mode.py` and `Tests/agent_checks.py`. `Tests/agent_field.py` measures model agents on invented sites, the long list tasks (`ledger_sum`, `dispatch_count`, `stockroom_most`) among them.

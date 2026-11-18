@@ -43,7 +43,7 @@ enum AgentCatalog {
         return found
     }
 
-    static let reads: Set<String> = ["tab", "tabs", "snapshot", "locate", "text", "screenshot", "console", "network", "pdf", "wait", "history", "skills", "skill"]
+    static let reads: Set<String> = ["tab", "tabs", "snapshot", "locate", "text", "screenshot", "console", "network", "pdf", "wait", "history", "skills", "skill", "audit", "timings", "styles"]
     static let printFlag = "--broadway-catalog"
 
     static let shapes: [String: Shape] = [
@@ -53,11 +53,14 @@ enum AgentCatalog {
         "navigate": Shape(command: "go", examples: ["broadway go https://example.com", "broadway go https://example.com --tab 1a2b3c4d"]),
         "close": Shape(examples: ["broadway close", "broadway close --tab 1a2b3c4d", "broadway close --others", "broadway close --all"]),
         "snapshot": Shape(examples: ["broadway snapshot", "broadway snapshot --json | jq '.data.elements[]'"]),
-        "text": Shape(command: "read", examples: ["broadway read", "broadway read | grep -i price"]),
+        "text": Shape(command: "read", examples: ["broadway read", "broadway read | grep -i price", "broadway read --rows", "broadway read --rows --in @e12 --max 500"]),
         "screenshot": Shape(command: "shot", examples: ["broadway shot -o page.png", "broadway shot > page.png", "broadway shot --ref @e7 -o button.png", "broadway shot --full -o whole.png"]),
         "console": Shape(positional: [], examples: ["broadway console --level error --limit 20", "broadway console --since CURSOR --json"], columns: ["cursor", "level", "message", "source", "line"]),
         "network": Shape(positional: [], examples: ["broadway network --limit 20 --json"], columns: ["cursor", "method", "url", "status", "type", "milliseconds", "bytes", "failed"]),
         "pdf": Shape(examples: ["broadway pdf --json", "broadway pdf -o page.pdf"]),
+        "audit": Shape(examples: ["broadway audit", "broadway audit --json"]),
+        "timings": Shape(examples: ["broadway timings", "broadway timings --json"]),
+        "styles": Shape(positional: ["ref"], examples: ["broadway styles @e12", "broadway styles \"Add to basket\""]),
         "hover": Shape(positional: ["ref"], examples: ["broadway hover @e3"]),
         "choose": Shape(positional: ["ref", "value"], examples: ["broadway choose @e4 blue"]),
         "dialog": Shape(positional: ["action"], examples: ["broadway dialog", "broadway dialog accept --id ID", "broadway dialog dismiss --id ID"]),

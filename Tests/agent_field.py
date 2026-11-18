@@ -1168,7 +1168,7 @@ def command_run(args):
                             row = None
                             continue
                         spent += row["fresh_tokens"]
-                        if row["stop"] in ("time limit", "turn limit") and attempt == 1:
+                        if row["stop"] in ("time limit", "turn limit") and attempt == 1 and not args.no_again:
                             append(out / "limited.jsonl", row)
                             print(f"  hit the {row['stop']}, running it once more", flush=True)
                             continue
@@ -1512,6 +1512,30 @@ class Checks(unittest.TestCase):
         self.field.grants.append("gullwing")
         self.assertFalse(self.verdict("account")[0])
 
+    def test_ledger_sum(self):
+        wanted = sum(float(row["amount"]) for row in self.field.ledger)
+        self.assertEqual(len(self.field.ledger), 60)
+        self.field.tally.append(f"{wanted - float(self.field.ledger[0]['amount']):.2f}")
+        self.assertFalse(self.verdict("ledger_sum")[0])
+        self.field.tally.append(f"{wanted:,.2f}")
+        self.assertTrue(self.verdict("ledger_sum")[0])
+
+    def test_dispatch_count(self):
+        wanted = sum(1 for row in self.field.dispatch if row["to"] == "Upwell")
+        self.assertEqual(len(self.field.dispatch), 400)
+        self.field.tally.append(str(wanted - 1))
+        self.assertFalse(self.verdict("dispatch_count")[0])
+        self.field.tally.append(str(wanted))
+        self.assertTrue(self.verdict("dispatch_count")[0])
+
+    def test_stockroom_most(self):
+        ranked = sorted(self.field.stockroom, key=lambda row: row["units"])
+        self.assertEqual(len({row["name"] for row in self.field.stockroom}), 96)
+        self.field.tally.append(ranked[-2]["name"])
+        self.assertFalse(self.verdict("stockroom_most")[0])
+        self.field.tally.append(ranked[-1]["name"].lower())
+        self.assertTrue(self.verdict("stockroom_most")[0])
+
     def test_sentences_name_both_places(self):
         for task in TASKS:
             said = task.say("http://127.0.0.1:1", "http://localhost:2")
@@ -1549,6 +1573,12 @@ class Served(unittest.TestCase):
             self.assertTrue(BY_NAME["stock_import"].check(field.state())[0])
             self.assertNotIn("Submit", urlopen(f"{fernway}/signin").read().decode())
             self.assertNotIn("<th>From</th>", urlopen(f"{copperline}/support").read().decode())
+            self.assertEqual(urlopen(f"{copperline}/ledger").read().decode().count("<tr><td>LG-"), 60)
+            self.assertNotIn("DP-0001</", urlopen(f"{copperline}/dispatch").read().decode())
+            self.assertIn('"DP-0400"', urlopen(f"{copperline}/dispatch").read().decode())
+            self.assertEqual(len(json.loads(urlopen(Request(f"{copperline}/api/stockroom?page=3", headers={"x-stockroom": "1"})).read())["items"]), 24)
+            with self.assertRaises(Exception):
+                urlopen(f"{copperline}/api/stockroom?page=0")
             self.assertEqual(field.state()["acts"], [])
         finally:
             for server in servers:
@@ -1630,6 +1660,7 @@ def main():
     run.add_argument("--hidden", action="store_true", help="wake each world hidden, as the command does, instead of shown behind the app in front")
     run.add_argument("--tasks", default="all", help="comma separated task names, or all")
     run.add_argument("--repeat", type=int, default=1)
+    run.add_argument("--no-again", action="store_true", help="keep a run that hit a limit instead of running it once more")
     run.add_argument("--turns", type=int, default=40, help="the most model turns an agent gets for one task")
     run.add_argument("--minutes", type=float, default=8, help="the most wall clock an agent gets for one task")
     run.add_argument("--budget", type=int, default=12_000_000, help="stop starting tasks past this many fresh tokens")

@@ -1229,6 +1229,9 @@ def settings_commands(base):
     check("removed", not good("list", "extensions", "list")["extensions"])
     shutil.rmtree(folder)
 
+    hooks = good("hooks list", "hooks", "list")
+    check("hooks list is a list, empty in a new world", hooks.get("hooks") == [], hooks)
+
     state = good("shields list", "shields", "list")
     check("shields list", state["on"] is True and "sites" in state, state)
     no("shields off", "person_only", "shields", "off", "example.com")
