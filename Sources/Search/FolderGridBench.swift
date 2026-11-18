@@ -79,7 +79,13 @@ enum FolderGridBench {
             if let title = row.kitSubviews(of: RowTitleView.self).first(where: seen) { out["title"] = placed(title) }
             return out
         }
-        answer(["headings": headings, "rows": rows, "blocks": SidePageView.benchBlocks, "drop": SidePageView.benchDrop,
+        let splits = content.kitSubviews(of: SplitSignView.self).filter(seen).map { sign -> [String: Any] in
+            ["left": Bench.short(sign.left), "right": Bench.short(sign.right), "frame": placed(sign),
+             "alpha": Double(sign.alphaValue),
+             "folder": browser.group(of: sign.left).flatMap { id in groups.first { $0.id == id }?.name } ?? "",
+             "chips": sign.item.chips.map(placed)]
+        }
+        answer(["headings": headings, "rows": rows, "splits": splits, "blocks": SidePageView.benchBlocks, "drop": SidePageView.benchDrop,
                 "undo": ["level": undo?.groupingLevel ?? -1, "name": undo?.undoActionName ?? "", "can": undo?.canUndo ?? false],
                 "edges": ["top": ColumnEdges.seen["top"] ?? 0, "bottom": ColumnEdges.seen["bottom"] ?? 0],
                 "items": browser.listItems(browser.displayedTabs).map { item -> String in

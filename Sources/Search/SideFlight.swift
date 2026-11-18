@@ -11,6 +11,7 @@ final class PinMorphView: NSView {
     private let face = PinFaceView()
     private let title = KitLabel()
     private let mark = RowMarkView()
+    private var held: NSView?
     private var form: CGFloat = 0
     private var rowWidth: CGFloat = 0
     private var slab: Bool?
@@ -78,6 +79,16 @@ final class PinMorphView: NSView {
         mark.ink = ground.ink
     }
 
+    func carry(_ view: NSView) {
+        held?.removeFromSuperview()
+        held = view
+        for part in [face, title, mark] as [NSView] { part.isHidden = true }
+        slab = nil
+        wash.isHidden = true
+        clip.addSubview(view)
+        view.frame = clip.bounds
+    }
+
     private struct Seen {
         var frames: [ObjectIdentifier: (CGPoint, CGSize)] = [:]
         var alphas: [ObjectIdentifier: Swift.Float] = [:]
@@ -111,6 +122,7 @@ final class PinMorphView: NSView {
         clip.layer?.cornerRadius = radius
         base.frame = box
         base.radius = radius
+        held?.frame = box
         base.alphaValue = 1 - form
         wash.frame = box
         wash.radius = radius

@@ -1257,7 +1257,9 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
             if view.superview !== parent { parent.addSubview(view) }
             SideSigns.update(view, colour: .ink, ground: ground)
             (view as? SplitSignView)?.item.radius = state.radius
-            put(view, frame, rise: rise)
+            (view as? SplitSignView)?.host = self
+            view.alphaValue = morphCarried == tab.id || veiled == tab.id ? 0 : 1
+            if carry?.tab.id != tab.id { put(view, frame, rise: rise) }
             StackFoldButton.dress(view, stack, lit: false, fades: fades)
             seenSplits.insert(tab.id)
             return
@@ -1517,7 +1519,7 @@ extension SidePageView {
         let point = convert(event.locationInWindow, from: nil)
         if carry == nil {
             guard let pending, pending.view === row, hypot(point.x - pending.at.x, point.y - pending.at.y) >= 5,
-                  let tab = (row as? TabRowView)?.tab ?? (row as? PinSquareView)?.tab, let laid = laid[tab.id] else { return }
+                  let tab = Self.tab(of: row), let laid = laid[tab.id] else { return }
             carry = SideCarry(tab: tab, view: row, block: laid.block, from: laid.index, count: laid.count, down: pending.at,
                               startY: laidY(tab.id))
             browser.beginGesture()
@@ -1531,7 +1533,8 @@ extension SidePageView {
         self.carry = carry
         let tab = carry.tab
         if carry.block != .pins, let window,
-           TearOff.shared.drag(self, tab: tab, at: window.convertPoint(toScreen: event.locationInWindow), moved: Self.moved(event)) {
+           TearOff.shared.drag(self, tab: tab, at: window.convertPoint(toScreen: event.locationInWindow), moved: Self.moved(event),
+                               whole: carryingPair) {
             if browser.prefs.splitView, TabDrag.shared.update(browser: browser, tab: tab, translation: carry.travel, event: event),
                TabDrag.shared.cancelledID == tab.id, lifted(tab) {
                 setAway(false)
@@ -1579,7 +1582,7 @@ extension SidePageView {
         pending = nil
         if swallowRelease {
             swallowRelease = false
-            if let tab = (row as? TabRowView)?.tab { _ = TabDrag.shared.finish(browser: browser, tab: tab, event: event) }
+            if let tab = Self.tab(of: row) { _ = TabDrag.shared.finish(browser: browser, tab: tab, event: event) }
             return true
         }
         guard let carry else { return false }
@@ -1589,12 +1592,15 @@ extension SidePageView {
         if browser.prefs.splitView, carry.block != .pins {
             let finished = TabDrag.shared.finish(browser: browser, tab: tab, event: event)
             let source = finished.source
+            let whole = carry.view is SplitSignView
             let cancelled: Bool = if case .cancelled = finished.drop { true } else { false }
-            if !cancelled, carry.away, TearOff.shared.letGo(self, source) { return true }
+            if !cancelled, carry.away, TearOff.shared.letGo(self, whole ? tab : source, whole: whole) { return true }
             if !taken(cancelled ? nil : point, carry) {
                 switch finished.drop {
                 case .stage(let target, let onLeft): browser.pair(source, with: target, onLeft: onLeft)
                 case .replace(let target): browser.replacePage(target, with: source)
+                case .strip where whole:
+                    drop(tab, at: point)
                 case .strip(let target):
                     if let destination = destination(source, at: point) {
                         browser.move(source, toGroup: destination, detaching: true)
@@ -1602,7 +1608,7 @@ extension SidePageView {
                         browser.dropTabIntoStrip(source, before: target)
                     }
                 case .outside:
-                    drop(source, at: point)
+                    drop(tab, at: point)
                 case .cancelled:
                     break
                 }
@@ -1694,6 +1700,12 @@ extension SidePageView {
         return CGVector(dx: event.deltaX, dy: -event.deltaY)
     }
 
+    private static func tab(of row: NSView) -> Tab? {
+        (row as? TabRowView)?.tab ?? (row as? PinSquareView)?.tab ?? (row as? SplitSignView)?.left
+    }
+
+    private var carryingPair: Bool { carry?.view is SplitSignView }
+
     private func lifted(_ tab: Tab) -> Bool {
         guard let carry, carry.tab.id == tab.id, morphCarried == tab.id else { return false }
         return carry.block != .pins
@@ -1717,6 +1729,14 @@ extension SidePageView {
                         grab: CGSize(width: point.x - source.minX, height: point.y - source.minY), started: source)
         morphCarried = tab.id
         startMorph(tab, washed: false)
+        if let sign = row as? SplitSignView {
+            let copy = SplitSignView(browser: browser, left: sign.left, right: sign.right, height: sign.height, interactive: false)
+            SideSigns.update(copy, colour: .ink, ground: ground)
+            copy.item.radius = sign.item.radius
+            morphView?.rowRadius = sign.item.radius
+            morphView?.carry(copy)
+            sign.alphaValue = 0
+        }
         morphView?.apply(frame: source, form: 0, lift: 0, curve: .none)
         drawHand(tab, curve: Motion.calm ? .none : Self.morphChange)
         for view in listDocument.kitSubviews(of: TabRowView.self) where view.tab?.id == tab.id { view.alphaValue = 0 }
@@ -2247,6 +2267,7 @@ extension SidePageView {
         layoutSubtreeIfNeeded()
         for view in rows.values { view.alphaValue = 1 }
         for view in pins.values { view.alphaValue = 1 }
+        for held in splitRows.values { held.view.alphaValue = 1 }
     }
 
     func flyPin(_ tab: Tab, _ change: () -> Void) -> Bool {

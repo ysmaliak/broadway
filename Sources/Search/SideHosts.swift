@@ -173,19 +173,23 @@ final class SplitSignView: NSView, SideGrounded {
     let height: CGFloat
     var ground = RowGround() { didSet { if ground != oldValue { refresh() } } }
     let item: SplitTabItemView
+    let interactive: Bool
+    weak var host: TabRowHost?
     private var catches: [Tab.ID: SplitChipCatch] = [:]
     private lazy var reads = KitReads { [weak self] in self?.later() }
     private var queued = false
 
-    init(browser: Browser, left: Tab, right: Tab, height: CGFloat) {
+    init(browser: Browser, left: Tab, right: Tab, height: CGFloat, interactive: Bool = true) {
         self.browser = browser
         self.left = left
         self.right = right
         self.height = height
+        self.interactive = interactive
         item = SplitTabItemView(browser: browser, left: left, right: right)
         super.init(frame: NSRect(x: 0, y: 0, width: 240, height: height))
-        for tab in [left, right] {
+        for tab in interactive ? [left, right] : [] {
             let made = SplitChipCatch(browser: browser, tab: tab)
+            made.sign = self
             catches[tab.id] = made
             addSubview(made)
         }
@@ -213,7 +217,7 @@ final class SplitSignView: NSView, SideGrounded {
         let active = browser.activeID
         let live = active.map { [left.id, right.id].contains($0) } ?? false
         item.update(left: left, right: right,
-                    setup: .init(height: height, live: live, focusedID: active, interactive: true,
+                    setup: .init(height: height, live: live, focusedID: active, interactive: interactive,
                                  onFrame: ground.greys.onFrame, ink: ground.ink, greys: ground.greys, numbers: browser.tabShortcutNumbers))
         for (id, chip) in catches {
             chip.focused = live && active == id
@@ -241,6 +245,7 @@ final class SplitSignView: NSView, SideGrounded {
 final class SplitChipCatch: NSView {
     let browser: Browser
     let tab: Tab
+    weak var sign: SplitSignView?
     var focused = false
     var editing = false
     private var selectedOnPress = false
@@ -268,6 +273,7 @@ final class SplitChipCatch: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        if let sign, sign.host?.rowPressed(sign, event: event) == true { return }
         down = true
         selectedOnPress = false
         guard !editing, event.modifierFlags.intersection([.command, .control, .shift]).isEmpty else { return }
@@ -279,7 +285,17 @@ final class SplitChipCatch: NSView {
         }
     }
 
+    override func mouseDragged(with event: NSEvent) {
+        guard !editing, let sign else { return }
+        sign.host?.rowDragged(sign, event: event)
+    }
+
     override func mouseUp(with event: NSEvent) {
+        if let sign, sign.host?.rowReleased(sign, event: event) == true {
+            down = false
+            selectedOnPress = false
+            return
+        }
         guard down else { return }
         down = false
         defer { selectedOnPress = false }

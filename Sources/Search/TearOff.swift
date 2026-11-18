@@ -51,10 +51,16 @@ final class TearOff {
         }
     }
 
-    func drag(_ page: SidePageView, tab: Tab, at point: NSPoint, moved: CGVector?) -> Bool {
+    static func mayLeave(_ tab: Tab, in browser: Browser, whole: Bool) -> Bool {
+        guard whole, let pair = browser.split(for: tab) else { return mayLeave(tab, in: browser) }
+        let halves = browser.tabs.filter { pair.contains($0.id) }
+        return halves.count == pair.tabs.count && halves.allSatisfy { mayLeave($0, in: browser) }
+    }
+
+    func drag(_ page: SidePageView, tab: Tab, at point: NSPoint, moved: CGVector?, whole: Bool = false) -> Bool {
         let browser = page.browser
         if tabID != tab.id || self.page !== page { begin(page, tab) }
-        guard !refused, Self.mayLeave(tab, in: browser), let window = browser.window else { return false }
+        guard !refused, Self.mayLeave(tab, in: browser, whole: whole), let window = browser.window else { return false }
         let delta = moved ?? last.map { CGVector(dx: point.x - $0.x, dy: point.y - $0.y) } ?? .zero
         let screen = window.screen.map { TearRules.Screen(frame: $0.frame, visible: $0.visibleFrame) }
         state = TearRules.step(state, from: last, point: point, moved: delta, window: window.frame, screen: screen)
@@ -72,17 +78,19 @@ final class TearOff {
         return out
     }
 
-    func letGo(_ page: SidePageView, _ tab: Tab) -> Bool {
+    func letGo(_ page: SidePageView, _ tab: Tab, whole: Bool = false) -> Bool {
         defer { end() }
         let browser = page.browser
-        guard out, !refused, self.page === page, Self.mayLeave(tab, in: browser), browser.tabs.contains(where: { $0.id == tab.id }) else { return false }
+        guard out, !refused, self.page === page, Self.mayLeave(tab, in: browser, whole: whole),
+              browser.tabs.contains(where: { $0.id == tab.id }) else { return false }
         let over = target
         let place = over == nil ? nil : self.place
         let point = self.point
-        guard over != nil || browser.tabs.count > 1 else { return true }
+        let going = whole ? browser.split(for: tab)?.tabs.count ?? 1 : 1
+        guard over != nil || browser.tabs.count > going else { return true }
         DispatchQueue.main.async { [weak browser, weak over] in
             guard let browser else { return }
-            browser.moveToWindow(tab, over, at: point)
+            if whole { browser.moveToWindow(pairOf: tab, over, at: point) } else { browser.moveToWindow(tab, over, at: point) }
             if let over, let place, over.tabs.contains(where: { $0.id == tab.id }) { over.placeTorn(tab, place) }
         }
         return true

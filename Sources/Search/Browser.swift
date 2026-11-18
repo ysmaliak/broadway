@@ -4581,6 +4581,23 @@ extension Browser {
         }
     }
 
+    func moveToWindow(pairOf tab: Tab, _ target: Browser?, at point: NSPoint? = nil) {
+        guard let pair = split(for: tab) else { return moveToWindow(tab, target, at: point) }
+        let halves = pair.tabs.compactMap { id in tabs.first { $0.id == id } }
+        guard halves.count == pair.tabs.count, target?.isPopup != true, (target?.isPrivate ?? isPrivate) == isPrivate,
+              target !== self, halves.allSatisfy({ $0.pin == nil && !$0.bench }), target != nil || tabs.count > halves.count
+        else { return }
+        let destination = target ?? Browser(record: WindowRecord(space: spaceID), privateStore: privateStore)
+        for half in halves { detach(half) }
+        destination.receive(pair: pair, halves)
+        if target == nil {
+            let frame = point.map { TearOff.newWindow(at: $0, leaving: window) }
+            Browsers.open(destination, frame: frame)
+        } else {
+            destination.window?.makeKeyAndOrderFront(nil)
+        }
+    }
+
     /// A tab dragged out of the row and let go outside this window: into
     /// the window it was let go over, or a new one there, as in Chrome and
     /// Safari. False when it was let go over this window, where the drag
@@ -4634,6 +4651,18 @@ extension Browser {
             for blank in blanks { tabs.removeAll { $0 === blank }; blank.close() }
         }
         if let active, active.id == tab.id, tab.asleep { _ = tab.wake() }
+        writeSession(now: true)
+    }
+
+    func receive(pair: TabSplit, _ halves: [Tab]) {
+        guard let first = halves.first else { return }
+        for half in halves { receive(half) }
+        var row = tabs.filter { tab in !halves.dropFirst().contains { $0 === tab } }
+        guard let at = row.firstIndex(where: { $0 === first }) else { return }
+        row.insert(contentsOf: halves.dropFirst(), at: at + 1)
+        tabs = row
+        putBackSplit(pair)
+        if let focused = halves.first(where: { $0.id == pair.focused }) ?? halves.first { focusPane(focused) }
         writeSession(now: true)
     }
 

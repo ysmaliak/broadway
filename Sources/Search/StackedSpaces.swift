@@ -367,7 +367,80 @@ enum StackedProbe {
 extension Browser {
     func stackedDrop(_ tab: Tab, onto id: UUID) {
         guard id != spaceID, tabs.contains(where: { $0.id == tab.id }) else { return }
+        if let pair = split(for: tab) {
+            KitChange.eased { move(pair: pair, toSpace: id) }
+            return
+        }
         KitChange.eased { move(tab, toSpace: id) }
+    }
+
+    func move(pair: TabSplit, toSpace id: UUID) {
+        guard showsSpaces, id != spaceID, let destination = spaces.first(where: { $0.id == id }) else { return }
+        let halves = pair.tabs.compactMap { half in tabs.first { $0.id == half } }
+        guard halves.count == pair.tabs.count,
+              halves.allSatisfy({ !$0.bench && $0.address.flatMap({ Browser.extensionHost(of: $0) }) == nil })
+        else { return }
+        let from = spaceID
+        let complete: () -> Void = { [weak self] in
+            guard let self, self.spaceID == from, self.splits.contains(where: { $0.id == pair.id }),
+                  halves.allSatisfy({ half in self.tabs.contains { $0 === half } })
+            else { return }
+            self.finishPairMove(pair, halves, to: destination)
+        }
+        let store = Spaces.store(for: id)
+        let asking = halves.filter { !$0.shy && $0.store !== store }
+        guard !asking.isEmpty else { return complete() }
+        var unsaved = false
+        let asked = DispatchGroup()
+        for half in asking {
+            asked.enter()
+            half.unsaved { if $0 { unsaved = true }; asked.leave() }
+        }
+        asked.notify(queue: .main) {
+            guard unsaved else { return complete() }
+            Ask.sure(
+                "Move tabs?",
+                detail: "A page in this Split View has unsaved form entries. Both pages will reopen in “\(destination.name)” with that space's accounts, so the entries may be lost.",
+                confirm: "Move",
+                then: {
+                    for half in halves { half.leaveSettled = true }
+                    complete()
+                }
+            )
+        }
+    }
+
+    private func finishPairMove(_ pair: TabSplit, _ halves: [Tab], to destination: Space) {
+        let mark = beginStep("Move to Space", carrying: halves.map(\.id), to: destination.id)
+        defer { endStep(mark) }
+        let ids = Set(halves.map(\.id))
+        if let here = active, ids.contains(here.id), let next = successor(of: here, without: ids) {
+            select(next, floatPrevious: false)
+        }
+        var arrived: Tab?
+        holdingLoneFolders {
+            for half in halves where finishMove(half, toSpace: destination.id, quietly: true) {
+                if arrived == nil, LinkArrivals.arrived[half.id] != nil { arrived = half }
+            }
+        }
+        guard !halves.contains(where: { half in tabs.contains { $0 === half } }) else { return }
+        keepPair(pair, in: destination.id)
+        writeSession(now: true)
+        if let row = parked[destination.id] { writeSession(now: true, space: destination.id, row: row) }
+        announce("Moved to \(destination.name)")
+        if let arrived { LinkArrivals.moved(arrived, to: destination.id, in: self) }
+    }
+
+    private func keepPair(_ pair: TabSplit, in space: UUID) {
+        guard var row = parked[space], !row.splits.contains(where: { $0.id == pair.id }) else { return }
+        let rest = row.tabs.filter { !pair.contains($0.id) }
+        let halves = pair.tabs.compactMap { id in row.tabs.first { $0.id == id } }
+        guard halves.count == pair.tabs.count, let at = row.tabs.firstIndex(where: { pair.contains($0.id) }) else { return }
+        row.tabs = rest
+        row.tabs.insert(contentsOf: halves, at: min(at, rest.count))
+        guard Browser.holds(pair, in: row.tabs) else { return }
+        row.splits.append(pair)
+        parked[space] = row
     }
 
     func stackedReport() -> [String: Any] {
