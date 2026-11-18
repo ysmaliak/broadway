@@ -637,6 +637,9 @@ final class SplitRowDragTests {
         }
         #expect(world.browser.activeID == front.id, "the page in front came back under the hand")
         try await Task.sleep(for: .milliseconds(500))
+        let side = try #require(window.contentView?.kitSubviews(of: SidePageView.self).first { !$0.embedded && !$0.isHiddenOrHasHiddenAncestor })
+        #expect(side.morphCarried == carried.id)
+        #expect(abs((side.morphView?.alphaValue ?? 1) - 0.4) < 0.01, "held still over the split it shows, the carried row is faded as over a page")
         try await send(.leftMouseUp, at: edge, in: window)
         try await Task.sleep(for: .milliseconds(300))
         let split = world.browser.split(for: carried)

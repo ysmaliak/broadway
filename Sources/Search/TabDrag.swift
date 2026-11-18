@@ -99,6 +99,7 @@ final class TabDrag {
     @ObservationIgnored private var recheck: DispatchWorkItem?
     @ObservationIgnored private var last: NSPoint?
     @ObservationIgnored private var lookQueued = false
+    @ObservationIgnored private var onShown: (() -> Void)?
 
     private init() {}
 
@@ -110,13 +111,14 @@ final class TabDrag {
         markers[ObjectIdentifier(view)] = nil
     }
 
-    func update(browser: Browser, tab: Tab, translation: CGSize, event: NSEvent? = nil) -> Bool {
+    func update(browser: Browser, tab: Tab, translation: CGSize, event: NSEvent? = nil, shown: (() -> Void)? = nil) -> Bool {
         guard browser.prefs.splitView else { return false }
         if sourceBrowser !== browser || gestureTab !== tab {
             let pointer = pointer(in: browser, event: event)
             let origin = NSPoint(x: pointer.x - translation.width, y: pointer.y + translation.height)
             begin(browser: browser, tab: tab, at: origin)
         }
+        onShown = shown
         guard cancelledID != tab.id else { return true }
         guard sourceTab != nil else { return false }
         let point = pointer(in: browser, event: event)
@@ -302,7 +304,7 @@ final class TabDrag {
             lookQueued = false
             guard let browser = sourceBrowser, let gestureTab, cancelledID != gestureTab.id, sourceTab != nil, preview == nil,
                   let last, Store.testing || NSEvent.pressedMouseButtons & 1 != 0 else { return }
-            look(browser: browser, at: last)
+            if look(browser: browser, at: last) { onShown?() }
         }
     }
 
@@ -372,6 +374,7 @@ final class TabDrag {
         sourceBrowser = nil
         gestureTab = nil
         sourceTab = nil
+        onShown = nil
         target = .outside
         removeMonitor()
     }

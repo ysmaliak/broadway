@@ -1554,16 +1554,18 @@ extension SidePageView {
         follow()
         let tasked: Bool = if case .task = carry.block { true } else { false }
         let crossed = tasked ? false : cross(tab, point, fromPin: carry.block == .pins)
-        if carry.block != .pins, browser.prefs.splitView, TabDrag.shared.update(browser: browser, tab: tab, translation: carry.travel, event: event) {
-            clearListDrop()
+        if carry.block != .pins, browser.prefs.splitView,
+           TabDrag.shared.update(browser: browser, tab: tab, translation: carry.travel, event: event,
+                                 shown: { [weak self] in self?.overPage(tab) }) {
             if TabDrag.shared.cancelledID == tab.id, lifted(tab) {
+                clearListDrop()
                 _ = land(tab, nil)
                 finishCarry()
                 pending = nil
                 swallowRelease = true
                 return
             }
-            setFaded(true)
+            overPage(tab)
             return
         }
         setFaded(false)
@@ -1674,6 +1676,12 @@ extension SidePageView {
         if on { pinStart = laid[(view as? PinSquareView)?.tab?.id ?? UUID()]?.frame }
         (view as? TabRowView)?.releasePress()
         (view as? PinSquareView)?.releasePress()
+    }
+
+    private func overPage(_ tab: Tab) {
+        guard carry?.tab.id == tab.id, carry?.away != true else { return }
+        clearListDrop()
+        setFaded(true)
     }
 
     private func setFaded(_ on: Bool) {
