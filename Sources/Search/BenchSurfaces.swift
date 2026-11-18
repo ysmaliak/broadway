@@ -159,7 +159,8 @@ enum BenchSurfaces {
         let area = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         window.setFrame(NSRect(x: area.minX + 40 + CGFloat(windows.count) * 24, y: area.maxY - 200 - size.height,
                                width: size.width + pad * 2, height: size.height + pad * 2), display: true)
-        window.orderFrontRegardless()
+        window.level = NSWindow.Level(rawValue: NSWindow.Level.normal.rawValue - 1)
+        window.orderBack(nil)
         windows.append(window)
         var said: [String: Any] = ["number": window.windowNumber, "size": [size.width, size.height], "dark": dark]
         if request["controls"] as? Bool == true { said["controls"] = controls(in: view) }
@@ -252,6 +253,15 @@ enum BenchSurfaces {
         return ["drawn": path, "width": whole.pixelsWide, "height": whole.pixelsHigh]
     }
 
+    private static func landed(_ point: NSPoint, in view: NSView) -> NSView? {
+        let hit = view.hitTest(point)
+        if let found = control(of: hit, under: view) { return found }
+        guard let table = hit as? NSTableView, table.action != nil, let above = view.superview else { return nil }
+        let row = table.row(at: table.convert(point, from: above))
+        guard row >= 0, table.numberOfColumns > 0, let cell = table.view(atColumn: 0, row: row, makeIfNecessary: false) else { return nil }
+        return control(of: cell, under: view)
+    }
+
     private static func control(of view: NSView?, under top: NSView) -> NSView? {
         var at = view
         while let here = at, here !== top.superview {
@@ -278,7 +288,7 @@ enum BenchSurfaces {
         while y < frame.maxY {
             var x = frame.minX + 0.5
             while x < frame.maxX {
-                if let hit = control(of: view.hitTest(NSPoint(x: x, y: y)), under: view) {
+                if let hit = landed(NSPoint(x: x, y: y), in: view) {
                     let dot = NSRect(x: x - 0.5, y: y - 0.5, width: 1, height: 1)
                     reach[ObjectIdentifier(hit)] = reach[ObjectIdentifier(hit)].map { $0.union(dot) } ?? dot
                 }

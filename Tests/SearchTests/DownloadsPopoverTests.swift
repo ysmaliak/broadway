@@ -133,6 +133,39 @@ final class DownloadsPopoverTests {
         #expect(RecentDownloadsView.menuVerbs(for: .none).isEmpty)
     }
 
+    @Test func aWordRowAtTheFootTakesAClickOverItsWhole24Points() throws {
+        let loot = Loot()
+        let fetches = Fetches(loot: loot)
+        defer { fetches.benchStage("empty", loot: loot) }
+        fetches.benchStage("many", loot: loot)
+        let list = RecentDownloadsView(browser: Browser(record: WindowRecord()), loot: loot, fetches: fetches)
+        list.prepare()
+        let size = list.fitting(maxHeight: .greatestFiniteMagnitude)
+        let window = NSWindow(contentRect: NSRect(x: -20_000, y: -20_000, width: size.width, height: size.height), styleMask: .borderless,
+                              backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let stage = NSView(frame: NSRect(origin: .zero, size: size))
+        window.contentView = stage
+        list.frame = stage.bounds
+        stage.addSubview(list)
+        stage.layoutSubtreeIfNeeded()
+        let foot = try #require(list.kitSubviews(of: DownloadsTable.self).first { $0.accessibilityLabel() == "Downloads Actions" })
+
+        for index in RecentDownloadsView.footTitles.indices {
+            let row = foot.rect(ofRow: index)
+            let word = try #require(foot.view(atColumn: 0, row: index, makeIfNecessary: false) as? DownloadsWordCell)
+            #expect(row.height == 24)
+            #expect((word.textField?.frame.height ?? 24) < 24)
+            for y in [row.minY + 0.5, row.midY, row.maxY - 0.5] {
+                let hit = stage.hitTest(stage.convert(NSPoint(x: row.midX, y: y), from: foot))
+                #expect(hit === foot || hit?.isDescendant(of: foot) == true)
+                #expect(foot.row(at: NSPoint(x: row.midX, y: y)) == index)
+            }
+        }
+        #expect(foot.action != nil)
+    }
+
     @Test func manyRowsScrollInsideAFixedRoom() {
         let loot = Loot()
         let fetches = Fetches(loot: loot)

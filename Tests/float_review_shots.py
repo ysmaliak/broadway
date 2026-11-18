@@ -109,7 +109,6 @@ FAMILY = {
     "form-drafts-working", "form-drafts-card", "form-drafts-warned", "meeting-alert", "meeting-alert-two", "meeting-alert-faces",
     "meeting-alert-long", "selection-result",
 }
-FIELD_BARS = ("find-bar", "find-bar-empty", "find-bar-narrow", "selection-result", "form-drafts-card", "form-drafts-warned")
 
 
 def judge(where, control, short):
@@ -119,7 +118,7 @@ def judge(where, control, short):
     row = control["kind"].endswith("Cell")
     surface = where.split(" ")[0]
     least = min(wide, tall)
-    if control["enabled"] and wide and tall and not row and (not field or surface in FIELD_BARS):
+    if control["enabled"] and wide and tall:
         if least < 24:
             short.append(f"{where}: {named} reach {wide:g} by {tall:g}")
         t.ok(f"{where}: {named} can be hit over at least 24 points", least >= 24, f"reach {wide:g} by {tall:g}, drawn {control['size']}")

@@ -15,20 +15,26 @@ enum MeetingGuests {
         }
     }
 
+    static let leastOfAName = 6
+
+    static func count(_ names: [String]) -> String {
+        "\(names.count) guests"
+    }
+
     static func line(_ names: [String], fits: (String) -> Bool = { _ in true }) -> String {
         guard let first = names.first else { return "" }
         let tail = tail(names)
         let whole = "With \(first)\(tail)"
         guard !tail.isEmpty, !fits(whole) else { return whole }
         var kept = Array(first)
-        while kept.count > 1 {
+        while kept.count > leastOfAName {
             kept.removeLast()
             let stem = String(kept).trimmingCharacters(in: CharacterSet(charactersIn: " .-_+"))
-            guard !stem.isEmpty else { break }
+            guard stem.count >= leastOfAName else { break }
             let cut = "With \(stem)…\(tail)"
             if fits(cut) { return cut }
         }
-        return whole
+        return count(names)
     }
 
     static func line(_ names: [String], font: NSFont, width: CGFloat) -> String {

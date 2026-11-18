@@ -48,6 +48,42 @@ struct MeetingGuestsTests {
         #expect(line == "With a.very.long… and 2 others")
     }
 
+    @Test func aNameCutToSixCharactersStillStands() {
+        let names = ["a.very.long.address.for.a.shared.mailbox", "Jun", "Ines", "Monica", "Fox"]
+
+        let line = MeetingGuests.line(names) { $0.count <= 25 }
+
+        #expect(line == "With a.very… and 4 others")
+    }
+
+    @Test func withNoRoomForSixCharactersOfTheNameTheLineIsTheCountAlone() {
+        let names = ["a.very.long.address.for.a.shared.mailbox", "Jun", "Ines", "Monica", "Fox", "Dana", "Walter", "John"]
+
+        let line = MeetingGuests.line(names) { $0.count <= 24 }
+
+        #expect(line == "8 guests")
+    }
+
+    @Test func aCutThatWouldLeaveFiveCharactersAfterItsDotIsDroppedGivesTheCount() {
+        let names = ["a.ver.long.address", "Jun", "Ines"]
+
+        let line = MeetingGuests.line(names) { $0.count <= 25 }
+
+        #expect(line == "3 guests")
+    }
+
+    @Test func aShortNameThatDoesNotFitGivesTheCount() {
+        let line = MeetingGuests.line(["Dana", "Fox", "Monica"]) { $0.count <= 12 }
+
+        #expect(line == "3 guests")
+    }
+
+    @Test func twoGuestsWithNoRoomForSixCharactersOfTheFirstAreACount() {
+        let line = MeetingGuests.line(["a.very.long.address.for.a.shared.mailbox", "Dana"]) { $0.count <= 20 }
+
+        #expect(line == "2 guests")
+    }
+
     @Test func aLoneNameIsLeftToTheLabelsOwnCut() {
         let line = MeetingGuests.line(["a.very.long.address.for.a.shared.mailbox"]) { $0.count <= 12 }
 
@@ -60,7 +96,7 @@ struct MeetingGuestsTests {
         #expect(line == "With a.very.long… and Dana")
     }
 
-    @Test func aReminderWithALongNamelessGuestKeepsItsCount() throws {
+    @Test func aReminderWithALongNamelessGuestShowsTheCountAndSpeaksTheNames() throws {
         let suite = "meeting-guests-tests-\(UUID().uuidString)"
         let store = try #require(UserDefaults(suiteName: suite))
         defer { store.removePersistentDomain(forName: suite) }
@@ -81,10 +117,10 @@ struct MeetingGuestsTests {
         stage.addSubview(stack)
 
         stage.layoutSubtreeIfNeeded()
-        let line = try #require(stack.kitSubviews(of: KitLabel.self).first { $0.text.hasPrefix("With ") })
+        let line = try #require(stack.kitSubviews(of: KitLabel.self).first { $0.text.hasSuffix(" guests") })
 
-        #expect(line.text.hasPrefix("With a."))
-        #expect(line.text.hasSuffix("… and 7 others"))
+        #expect(line.text == "8 guests")
+        #expect(line.accessibilityValue() as? String == "With a.very.long.address.for.a.shared.mailbox and 7 others")
         #expect(line.intrinsicContentSize.width <= line.frame.width + 0.5)
     }
 }

@@ -709,6 +709,14 @@ final class CommandListPanel: NSView, NSTextFieldDelegate {
         super.removeFromSuperview()
     }
 
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let hit = super.hitTest(point), let superview else { return nil }
+        let onField = hit === field || hit.isDescendant(of: field)
+        let row = KitReach.rect(field.frame, reach: KitReach.least)
+        guard !onField, !KitReach.pressable(hit, under: self), row.contains(stage.convert(point, from: superview)) else { return hit }
+        return KitReach.field(field)
+    }
+
     func controlTextDidChange(_ notification: Notification) {
         list.typed = field.stringValue
     }
