@@ -34,8 +34,10 @@ def main():
         for name, (data, _) in FILES.items():
             (folder / name).write_bytes(data)
         sv.launch()
+        opened = {}
         for name, (_, want) in FILES.items():
             tid = sv.sp("open", url=(folder / name).as_uri())["resultID"]
+            opened[name] = tid
             time.sleep(1.5)
             kind = sv.ev(tid, "document.contentType + ' ' + document.characterSet") or ""
             text = sv.ev(tid, "document.body ? document.body.innerText : ''") or ""
@@ -44,7 +46,7 @@ def main():
                 t.ok(f"{name}: shown as UTF-8 text", kind == "text/plain UTF-8" and name not in downloads, (kind, downloads))
             else:
                 t.ok(f"{name}: downloaded, as before", name in downloads, (kind, downloads))
-        t.ok("Makefile's accent reads as one letter", "héllo" in (sv.ev(sv.sp("state")["tabs"][1]["id"], "document.body.innerText") or ""))
+        t.ok("Makefile's accent reads as one letter", "héllo" in (sv.ev(opened["Makefile"], "document.body.innerText") or ""))
         evil = [x for x in sv.sp("state")["tabs"] if x.get("url", "").endswith("evil.txt")]
         if evil:
             t.ok("a file's <script> and onerror run nothing", sv.ev(evil[0]["id"], "String(window.__ran)") == "undefined")

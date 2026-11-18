@@ -75,7 +75,7 @@ def main():
         t.ok("with its source", f"Source: {sv.BASE}/story" in text, text)
         t.ok("bold and links", "**April**" in text and f"[flow data]({sv.BASE}/data)" in text, text)
         t.ok("an image with its full address", f"![River]({sv.BASE}/river.png)" in text, text)
-        t.ok("code fenced", "```sh\nave tabs list\n```" in text, text)
+        t.ok("code fenced", "```sh\nbroadway tabs list\n```" in text, text)
         t.ok("a table", "| Month | Flow |\n| --- | --- |\n| April | High |" in text, text)
         t.ok("no navigation or footer", "Home" not in text and "Footer words" not in text, text)
         t.ok("says Copied as Markdown", markdown()["announced"] == "Copied as Markdown", markdown())

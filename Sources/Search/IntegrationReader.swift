@@ -91,11 +91,14 @@ enum IntegrationReader {
             user = picked
         }
         guard let (data, status) = await transport(sessionRequest(body, cookies: cookies, user: user, endpoint: endpoint)) else { return nil }
+        let own = Asking(space: asking.space, workspace: user.workspace)
         guard refused(data, status) else {
             askers[asking] = user
+            if !user.workspace.isEmpty { askers[own] = user }
             return .answered(data, status)
         }
         askers[asking] = nil
+        if askers[own] == user { askers[own] = nil }
         guard again else { return .signIn }
         return await sessionCall(body, asking: asking, workspace: workspace, cookies: cookies, endpoint: endpoint,
                                  transport: transport, again: false)

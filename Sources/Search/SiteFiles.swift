@@ -69,7 +69,7 @@ enum SiteFiles {
     }
 
     static func verdict(_ facts: FileFacts, kept: Bool?, local: (String) -> Bool = SiteFiles.local) -> FileVerdict {
-        if facts.agent || facts.start == .broadway { return .go }
+        if facts.agent || facts.start == .broadway || facts.url.isFileURL { return .go }
         let asked = asked(facts)
         if !asked, kept == false { return .drop }
         if insecure(facts, local: local) { return .askInsecure }

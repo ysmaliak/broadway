@@ -67,7 +67,7 @@ def main():
         t.ok("a file given to a site is listed", names(files()) == ["holiday-photo.png"], files())
         t.ok("with the site", files()["items"][0]["source"] == "shop.example", files())
 
-        sv.ev(tab, "document.getElementById('d').click(), 1")
+        sv.cmd({"do": "tap", "id": tab, "selector": "#d"})
         t.ok("a download is listed", until(lambda: any("report-for-files" in n for n in names(files()))), files())
         fetched = next(x for x in files()["items"] if "report-for-files" in x["name"])
         t.ok("from the site it came from", fetched["source"] == "127.0.0.1", fetched)

@@ -31,6 +31,12 @@ struct SiteFilesTests {
         #expect(SiteFiles.verdict(facts(agent: true, url: plain), kept: false, local: notLocal) == .go)
     }
 
+    @Test func aFileOnThisMacOpenedByItsAddressIsNeverAsked() {
+        let here = URL(fileURLWithPath: "/tmp/site-files-test/blob.bin")
+        #expect(SiteFiles.verdict(facts(url: here, secure: false), kept: nil) == .go)
+        #expect(SiteFiles.verdict(facts(url: here, secure: false), kept: false) == .go)
+    }
+
     @Test func aKeptAllowLetsTheSitesFilesThrough() {
         #expect(SiteFiles.verdict(facts(), kept: true) == .go)
     }

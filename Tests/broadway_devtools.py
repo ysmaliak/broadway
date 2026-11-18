@@ -180,7 +180,9 @@ def exercise(call, base, label):
     check(label + ' select changed', 'selected blue' in call('text', tab=tab)['data'].get('text', ''))
     check(label + ' disabled option refuses', not call('choose', tab=tab, ref=refs['Colour'], value='blocked')['ok'])
     check(label + ' secret select refuses', not call('choose', tab=tab, ref=refs['Verification code'], value='123456')['ok'])
-    for name, action, expected in [('Alert', 'accept', 'alert answered'), ('Confirm', 'dismiss', 'confirm false'), ('Prompt', 'accept', 'prompt Robin'), ('Secret prompt', 'dismiss', 'secret null')]:
+    call('click', tab=tab, ref=refs['Alert'])
+    check(label + ' a click answers a plain alert itself', not call('dialog', tab=tab)['data'].get('pending') and 'alert answered' in call('text', tab=tab)['data'].get('text', ''))
+    for name, action, expected in [('Confirm', 'dismiss', 'confirm false'), ('Prompt', 'accept', 'prompt Robin'), ('Secret prompt', 'dismiss', 'secret null')]:
         call('click', tab=tab, ref=refs['Check choice' if name == 'Confirm' else name])
         for _ in range(30):
             pending = call('dialog', tab=tab)['data']
@@ -225,7 +227,7 @@ def main():
             help_page = cli('help', name, raw=True)
             check('help ' + name, help_page.returncode == 0 and name in help_page.stdout.decode())
         snapshot_help = cli('help', 'snapshot', raw=True).stdout.decode()
-        check('snapshot help explains option bounds', all(words in snapshot_help for words in ['100 select options', '120 characters', '200 characters']))
+        check('snapshot help says options are shown and secrets never', all(words in snapshot_help for words in ['Select options, values and states are shown', 'password and card values never']))
         choose_help = cli('help', 'choose', raw=True).stdout.decode()
         check('choose help explains opaque final effects', 'Set final for opaque' in choose_help)
         def command(name, **args):

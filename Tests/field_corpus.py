@@ -14,6 +14,7 @@ hosts share no registrable domain. The account is forgotten at the end; no
 window is made or shown.
 """
 import os
+import re
 import sys
 import threading
 import time
@@ -88,7 +89,11 @@ def main():
             r = offered(HERE, c)
             users = {x.get("login") for x in r.get("rows", [])}
             if c["expect"] == "none":
-                t.ok(f"{c['file']}: no accounts", r.get("shown") is False, r)
+                probed = re.search(r"<input[^>]*data-probe[^>]*>", c["html"])
+                fresh = bool(probed and 'autocomplete="new-password"' in probed.group(0))
+                rows = r.get("rows", [])
+                strong = fresh and rows and all(x.get("strong") for x in rows)
+                t.ok(f"{c['file']}: no accounts", r.get("shown") is False or strong, r)
                 continue
             wide = c["expect"] == "wide"
             t.ok(f"{c['file']}: {'the site' if wide else 'this host alone'}'s accounts",

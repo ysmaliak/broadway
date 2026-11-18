@@ -39,7 +39,23 @@ class Page(BaseHTTPRequestHandler):
         pass
 
 
-class Six(ThreadingHTTPServer):
+class Four(ThreadingHTTPServer):
+    def get_request(self):
+        connection, address = super().get_request()
+        self.open.add(connection)
+        return connection, address
+
+    def drop(self):
+        for connection in list(self.open):
+            try:
+                connection.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            connection.close()
+        self.open.clear()
+
+
+class Six(Four):
     address_family = socket.AF_INET6
 
 
@@ -64,7 +80,7 @@ class Server:
         context.load_cert_chain(str(pair[1]), str(pair[0]))
         for _ in range(20):
             try:
-                four = ThreadingHTTPServer(("127.0.0.1", self.port or 0), Page)
+                four = Four(("127.0.0.1", self.port or 0), Page)
                 six = Six(("::1", four.server_port), Page)
                 break
             except OSError:
@@ -75,6 +91,7 @@ class Server:
             raise RuntimeError("no port for the https server")
         self.port = four.server_port
         for server in (four, six):
+            server.open = set()
             server.socket = context.wrap_socket(server.socket, server_side=True)
             threading.Thread(target=server.serve_forever, daemon=True).start()
             self.running.append(server)
@@ -83,6 +100,7 @@ class Server:
         for server in self.running:
             server.shutdown()
             server.server_close()
+            server.drop()
         self.running = []
 
     def url(self, name):

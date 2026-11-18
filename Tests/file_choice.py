@@ -112,7 +112,7 @@ def main():
         def chosen(selector, page=tab):
             return sv.ev(page, f"Array.from(document.querySelector('{selector}').files).map(f=>f.name)")
 
-        sv.ev(tab, "document.querySelector('#download').click();1")
+        sv.cmd({"do": "tap", "id": tab, "selector": "#download"})
         until(lambda: any(x["name"] == "recent.png" for x in sv.cmd({"do": "uploads"})["items"]))
         state = open_picker("#image")
         t.ok("real delegate reads image accept and single mode", state["accept"] == "image/*" and not state["multiple"], state)
@@ -221,7 +221,7 @@ def main():
         state = open_picker("#any", private, pn)
         t.ok("private chooser cannot see regular files", state["items"] == [], state)
         box("cancel", window=pn)
-        sv.ev(private, "document.querySelector('#private').click();1")
+        sv.cmd({"do": "tap", "id": private, "selector": "#private", "window": pn})
         until(lambda: (support / "Downloads" / "private.png").exists())
         time.sleep(0.6)
         state = open_picker("#any", private, pn)

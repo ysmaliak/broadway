@@ -116,7 +116,7 @@ try:
     # A private tab stays: nothing could bring it back. Last of these, since
     # a page opened from a private tab is private too.
     quiet = sv.sp("private"); time.sleep(0.5)
-    shy = quiet["activeID"]
+    shy = sv.sp("open", url=f"{sv.BASE}/before", window=quiet["window"])["resultID"]; time.sleep(0.7)
     sv.sp("open", url=f"{sv.BASE}/after", window=quiet["window"]); time.sleep(0.7)
     sv.sp("age", id=shy, seconds=2 * HOUR); st = sv.sp("tidy", window=quiet["window"])
     t.ok("private: stays however long it is left", by(st, shy) is not None and by(st, shy)["staysReason"] == "private", by(st, shy))

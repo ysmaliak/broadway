@@ -258,9 +258,21 @@ def stage(events, key):
     return "never became a download"
 
 
+ASKED = []
+ASKS = {"frame-src", "frame-away", "script-later", "script-frame", "script-anchor", "script-blob-later", "countdown-location"}
+
+
+def allow_cards():
+    for card in sv.cmd({"do": "sitefiles"}).get("cards", []):
+        if card["kind"] == "site":
+            sv.cmd({"do": "sitefiles", "action": "allow", "id": card["id"]})
+            ASKED.append(card["files"])
+
+
 def wait_for(names, seconds=6.0):
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
+        allow_cards()
         have = files()
         if all(n in have for n in names):
             return have
@@ -302,6 +314,8 @@ def check_files(case, wanted, have, new, got):
 def run(case, t, window=None):
     before = set(files())
     trace(clear=True)
+    sv.cmd({"do": "sitefiles", "action": "forget"})
+    ASKED.clear()
     source = "same-name" if case == "same-name-again" else case
     tab = None
     at = {"window": window} if window else {}
@@ -325,6 +339,8 @@ def run(case, t, window=None):
         have = wait_for(wanted) if wanted else (time.sleep(4) or files())
         new = sorted(set(have) - before)
         problems = check_files(case, wanted, have, new, trace())
+        if (case in ASKS) != bool(ASKED):
+            problems.append("a card asked first" if ASKED else "no card asked first")
         label = "only the second of two, WebKit drops the first" if case == "two" else ", ".join(wanted) or "one file"
     elif outcome == "refused":
         time.sleep(3)
@@ -364,6 +380,9 @@ def run(case, t, window=None):
     if tab and case in GUARDED:
         shown = sign(tab)
         events.append({"kind": "sign", "blocked": " ".join(shown["blocked"]), "reasons": " ".join(shown["reasons"])})
+    if ASKED:
+        print(f"  card {case}: {ASKED}")
+        events.append({"kind": "asked", "files": ASKED[:]})
     good = not problems
     why = "" if good else "; ".join(problems) + " | " + stage(events, "/file/")
     t.ok(f"{case}: {label}", good, why)

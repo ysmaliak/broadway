@@ -311,6 +311,22 @@ final class IntegrationTests {
         #expect(session.lookups.count == 1)
     }
 
+    @Test func aLinearFolderPinnedToItsWorkspaceAfterTheFirstReadSendsOneRequestOnTheNext() async throws {
+        let made = integrations(answering: ["/graphql": ("linear-assigned", 200)])
+        IntegrationReader.cookies = { _ in [HTTPCookie(properties: [.domain: ".linear.app", .path: "/", .name: "session", .value: "fixture"])!] }
+        var mine = folder(.linear(.assigned, workspace: nil))
+
+        let first = await IntegrationReader.read(mine, with: made)
+        guard case .read(let read) = first, let pinned = read.source else { Issue.record("\(String(describing: first))"); return }
+        mine.source = pinned
+        let again = await IntegrationReader.read(mine, with: made)
+
+        guard again?.found != nil else { Issue.record("\(String(describing: again))"); return }
+        #expect(LinearAPI.workspace(in: pinned.address) == "north")
+        #expect(asked.count == 3)
+        #expect(session.lookups.count == 1)
+    }
+
     @Test func aRefusedLinearSessionAsksAgainOnceThenSaysSignIn() async throws {
         let made = integrations(answering: ["/graphql": ("linear-assigned", 200)])
         IntegrationReader.cookies = { _ in [HTTPCookie(properties: [.domain: ".linear.app", .path: "/", .name: "session", .value: "fixture"])!] }
