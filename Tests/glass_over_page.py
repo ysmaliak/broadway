@@ -33,6 +33,8 @@ MEMBERS = [
     ("downloads-many", "RecentDownloadsView", lambda: sv.cmd({"do": "ui", "downloadsStage": "many", "recentdownloads": True}),
      lambda: sv.cmd({"do": "ui", "recentdownloads": False, "downloadsStage": "empty"})),
     ("downloads-picked", "RecentDownloadsView", lambda: picked(), lambda: sv.cmd({"do": "ui", "recentdownloads": False, "downloadsStage": "empty"})),
+    ("link-chooser", "LinkChooserView", lambda: sv.cmd({"do": "ui", "linkChooser": "https://linear.example/team/issue/RDR-214"}),
+     lambda: sv.cmd({"do": "ui", "linkChooserDrop": True})),
 ]
 
 

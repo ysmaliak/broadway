@@ -13,7 +13,7 @@ GLASS = {
     "meeting-alert", "meeting-alert-two",
     "meeting-alert-faces", "meeting-alert-long", "agent-card", "agent-badge", "recent-downloads",
     "site-file", "announcement", "agent-ask-outside", "offer-bar", "link-preview", "account-list",
-    "update-card", "stuck-card", "field-bar", "mini-player", "float-controls",
+    "update-card", "stuck-card", "field-bar", "mini-player", "float-controls", "link-chooser",
 }
 SURFACES = [
     ("site-file", "site", {"kind": "site"}),
@@ -30,6 +30,15 @@ SURFACES = [
     ("update-card", "shown", {}),
     ("stuck-card", "stuck", {}),
     ("stuck-card", "leave", {"kind": "leave"}),
+    ("link-chooser", "spaces", {"spaces": 2}),
+    ("link-chooser", "hovered", {"spaces": 2, "lit": 2, "faint": True}),
+    ("link-chooser", "always", {"spaces": 2, "lit": 1, "always": True}),
+    ("link-chooser", "no-spaces", {"spaces": 0}),
+    ("link-chooser", "private-window", {"spaces": 0, "peek": False}),
+    ("link-chooser", "many", {"spaces": 12}),
+    ("link-chooser", "many-end", {"spaces": 12, "lit": 13}),
+    ("link-chooser", "no-site", {"spaces": 2, "url": "file:///Volumes/Shared/notes/plan.html"}),
+    ("link-chooser", "narrow", {"spaces": 2, "width": 320}),
 ]
 NOTES = {"own": "on a colour of its own", "picked": "on the system's selection colour", "off": "on a key that is switched off",
          "video": "straight on the video"}

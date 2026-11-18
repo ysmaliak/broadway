@@ -185,6 +185,11 @@ enum TabsBench {
                 "chooser": LinkChooser.shown?.rows.map(\.title) ?? [],
                 "chooserLit": LinkChooser.shown?.choosing.lit ?? -1,
                 "chooserLitShown": LinkChooser.shown?.litShown ?? true,
+                "chooserFaint": LinkChooser.shown?.faint ?? false,
+                "chooserAlways": LinkChooser.shown?.always ?? false,
+                "chooserWindow": LinkChooser.shown?.windowNumber ?? 0,
+                "chooserFrames": BenchLinkChooser.frames(in: browser),
+                "chooserMotion": BenchLinkChooser.motion,
                 "peek": browser.peekTab?.address?.absoluteString ?? ""].merging(extra) { $1 })
     }
 

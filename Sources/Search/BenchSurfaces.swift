@@ -11,7 +11,7 @@ enum BenchSurfaces {
         + ["find-bar", "find-bar-empty", "find-bar-narrow", "find-count", "form-fill-card", "form-fill-done", "form-fill-offer"]
         + ["meeting-alert", "meeting-alert-two", "meeting-alert-faces", "meeting-alert-long", "pin-meeting-badges", "history-panel", "downloads-panel", "hidden-panel"]
         + BookmarksSurface.names + SettingsPieceSurfaces.names + BenchFloating.names + BenchPages.names + SiteSurfaces.names
-        + BenchFieldFixtures.names + SideSurfaces.names + BenchGlassFamily.names
+        + BenchFieldFixtures.names + SideSurfaces.names + BenchGlassFamily.names + BenchLinkChooser.names
     private static var windows: [NSWindow] = []
     private static var inked: String?
 
@@ -137,6 +137,8 @@ enum BenchSurfaces {
             return BenchFieldFixtures.surface(name, request, browser: browser)
         case _ where BenchGlassFamily.names.contains(name):
             return BenchGlassFamily.make(name, request, browser: browser)
+        case _ where BenchLinkChooser.names.contains(name):
+            return BenchLinkChooser.make(request)
         default:
             return BenchFloating.make(name, request)
         }
@@ -209,6 +211,14 @@ enum BenchSurfaces {
         let ground = ((stage as? KitBox)?.fill ?? .white).kitResolved(dark: stage.kitDark).usingColorSpace(.deviceRGB) ?? .white
         pen.setFillColor(red: ground.redComponent, green: ground.greenComponent, blue: ground.blueComponent, alpha: 1)
         pen.fill(CGRect(origin: .zero, size: size))
+        paint(stage, into: pen, size: size)
+        guard let png = whole.representation(using: .png, properties: [:]), (try? png.write(to: URL(fileURLWithPath: path))) != nil else {
+            return ["error": "could not write the picture"]
+        }
+        return ["drawn": path, "width": whole.pixelsWide, "height": whole.pixelsHigh]
+    }
+
+    static func paint(_ stage: NSView, into pen: CGContext, size: CGSize) {
         func glassy(_ view: NSView) -> Bool { view is NSGlassEffectView || view.subviews.contains(where: glassy) }
         func rounded(_ rect: CGRect, _ radius: CGFloat) -> CGPath {
             let r = max(0, min(radius, min(rect.width, rect.height) / 2))
@@ -254,10 +264,6 @@ enum BenchSurfaces {
             pen.restoreGState()
         }
         stage.subviews.forEach { paint($0, 1) }
-        guard let png = whole.representation(using: .png, properties: [:]), (try? png.write(to: URL(fileURLWithPath: path))) != nil else {
-            return ["error": "could not write the picture"]
-        }
-        return ["drawn": path, "width": whole.pixelsWide, "height": whole.pixelsHigh]
     }
 
     private static func landed(_ point: NSPoint, in view: NSView) -> NSView? {

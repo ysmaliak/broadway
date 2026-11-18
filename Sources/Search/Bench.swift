@@ -4349,6 +4349,11 @@ final class Bench {
             if Store.testing, let text = request["linkChooser"] as? String, let url = URL(string: text) {
                 LinkChooser.ask(IncomingLink(url: url, source: .unknownApp), url: url, in: browser, world: Browsers.linkWorld(from: browser))
             }
+            if Store.testing, let row = request["linkChooserPoint"] as? Int { LinkChooser.shown?.point(at: row) }
+            if Store.testing, let seconds = request["linkChooserWatch"] as? Double { BenchLinkChooser.watch(for: seconds) }
+            if Store.testing, let path = request["linkChooserPicture"] as? String { _ = BenchLinkChooser.picture(of: browser, to: path) }
+            if Store.testing, request["linkChooserDrop"] as? Bool == true { LinkChooser.shown?.drop() }
+            if Store.testing, request["linkChooserDrop"] as? String == "fade" { LinkChooser.shown?.drop(animated: true) }
             if Store.testing, let on = request["linkNotice"] as? Bool {
                 browser.showLinkNotice(on ? LinkNotice("Opened in Work by a rule", choices: [
                     .init("Undo", id: "link.notice.undo") {}, .init("Edit Rule", id: "link.notice.edit") {},

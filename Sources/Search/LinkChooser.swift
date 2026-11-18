@@ -51,14 +51,12 @@ final class LinkChooser {
         case space(UUID, name: String)
         case window
         case peek
-        case app(bundleID: String, name: String, path: String)
 
         var title: String {
             switch self {
             case .space(_, let name): name
             case .window: "New Window"
             case .peek: "Peek"
-            case .app(_, let name, _): name
             }
         }
 
@@ -67,7 +65,6 @@ final class LinkChooser {
             case .space(let id, _): .space(id, folder: nil)
             case .window: .window(nil)
             case .peek: .peek
-            case .app(let bundle, let name, _): .app(bundleID: bundle, name: name)
             }
         }
 
@@ -76,7 +73,6 @@ final class LinkChooser {
             case .space(let id, _): .space(id, folder: nil)
             case .window: .window(nil)
             case .peek: .peek
-            case .app(let bundle, let name, _): .app(bundleID: bundle, name: name)
             }
         }
     }
@@ -91,33 +87,36 @@ final class LinkChooser {
     var choosing: LinkChoosing { didSet { view?.lit = choosing.lit } }
     var always = false { didSet { view?.always = always } }
     private weak var browser: Browser?
-    private var popup: KitPopup?
+    private var panel: LinkChooserPanel?
     private var view: LinkChooserView?
     private var monitor: Any?
+    private var watching: [NSObjectProtocol] = []
     private(set) var done = false
     var litShown: Bool { view?.litShown ?? true }
+    var faint: Bool { view?.faint ?? false }
+    private var keyed: Int?
+    var windowNumber: Int? { panel?.window.windowNumber }
 
-    init(link: IncomingLink, url: URL, browser: Browser, world: LinkWorld, browsers: [(bundleID: String, name: String, path: String)]) {
+    static func rows(spaces: [LinkWorld.Space], usesSpaces: Bool, isPrivate: Bool, peekable: Bool) -> [Row] {
+        var rows: [Row] = []
+        if usesSpaces, !isPrivate { rows += spaces.map { .space($0.id, name: $0.name) } }
+        rows.append(.window)
+        if peekable { rows.append(.peek) }
+        return rows
+    }
+
+    init(link: IncomingLink, url: URL, browser: Browser, world: LinkWorld) {
         self.link = link
         self.url = url
         self.browser = browser
         self.world = world
         site = LinkRouter.site(of: url)
-        var rows: [Row] = []
-        if world.usesSpaces, !browser.isPrivate {
-            rows += world.spaces.map { .space($0.id, name: $0.name) }
-        }
-        rows.append(.window)
-        if browser.active.map({ !$0.isBlank && !$0.shy }) == true, browser.peekTab == nil { rows.append(.peek) }
-        rows += browsers.map { .app(bundleID: $0.bundleID, name: $0.name, path: $0.path) }
+        let rows = Self.rows(spaces: world.spaces, usesSpaces: world.usesSpaces, isPrivate: browser.isPrivate,
+                             peekable: browser.active.map { !$0.isBlank && !$0.shy } == true && browser.peekTab == nil)
         self.rows = rows
         choosing = LinkChoosing(count: rows.count)
         if let front = world.front, let at = rows.firstIndex(of: .space(front, name: world.name(of: front))) { choosing.point(at: at) }
-    }
-
-    static func otherBrowsers(for url: URL) -> [(bundleID: String, name: String, path: String)] {
-        guard !Store.testing else { return [] }
-        return installedBrowsers(for: url)
+        keyed = choosing.lit
     }
 
     static func installedBrowsers(for url: URL) -> [(bundleID: String, name: String, path: String)] {
@@ -133,8 +132,8 @@ final class LinkChooser {
     }
 
     static func ask(_ link: IncomingLink, url: URL, in browser: Browser, world: LinkWorld) {
-        shown?.finish(nil)
-        let chooser = LinkChooser(link: link, url: url, browser: browser, world: world, browsers: otherBrowsers(for: url))
+        shown?.finish(nil, animated: false)
+        let chooser = LinkChooser(link: link, url: url, browser: browser, world: world)
         shown = chooser
         chooser.present()
     }
@@ -151,46 +150,80 @@ final class LinkChooser {
     }
 
     private func show(in browser: Browser) {
-        guard !done, let window = browser.window, let content = window.contentView else { return }
-        var marks: [UUID: NSImage] = [:]
-        for space in browser.spaces { if let mark = space.menuMark ?? space.menuImage { marks[space.id] = mark } }
-        let made = LinkChooserView(rows: rows, site: site, address: url.absoluteString, marks: marks)
+        guard !done, let window = browser.window, window.contentView != nil else { return }
+        KitPopup.closeAll(in: window)
+        if browser.editing { browser.quitField() }
+        var marks: [UUID: LinkChooserView.Mark] = [:]
+        for space in browser.spaces { marks[space.id] = LinkChooserView.Mark(icon: space.shownIcon, look: space.look ?? SpaceLook()) }
+        let made = LinkChooserView(rows: rows, url: url, site: site, marks: marks)
         made.lit = choosing.lit
+        made.always = always
         made.choose = { [weak self] in self?.finish($0) }
-        made.point = { [weak self] in self?.choosing.point(at: $0) }
+        made.point = { [weak self] in self?.point(at: $0) }
         made.flip = { [weak self] in self?.always.toggle() }
+        made.here = { [weak self] in self?.finish(nil) }
+        made.open = { [weak self] in
+            guard let self, let lit = self.choosing.lit else { return }
+            self.finish(lit)
+        }
         view = made
-        let spot = LinkChooser.spot(in: window, content: content, browser: browser)
-        popup = KitPopup.show(made, size: made.fittingSize, from: spot, of: content, edge: .below, focus: true) { [weak self] in
-            guard let self, !self.done else { return }
-            self.popup = nil
-            self.finish(nil)
-        }
+        let panel = LinkChooserPanel(made) { [weak self] in self?.finish(nil) }
+        self.panel = panel
+        panel.show(over: window)
         made.reveal(choosing.lit)
-        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
-            MainActor.assumeIsolated { self?.heard(event) == true } ? nil : event
-        }
+        watch(window, panel.window)
     }
 
-    static func spot(in window: NSWindow, content: NSView, browser: Browser) -> NSRect {
-        let pointer = content.convert(window.mouseLocationOutsideOfEventStream, from: nil)
-        if content.bounds.insetBy(dx: 40, dy: 40).contains(pointer) {
-            return NSRect(x: pointer.x, y: pointer.y, width: 1, height: 1)
+    func point(at index: Int) {
+        guard !done, rows.indices.contains(index) else { return }
+        choosing.point(at: index)
+        view?.faint = index != keyed
+    }
+
+    private func watch(_ window: NSWindow, _ panel: NSWindow) {
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
+            MainActor.assumeIsolated { self?.heard(event) == true } ? nil : event
         }
-        let x = browser.prefs.sidePosition == .right ? max(12, content.bounds.width - LinkChooserView.width - PopupLook.inset * 2 - 12) : 12
-        let top = min(96, content.bounds.height / 4)
-        let y = content.isFlipped ? top : content.bounds.height - top
-        return NSRect(x: x - 1, y: y - 1, width: 2, height: 2)
+        let center = NotificationCenter.default
+        let gone: (Notification) -> Void = { [weak self] _ in
+            MainActor.assumeIsolated { self?.finish(nil, animated: false) }
+        }
+        let resigned: (Notification) -> Void = { [weak self] _ in
+            DispatchQueue.main.async {
+                guard let self, !self.done, let panel = self.panel else { return }
+                let key = NSApp.keyWindow
+                let fieldUp = key === self.browser?.window && self.browser?.editing == true
+                if fieldUp || (key !== panel.window && key !== self.browser?.window) { self.finish(nil) }
+            }
+        }
+        watching = [
+            center.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main, using: gone),
+            center.addObserver(forName: NSWindow.didResignKeyNotification, object: window, queue: .main, using: resigned),
+            center.addObserver(forName: NSWindow.didResignKeyNotification, object: panel, queue: .main, using: resigned),
+            center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main, using: gone),
+            center.addObserver(forName: KitPopup.willShow, object: window, queue: .main, using: gone),
+            center.addObserver(forName: NSWindow.didResizeNotification, object: window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.panel?.place() }
+            },
+        ]
     }
 
     private func heard(_ event: NSEvent) -> Bool {
-        guard !done, event.window === popup?.panel || event.window === browser?.window else { return false }
+        guard !done, let panel else { return false }
+        guard event.type == .keyDown else {
+            if event.window !== panel.window { finish(nil) }
+            return false
+        }
+        guard event.window === panel.window || event.window === browser?.window else { return false }
         return key(event.keyCode, event.charactersIgnoringModifiers)
     }
 
     @discardableResult
     func key(_ code: UInt16, _ characters: String?) -> Bool {
-        switch choosing.key(code, characters) {
+        let outcome = choosing.key(code, characters)
+        keyed = choosing.lit
+        view?.faint = false
+        switch outcome {
         case .none:
             view?.reveal(choosing.lit)
             return code == 125 || code == 126
@@ -204,15 +237,27 @@ final class LinkChooser {
         return true
     }
 
-    func finish(_ index: Int?) {
+    func drop(animated: Bool = false) {
         guard !done else { return }
         done = true
+        close(animated: animated)
+    }
+
+    private func close(animated: Bool) {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
-        let closing = popup
-        popup = nil
-        closing?.close()
+        watching.forEach { NotificationCenter.default.removeObserver($0) }
+        watching = []
+        let closing = panel
+        panel = nil
+        closing?.leave(animated: animated)
         if LinkChooser.shown === self { LinkChooser.shown = nil }
+    }
+
+    func finish(_ index: Int?, animated: Bool = true) {
+        guard !done else { return }
+        done = true
+        close(animated: animated)
         guard let browser else { return }
         guard let index, rows.indices.contains(index) else {
             Browsers.apply(LinkDecision(url: url, place: .here, rule: nil, steps: ["You chose where you are"], background: false),
@@ -228,179 +273,93 @@ final class LinkChooser {
     }
 }
 
-final class LinkChooserView: NSView {
-    var lit: Int? { didSet { if lit != oldValue { for (index, row) in rows.enumerated() { row.lit = lit == index } } } }
+@MainActor
+final class LinkChooserPanel {
+    static let arrival = KitArrival(anchor: KitArrival.top, scale: 0.98)
+    static let leaveSeconds = 0.2
 
-    func reveal(_ index: Int?) {
-        guard let index, rows.indices.contains(index) else { return }
-        layoutSubtreeIfNeeded()
-        rows[index].scrollToVisible(rows[index].bounds.insetBy(dx: 0, dy: -4))
+    let window: KitPopupPanel
+    private let stage: LinkChooserStage
+    private let card: LinkChooserView
+    private weak var parent: NSWindow?
+    private static var leaving: [LinkChooserPanel] = []
+
+    init(_ card: LinkChooserView, outside: @escaping () -> Void) {
+        self.card = card
+        stage = LinkChooserStage(card)
+        stage.outside = outside
+        window = KitPopupPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        window.takesKey = true
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.hasShadow = false
+        window.hidesOnDeactivate = true
+        window.isReleasedWhenClosed = false
+        window.animationBehavior = .none
+        window.contentView = stage
     }
 
-    var litShown: Bool {
-        guard let lit, rows.indices.contains(lit) else { return true }
-        return rows[lit].visibleRect.height >= rows[lit].bounds.height - 0.5
-    }
-    var always = false { didSet { toggle.set(always, animated: true) } }
-    var choose: ((Int) -> Void)?
-    var point: ((Int) -> Void)?
-    var flip: (() -> Void)?
-
-    private let head: KitLabel
-    private let address: KitLabel
-    private var rows: [LinkChooserRow] = []
-    private let rule = KitBox(fill: PopupLook.edge)
-    private let foot: KitLabel
-    private let toggle = KitSwitch(isOn: false, small: true, system: false)
-    static let width: CGFloat = 280
-
-    init(rows choices: [LinkChooser.Row], site: String?, address text: String, marks: [UUID: NSImage]) {
-        head = KitLabel("Open Link In", font: .systemFont(ofSize: 11, weight: .semibold), color: KitColor.muted)
-        address = KitLabel(site ?? text, font: .systemFont(ofSize: 12), color: KitColor.muted)
-        foot = KitLabel(site.map { "Always for \($0)" } ?? "Always for this site", font: .systemFont(ofSize: 12), color: KitColor.ink)
-        super.init(frame: .zero)
-        identifier = NSUserInterfaceItemIdentifier("link.chooser")
-        rows = choices.enumerated().map { index, choice in
-            let row = LinkChooserRow(choice, number: index < 9 ? index + 1 : nil, marks: marks)
-            row.action = { [weak self] in self?.choose?(index) }
-            row.moved = { [weak self] in
-                guard let self, self.lit != index else { return }
-                self.point?(index)
-            }
-            return row
-        }
-        for view in [head, address, rule, foot, toggle] as [NSView] { addSubview(view) }
-        rows.forEach { addSubview($0) }
-        toggle.onChange = { [weak self] on in
-            guard let self, on != self.always else { return }
-            self.flip?()
-        }
-        toggle.kitAccess(id: "link.chooser.always", label: foot.text)
-        head.setAccessibilityElement(false)
-        setAccessibilityElement(true)
-        setAccessibilityRole(.group)
-        setAccessibilityLabel("Open Link In")
-        setAccessibilityModal(true)
+    func show(over parent: NSWindow) {
+        self.parent = parent
+        place()
+        stage.layoutSubtreeIfNeeded()
+        card.kitArrive(false, Self.arrival, animated: false)
+        parent.addChildWindow(window, ordered: .above)
+        if window.level < parent.level { window.level = parent.level }
+        window.makeKey()
+        card.kitArrive(true, Self.arrival)
+        NSAccessibility.post(element: card, notification: .created)
+        NSAccessibility.post(element: card, notification: .layoutChanged, userInfo: [.uiElements: [card]])
     }
 
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError() }
-
-    override var isFlipped: Bool { true }
-
-    private var headHeight: CGFloat { 40 }
-    private var footHeight: CGFloat { 38 }
-
-    override var intrinsicContentSize: NSSize {
-        NSSize(width: Self.width, height: headHeight + CGFloat(rows.count) * PopupLook.row + 9 + footHeight)
+    func place() {
+        guard let parent, let content = parent.contentView else { return }
+        let box = LinkChooserLook.frame(in: content.bounds.size, rows: card.count)
+        let local = content.isFlipped ? box : NSRect(x: box.minX, y: content.bounds.height - box.maxY, width: box.width, height: box.height)
+        let onScreen = parent.convertToScreen(content.convert(local, to: nil))
+        window.setFrame(onScreen.insetBy(dx: -LinkChooserLook.room, dy: -LinkChooserLook.room), display: true)
     }
 
-    override var fittingSize: NSSize { intrinsicContentSize }
+    func leave(animated: Bool) {
+        window.ignoresMouseEvents = true
+        if window.isKeyWindow { parent?.makeKey() }
+        guard animated else { return drop() }
+        Self.leaving.append(self)
+        card.kitArrive(false, Self.arrival)
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.leaveSeconds) { [self] in drop() }
+    }
 
-    override func layout() {
-        super.layout()
-        let width = bounds.width
-        let headSize = head.intrinsicContentSize
-        head.frame = kitSnap(NSRect(x: 10, y: 5, width: width - 20, height: headSize.height))
-        let addressSize = address.intrinsicContentSize
-        address.frame = kitSnap(NSRect(x: 10, y: head.frame.maxY + 2, width: min(addressSize.width, width - 20), height: addressSize.height))
-        var y = headHeight
-        for row in rows {
-            row.frame = NSRect(x: 0, y: y, width: width, height: PopupLook.row)
-            y += PopupLook.row
-        }
-        y += 4
-        rule.frame = kitSnap(NSRect(x: 10, y: y, width: width - 20, height: 1))
-        y += 5
-        let switchSize = toggle.intrinsicContentSize
-        toggle.frame = kitSnap(NSRect(x: width - 10 - switchSize.width, y: y + (footHeight - switchSize.height) / 2,
-                                      width: switchSize.width, height: switchSize.height))
-        let footSize = foot.intrinsicContentSize
-        foot.frame = kitSnap(NSRect(x: 10, y: y + (footHeight - footSize.height) / 2, width: toggle.frame.minX - 20, height: footSize.height))
+    private func drop() {
+        Self.leaving.removeAll { $0 === self }
+        window.parent?.removeChildWindow(window)
+        window.orderOut(nil)
     }
 }
 
-private final class LinkChooserRow: KitButton {
-    var lit = false { didSet { if lit != oldValue { paint() } } }
-    var moved: (() -> Void)?
+final class LinkChooserStage: NSView {
+    var outside: (() -> Void)?
+    private let card: NSView
 
-    private let ground = KitBox(fill: nil, corners: .radius(PopupLook.rowCorner))
-    private let art: NSView
-    private let title: KitLabel
-    private let number: KitLabel?
-    private var motion: NSTrackingArea?
-
-    init(_ choice: LinkChooser.Row, number at: Int?, marks: [UUID: NSImage]) {
-        title = KitLabel(choice.title, font: PopupLook.font, color: KitColor.ink)
-        number = at.map { KitLabel("\($0)", font: .monospacedDigitSystemFont(ofSize: 12, weight: .regular), color: KitColor.muted) }
-        switch choice {
-        case .space(let id, _):
-            if let image = marks[id] {
-                art = NSImageView(image: image)
-            } else {
-                art = KitSymbol("square.stack", style: KitSymbol.Style(size: 13), tint: KitColor.ink)
-            }
-        case .window:
-            art = KitSymbol("macwindow.badge.plus", style: KitSymbol.Style(size: 13), tint: KitColor.ink)
-        case .peek:
-            art = KitSymbol("eye", style: KitSymbol.Style(size: 13), tint: KitColor.ink)
-        case .app(_, _, let path):
-            let image = NSWorkspace.shared.icon(forFile: path)
-            image.size = NSSize(width: 18, height: 18)
-            art = NSImageView(image: image)
-        }
-        super.init(.plain(press: 0.98), label: choice.title)
-        identifier = NSUserInterfaceItemIdentifier("link.chooser.row." + choice.title)
-        addSubview(ground, positioned: .below, relativeTo: nil)
-        addSubview(art)
-        addSubview(title)
-        title.setAccessibilityElement(false)
-        art.setAccessibilityElement(false)
-        if let number {
-            number.setAccessibilityElement(false)
-            addSubview(number)
-        }
+    init(_ card: NSView) {
+        self.card = card
+        super.init(frame: .zero)
+        wantsLayer = true
+        addSubview(card)
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let motion { removeTrackingArea(motion) }
-        let made = NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeAlways, .inVisibleRect], owner: self)
-        addTrackingArea(made)
-        motion = made
-    }
-
-    override func mouseMoved(with event: NSEvent) { moved?() }
-
-    override func isAccessibilitySelected() -> Bool { lit }
-
-    private func paint() {
-        ground.layer?.kitTransition(Motion.kitQuick)
-        ground.fill = lit ? KitColor.ink.withAlphaComponent(0.09) : nil
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        ground.needsDisplay = true
-    }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func layout() {
         super.layout()
-        ground.frame = bounds.insetBy(dx: 0, dy: 0)
-        let size: NSSize = (art as? NSImageView) != nil ? NSSize(width: 18, height: 18) : art.intrinsicContentSize
-        art.frame = kitSnap(NSRect(x: 6 + (22 - size.width) / 2, y: (bounds.height - size.height) / 2, width: size.width, height: size.height))
-        var right = bounds.width - 10
-        if let number {
-            let size = number.intrinsicContentSize
-            number.frame = kitSnap(NSRect(x: right - size.width, y: (bounds.height - size.height) / 2, width: size.width, height: size.height))
-            right -= size.width + 10
-        }
-        let x: CGFloat = 6 + 22 + 10
-        let height = title.intrinsicContentSize.height
-        title.frame = kitSnap(NSRect(x: x, y: (bounds.height - height) / 2, width: max(0, min(title.intrinsicContentSize.width, right - x)),
-                                     height: height))
+        if let layer = card.layer, !CATransform3DIsIdentity(layer.transform) { return }
+        let box = bounds.insetBy(dx: LinkChooserLook.room, dy: LinkChooserLook.room)
+        if card.frame != box { card.frame = box }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        outside?()
     }
 }

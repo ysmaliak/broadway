@@ -237,8 +237,8 @@ final class LinkRulesTests {
         _ = page("https://example.com")
         let world = Browsers.linkWorld(from: browser)
         let link = outside("https://linear.app/a")
-        let chooser = LinkChooser(link: link, url: link.url, browser: browser, world: world, browsers: [])
-        let staying = LinkChooser(link: link, url: link.url, browser: browser, world: world, browsers: [])
+        let chooser = LinkChooser(link: link, url: link.url, browser: browser, world: world)
+        let staying = LinkChooser(link: link, url: link.url, browser: browser, world: world)
 
         let work = try #require(chooser.rows.firstIndex(of: .space(second, name: "Work")))
 
@@ -254,6 +254,124 @@ final class LinkRulesTests {
         #expect(browser.active?.address?.host() == "linear.app")
         #expect(store.recent.count == 1)
         #expect(store.recent.first?.rule == nil)
+    }
+
+    @Test func theChooserOffersSpacesThenNewWindowThenPeekAndNoOtherApp() {
+        let home = LinkWorld.Space(id: first, name: "Home")
+        let work = LinkWorld.Space(id: second, name: "Work")
+
+        let all = LinkChooser.rows(spaces: [home, work], usesSpaces: true, isPrivate: false, peekable: true)
+        let unpeekable = LinkChooser.rows(spaces: [home, work], usesSpaces: true, isPrivate: false, peekable: false)
+        let spaceless = LinkChooser.rows(spaces: [home, work], usesSpaces: false, isPrivate: false, peekable: true)
+        let shy = LinkChooser.rows(spaces: [home, work], usesSpaces: true, isPrivate: true, peekable: false)
+
+        #expect(all == [.space(first, name: "Home"), .space(second, name: "Work"), .window, .peek])
+        #expect(unpeekable == [.space(first, name: "Home"), .space(second, name: "Work"), .window])
+        #expect(spaceless == [.window, .peek])
+        #expect(shy == [.window])
+    }
+
+    @Test func theChoosersRowsFollowTheWindowInFront() {
+        let link = outside("https://linear.app/a")
+        let world = Browsers.linkWorld(from: browser)
+        let blank = LinkChooser(link: link, url: link.url, browser: browser, world: world)
+        _ = page("https://example.com")
+        let over = LinkChooser(link: link, url: link.url, browser: browser, world: Browsers.linkWorld(from: browser))
+
+        #expect(blank.rows.map(\.title).suffix(1) == ["New Window"])
+        #expect(!blank.rows.contains(.peek))
+        #expect(over.rows.map(\.title).suffix(2) == ["New Window", "Peek"])
+        #expect(over.rows.prefix(2).map(\.target) == [.space(first, folder: nil), .space(second, folder: nil)])
+        #expect(over.choosing.lit == over.rows.firstIndex { $0.target == .space(first, folder: nil) })
+        #expect(over.rows.allSatisfy { row in
+            if case .app = row.target { return false }
+            return true
+        })
+    }
+
+    @Test func theChooserSitsWhereTheFieldDoesAndStaysInsideASmallWindow() {
+        let roomy = LinkChooserLook.frame(in: NSSize(width: 1200, height: 800), rows: 4)
+        let many = LinkChooserLook.frame(in: NSSize(width: 1200, height: 800), rows: 30)
+        let small = LinkChooserLook.frame(in: NSSize(width: 420, height: 360), rows: 30)
+
+        #expect(roomy.midX == 600)
+        #expect(roomy.minY == (800 * OmniboxView.topShare).rounded())
+        #expect(roomy.width == LinkChooserLook.width)
+        #expect(roomy.height == LinkChooserLook.height(rows: 4))
+        #expect(many.height == LinkChooserLook.height(rows: LinkChooserLook.most))
+        #expect(small.width == 380)
+        #expect(small.maxY <= 360 - 20)
+        #expect(small.height >= LinkChooserLook.head + LinkChooserLook.heading + LinkChooserLook.row + LinkChooserLook.bar)
+    }
+
+    @Test func theChoosersHeadNamesTheSiteAndTheRestOfTheAddress() {
+        let plain = LinkChooserLook.words(for: URL(string: "https://www.linear.app/")!)
+        let deep = LinkChooserLook.words(for: URL(string: "https://linear.app/team/issue/RDR-214?tab=all")!)
+        let file = LinkChooserLook.words(for: URL(string: "mailto:someone@example.com")!)
+
+        #expect(plain.site == "linear.app")
+        #expect(plain.rest == "")
+        #expect(deep.site == "linear.app")
+        #expect(deep.rest == "/team/issue/RDR-214?tab=all")
+        #expect(file.site == "mailto:someone@example.com")
+        #expect(file.rest == "")
+    }
+
+    @Test func aDigitPastTheRowsAndAKeyThatIsNotOneChooseNothing() {
+        var choosing = LinkChoosing(count: 2)
+
+        #expect(choosing.key(0, "3") == .none)
+        #expect(choosing.key(0, "0") == .none)
+        #expect(choosing.key(0, "a") == .none)
+        #expect(choosing.key(0, nil) == .none)
+        #expect(choosing.lit == 0)
+        #expect(choosing.key(126, nil) == .none)
+        #expect(choosing.lit == 0)
+        #expect(choosing.key(76, nil) == .pick(0))
+        #expect(choosing.key(0, "2") == .pick(1))
+        #expect(choosing.lit == 1)
+    }
+
+    @Test func theChoosersKeysPickStayHereAndFlipAlways() throws {
+        _ = page("https://example.com")
+        let link = outside("https://linear.app/a")
+        let world = Browsers.linkWorld(from: browser)
+        let chooser = LinkChooser(link: link, url: link.url, browser: browser, world: world)
+        let work = try #require(chooser.rows.firstIndex(of: .space(second, name: "Work")))
+
+        #expect(chooser.key(49, " "))
+        #expect(chooser.always)
+        #expect(chooser.key(49, " "))
+        #expect(!chooser.always)
+        #expect(chooser.key(49, " "))
+        #expect(!chooser.key(0, "a"))
+        #expect(!chooser.done)
+        while chooser.choosing.lit != work { #expect(chooser.key(125, nil)) }
+        #expect(chooser.key(36, "\r"))
+
+        #expect(chooser.done)
+        #expect(browser.spaceID == second)
+        #expect(store.siteRule("linear.app")?.target == .space(second, folder: nil))
+    }
+
+    @Test func pointingAtARowLightsItAndEscapeStillOpensTheLinkHere() throws {
+        _ = page("https://example.com")
+        let link = outside("https://linear.app/a")
+        let chooser = LinkChooser(link: link, url: link.url, browser: browser, world: Browsers.linkWorld(from: browser))
+        let last = chooser.rows.count - 1
+
+        chooser.point(at: last)
+        let pointed = chooser.choosing.lit
+        chooser.point(at: 99)
+        let stray = chooser.choosing.lit
+        chooser.key(53, nil)
+
+        #expect(pointed == last)
+        #expect(stray == last)
+        #expect(chooser.done)
+        #expect(browser.spaceID == first)
+        #expect(browser.active?.address?.host() == "linear.app")
+        #expect(browser.peekTab == nil)
     }
 
     @Test func theChoosersArrowsAndReturnAndAlways() {
@@ -275,7 +393,7 @@ final class LinkRulesTests {
     @Test func choosingAlwaysMakesASiteRule() {
         _ = page("https://example.com")
         let link = outside("https://linear.app/a")
-        let chooser = LinkChooser(link: link, url: link.url, browser: browser, world: Browsers.linkWorld(from: browser), browsers: [])
+        let chooser = LinkChooser(link: link, url: link.url, browser: browser, world: Browsers.linkWorld(from: browser))
         let work = chooser.rows.firstIndex(of: .space(second, name: "Work"))!
 
         chooser.always = true

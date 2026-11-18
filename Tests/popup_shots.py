@@ -186,7 +186,7 @@ def round_of(dark, side):
               lambda: (sv.cmd({"do": "ext-press", "id": EXTENSION[0]}), time.sleep(3.5)))
     if not ONLY or any(o.startswith("link") for o in ONLY):
         spaces(True)
-        still(f"link-chooser-{tag}", f"link chooser, {tag}", ui(linkChooser=f"{BASE}/pull/1"))
+        still(f"link-chooser-{tag}", f"link chooser, {tag}", ui(linkChooser=f"{BASE}/pull/1"), ui(linkChooserDrop=True))
         notice(tag)
         spaces(False)
     sv.sp("close", id=page)
