@@ -148,13 +148,17 @@ def main():
                     numbers[label] = measured
                     for mark in measured:
                         need = gi.limit(mark)
-                        t.ok(f"{label}: {gi.named(mark)}{gi.NOTES.get(mark.get('note'), '')} reads at {need:g} to 1 or more", mark["worst"] >= need,
+                        if mark.get("note") in gi.NOTES:
+                            continue
+                        t.ok(f"{label}: {gi.named(mark)} reads at {need:g} to 1 or more", mark["worst"] >= need,
                              f"{mark['worst']:g} to 1 at its worst, {mark.get('typical', 0):g} typical, ink {mark.get('ink')}, behind {mark.get('behind')}")
         kept = out / f"ink-{tag}.json"
         kept.parent.mkdir(parents=True, exist_ok=True)
         kept.write_text(json.dumps(numbers, indent=1, sort_keys=True))
         for line in gi.summary(numbers):
             print("  ink  ", line)
+        for line in gi.listed(numbers):
+            print("  own  ", line)
     finally:
         sv.quit()
         sv.finish()

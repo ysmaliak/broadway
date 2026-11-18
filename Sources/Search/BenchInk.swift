@@ -15,9 +15,14 @@ enum BenchInk {
 
     private static func note(_ view: NSView) -> String {
         var at = view.superview
+        var plated = false
         while let here = at {
-            if here is MeetingFaceView || here is MeetingJoinButton { return "own" }
-            if let face = here as? KitGlassFace, face.plate != nil { return "own" }
+            if here is NSGlassEffectView { plated = true }
+            if here is FloatLiveView, !plated { return "video" }
+            if here is MeetingFaceView || here is MeetingJoinButton || here is MiniToggle { return "own" }
+            if let face = here as? KitGlassFace, let plate = face.plate, plate !== Palette.NS.glassGround { return "own" }
+            if let row = here as? NSTableRowView, row.isSelected { return "picked" }
+            if let key = here as? KitButton, !key.isEnabled, key.superview is FieldBarView { return "off" }
             at = here.superview
         }
         return ""
@@ -53,7 +58,7 @@ enum BenchInk {
     }
 
     static func leaves(in view: NSView) -> [NSView] {
-        if view.isHidden || (view.alphaValue == 0 && !marked.contains(view)) { return [] }
+        if view.isHidden || ((view.alphaValue == 0 || view.layer?.opacity == 0) && !marked.contains(view)) { return [] }
         if inked(view) { return [view] }
         return view.subviews.flatMap(leaves)
     }

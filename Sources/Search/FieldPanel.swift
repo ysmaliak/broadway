@@ -374,7 +374,7 @@ final class FieldPlainRowView: NSView {
     }
 }
 
-final class FieldHint: NSView {
+final class FieldHint: NSView, KitOnGlass {
     var word: String { didSet { if word != oldValue { label.text = word; invalidateIntrinsicContentSize(); needsLayout = true } } }
     var faded = false {
         didSet {
@@ -390,8 +390,7 @@ final class FieldHint: NSView {
     init(_ word: String, keys: String, size: CGFloat = 13) {
         self.word = word
         label = KitLabel(word, font: .systemFont(ofSize: size), color: KitColor.ink)
-        self.keys = KitLabel(keys, font: .systemFont(ofSize: 13, weight: .medium), color: KitColor.ink)
-        self.keys.opacity = 0.5
+        self.keys = KitLabel(keys, font: .systemFont(ofSize: 13, weight: .medium), color: KitColor.muted)
         super.init(frame: .zero)
         wantsLayer = true
         label.setAccessibilityElement(false)
@@ -441,7 +440,10 @@ final class FieldBarView: NSView {
         go.content = goHint
         actions.content = FieldHint("Actions", keys: "⌘K")
         actions.setAccessibilityLabel("Actions ⌘K")
-        for key in [places, go, actions] { addSubview(key) }
+        for key in [places, go, actions] {
+            key.grounded = true
+            addSubview(key)
+        }
     }
 
     @available(*, unavailable)

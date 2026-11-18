@@ -76,6 +76,7 @@ final class AskFieldPanel: NSView, NSTextFieldDelegate {
         input = SelectionField.make(placeholder: line.placeholder, size: 13)
         add = KitGlassKey(symbol: "plus", circle: 20, symbolSize: 10, quiet: true, label: "Add")
         super.init(frame: NSRect(x: 0, y: 0, width: 600, height: 44))
+        add.kitAccess(help: "Add")
         glass.hold(stage)
         addSubview(glass)
         input.delegate = self
@@ -124,6 +125,15 @@ final class AskFieldPanel: NSView, NSTextFieldDelegate {
 
     func controlTextDidChange(_ notification: Notification) {
         line.draft = input.stringValue
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let hit = super.hitTest(point), let superview else { return nil }
+        if KitReach.pressable(hit, under: self) || hit === input || hit.isDescendant(of: input) { return hit }
+        let local = stage.convert(point, from: superview)
+        if let chip = chips.first(where: { $0.index != nil && KitReach.rect($0.frame, reach: KitReach.least).contains(local) }) { return chip }
+        if !input.isHidden, KitReach.rect(input.frame, reach: KitReach.least).contains(local) { return KitReach.field(input) }
+        return hit
     }
 
     private var chipWords: [(String, String, Int?)] {
@@ -281,7 +291,7 @@ final class AskChip: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        guard index != nil, point.x >= bounds.width - tail - 2 else { return super.mouseDown(with: event) }
+        guard index != nil, point.x >= bounds.width - tail - 2, point.x <= bounds.width else { return super.mouseDown(with: event) }
         remove()
     }
 

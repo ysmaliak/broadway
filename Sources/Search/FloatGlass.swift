@@ -237,6 +237,7 @@ final class FloatKeyView: KitHoverView {
             let made = KitGlassFace(face)
             made.style = .regular
             made.effectIsInteractive = true
+            made.plate = Palette.NS.glassGround
             glass = made
             holder = made
         } else {
@@ -409,7 +410,7 @@ final class FloatScrubView: FloatPiece {
     private let fill = CALayer()
     private let knob = CALayer()
     private var ticks: [CALayer] = []
-    private let pill = NSGlassEffectView()
+    private let pill = KitGlass.floating()
     private let words = KitLabel("", font: .monospacedDigitSystemFont(ofSize: 11, weight: .semibold), color: .white)
     private var hovering = false { didSet { if hovering != oldValue { needsLayout = true } } }
     private var hoverFraction: Double? { didSet { if hoverFraction != oldValue { needsLayout = true } } }

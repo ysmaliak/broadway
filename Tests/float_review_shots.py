@@ -299,6 +299,8 @@ def main():
             inked.write_text(json.dumps(numbers, indent=1, sort_keys=True))
             for line in gi.summary(numbers):
                 print("  ink  ", line)
+            for line in gi.listed(numbers):
+                print("  own  ", line)
             print("  note  leaves the measure does not read as words:", ", ".join(sorted(gi.unmeasured)))
         else:
             print("  note  words on glass are not measured without real pictures of the probe's own window")

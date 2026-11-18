@@ -2,7 +2,7 @@ import AppKit
 
 @MainActor
 enum BenchGlassFamily {
-    static let names = ["page-ask", "site-file", "announcement", "agent-ask-outside", "offer-bar", "link-preview", "chat-down"]
+    static let names = ["page-ask", "site-file", "announcement", "agent-ask-outside", "offer-bar", "link-preview", "chat-down", "update-card", "stuck-card"]
     private static var holds: [AnyObject] = []
 
     static func make(_ name: String, _ request: [String: Any], browser: Browser?) -> NSView? {
@@ -28,6 +28,14 @@ enum BenchGlassFamily {
             return BenchFloating.sized(card, NSSize(width: 460, height: card.intrinsicContentSize.height))
         case "chat-down":
             return down(browser)
+        case "update-card":
+            let card = UpdateCardView(wait: UpdateWait())
+            return BenchFloating.sized(BenchHovered(card), NSSize(width: 248, height: UpdateCardView.height + UpdateCardView.room + 8))
+        case "stuck-card":
+            guard let tab = browser.active else { return nil }
+            let leave = request["kind"] as? String == "leave"
+            let card = leave ? StuckCardView(tab: tab, browser: browser, words: .leave) { _ in } : StuckCardView(tab: tab, browser: browser)
+            return BenchFloating.sized(card, NSSize(width: 440, height: 230))
         case "link-preview":
             let size = NSSize(width: 320, height: 148)
             return BenchFloating.sized(LinkPreviewCard(preview: IntegrationPreviewSurface.github, size: size), size)
@@ -92,5 +100,34 @@ enum BenchGlassFamily {
         let view = PageAskView(browser: browser, line: line)
         let width: CGFloat = 560
         return BenchFloating.sized(view, NSSize(width: width, height: view.height(for: width)))
+    }
+}
+
+private final class BenchHovered: NSView {
+    private let held: KitHoverView
+
+    init(_ held: KitHoverView) {
+        self.held = held
+        super.init(frame: .zero)
+        addSubview(held)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var isFlipped: Bool { true }
+
+    override func layout() {
+        super.layout()
+        held.frame = bounds.insetBy(dx: 4, dy: 4)
+        guard let window else { return }
+        held.layoutSubtreeIfNeeded()
+        KitHoverView.pointerStandIn = (window, held.convert(NSPoint(x: held.bounds.midX, y: held.bounds.midY), to: nil))
+        held.settleHover()
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        if newWindow == nil { KitHoverView.pointerStandIn = nil }
     }
 }

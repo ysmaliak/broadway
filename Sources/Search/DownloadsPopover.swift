@@ -919,7 +919,8 @@ final class DownloadCell: NSTableCellView {
     }
 
     private func key(_ verb: DownloadVerb) -> NSButton {
-        let made = NSButton()
+        let made = KitPushButton()
+        made.reach = 0
         made.isBordered = false
         made.bezelStyle = .accessoryBarAction
         made.imagePosition = .imageOnly
@@ -929,6 +930,22 @@ final class DownloadCell: NSTableCellView {
         made.kitAccess(id: "downloads.key." + verb.rawValue, label: verb.title, help: verb.help)
         made.kitOnChange { [weak self] _ in self?.run?(verb) }
         return made
+    }
+
+    private func reach(of index: Int) -> NSRect {
+        let frame = keys[index].frame
+        let only = keys.count == 1
+        let left: CGFloat = only ? 2 : index == 0 ? 4 : index == keys.count - 1 ? 0 : 2
+        let right: CGFloat = only ? 2 : index == keys.count - 1 ? 4 : index == 0 ? 0 : 2
+        return NSRect(x: frame.minX - left, y: frame.minY - 2, width: frame.width + left + right, height: frame.height + 4)
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        if let hit, keys.contains(where: { $0 === hit }) { return hit }
+        guard let superview, !isHidden else { return hit }
+        let local = convert(point, from: superview)
+        return keys.indices.first { reach(of: $0).contains(local) }.map { keys[$0] } ?? hit
     }
 
     private func tint() {

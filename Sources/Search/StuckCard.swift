@@ -19,7 +19,7 @@ final class StuckCardView: NSView {
     private let answered: (Bool) -> Void
     private let dim = KitBox(fill: Palette.NS.ground.withAlphaComponent(0.62))
     private let card = StuckCardPlate()
-    private let glass = KitGlass(radius: 14, tint: Palette.NS.glassTint)
+    private let glass = KitGlass.floating(radius: 14)
     private let heading: KitLabel
     private let text: KitLabel
     private let other: KitButton

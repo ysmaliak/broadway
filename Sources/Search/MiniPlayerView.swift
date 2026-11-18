@@ -1,7 +1,7 @@
 import AppKit
 import Combine
 
-final class MiniPlayerView: KitHoverView, NSViewToolTipOwner {
+final class MiniPlayerView: KitHoverView, NSViewToolTipOwner, KitOnGlass {
     static let height: CGFloat = 44
     static let above: CGFloat = 0
     static let below: CGFloat = UpdateCardView.foot - UpdateCardView.height
@@ -37,7 +37,7 @@ final class MiniPlayerView: KitHoverView, NSViewToolTipOwner {
     var filming: [(time: Double, picture: CGImage)]?
 
     private let card = KitFlippedView()
-    private let glass = NSGlassEffectView()
+    private let glass = KitGlass.floating(radius: SideLook.cardRadius)
     private let open = KitButton(.plain(press: 1), label: "Go to Tab")
     private let face = KitFlippedView()
     private let cover = MiniCoverView()
@@ -78,8 +78,6 @@ final class MiniPlayerView: KitHoverView, NSViewToolTipOwner {
         card.layer?.opacity = 0
         addSubview(card)
         card.addSubview(glass)
-        glass.cornerRadius = SideLook.cardRadius
-        glass.tintColor = Palette.NS.glassTint
         open.content = face
         open.action = { [weak self] in self?.mini.open() }
         face.wantsLayer = true

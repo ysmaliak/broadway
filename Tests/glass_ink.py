@@ -13,6 +13,7 @@ GLASS = {
     "form-drafts-working", "form-drafts-card", "form-drafts-warned", "meeting-alert", "meeting-alert-two",
     "meeting-alert-faces", "meeting-alert-long", "agent-card", "agent-badge", "recent-downloads", "selection-result", "command-list",
     "page-ask", "site-file", "announcement", "agent-ask-outside", "offer-bar", "link-preview", "chat-down", "account-list",
+    "update-card", "stuck-card", "field-bar", "mini-player", "float-controls",
 }
 SURFACES = [
     ("page-ask", "answered", {"state": "answered"}),
@@ -32,8 +33,12 @@ SURFACES = [
     ("offer-bar", "developer", {"text": "Turn on Developer Mode for ⌥⌘I?"}),
     ("link-preview", "shown", {}),
     ("chat-down", "shown", {"under": "KitGlassKey"}),
+    ("update-card", "shown", {}),
+    ("stuck-card", "stuck", {}),
+    ("stuck-card", "leave", {"kind": "leave"}),
 ]
-NOTES = {"own": " is on a colour of its own and"}
+NOTES = {"own": "on a colour of its own", "picked": "on the system's selection colour", "off": "on a key that is switched off",
+         "video": "straight on the video"}
 MUTED_LARGE = 18
 unmeasured = set()
 
@@ -89,7 +94,9 @@ def judge(t, sv, shot, pid, made, label, path, pad, ground, numbers):
     numbers[label] = said
     for mark in said:
         need = limit(mark)
-        t.ok(f"{label}: {named(mark)}{NOTES.get(mark.get('note'), '')} reads at {need:g} to 1 or more", mark["worst"] >= need,
+        if mark.get("note") in NOTES:
+            continue
+        t.ok(f"{label}: {named(mark)} reads at {need:g} to 1 or more", mark["worst"] >= need,
              f"{mark['worst']:g} to 1 at its worst, {mark.get('typical', 0):g} typical, ink {mark.get('ink')}, behind {mark.get('behind')}")
 
 
@@ -112,14 +119,32 @@ def table(numbers):
         surface, rest = label.split(", ", 1)
         if not marks:
             continue
-        for own in (False, True):
-            some = [m for m in marks if (m.get("note") in NOTES) == own]
-            if not some:
-                continue
-            low = min(some, key=lambda m: m["worst"])
-            under = sum(1 for m in some if m["worst"] < limit(m))
-            rows.setdefault(surface + (", on a colour of its own" if own else ""), {})[rest] = (low["worst"], under, len(some), named(low))
+        some = [m for m in marks if m.get("note") not in NOTES]
+        if not some:
+            continue
+        low = min(some, key=lambda m: m["worst"])
+        under = sum(1 for m in some if m["worst"] < limit(m))
+        rows.setdefault(surface, {})[rest] = (low["worst"], under, len(some), named(low))
     return rows
+
+
+def listed(numbers):
+    found = {}
+    for label, marks in numbers.items():
+        surface, rest = label.split(", ", 1)
+        for mark in marks:
+            if mark.get("note") not in NOTES:
+                continue
+            key = (NOTES[mark["note"]], f"{surface}: {named(mark)}")
+            if key not in found or mark["worst"] < found[key][0]:
+                found[key] = (mark["worst"], rest)
+    lines = []
+    for heading in sorted({key[0] for key in found}):
+        lines.append(f"Marks {heading}, listed and not judged")
+        for (kind, name), (low, where) in sorted(found.items()):
+            if kind == heading:
+                lines.append(f"  {name}: lowest {low:g} to 1 ({where})")
+    return lines
 
 
 def summary(numbers):
@@ -141,5 +166,6 @@ if __name__ == "__main__":
             for state in sorted({p.name.split("-light-")[0] for p in folder.glob(f"*-light-white-{tag}.png")}):
                 print(sheet(folder, state, tag))
     else:
-        for line in summary(json.loads(Path(sys.argv[1]).read_text())):
+        numbers = json.loads(Path(sys.argv[1]).read_text())
+        for line in summary(numbers) + listed(numbers):
             print(line)

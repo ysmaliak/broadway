@@ -389,6 +389,19 @@ final class AgentCardView: NSView {
     private var buttons: [NSView] = []
     private var choices: [AgentChoiceRow] = []
 
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        guard let hit, let superview, !choices.isEmpty, !KitReach.pressable(hit, under: self) else { return hit }
+        let local = stage.convert(point, from: superview)
+        let last = choices.count - 1
+        let three = choices.count == 3
+        return choices.enumerated().first { index, row in
+            let up: CGFloat = index == 0 ? AgentChoiceRow.reach : three ? (index == 1 ? 4 : 0) : 2
+            let down: CGFloat = index == last ? AgentChoiceRow.reach : three ? (index == 1 ? 4 : 0) : 2
+            return NSRect(x: row.frame.minX, y: row.frame.minY - up, width: row.frame.width, height: row.frame.height + up + down).contains(local)
+        }?.element ?? hit
+    }
+
     static let widest: CGFloat = 460
     private static let pad: CGFloat = 14
 
@@ -593,6 +606,7 @@ final class AgentCardView: NSView {
 
 final class AgentChoiceRow: NSView {
     static let height: CGFloat = 17
+    static let reach: CGFloat = 7
     private let number: KitLabel
     private let cap = KitBox(fill: Palette.NS.keycap.withAlphaComponent(0.5), corners: .radius(4))
     private let text: KitLabel
@@ -627,7 +641,7 @@ final class AgentChoiceRow: NSView {
     override func mouseDown(with event: NSEvent) {}
 
     override func mouseUp(with event: NSEvent) {
-        if bounds.contains(convert(event.locationInWindow, from: nil)) { act() }
+        if bounds.insetBy(dx: 0, dy: -Self.reach).contains(convert(event.locationInWindow, from: nil)) { act() }
     }
 
     override func accessibilityPerformPress() -> Bool {
