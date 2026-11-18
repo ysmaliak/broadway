@@ -67,15 +67,34 @@ def menu(tab, js, pick="(nothing)"):
     except RuntimeError as error:
         return None, str(error)
     time.sleep(0.4)
-    return said.get("menu") or None, "" if said.get("menu") else "no menu came up"
+    if not said.get("menu"):
+        return None, "no menu came up"
+    shown = Shown(said["menu"])
+    shown.marks = said.get("marks")
+    shown.mark = said.get("textMark")
+    return shown, ""
+
+
+class Shown(list):
+    marks = None
+    mark = None
 
 
 def titles(items):
     return list(items or [])
 
 
+def ours(items):
+    marks = getattr(items, "marks", None)
+    mark = getattr(items, "mark", None)
+    if not marks or not mark or len(marks) != len(items):
+        return None
+    return [at for at, name in enumerate(marks) if name.startswith(mark)]
+
+
 def rows(items):
-    return [t for t in titles(items) if t in ROWS]
+    found = ours(items)
+    return ["the bench did not say which rows are Broadway's"] if found is None else [items[at] for at in found]
 
 
 def ai(**f):
@@ -116,10 +135,13 @@ def main():
 
         items, why = menu(tab, PICK_WORDS)
         shown = titles(items)
-        t.ok("the right-click menu on selected words has the three actions and More Commands…", rows(items) == ROWS, why or shown)
+        t.ok("the right-click menu on selected words has the three actions and More Commands…", rows(items) == ROWS, why or (rows(items), shown))
+        others = [(name, mark) for name, mark in zip(shown, getattr(items, "marks", None) or []) if name in ROWS and not mark.startswith(items.mark or "?")]
+        if others:
+            print("   note  rows with one of our names that are not Broadway's, and so not counted:", others)
         if rows(items) == ROWS:
-            first = shown.index(ROWS[0])
-            last = shown.index(ROWS[-1])
+            first = ours(items)[0]
+            last = ours(items)[-1]
             t.ok("they sit together", last - first == len(ROWS) - 1, shown)
             t.ok("a separator on each side", shown[first - 1] == "---" and (last + 1 == len(shown) or shown[last + 1] == "---"), shown)
             t.ok("below Copy", "Copy" in shown and shown.index("Copy") < first, shown)

@@ -159,8 +159,7 @@ enum BenchSurfaces {
         let area = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         window.setFrame(NSRect(x: area.minX + 40 + CGFloat(windows.count) * 24, y: area.maxY - 200 - size.height,
                                width: size.width + pad * 2, height: size.height + pad * 2), display: true)
-        window.level = NSWindow.Level(rawValue: NSWindow.Level.normal.rawValue - 1)
-        window.orderBack(nil)
+        window.benchShowBehind()
         windows.append(window)
         var said: [String: Any] = ["number": window.windowNumber, "size": [size.width, size.height], "dark": dark]
         if request["controls"] as? Bool == true { said["controls"] = controls(in: view) }

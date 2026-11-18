@@ -2568,7 +2568,11 @@ final class PageView: WKWebView {
         while let last = menu.items.last(where: { !$0.isHidden }), last.isSeparatorItem {
             last.isHidden = true
         }
-        if Store.testing { PageView.seen = menu.items.filter { !$0.isHidden }.map { $0.isSeparatorItem ? "---" : $0.title } }
+        if Store.testing {
+            let shown = menu.items.filter { !$0.isHidden }
+            PageView.seen = shown.map { $0.isSeparatorItem ? "---" : $0.title }
+            PageView.seenMarks = shown.map { $0.identifier?.rawValue ?? "" }
+        }
         if let item = menu.items.first(where: { $0.identifier?.rawValue == "WKMenuItemIdentifierSearchWeb" }),
            let name = searchName?() {
             webSearch = (item.target, item.action)
@@ -2701,6 +2705,7 @@ final class PageView: WKWebView {
     var keptImage: URL?
     var textOffered: Bool?
     static var seen: [String] = []
+    static var seenMarks: [String] = []
     static var pickHold: Double = 0
     /// Copy Image (true) or Download Image (false), this app's own.
     var onImage: ((URL, Bool) -> Void)?

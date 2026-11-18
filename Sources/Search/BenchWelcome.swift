@@ -89,7 +89,7 @@ enum BenchWelcome {
                     let window = AboutWindow.make()
                     window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
                     window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)) - 1)
-                    window.orderFrontRegardless()
+                    window.benchShowBehind()
                     let file = "\(folder)/about-\(dark ? "dark" : "light").png"
                     if let rep = AboutWindow.picture(window), let data = rep.representation(using: .png, properties: [:]),
                        (try? data.write(to: URL(fileURLWithPath: file))) != nil {

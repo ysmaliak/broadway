@@ -47,7 +47,7 @@ final class GlassKeyGallery {
         }
         chrome.shown = true
         root.layoutSubtreeIfNeeded()
-        window.orderFrontRegardless()
+        window.benchShowBehind()
     }
 
     func close() {
@@ -295,7 +295,7 @@ enum BenchGlassKeys {
             if below { made.window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)) - 1) }
             if request["behind"] as? Bool == true, let screen = NSScreen.main {
                 made.window.setFrameOrigin(NSPoint(x: screen.frame.minX - made.window.frame.width + 1, y: screen.frame.minY))
-                made.window.orderFrontRegardless()
+                made.window.benchShowBehind()
             }
             gallery = made
         }

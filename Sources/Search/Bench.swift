@@ -835,6 +835,7 @@ final class Bench {
             let point = web.convert(inView, to: nil)
             PageView.picking = pick
             PageView.seen = []
+            PageView.seenMarks = []
             let hold = request["hold"] as? Double ?? 0
             PageView.pickHold = hold
             for type in [NSEvent.EventType.rightMouseDown, .rightMouseUp] {
@@ -849,6 +850,8 @@ final class Bench {
                 PageView.picking = nil
                 answer([
                     "menu": PageView.seen,
+                    "marks": PageView.seenMarks,
+                    "textMark": TextActions.menuMark,
                     "tabs": browser.tabs.map { Bench.short($0) },
                     "urls": browser.tabs.map { $0.address?.absoluteString ?? "" },
                     "active": browser.activeID.flatMap { id in browser.tabs.first { $0.id == id } }.map { Bench.short($0) } ?? "",

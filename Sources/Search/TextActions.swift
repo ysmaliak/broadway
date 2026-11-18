@@ -10,6 +10,7 @@ enum TextActions {
     nonisolated static let more = "more"
     static let inMenu = ["improve", "fix", "summarize"]
     nonisolated static let moreTitle = "More Commands…"
+    nonisolated static let menuMark = "BroadwayTextAction."
 
     nonisolated static func commandID(_ id: String) -> String { "edit.text." + id }
 
@@ -87,7 +88,7 @@ extension PageView {
         for id in rows {
             let title = id == TextActions.more ? TextActions.moreTitle : TextCommand.standard.first { $0.id == id }?.name ?? id
             let item = NSMenuItem(title: title, action: #selector(takeTextAction(_:)), keyEquivalent: "")
-            item.identifier = NSUserInterfaceItemIdentifier("BroadwayTextAction." + id)
+            item.identifier = NSUserInterfaceItemIdentifier(TextActions.menuMark + id)
             item.target = self
             item.representedObject = id
             made.append(item)

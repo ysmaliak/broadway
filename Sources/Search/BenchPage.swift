@@ -168,7 +168,7 @@ enum BenchPage {
             let area = NSScreen.main?.visibleFrame ?? .zero
             let size = float.window?.frame.size ?? .zero
             let shown = action == "show"
-            float.window?.level = shown ? NSWindow.Level(rawValue: NSWindow.Level.normal.rawValue - 1) : KeepOnTop.panelLevel
+            float.window?.level = shown ? .benchBehind : KeepOnTop.panelLevel
             float.window?.setFrameOrigin(shown ? NSPoint(x: area.minX + 40, y: area.maxY - 200 - size.height) : NSPoint(x: -20000, y: -20000))
             if shown { float.window?.orderBack(nil) }
         case "close": browser.closeFront()

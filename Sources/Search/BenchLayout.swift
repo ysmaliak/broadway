@@ -68,7 +68,7 @@ enum BenchLayout {
                                   backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
             window.contentView = pong
-            window.orderFrontRegardless()
+            window.benchShowBehind()
             windows.append(window)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 let before = LayoutWatch.made

@@ -18,7 +18,7 @@ enum AboutWindow {
         window = shown
         if behind {
             shown.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)) - 1)
-            shown.orderFrontRegardless()
+            shown.orderBack(nil)
         } else {
             shown.center()
             shown.makeKeyAndOrderFront(nil)
