@@ -191,7 +191,7 @@ final class LinkBubbleView: KitFlippedView {
     let status: LinkStatus
 
     private let bubble = KitFlippedView()
-    private let glass = NSGlassEffectView()
+    private let glass = KitGlass.floating(radius: 13)
     private let words = LinkWordsView()
     private var card: NSView?
     private var cardFor: IntegrationPreview?
@@ -205,7 +205,6 @@ final class LinkBubbleView: KitFlippedView {
         wantsLayer = true
         bubble.wantsLayer = true
         addSubview(bubble)
-        glass.tintColor = Palette.NS.glassTint
         bubble.addSubview(glass)
         bubble.addSubview(words)
     }

@@ -11,8 +11,9 @@ enum BenchSurfaces {
         + ["find-bar", "find-bar-empty", "find-bar-narrow", "find-count", "form-fill-card", "form-fill-done", "form-fill-offer", "form-drafts-working", "form-drafts-card", "form-drafts-warned"]
         + ["meeting-alert", "meeting-alert-two", "meeting-alert-faces", "meeting-alert-long", "pin-meeting-badges", "history-panel", "downloads-panel", "hidden-panel"]
         + BookmarksSurface.names + SettingsPieceSurfaces.names + BenchFloating.names + BenchPages.names + SiteSurfaces.names
-        + BenchFieldFixtures.names + SideSurfaces.names
+        + BenchFieldFixtures.names + SideSurfaces.names + BenchGlassFamily.names
     private static var windows: [NSWindow] = []
+    private static var inked: String?
 
     static func run(_ verb: String, _ request: [String: Any], _ answer: @escaping ([String: Any]) -> Void) {
         guard Store.testing else { answer(["error": "surface only works on a --test run"]); return }
@@ -29,6 +30,10 @@ enum BenchSurfaces {
             answer(draw(stage, to: path))
         case "list":
             answer(["surfaces": names])
+        case "blank":
+            guard let stage = windows.last?.contentView else { answer(["error": "no surface is up to blank"]); return }
+            (inked.map { BenchInk.named($0, in: stage) } ?? [stage]).forEach(BenchInk.blank)
+            answer(["blank": true])
         default:
             guard let name = request["name"] as? String, let view = make(name, request) else {
                 answer(["error": "no surface named \(request["name"] as? String ?? "")", "surfaces": names])
@@ -137,6 +142,8 @@ enum BenchSurfaces {
             return BenchPages.make(name, request)
         case _ where BenchFieldFixtures.names.contains(name):
             return BenchFieldFixtures.surface(name, request, browser: browser)
+        case _ where BenchGlassFamily.names.contains(name):
+            return BenchGlassFamily.make(name, request, browser: browser)
         default:
             return BenchFloating.make(name, request)
         }
@@ -149,7 +156,7 @@ enum BenchSurfaces {
         window.isReleasedWhenClosed = false
         window.hasShadow = false
         window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
-        let stage = KitBox(fill: ground(request["ground"] as? String))
+        let stage: NSView = request["ground"] as? String == "picture" ? BenchPictureGround() : KitBox(fill: ground(request["ground"] as? String))
         window.contentView = stage
         stage.addSubview(view)
         view.layoutSubtreeIfNeeded()
@@ -162,7 +169,15 @@ enum BenchSurfaces {
         window.benchShowBehind()
         windows.append(window)
         var said: [String: Any] = ["number": window.windowNumber, "size": [size.width, size.height], "dark": dark]
+        said["key"] = window.isKeyWindow
+        said["active"] = NSApp.isActive
+        said["level"] = window.level.rawValue
         if request["controls"] as? Bool == true { said["controls"] = controls(in: view) }
+        inked = request["under"] as? String
+        if request["inks"] as? Bool == true {
+            said["inks"] = (inked.map { BenchInk.named($0, in: view) } ?? [view]).flatMap(BenchInk.said)
+            said["others"] = Array(Set(BenchInk.others(in: view))).sorted()
+        }
         if request["moving"] as? Bool == true { said["moving"] = moving(in: stage) }
         return said
     }

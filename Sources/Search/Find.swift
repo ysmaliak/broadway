@@ -90,7 +90,7 @@ final class FindBarView: NSView, NSTextFieldDelegate {
         field.cell?.isScrollable = true
         field.cell?.wraps = false
         field.placeholderAttributedString = NSAttributedString(string: "Find on page", attributes: [
-            .font: NSFont.systemFont(ofSize: 13), .foregroundColor: Palette.NS.ink.withAlphaComponent(0.3),
+            .font: NSFont.systemFont(ofSize: 13), .foregroundColor: Palette.NS.glassFaint,
         ])
         field.delegate = self
         field.setAccessibilityLabel("Find on page")
@@ -99,7 +99,7 @@ final class FindBarView: NSView, NSTextFieldDelegate {
         edge.strokeWidth = 1
         edge.wantsLayer = true
         addSubview(glass)
-        glass.contentView = inside
+        glass.hold(inside)
         inside.addSubview(field)
         inside.addSubview(count)
         for key in [previous, next, options, close] { keys.addSubview(key) }

@@ -728,7 +728,7 @@ final class MeetingAlertCardView: NSView {
         shade.wantsLayer = true
         addSubview(shade)
         addSubview(ground)
-        if let glass = ground as? KitGlass { glass.contentView = inside } else { addSubview(inside) }
+        if let glass = ground as? KitGlass { glass.hold(inside) } else { addSubview(inside) }
         title.font = .systemFont(ofSize: 15, weight: .semibold)
         title.textColor = Palette.NS.ink
         title.maximumNumberOfLines = 2
@@ -1178,7 +1178,7 @@ final class MeetingFaceView: KitBox {
 private final class MeetingInvitedView: NSView {
     private let ground = KitBox(fill: NSColor.systemOrange.withAlphaComponent(0.15), corners: .capsule)
     static let ink = NSColor(name: nil) { look in
-        look.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .systemOrange : NSColor(srgbRed: 0x9A / 255.0, green: 0x4D / 255.0, blue: 0, alpha: 1)
+        look.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? NSColor(srgbRed: 1, green: 0.78, blue: 0.45, alpha: 1) : NSColor(srgbRed: 0x9A / 255.0, green: 0x4D / 255.0, blue: 0, alpha: 1)
     }
     private let word = KitLabel("Invited", font: .systemFont(ofSize: 11, weight: .medium), color: MeetingInvitedView.ink)
 

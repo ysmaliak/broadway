@@ -7,10 +7,22 @@ struct KitInk: Equatable {
     }
 
     var lift: Double = 0
+    var glass = false
 
     static let flat = KitInk()
 
+    func onGlass(_ on: Bool) -> KitInk {
+        guard on != glass else { return self }
+        var next = self
+        next.glass = on
+        return next
+    }
+
     func color(_ base: NSColor, _ kind: Kind = .plain, opacity: Double = 1, dark: Bool) -> NSColor {
+        if glass, let strong = KitColor.onGlass(base) {
+            let resolved = strong.kitResolved(dark: dark)
+            return resolved.withAlphaComponent(resolved.alphaComponent * CGFloat(opacity))
+        }
         let resolved = base.kitResolved(dark: dark)
         let alpha = Double(resolved.alphaComponent)
         guard lift > 0, kind != .plain else { return resolved.withAlphaComponent(CGFloat(alpha * opacity)) }
@@ -30,12 +42,20 @@ struct KitInk: Equatable {
 }
 
 enum KitColor {
+    static func onGlass(_ base: NSColor) -> NSColor? {
+        if base === muted { return glassMuted }
+        if base === faint { return glassFaint }
+        return nil
+    }
+
     static let ink = Palette.NS.ink
     static let muted = Palette.NS.muted
     static let faint = Palette.NS.faint
     static let hairline = Palette.NS.hairline
     static let ground = Palette.NS.ground
     static let title = Palette.NS.ink.withAlphaComponent(Paint.title)
+    static let glassMuted = Palette.NS.glassMuted
+    static let glassFaint = Palette.NS.glassFaint
     static let dim: CGFloat = 0.16
 
     static func kind(of base: NSColor) -> KitInk.Kind {
@@ -57,7 +77,18 @@ extension NSColor {
     }
 }
 
+protocol KitOnGlass: NSView {}
+
 extension NSView {
+    var kitOnGlass: Bool {
+        var view = superview
+        while let next = view {
+            if next is KitGlassGround || next is KitOnGlass { return true }
+            view = next.superview
+        }
+        return false
+    }
+
     var kitDark: Bool {
         effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
     }

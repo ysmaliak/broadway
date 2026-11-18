@@ -507,7 +507,7 @@ final class AgentCardView: NSView {
     static func wrapping(lines: Int) -> NSTextField {
         let field = NSTextField(wrappingLabelWithString: "")
         field.font = .systemFont(ofSize: 12)
-        field.textColor = KitColor.muted
+        field.textColor = KitColor.glassMuted
         field.maximumNumberOfLines = lines
         field.lineBreakMode = .byTruncatingTail
         field.cell?.truncatesLastVisibleLine = true

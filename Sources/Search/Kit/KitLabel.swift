@@ -123,6 +123,7 @@ final class KitLabel: NSView {
         case .fade: paragraph.lineBreakMode = .byClipping
         }
         let out = NSMutableAttributedString()
+        let ink = ink.onGlass(kitOnGlass)
         for run in runs {
             let base = run.color ?? color
             let resolved = ink.color(base, KitColor.kind(of: base), opacity: opacity, dark: dark)

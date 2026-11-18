@@ -744,7 +744,7 @@ extension Browser {
 
 private final class CallBar: KitFlippedView {
     private let call: CallFloat
-    private let glass = NSGlassEffectView()
+    private let glass = KitGlass.floating(radius: 20)
     private let group = KitGlassGroup(spacing: 2)
     private lazy var mic = tool { [weak self] in self?.call.toggleMic() }
     private lazy var camera = tool { [weak self] in self?.call.toggleCamera() }
@@ -753,7 +753,6 @@ private final class CallBar: KitFlippedView {
     init(call: CallFloat) {
         self.call = call
         super.init(frame: .zero)
-        glass.tintColor = Palette.NS.glassTint
         addSubview(glass)
         addSubview(group)
         for tool in [mic, camera, leave] { group.content.addSubview(tool) }
@@ -824,9 +823,9 @@ private final class CallBar: KitFlippedView {
         glass.plate = KitGlass.keyInk(kind, dark: kitDark)
         glass.tintColor = glass.plate == nil ? KitGlass.keyTint(kind, dark: kitDark) : nil
         image.name = symbol
-        image.tint = tint ?? (alert ? .systemRed : KitColor.ink)
+        image.tint = tint ?? (alert ? Palette.NS.glassAlert : KitColor.ink)
         var style = image.style
-        style.palette = alert ? [NSColor.systemRed.kitResolved(dark: kitDark)] : []
+        style.palette = alert ? [Palette.NS.glassAlert.kitResolved(dark: kitDark)] : []
         image.style = style
         tool.toolTip = help
         tool.setAccessibilityLabel(help.components(separatedBy: "   ").first ?? help)

@@ -101,7 +101,12 @@ final class DownloadsLayerView: NSView, NSPopoverDelegate {
         let above = Self.opensAbove(door: door, window: window.frame)
         shown = (door, above)
         let holder = NSViewController()
-        holder.view = list
+        let ground = KitBox(fill: Palette.NS.glassGround)
+        list.removeFromSuperview()
+        list.frame = ground.bounds
+        list.autoresizingMask = [.width, .height]
+        ground.addSubview(list)
+        holder.view = ground
         let made = NSPopover()
         made.contentViewController = holder
         made.behavior = .transient
@@ -738,7 +743,7 @@ final class DownloadsWordCell: NSTableCellView {
 
     func show(_ text: String, enabled: Bool) {
         word.stringValue = text
-        word.textColor = enabled ? .labelColor : .disabledControlTextColor
+        word.textColor = enabled ? .labelColor : Palette.NS.glassFaint
         if press != nil {
             setAccessibilityElement(true)
             setAccessibilityRole(.button)
@@ -780,6 +785,7 @@ final class DownloadCell: NSTableCellView {
     private var watch: AnyCancellable?
     private var watched: UUID?
     private var height: CGFloat = 0
+    private var gone = false
 
     init() {
         super.init(frame: .zero)
@@ -787,7 +793,7 @@ final class DownloadCell: NSTableCellView {
         name.font = .systemFont(ofSize: NSFont.systemFontSize)
         name.lineBreakMode = .byTruncatingMiddle
         detail.font = .monospacedDigitSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
-        detail.textColor = .secondaryLabelColor
+        detail.textColor = Palette.NS.glassMuted
         detail.lineBreakMode = .byTruncatingTail
         bar.style = .bar
         bar.controlSize = .small
@@ -859,6 +865,7 @@ final class DownloadCell: NSTableCellView {
                 }
                 bar.doubleValue = 0
             }
+            gone = false
             next = entry.verbs
             setAccessibilityLabel("\(entry.name), \(entry.detailText)")
         case .kept(let keep):
@@ -866,7 +873,7 @@ final class DownloadCell: NSTableCellView {
             icon.image = NSWorkspace.shared.icon(forFile: keep.path)
             icon.alphaValue = there ? 1 : 0.45
             name.stringValue = keep.name
-            name.textColor = there ? .labelColor : .disabledControlTextColor
+            gone = !there
             detail.stringValue = keep.from
             detail.toolTip = nil
             detail.isHidden = keep.from.isEmpty
@@ -926,7 +933,9 @@ final class DownloadCell: NSTableCellView {
 
     private func tint() {
         let lit = backgroundStyle == .emphasized
-        for key in keys { key.contentTintColor = lit ? .alternateSelectedControlTextColor : .tertiaryLabelColor }
+        for key in keys { key.contentTintColor = lit ? .alternateSelectedControlTextColor : Palette.NS.glassFaint }
+        name.textColor = lit ? .alternateSelectedControlTextColor : gone ? Palette.NS.glassFaint : .labelColor
+        detail.textColor = lit ? .alternateSelectedControlTextColor : Palette.NS.glassMuted
     }
 
     var bench: [String: Any] {

@@ -308,7 +308,7 @@ class FormGlassBar: NSView {
         glass = KitGlass.floating(radius: radius)
         super.init(frame: .zero)
         addSubview(glass)
-        glass.contentView = inside
+        glass.hold(inside)
     }
 
     @available(*, unavailable)
@@ -402,7 +402,7 @@ final class FormFillCard: NSView {
         fill = KitGlassKey(title: "Fill", kind: .primary) { [weak forms] in forms?.confirm() }
         super.init(frame: .zero)
         addSubview(glass)
-        glass.contentView = inside
+        glass.hold(inside)
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
@@ -410,7 +410,7 @@ final class FormFillCard: NSView {
         scroll.borderType = .noBorder
         scroll.documentView = list
         note.font = .systemFont(ofSize: 12)
-        note.textColor = KitColor.muted
+        note.textColor = KitColor.glassMuted
         for view in [title, summary, scroll, note, notNow, fill] as [NSView] { inside.addSubview(view) }
     }
 

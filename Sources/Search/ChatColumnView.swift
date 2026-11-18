@@ -233,6 +233,8 @@ final class ChatThreadView: NSView {
         down = KitGlassKey(symbol: "arrow.down", circle: 28, symbolSize: 11, weight: .semibold, label: "Go to the Newest")
         super.init(frame: .zero)
         down.action = { [weak self] in self?.goDown() }
+        down.grounded = true
+        down.kitAccess(help: "Go to the Newest")
         document.thread = self
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true

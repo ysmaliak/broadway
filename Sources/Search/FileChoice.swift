@@ -422,7 +422,7 @@ final class FileChoiceCardView: NSView {
             addSubview(back)
         }
         addSubview(glass)
-        glass.contentView = inside
+        glass.hold(inside)
         header.text = choice.host.isEmpty ? "Choose a file for this page" : "Choose a file for \(choice.host)"
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true

@@ -9,12 +9,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import split_view as sv
 import visual_diff as vd
+import glass_ink as gi
 
 sv.use("float-review-shots")
 t = sv.T()
 
 LONG = "https://files.example.test/a/very/long/path/that/keeps/going/and/going/past/the/edge/of/any/bubble/there/is/quarterly-report-final-v7.pdf?download=1&token=abcdefghijklmnopqrstuvwxyz"
-GROUNDS = {"light": "#ffffff", "dark": "#161618"}
+GROUNDS = gi.GROUNDS
+REST = {"light": "#ffffff", "dark": "#161618"}
 
 SURFACES = [
     ("float-feedback", "speed", {"text": "1.5×"}),
@@ -86,7 +88,9 @@ SURFACES = [
     ("integration-preview", "shown", {}),
     ("agent-card", "shown", {}),
     ("agent-badge", "shown", {}),
-    ("recent-downloads", "shown", {}),
+    ("recent-downloads", "shown", {"stage": "empty"}),
+    ("recent-downloads", "running", {"stage": "running"}),
+    ("recent-downloads", "failed", {"stage": "failed"}),
     ("selection-result", "shown", {}),
     ("field-bar", "shown", {}),
     ("field-slab", "shown", {}),
@@ -98,7 +102,7 @@ SURFACES = [
     ("account-list", "offer", {"kind": "offer"}),
     ("space-look-chooser", "shown", {}),
     ("space-look-editor", "shown", {}),
-]
+] + gi.SURFACES
 
 
 DRAWN = "--drawn" in sys.argv
@@ -214,7 +218,7 @@ def still(only):
             for look in ("light", "dark"):
                 label = f"{name} {state}, {look}, with Reduce Motion"
                 try:
-                    made = sv.cmd({"do": "surface", "name": name, "look": look, "ground": GROUNDS[look], "pad": 24, "moving": True,
+                    made = sv.cmd({"do": "surface", "name": name, "look": look, "ground": REST[look], "pad": 24, "moving": True,
                                    **{k: v for k, v in request.items() if v is not None}})
                 except RuntimeError as error:
                     t.ok(f"{label}: drawn", False, str(error)[:200])
@@ -246,9 +250,13 @@ def main():
     sv.launch()
     try:
         pid = next(iter(sv.holding() & sv.running()))
+        placed = sv.cmd({"do": "windowbehind"})
+        t.ok("the probe's window stays behind and takes no keys", not placed["key"] and not placed["active"], str(placed))
         audit = {}
         short = []
+        numbers = {}
         bare = "--no-shots" in sys.argv
+        measured = not bare and not DRAWN
         for name, state, request in SURFACES:
             if only and name not in only:
                 continue
@@ -257,11 +265,12 @@ def main():
             for look in ("light", "dark"):
                 for ground, colour in GROUNDS.items():
                     label = f"{name} {state}, {look} on {ground}"
-                    first = look == "light" and ground == "light"
+                    first = look == "light" and ground == "white"
                     if bare and not first:
                         continue
                     try:
                         made = sv.cmd({"do": "surface", "name": name, "look": look, "ground": colour, "pad": 24, "controls": first,
+                                       "inks": measured and name in gi.GLASS,
                                        **{k: v for k, v in request.items() if v is not None}})
                     except RuntimeError as error:
                         t.ok(f"{label}: drawn", False, str(error)[:200])
@@ -271,6 +280,9 @@ def main():
                         path = folder / f"{state}-{look}-{ground}-{tag}{'-drawn' if DRAWN else ''}.png"
                         said = picture(shot, pid, made["number"], path)
                         t.ok(f"{label}: pictured", path.exists(), said)
+                        t.ok(f"{label}: stays behind and takes no keys", not made.get("key") and not made.get("active"), str(made)[:120])
+                        if measured and name in gi.GLASS and path.exists():
+                            gi.judge(t, sv, shot, pid, made, label, path, 24, colour, numbers)
                     if first:
                         audit[f"{name} {state}"] = made.get("controls", [])
                         for control in made.get("controls", []):
@@ -280,6 +292,16 @@ def main():
         if only and kept.exists():
             audit = {**json.loads(kept.read_text()), **audit}
         kept.write_text(json.dumps(audit, indent=1, sort_keys=True))
+        if measured:
+            inked = out / f"ink-{tag}.json"
+            if only and inked.exists():
+                numbers = {**json.loads(inked.read_text()), **numbers}
+            inked.write_text(json.dumps(numbers, indent=1, sort_keys=True))
+            for line in gi.summary(numbers):
+                print("  ink  ", line)
+            print("  note  leaves the measure does not read as words:", ", ".join(sorted(gi.unmeasured)))
+        else:
+            print("  note  words on glass are not measured without real pictures of the probe's own window")
         print(f"{len(short)} controls have a reach under 24 points")
     finally:
         sv.quit()

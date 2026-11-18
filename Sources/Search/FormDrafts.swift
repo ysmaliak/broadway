@@ -243,7 +243,7 @@ final class FormDraftCard: NSView, NSTextFieldDelegate {
         fill = KitGlassKey(title: "Fill", kind: .primary) { [weak drafts] in drafts?.confirm() }
         super.init(frame: .zero)
         addSubview(glass)
-        glass.contentView = inside
+        glass.hold(inside)
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true

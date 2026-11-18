@@ -52,7 +52,13 @@ final class KitSymbol: NSImageView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        refresh()
         settle()
+    }
+
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        refresh()
     }
 
     override func viewDidChangeBackingProperties() {
@@ -161,7 +167,7 @@ final class KitSymbol: NSImageView {
             let next = Self.image(name, style)
             if next !== image { image = next }
         }
-        let tinted = style.palette.isEmpty ? ink.color(tint, KitColor.kind(of: tint), opacity: opacity, dark: kitDark) : nil
+        let tinted = style.palette.isEmpty ? ink.onGlass(kitOnGlass).color(tint, KitColor.kind(of: tint), opacity: opacity, dark: kitDark) : nil
         if tinted != contentTintColor { contentTintColor = tinted }
     }
 }

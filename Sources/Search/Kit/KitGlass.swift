@@ -2,6 +2,8 @@ import AppKit
 
 final class KitGlass: NSGlassEffectView {
     var capsule = false { didSet { needsLayout = true } }
+    var ground: NSColor? { didSet { if ground != oldValue { grounded() } } }
+    private var plate: KitGlassGround?
 
     init(radius: CGFloat = 0, tint: NSColor? = nil, style: NSGlassEffectView.Style = .regular, interactive: Bool = false) {
         super.init(frame: .zero)
@@ -17,6 +19,36 @@ final class KitGlass: NSGlassEffectView {
     override func layout() {
         super.layout()
         if capsule { cornerRadius = min(bounds.width, bounds.height) / 2 }
+        plate?.frame = bounds
+        plate?.radius = cornerRadius
+    }
+
+    override var cornerRadius: CGFloat { didSet { plate?.radius = cornerRadius } }
+
+    func hold(_ view: NSView) {
+        if let plate { plate.hold(view) } else { contentView = view }
+    }
+
+    private func grounded() {
+        guard let ground else {
+            let held = plate?.held
+            plate?.hold(nil)
+            plate = nil
+            contentView = held
+            return
+        }
+        if let plate {
+            plate.fill = ground
+            return
+        }
+        let made = KitGlassGround()
+        let held = contentView
+        made.fill = ground
+        made.radius = cornerRadius
+        plate = made
+        contentView = made
+        made.hold(held)
+        needsLayout = true
     }
 
     static func keyTint(_ kind: KitButton.Kind, dark: Bool) -> NSColor {

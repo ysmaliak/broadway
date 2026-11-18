@@ -141,6 +141,8 @@ class KitButton: KitHoverView {
         paint()
     }
 
+    var grounded = false { didSet { if grounded != oldValue { paint() } } }
+
     private var amount: CGFloat {
         switch look {
         case .plain(let press): return press
@@ -197,6 +199,7 @@ class KitButton: KitHoverView {
             track.gradient = []
             track.stroke = nil
             track.fill = KitGlass.keyInk(kind, dark: dark, lit: lit, pressed: pressed)
+                ?? (grounded ? Palette.NS.glassGround.kitResolved(dark: dark) : nil)
             glass?.tintColor = track.fill == nil ? KitGlass.keyTint(kind, dark: dark) : nil
             let ink: NSColor = switch kind {
             case .primary: dark ? .black : .white

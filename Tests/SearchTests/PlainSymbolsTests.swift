@@ -16,6 +16,10 @@ struct PlainSymbolsTests {
     private func plated(_ symbol: KitSymbol, within root: NSView) -> Bool {
         var view: NSView? = symbol
         while let here = view, here !== root {
+            if here is KitGlassGround {
+                view = here.superview
+                continue
+            }
             if let box = here as? KitBox, box.fill != nil || !box.gradient.isEmpty { return true }
             if let parent = here.superview {
                 let frame = symbol.convert(symbol.bounds, to: parent)

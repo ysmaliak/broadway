@@ -55,10 +55,10 @@ enum AgentDriving {
     }
 }
 
-final class AgentDrivingBarView: KitFlippedView {
+final class AgentDrivingBarView: KitFlippedView, KitOnGlass {
     var ink: KitInk = .flat { didSet { if ink != oldValue { needsLayout = true } } }
 
-    private let glass = NSGlassEffectView()
+    private let glass = KitGlass.floating(radius: 16)
     private let wheel = KitSymbol("steeringwheel", style: KitSymbol.Style(size: 12))
     private let words = KitLabel("You're driving", font: .systemFont(ofSize: 12, weight: .medium))
     private let back = KitButton(.keycap(.secondary), label: "Hand Back")
@@ -67,7 +67,6 @@ final class AgentDrivingBarView: KitFlippedView {
 
     init(handBack: @escaping () -> Void) {
         super.init(frame: .zero)
-        glass.tintColor = Palette.NS.glassTint
         addSubview(glass)
         addSubview(wheel)
         addSubview(words)

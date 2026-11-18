@@ -181,6 +181,7 @@ enum BenchFieldFixtures {
             return row(doors, spacing: 8, pad: 6)
         case "recent-downloads":
             guard let browser else { return nil }
+            if let stage = request["stage"] as? String, Fetches.benchStages.contains(stage) { browser.fetches.benchStage(stage, loot: browser.loot) }
             let list = RecentDownloadsView(browser: browser, loot: browser.loot, fetches: browser.fetches)
             list.prepare()
             let size = list.fittingSize

@@ -24,7 +24,7 @@ struct KitCardsTests {
 
         let symbol = try #require(key.content as? KitSymbol)
 
-        #expect(symbol.opacity == 0.62)
+        #expect(symbol.opacity == 0.86)
     }
 
     @Test func aContinuousRectStaysInItsBoundsAndKeepsItsMiddle() {

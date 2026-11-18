@@ -13,7 +13,7 @@ final class AccountCardView: NSView {
         self.browser = browser
         super.init(frame: .zero)
         addSubview(glass)
-        glass.contentView = column
+        glass.hold(column)
         setAccessibilityElement(false)
     }
 

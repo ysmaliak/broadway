@@ -579,7 +579,7 @@ final class DevRowView: KitHoverView {
 }
 
 @MainActor
-final class OfferBarView: KitFlippedView, BarShrinks {
+final class OfferBarView: KitFlippedView, BarShrinks, KitOnGlass {
     struct Choice {
         var title: String
         var kind: KitButton.Kind
@@ -594,7 +594,7 @@ final class OfferBarView: KitFlippedView, BarShrinks {
         }
     }
 
-    private let glass = KitGlass(radius: 20, tint: Palette.NS.glassTint)
+    private let glass = KitGlass.floating(radius: 20)
     private let label: KitLabel
     let buttons: [KitButton]
 

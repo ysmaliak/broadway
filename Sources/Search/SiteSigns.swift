@@ -214,6 +214,6 @@ final class SiteWrapLabel: NSView {
     override var intrinsicContentSize: NSSize { measure(width: .greatestFiniteMagnitude) }
 
     override func draw(_ dirtyRect: NSRect) {
-        attributed(color.kitResolved(dark: kitDark)).draw(with: bounds, options: [.usesLineFragmentOrigin])
+        attributed(KitInk.flat.onGlass(kitOnGlass).color(color, dark: kitDark)).draw(with: bounds, options: [.usesLineFragmentOrigin])
     }
 }

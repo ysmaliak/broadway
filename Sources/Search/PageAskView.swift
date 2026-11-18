@@ -199,7 +199,7 @@ final class AskFieldPanel: NSView, NSTextFieldDelegate {
         let room = max(0, right - Self.pad)
         if line.takes {
             input.placeholderAttributedString = NSAttributedString(string: line.placeholder, attributes: [
-                .font: NSFont.systemFont(ofSize: 13), .foregroundColor: Palette.NS.faint,
+                .font: NSFont.systemFont(ofSize: 13), .foregroundColor: Palette.NS.glassFaint,
             ])
             if input.stringValue != line.draft { input.stringValue = line.draft }
             input.isEnabled = !running
@@ -357,9 +357,10 @@ final class AskAnswerCard: NSView {
         func caution(_ string: String) {
             let paragraph = NSMutableParagraphStyle()
             paragraph.paragraphSpacingBefore = out.length > 0 ? 8 : 0
-            let ink = KitColor.muted.kitResolved(dark: dark)
+            let ink = KitColor.glassMuted.kitResolved(dark: dark)
             if out.length > 0 { out.append(NSAttributedString(string: "\n")) }
-            if let image = KitGlyph.image("exclamationmark.triangle", KitSymbol.Style(size: 10, weight: .medium, palette: [ink])) {
+            let drawn = ink.withAlphaComponent(ink.alphaComponent.squareRoot())
+            if let image = KitGlyph.image("exclamationmark.triangle", KitSymbol.Style(size: 10, weight: .medium, palette: [drawn])) {
                 let attachment = NSTextAttachment()
                 attachment.image = image
                 attachment.bounds = NSRect(x: 0, y: -1, width: image.size.width, height: image.size.height)
@@ -372,14 +373,14 @@ final class AskAnswerCard: NSView {
             ]))
         }
         if answer.addressed { caution("This page has text written for an AI to follow. The answer may have been steered by it.") }
-        if answer.text.isEmpty, !answer.done { add(line.conversation.status ?? "…", size: 13, color: KitColor.faint) }
+        if answer.text.isEmpty, !answer.done { add(line.conversation.status ?? "…", size: 13, color: KitColor.glassFaint) }
         if !answer.text.isEmpty { add(answer.text, size: 13, color: KitColor.ink) }
         if let failed = answer.failed {
             let problem = AskProblem.of(failed, plan: answer.model?.plan ?? line.agent, other: browser.otherAgent(for: line)?.plan)
             add(problem.title, size: 12.5, color: KitColor.ink)
-            if let detail = problem.detail { add(detail, size: 12, color: KitColor.muted, gap: 2) }
+            if let detail = problem.detail { add(detail, size: 12, color: KitColor.glassMuted, gap: 2) }
         }
-        if answer.stopped { add("Stopped", size: 11.5, color: KitColor.faint) }
+        if answer.stopped { add("Stopped", size: 11.5, color: KitColor.glassFaint) }
         if !answer.strays.isEmpty { caution("Not on the page: " + answer.strays.joined(separator: ", ")) }
         return out
     }

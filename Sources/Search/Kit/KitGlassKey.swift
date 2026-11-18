@@ -88,7 +88,7 @@ final class KitGlassKey: KitButton {
 
     private func refreshInk() {
         let lit = (hovering || pressed) && isEnabled
-        let opacity = quiet && !lit ? 0.62 : 1
+        let opacity = quiet && !lit ? 0.86 : 1
         let ink: NSColor = switch kind {
         case .primary: kitDark ? .black : .white
         case .destructive: .white

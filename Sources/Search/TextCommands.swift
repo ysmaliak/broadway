@@ -222,10 +222,10 @@ enum TextDiff {
             case .same: break
             case .added:
                 attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
-                attributes[.foregroundColor] = Palette.NS.safe
+                attributes[.foregroundColor] = Palette.NS.glassSafe
             case .removed:
                 attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
-                attributes[.foregroundColor] = Palette.NS.muted
+                attributes[.foregroundColor] = Palette.NS.glassMuted
             }
             out.append(NSAttributedString(string: piece.text, attributes: attributes))
         }
@@ -649,7 +649,7 @@ final class SelectionField: NSTextField {
         field.lineBreakMode = .byTruncatingTail
         field.cell?.isScrollable = true
         field.placeholderAttributedString = NSAttributedString(string: placeholder, attributes: [
-            .font: NSFont.systemFont(ofSize: size), .foregroundColor: Palette.NS.faint,
+            .font: NSFont.systemFont(ofSize: size), .foregroundColor: Palette.NS.glassFaint,
         ])
         return field
     }
@@ -938,11 +938,11 @@ final class SelectionResultPanel: NSView, NSTextFieldDelegate {
             out.append(NSAttributedString(string: string, attributes: [.font: font, .foregroundColor: color.kitResolved(dark: dark)]))
         }
         if run.showOriginal {
-            plain(run.picked.text, font, KitColor.muted)
+            plain(run.picked.text, font, KitColor.glassMuted)
         } else if run.showsDiff {
             out.append(TextDiff.marked(from: run.picked.text, to: run.text, font: font, ink: ink))
         } else if run.text.isEmpty, run.running {
-            plain("…", .systemFont(ofSize: 13), KitColor.faint)
+            plain("…", .systemFont(ofSize: 13), KitColor.glassFaint)
         } else {
             plain(run.text, font, KitColor.ink)
         }
@@ -950,7 +950,7 @@ final class SelectionResultPanel: NSView, NSTextFieldDelegate {
             let gap = NSMutableParagraphStyle()
             gap.paragraphSpacingBefore = 6
             out.append(NSAttributedString(string: (out.length > 0 ? "\n" : "") + failed,
-                                          attributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: KitColor.muted.kitResolved(dark: dark),
+                                          attributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: KitColor.glassMuted.kitResolved(dark: dark),
                                                        .paragraphStyle: gap]))
         }
         return out
