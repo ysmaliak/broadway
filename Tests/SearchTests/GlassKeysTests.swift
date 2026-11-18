@@ -149,7 +149,7 @@ struct GlassKeysTests {
         #expect(hit?.mouseDownCanMoveWindow == key.mouseDownCanMoveWindow)
     }
 
-    @Test func playAndPauseChangeOnceForEachRealChangeWithTheSymbolsReplace() {
+    @Test func playAndPauseChangeOnceForEachRealChangeWithTheMarksOwnSwap() async {
         Store.settings.set(false, forKey: "motion.testReduced")
         defer { Store.settings.removeObject(forKey: "motion.testReduced") }
         let chrome = FloatChrome()
@@ -165,23 +165,25 @@ struct GlassKeysTests {
             transport.layoutSubtreeIfNeeded()
         }
         settle()
-        let symbol = transport.toggle.symbol
+        let mark = transport.mark
 
-        let first = symbol?.replaced
+        let first = mark.swaps
         chrome.playing = false
         settle()
-        let clicked = symbol?.replaced
+        let clicked = mark.swaps
+        try? await Task.sleep(for: .milliseconds(80))
         chrome.playing = false
         settle()
-        let twice = symbol?.replaced
+        let twice = mark.swaps
         chrome.playing = true
         settle()
 
         #expect(first == 0)
         #expect(clicked == 1)
         #expect(twice == 1)
-        #expect(symbol?.replaced == 2)
-        #expect(symbol?.name == "pause.fill")
+        #expect(mark.swaps == 2)
+        #expect(mark.face == .pause)
+        #expect(transport.toggle.symbol == nil)
         #expect(transport.toggle.accessibilityLabel() == "Pause")
     }
 

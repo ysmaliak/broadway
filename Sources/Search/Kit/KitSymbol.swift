@@ -28,6 +28,9 @@ final class KitSymbol: NSImageView {
     var tint: NSColor = KitColor.ink { didSet { if tint != oldValue { refresh() } } }
     var opacity: Double = 1 { didSet { if opacity != oldValue { refresh() } } }
     var ink: KitInk = .flat { didSet { if ink != oldValue { refresh() } } }
+    var whole = false { didSet { if whole != oldValue { invalidateIntrinsicContentSize() } } }
+
+    override var intrinsicContentSize: NSSize { whole ? image?.size ?? super.intrinsicContentSize : super.intrinsicContentSize }
 
     init(_ name: String, style: Style = Style(), tint: NSColor = KitColor.ink, label: String? = nil) {
         self.name = name

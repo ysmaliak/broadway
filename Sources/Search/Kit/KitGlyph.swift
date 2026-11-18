@@ -47,6 +47,45 @@ enum KitGlyph {
                       width: CGFloat(maxX - minX + 1) / unit, height: CGFloat(maxY - minY + 1) / unit)
     }
 
+    private static var weights: [Drawn: CGPoint] = [:]
+
+    static func weight(_ name: String, _ style: KitSymbol.Style, backing: Int = 8) -> CGPoint? {
+        let key = Drawn(name: name, size: style.size, weight: style.weight.rawValue, scale: style.scale.rawValue,
+                        fill: style.fill, hierarchical: style.hierarchical, backing: CGFloat(backing))
+        if let known = weights[key] { return known }
+        guard let image = image(name, style), let found = weight(of: image, backing: backing) else { return nil }
+        if weights.count > 600 { weights.removeAll() }
+        weights[key] = found
+        return found
+    }
+
+    static func weight(of image: NSImage, backing: Int, at origin: CGPoint = .zero) -> CGPoint? {
+        let wide = max(1, Int(ceil(image.size.width + origin.x)) * backing), high = max(1, Int(ceil(image.size.height + origin.y)) * backing)
+        guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: wide, pixelsHigh: high, bitsPerSample: 8, samplesPerPixel: 4,
+                                         hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 32)
+        else { return nil }
+        let unit = CGFloat(backing)
+        rep.size = NSSize(width: CGFloat(wide) / unit, height: CGFloat(high) / unit)
+        guard let context = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        image.draw(in: NSRect(x: origin.x, y: rep.size.height - origin.y - image.size.height, width: image.size.width, height: image.size.height))
+        NSGraphicsContext.restoreGraphicsState()
+        guard let data = rep.bitmapData else { return nil }
+        var sum = 0.0, across = 0.0, down = 0.0
+        for y in 0..<high {
+            let row = data + y * rep.bytesPerRow
+            for x in 0..<wide {
+                let alpha = Double(row[x * 4 + 3])
+                sum += alpha
+                across += alpha * (Double(x) + 0.5)
+                down += alpha * (Double(y) + 0.5)
+            }
+        }
+        guard sum > 0 else { return nil }
+        return CGPoint(x: across / sum / Double(backing), y: down / sum / Double(backing))
+    }
+
     private struct Drawn: Hashable {
         let name: String
         let size: CGFloat

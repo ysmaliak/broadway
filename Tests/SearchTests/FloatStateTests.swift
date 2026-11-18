@@ -282,50 +282,55 @@ struct FloatOpticsTests {
         return (view, chrome)
     }
 
-    @Test func theSkipKeysSitOnTheirRingsNotTheirArrowheads() {
+    @Test func theSkipKeysTakeOneNudgeFromTheirWeightSoTheySitAlike() {
         let (view, _) = transport(playing: true)
 
         let rewind = view.rewind.nudge
         let forward = view.forward.nudge
 
-        #expect(rewind == CGVector(dx: 0, dy: -1.5))
+        #expect(rewind == FloatOptics.nudge("gobackward.15", KitSymbol.Style(size: 16, weight: .semibold)))
         #expect(forward == rewind)
+        #expect(rewind.dy < 0)
+        #expect(view.rewind.symbol?.frame == view.forward.symbol?.frame)
     }
 
-    @Test func theToggleTakesEachGlyphsOwnNudge() {
+    @Test func theToggleKeepsOneCentreForPlayAndPause() {
         let (view, chrome) = transport(playing: true)
-        let pause = view.toggle.nudge
+        let pause = view.mark.frame
 
         chrome.playing = false
+        view.needsLayout = true
         view.layoutSubtreeIfNeeded()
 
-        #expect(pause == FloatOptics.nudge("pause.fill"))
-        #expect(view.toggle.nudge == FloatOptics.nudge("play.fill"))
-        #expect(view.toggle.nudge.dx > 0)
-        #expect(view.toggle.symbol?.name == "play.fill")
+        #expect(view.toggle.nudge == .zero)
+        #expect(view.mark.face == .play)
+        #expect(view.mark.frame == pause)
+        #expect(view.mark.frame.midX == FloatLayout.play / 2)
+        #expect(view.mark.frame.midY == FloatLayout.play / 2)
     }
 
-    @Test func theToggleSwapsWithoutShrinkingTheGlyph() {
+    @Test func theToggleSwapsWithoutShrinkingTheMark() {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100), styleMask: [.borderless], backing: .buffered, defer: true)
         let (view, chrome) = transport(playing: true)
         window.contentView?.addSubview(view)
         view.layoutSubtreeIfNeeded()
-        let size = view.toggle.symbol?.frame.size
+        let size = view.mark.frame.size
 
         chrome.playing = false
+        view.needsLayout = true
         view.layoutSubtreeIfNeeded()
-        let layer = view.toggle.symbol?.layer
+        let layer = view.mark.layer
 
-        #expect(view.toggle.symbol?.name == "play.fill")
-        #expect(layer?.animation(forKey: KitSwap.leave) == nil)
-        #expect(layer?.animation(forKey: KitSwap.arrive) == nil)
-        #expect(view.toggle.symbol?.frame.size.height == size?.height)
+        #expect(view.mark.face == .play)
+        #expect(layer?.animation(forKey: "transform") == nil)
+        #expect(layer?.animation(forKey: "opacity") == nil)
+        #expect(view.mark.frame.size == size)
     }
 
     @Test func glyphsWithoutAnOpticalOffsetStayCentred() {
         let names = ["xmark", "captions.bubble"]
 
-        let nudges = names.map(FloatOptics.nudge)
+        let nudges = names.map { FloatOptics.nudge($0, KitSymbol.Style(size: 12, weight: .semibold)) }
 
         #expect(nudges.allSatisfy { $0 == .zero })
     }

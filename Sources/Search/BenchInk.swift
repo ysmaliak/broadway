@@ -18,6 +18,7 @@ enum BenchInk {
         var plated = false
         while let here = at {
             if here is NSGlassEffectView { plated = true }
+            if here is FloatKeyView || here is FloatFeedbackView || here is FloatWaitingView || here is FloatScrubView { return "float" }
             if here is FloatLiveView, !plated { return "video" }
             if here is MeetingFaceView || here is MeetingJoinButton || here is MiniToggle { return "own" }
             if let face = here as? KitGlassFace, let plate = face.plate, plate !== Palette.NS.glassGround { return "own" }
@@ -64,6 +65,7 @@ enum BenchInk {
     }
 
     private static func inked(_ view: NSView) -> Bool {
+        if view is KitPlayMark { return true }
         if view is KitLabel || view is KitSymbol || view is SiteWrapLabel || view is LinkWordsView { return true }
         if view is NSTextField || view is NSTextView { return true }
         if let button = view as? NSButton { return !button.isBordered || button.subviews.isEmpty }
@@ -122,6 +124,9 @@ enum BenchInk {
             guard !label.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
             let size = label.runs.map(\.font.pointSize).min() ?? 0
             return [Mark(kind: kind, text: label.text, box: placed(drawn(label), of: label), size: size, muted: quiet(label.benchDrawn))]
+        }
+        if let mark = view as? KitPlayMark {
+            return [Mark(kind: kind, text: mark.face.rawValue, box: placed(mark.bounds, of: mark), size: 0, muted: false)]
         }
         if let symbol = view as? KitSymbol {
             guard symbol.image != nil else { return [] }

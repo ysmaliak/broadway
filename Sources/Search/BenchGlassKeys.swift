@@ -317,11 +317,14 @@ enum BenchGlassKeys {
         case "play":
             gallery.chrome.playing = request["playing"] as? Bool ?? !gallery.chrome.playing
             let transport = gallery.keys.first { $0.name == "float play" }?.view as? FloatTransportView
-            answer(["playing": gallery.chrome.playing, "replaced": transport?.toggle.symbol?.replaced ?? -1,
-                    "symbol": transport?.toggle.symbol?.name ?? ""])
+            transport?.needsLayout = true
+            transport?.layoutSubtreeIfNeeded()
+            answer(["playing": gallery.chrome.playing, "swaps": transport?.mark.swaps ?? -1, "mark": transport?.mark.face.rawValue ?? ""])
         case "state":
             let transport = gallery.keys.first { $0.name == "float play" }?.view as? FloatTransportView
-            answer(["replaced": transport?.toggle.symbol?.replaced ?? -1, "symbol": transport?.toggle.symbol?.name ?? ""])
+            transport?.needsLayout = true
+            transport?.layoutSubtreeIfNeeded()
+            answer(["swaps": transport?.mark.swaps ?? -1, "mark": transport?.mark.face.rawValue ?? ""])
         case "close":
             gallery.close()
             self.gallery = nil

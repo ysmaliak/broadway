@@ -43,6 +43,7 @@ SURFACES = [
 ]
 NOTES = {"own": "on a colour of its own", "picked": "on the system's selection colour", "off": "on a key that is switched off",
          "video": "straight on the video"}
+NOTES["float"] = "on a floating video's system glass"
 MUTED_LARGE = 18
 unmeasured = set()
 

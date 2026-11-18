@@ -21,7 +21,7 @@ final class FloatSpeedView: FloatPiece {
 
 final class FloatFeedbackView: KitFlippedView {
     let chrome: FloatChrome
-    private let glass = KitGlass.floating()
+    private let glass = NSGlassEffectView()
     private let words = KitLabel(" ", font: .monospacedDigitSystemFont(ofSize: 13, weight: .semibold), color: .white)
     private var was: Bool?
 

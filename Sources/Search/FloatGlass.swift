@@ -27,16 +27,24 @@ final class FloatChrome {
     var lag: Double { max(0, timeline.end - current) }
 }
 
+@MainActor
 enum FloatOptics {
-    static func nudge(_ symbol: String) -> CGVector {
+    static let twins = ["gobackward.15": "goforward.15", "goforward.15": "gobackward.15"]
+
+    static func nudge(_ symbol: String, _ style: KitSymbol.Style) -> CGVector {
         switch symbol {
-        case "gobackward.15", "goforward.15": CGVector(dx: 0, dy: -1.5)
-        case "pause.fill": CGVector(dx: 0, dy: -0.5)
-        case "play.fill": CGVector(dx: 1, dy: -0.5)
-        case "pip.exit": CGVector(dx: 0, dy: -0.5)
-        case "chevron.down": CGVector(dx: 0, dy: -1)
-        default: .zero
+        case "pip.exit": return CGVector(dx: 0, dy: -0.5)
+        case "chevron.down": return CGVector(dx: 0, dy: -1)
+        default: break
         }
+        guard let twin = twins[symbol], let size = KitGlyph.image(symbol, style)?.size,
+              let own = KitGlyph.weight(symbol, style), let other = KitGlyph.weight(twin, style) else { return .zero }
+        return CGVector(dx: size.width / 2 - (own.x + other.x) / 2, dy: size.height / 2 - (own.y + other.y) / 2)
+    }
+
+    static func frame(_ size: NSSize, nudge: CGVector, in disc: CGFloat, scale: CGFloat) -> NSRect {
+        NSView.kitPlace(NSRect(x: (disc - size.width) / 2 + nudge.dx, y: (disc - size.height) / 2 + nudge.dy, width: size.width, height: size.height),
+                        scale: scale, flipped: true)
     }
 }
 
@@ -237,7 +245,6 @@ final class FloatKeyView: KitHoverView {
             let made = KitGlassFace(face)
             made.style = .regular
             made.effectIsInteractive = true
-            made.plate = Palette.NS.glassGround
             glass = made
             holder = made
         } else {
@@ -258,9 +265,11 @@ final class FloatKeyView: KitHoverView {
 
     convenience init(symbol: String, size: CGFloat, weight: NSFont.Weight, glassed: Bool = true, label: String, help: String? = nil,
                      action: @escaping () -> Void) {
-        self.init(KitSymbol(symbol, style: KitSymbol.Style(size: size, weight: weight), tint: .white), glassed: glassed, label: label,
-                  help: help, action: action)
-        nudge = FloatOptics.nudge(symbol)
+        let style = KitSymbol.Style(size: size, weight: weight)
+        let mark = KitSymbol(symbol, style: style, tint: .white)
+        mark.whole = FloatOptics.twins[symbol] != nil
+        self.init(mark, glassed: glassed, label: label, help: help, action: action)
+        nudge = FloatOptics.nudge(symbol, style)
     }
 
     convenience init(text: String, font: NSFont, label: String, help: String? = nil, action: @escaping () -> Void) {
@@ -350,8 +359,8 @@ final class FloatTransportView: FloatPiece {
     let group = KitGlassGroup(spacing: FloatLayout.gap - 6)
     private(set) lazy var rewind = FloatKeyView(symbol: "gobackward.15", size: 16, weight: .semibold, label: "Back 15 Seconds",
                                                 help: "Back 15 Seconds") { [weak self] in self?.onRewind() }
-    private(set) lazy var toggle = FloatKeyView(symbol: "pause.fill", size: 21, weight: .semibold, label: "Pause",
-                                                help: "Pause") { [weak self] in self?.onToggle() }
+    let mark = KitPlayMark(.pause, size: 21)
+    private(set) lazy var toggle = FloatKeyView(mark, label: "Pause", help: "Pause") { [weak self] in self?.onToggle() }
     private(set) lazy var forward = FloatKeyView(symbol: "goforward.15", size: 16, weight: .semibold, label: "Forward 15 Seconds",
                                                  help: "Forward 15 Seconds") { [weak self] in self?.onForward() }
     private let onRewind: () -> Void
@@ -382,14 +391,8 @@ final class FloatTransportView: FloatPiece {
                                width: FloatLayout.skip, height: FloatLayout.skip)
         let playing = chrome.playing
         if playing != self.playing {
-            let name = playing ? "pause.fill" : "play.fill"
             let words = playing ? "Pause" : "Play"
-            toggle.nudge = FloatOptics.nudge(name)
-            if self.playing == nil {
-                toggle.symbol?.name = name
-            } else {
-                toggle.symbol?.replace(to: name)
-            }
+            mark.show(playing ? .pause : .play, animated: self.playing != nil)
             toggle.kitAccess(label: words, help: words)
             self.playing = playing
         }
@@ -410,7 +413,7 @@ final class FloatScrubView: FloatPiece {
     private let fill = CALayer()
     private let knob = CALayer()
     private var ticks: [CALayer] = []
-    private let pill = KitGlass.floating()
+    private let pill = NSGlassEffectView()
     private let words = KitLabel("", font: .monospacedDigitSystemFont(ofSize: 11, weight: .semibold), color: .white)
     private var hovering = false { didSet { if hovering != oldValue { needsLayout = true } } }
     private var hoverFraction: Double? { didSet { if hoverFraction != oldValue { needsLayout = true } } }

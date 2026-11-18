@@ -6,7 +6,7 @@ final class FloatCaptionsView: FloatPiece {
     static let tail: CGFloat = 24
 
     private let choose: (Int?) -> Void
-    private let pill = KitGlass.floating()
+    private let pill = NSGlassEffectView()
     private let row = KitFlippedView()
     private let divider = KitBox(fill: NSColor(white: 1, alpha: 0.24))
     private lazy var toggle = FloatKeyView(symbol: "captions.bubble", size: 12, weight: .semibold, glassed: false, label: "Subtitles",
@@ -19,7 +19,7 @@ final class FloatCaptionsView: FloatPiece {
         super.init(chrome: chrome, arrival: .unfold(from: KitArrival.top))
         pill.style = .regular
         pill.effectIsInteractive = true
-        pill.hold(row)
+        pill.contentView = row
         body.addSubview(pill)
         row.addSubview(divider)
         row.addSubview(toggle)
@@ -106,7 +106,7 @@ final class FloatLiveView: FloatPiece {
 
 final class FloatWaitingView: KitFlippedView {
     let chrome: FloatChrome
-    private let glass = KitGlass.floating()
+    private let glass = NSGlassEffectView()
     private let words = KitLabel("Buffering", font: .systemFont(ofSize: 11, weight: .medium), color: .white)
     private let spinner = NSProgressIndicator()
     private var was: Bool?

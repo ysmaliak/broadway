@@ -224,8 +224,8 @@ def main():
 
         shot, said = film(pid, window, OUT / "play-pause", 2.6, flip)
         after = glass("state")
-        t.ok("pause to play and back is two replace transitions", after["replaced"] - before["replaced"] == 2, (before, after))
-        t.ok("the key ends on pause", after["symbol"] == "pause.fill", after)
+        t.ok("pause to play and back is two swaps of the mark", after["swaps"] - before["swaps"] == 2, (before, after))
+        t.ok("the key ends on pause", after["mark"] == "pause", after)
         if shot is None:
             print("  film skipped:", said.strip())
             report["playPause"] = {"skipped": said.strip()}

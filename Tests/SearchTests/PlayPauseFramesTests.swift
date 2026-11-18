@@ -20,12 +20,15 @@ struct PlayPauseFramesTests {
         transport?.needsLayout = true
         transport?.layoutSubtreeIfNeeded()
         try? await Task.sleep(for: .milliseconds(800))
-        guard let symbol = transport?.toggle.symbol else { return [:] }
-        return await BenchGlassFrames.record(symbol, seconds: 0.8, into: Self.folder(name)) { gallery.chrome.playing = playing }
+        guard let transport else {
+            Issue.record("no transport in the gallery")
+            return [:]
+        }
+        return await BenchGlassFrames.record(transport.mark, seconds: 0.8, into: Self.folder(name)) { gallery.chrome.playing = playing }
     }
 
     @Test(arguments: [true, false])
-    func theFloatsPlayKeyDrawsFramesBetweenItsTwoGlyphs(playing: Bool) async {
+    func theFloatsPlayKeyDrawsFramesBetweenItsTwoFaces(playing: Bool) async {
         let row = await floatFrames(reduced: false, to: playing, name: "float-to-\(playing ? "pause" : "play")")
 
         #expect(row["ends"] as? Double ?? 0 > 0.004)
