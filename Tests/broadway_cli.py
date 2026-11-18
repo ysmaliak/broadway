@@ -531,11 +531,9 @@ def old_task_words():
         lines = said.stderr.strip().splitlines()
         check(f"{' '.join(words)} says Broadway no longer runs tasks", said.returncode == 2 and said.stdout == "" and len(lines) == 1
               and "Broadway no longer runs tasks" in lines[0], said.stdout + said.stderr)
-    for words in (["memory", "list"], ["notes"], ["memory"]):
-        said = broadway(*words)
-        lines = said.stderr.strip().splitlines()
-        check(f"{' '.join(words)} says Broadway no longer keeps notes", said.returncode == 2 and said.stdout == "" and len(lines) == 1
-              and "no longer keeps notes" in lines[0], said.stdout + said.stderr)
+    memory = broadway("memory")
+    check("memory is simply an unknown command", memory.returncode == 2 and memory.stdout == ""
+          and memory.stderr.startswith("broadway: Unknown command memory") and "notes" not in memory.stderr, memory.stderr)
     refused, parsed = envelope("say hello")
     check("its envelope", refused.returncode == 2 and parsed["error"]["code"] == "no_tasks" and parsed["ok"] is False, refused.stdout)
     shown = broadway("help").stdout

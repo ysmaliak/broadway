@@ -231,6 +231,16 @@ struct NounTests {
         #expect(throws: (any Error).self) { try Watch.parse(["--only", "cats"]) }
     }
 
+    @Test func watchOnlyTasksIsAPlainUsageRefusalThatNamesTheKinds() {
+        var said: Failure?
+
+        do { _ = try Watch.parse(["--only", "tasks"]) } catch let failure as Failure { said = failure } catch {}
+
+        #expect(said?.code == "usage")
+        #expect(said?.exit == .mistake)
+        #expect(said?.message == "--only takes tabs,spaces,downloads,approvals, not tasks")
+    }
+
     @Test func aWatchLineIsOneLine() {
         let event: [String: Any] = ["at": "2026-11-02T18:31:06Z", "event": "tab.added", "id": "e878df55", "title": "Two\nlines", "url": ""]
 

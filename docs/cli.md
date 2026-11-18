@@ -197,7 +197,7 @@ Every error carries a `hint` with the next command to run. Messages are one sent
 
 ## Tasks
 
-Broadway no longer runs tasks itself. `broadway task`, a bare sentence such as `broadway "what to do"`, `broadway session`, `broadway mcp --task ID`, `plans`, `tasks` and `helpers` print one line saying so and exit 2 with `no_tasks`. An agent you start yourself, such as Claude Code or Codex, uses Broadway with the commands here. Broadway keeps no notes for agents either: `broadway memory` and `broadway notes` print one line saying so and exit 2 with `no_notes`. Site skills stay, in `broadway skills`.
+Broadway no longer runs tasks itself. `broadway task`, a bare sentence such as `broadway "what to do"`, `broadway session`, `broadway mcp --task ID`, `plans`, `tasks` and `helpers` print one line saying so and exit 2 with `no_tasks`. An agent you start yourself, such as Claude Code or Codex, uses Broadway with the commands here.
 
 ## Broadway itself
 

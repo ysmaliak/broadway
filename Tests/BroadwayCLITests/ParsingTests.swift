@@ -146,6 +146,23 @@ struct ParsingTests {
         #expect((found["tags"] as? [String]) == ["a", "b"])
     }
 
+    @Test func memoryIsAnUnknownCommandLikeAnyOtherWord() throws {
+        let (globals, _) = try Globals.extract(["memory"], environment: [:])
+        let place = Place(socket: "/nonexistent/broadway.sock", wakes: false, world: nil, bundle: nil, named: false)
+        let context = Context(globals: globals, console: Console(json: true, quiet: true, noColor: true, environment: [:]), place: place, environment: [:], binary: "/nonexistent/broadway")
+        var said: [String: Failure] = [:]
+
+        for word in ["memory", "notes", "zzzz"] {
+            do { _ = try BroadwayCommand.route([word], context: context) } catch let failure as Failure { said[word] = failure }
+        }
+
+        for word in ["memory", "notes"] {
+            #expect(said[word]?.code == said["zzzz"]?.code, "\(word)")
+            #expect(said[word]?.exit == said["zzzz"]?.exit, "\(word)")
+            #expect(said[word]?.message.hasPrefix("Unknown command \(word)") == true, "\(word)")
+        }
+    }
+
     @Test func didYouMean() {
         #expect(Near.best("clikc", in: ["click", "close", "tabs"]) == "click")
         #expect(Near.best("sesion", in: ["session", "serve"]) == "session")

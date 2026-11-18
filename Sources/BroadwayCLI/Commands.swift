@@ -173,7 +173,7 @@ public enum BroadwayCommand {
         return String(cString: resolved)
     }
 
-    private static func route(_ words: [String], context: Context) throws -> Exit {
+    static func route(_ words: [String], context: Context) throws -> Exit {
         if context.globals.version { return Help.version(context) }
         guard let first = words.first else { return Help.show([], context: context) }
         if let builtin = Builtins.find(first) {
@@ -189,7 +189,6 @@ public enum BroadwayCommand {
             return try Browse.run(command, Array(words.dropFirst()), called: first, context: context)
         }
         if gone.contains(first) { throw noTasks }
-        if notesGone.contains(first) { throw noNotes }
         if let routed = try Nouns.route(words) { return try Person.run(routed.noun, routed.verb, routed.rest, context: context, bare: Person.bare(words)) }
         let spaced = first.contains(where: \.isWhitespace)
         if !spaced, !first.hasPrefix("-") {
@@ -206,10 +205,6 @@ public enum BroadwayCommand {
     }
 
     static let gone: Set<String> = ["task", "session", "plans", "tasks", "helpers"]
-
-    static let notesGone: Set<String> = ["memory", "notes"]
-
-    static let noNotes = Failure("no_notes", "Broadway no longer keeps notes for agents. Site skills stay, in broadway skills.", retrySafe: false, exit: .mistake)
 
     static let noTasks = Failure("no_tasks", "Broadway no longer runs tasks. An agent you start yourself uses Broadway with the broadway command.", retrySafe: false, exit: .mistake)
 
