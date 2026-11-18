@@ -484,8 +484,8 @@ enum FolderMenus {
     private static func live(_ browser: Browser, _ id: UUID) -> [KitMenuItem] {
         let live = LiveFolders.shared
         guard let folder = live.folder(id) else { return [] }
-        var items: [KitMenuItem] = [
-            .action("Update Now", symbol: MenuSymbol.reload, enabled: !live.reading.contains(id), run: { live.update(id) }),
+        var items: [KitMenuItem] = LiveQuiet.detail(folder, reading: live.reading.contains(id), now: Date(), online: live.online).map { .header($0) } + [
+            .action("Update Now", symbol: MenuSymbol.reload, enabled: !live.reading.contains(id), run: { live.update(id, asked: true) }),
             .action(folder.paused ? "Start Updating" : "Stop Updating", run: { live.pause(id, !folder.paused) }),
         ]
         if folder.state == .signIn {

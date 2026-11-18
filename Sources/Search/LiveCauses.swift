@@ -45,12 +45,10 @@ enum LiveWords {
         "\(site) is limiting requests. Trying again \(soon(until, now: now))."
     }
 
-    static func leftOut(_ statuses: [LinearStatus]) -> String {
-        statuses.count == 1 ? "\(LinearStatus.words(statuses)) left out" : "\(statuses.count) statuses left out"
-    }
-
-    static func limitedLines(_ site: String, until: Date?, now: Date) -> (String, String) {
-        ("Limited by \(site)", "Trying again \(soon(until, now: now))")
+    static func every(_ seconds: TimeInterval) -> String {
+        let minutes = max(1, Int((seconds / 60).rounded()))
+        if minutes == 1 { return "every minute" }
+        return minutes == 60 ? "every hour" : "every \(minutes) minutes"
     }
 
     static func soon(_ until: Date?, now: Date) -> String {
@@ -95,22 +93,5 @@ enum LiveWords {
         case .limited: return "\(read). \(limited(site, until: folder.limitedUntil, now: now))"
         case .unread, .other, nil: return "\(read). Couldn't read \(site) just now."
         }
-    }
-}
-
-@MainActor
-enum LiveAge {
-    static let least: TimeInterval = 600
-
-    static var every: TimeInterval { LivePace.seen }
-
-    static func old(_ folder: LiveFolder, at now: Date) -> Bool {
-        guard !folder.paused, let good = folder.good else { return false }
-        return now.timeIntervalSince(good) >= max(2 * every, least)
-    }
-
-    static func words(_ folder: LiveFolder, at now: Date) -> String? {
-        guard old(folder, at: now), let good = folder.good else { return nil }
-        return LiveWords.ago(good, now: now)
     }
 }

@@ -105,18 +105,101 @@ struct LiveCausesTests {
         #expect(!LiveFolderRows.read(failed, reading: false, now: now).contains(";"))
     }
 
-    @Test func aFolderSaysItsAgeOnlyOnceItIsOld() {
+    @Test func nothingIsSaidAfterOneFailedRead() {
         var fresh = folder()
         fresh.good = now.addingTimeInterval(-300)
+        let failed = LiveTrust.after(fresh, .failed, now: now)
+        let limited = LiveTrust.after(fresh, .missed(LiveMiss(cause: .limited)), now: now)
+        let next = now.addingTimeInterval(360)
+
+        for missed in [failed, limited] {
+            #expect(missed.state == .failed)
+            #expect(!LiveQuiet.stale(missed, at: now, every: 300))
+            #expect(!LiveQuiet.stale(missed, at: next, every: 300))
+            #expect(LiveQuiet.status(missed, stale: false) == nil)
+            #expect(LiveQuiet.note(missed, stale: false) == nil)
+        }
+        #expect(!LiveQuiet.stale(LiveTrust.after(failed, .items(failed.items, nil), now: next), at: next, every: 300))
+        #expect(LiveQuiet.detail(failed, reading: false, now: now) == ["Updated 5 minutes ago", "Couldn't read GitHub"])
+    }
+
+    @Test func aFolderThatKeepsFailingSaysItIsOutOfDateOnceItsListMisleads() {
+        var kept = folder()
+        kept.good = now
+        let failed = LiveTrust.after(kept, .failed, now: now.addingTimeInterval(300))
+        let long = LiveEvery.allCases.map { LiveQuiet.long(failed, every: $0.interval) }
+        let before = LiveQuiet.stale(failed, at: now.addingTimeInterval(1199), every: 300)
+        let after = LiveQuiet.stale(failed, at: now.addingTimeInterval(1200), every: 300)
+        let hourly = [3600.0, 7499, 7500].map { LiveQuiet.stale(failed, at: now.addingTimeInterval($0), every: 3600) }
+        var empty = failed
+        empty.items = []
+
+        #expect(long == [1200, 1200, 2100, 3900, 7500])
+        #expect(!before)
+        #expect(after)
+        #expect(hourly == [false, false, true])
+        #expect(LiveQuiet.turns(failed, after: now.addingTimeInterval(300), every: 300) == now.addingTimeInterval(1200))
+        #expect(LiveQuiet.status(failed, stale: true) == "Out of date")
+        #expect(LiveQuiet.note(failed, stale: true) == nil)
+        #expect(LiveQuiet.note(empty, stale: true) == .failed)
+        #expect(LiveQuiet.note(empty, stale: false) == .empty)
+        #expect(LiveQuiet.help(failed, now: now.addingTimeInterval(1500)) == "Updated 25 minutes ago. Couldn't read GitHub.")
+    }
+
+    @Test func aFineFolderIsNeverOutOfDateUnlessTheMacIsOffline() {
         var old = folder()
         old.good = now.addingTimeInterval(-7_200)
         var paused = old
         paused.paused = true
+        var asking = old
+        asking.state = .signIn
+        var never = folder([])
+        never.good = nil
+        never.state = .waiting
+        let lost = LiveTrust.after(never, .failed, now: now)
 
-        #expect(LiveAge.words(fresh, at: now) == nil)
-        #expect(LiveAge.words(old, at: now) == "Read 2 hours ago")
-        #expect(LiveAge.words(paused, at: now) == nil)
-        #expect(LiveAge.words(LiveTrust.after(old, .items(old.items, nil), now: now), at: now) == nil)
+        #expect(!LiveQuiet.stale(old, at: now, every: 300))
+        #expect(LiveQuiet.stale(old, at: now, every: 300, online: false))
+        #expect(!LiveQuiet.stale(folder(), at: now, every: 300, online: false))
+        #expect(!LiveQuiet.stale(paused, at: now, every: 300, online: false))
+        #expect(!LiveQuiet.stale(asking, at: now, every: 300, online: false))
+        #expect(!LiveQuiet.stale(never, at: now, every: 300))
+        #expect(LiveQuiet.stale(lost, at: now, every: 300))
+        #expect(LiveQuiet.status(paused, stale: false) == "Paused")
+        #expect(LiveQuiet.status(asking, stale: false) == "Sign in")
+        #expect(LiveQuiet.note(never, stale: false) == nil)
+        #expect(LiveQuiet.cause(old, now: now, online: false) == "You're offline")
+        #expect(LiveQuiet.detail(old, reading: true, now: now) == ["Updating…"])
+        #expect(LiveQuiet.detail(never, reading: false, now: now) == ["Not updated yet"])
+    }
+
+    @Test func anOldListSaysNothingUntilItHasStayedStuckThroughAnotherTry() {
+        var old = folder()
+        old.good = now.addingTimeInterval(-8 * 3600)
+        let slept = LiveTrust.after(old, .failed, now: now)
+        let grace = LiveEvery.allCases.map { LiveQuiet.grace(slept, every: $0.interval) }
+        let five = [0.0, 359, 360].map { LiveQuiet.stale(slept, at: now.addingTimeInterval($0), every: 300, since: now) }
+        let hour = [3659.0, 3660].map { LiveQuiet.stale(slept, at: now.addingTimeInterval($0), every: 3600, since: now) }
+        let offline = [59.0, 60].map { LiveQuiet.stale(slept, at: now.addingTimeInterval($0), every: 3600, online: false, since: now) }
+
+        #expect(grace == [120, 360, 960, 1860, 3660])
+        #expect(LiveQuiet.grace(slept, every: 3600, online: false) == 60)
+        #expect(five == [false, false, true])
+        #expect(hour == [false, true])
+        #expect(offline == [false, true])
+        #expect(LiveQuiet.turns(slept, after: now, every: 300, since: now) == now.addingTimeInterval(360))
+        #expect(LiveQuiet.stale(slept, at: now, every: 300))
+    }
+
+    @Test func aHeavySourceIsJudgedByItsOwnSlowerPace() {
+        var drive = LiveFolder(space: UUID(), name: "Recent Files", source: LiveDrive.source)
+        drive.state = .failed
+        drive.good = now
+
+        #expect(LivePace.pace(drive, every: 60) == LiveDrive.every)
+        #expect(LivePace.pace(drive, every: 3600) == 3600)
+        #expect(LiveQuiet.long(drive, every: 60) == 2100)
+        #expect(!LiveQuiet.stale(drive, at: now.addingTimeInterval(1500), every: 60))
     }
 
     @Test func anOldSavedFolderTakesItsLastReadAsItsLastGoodRead() {
@@ -135,19 +218,16 @@ struct LiveCausesTests {
         #expect(!LinearAPI.limited(Data(#"{"errors":[{"message":"Not authenticated"}]}"#.utf8)))
     }
 
-    @Test func aLimitedNoteIsTwoShortLines() {
-        let now = Date(timeIntervalSince1970: 1_800_000_000)
+    @Test func aLimitIsOneLineForSomeoneWhoLooks() {
+        var limited = LiveTrust.after(folder(), .missed(LiveMiss(cause: .limited, wait: 600)), now: now)
 
-        let lines = LiveWords.limitedLines("GitHub", until: now.addingTimeInterval(600), now: now)
-
-        #expect(lines.0 == "Limited by GitHub")
-        #expect(lines.1 == "Trying again in 10 minutes")
-        #expect(LiveWords.limitedLines("Linear", until: nil, now: now) == ("Limited by Linear", "Trying again in a moment"))
+        #expect(LiveQuiet.cause(limited, now: now) == "Limited by GitHub, trying again in 10 minutes")
+        #expect(LiveQuiet.cause(limited, now: now.addingTimeInterval(601)) == "Couldn't read GitHub")
+        limited.source = .linear(.assigned)
+        #expect(LiveQuiet.cause(limited, now: now.addingTimeInterval(540)) == "Limited by Linear, trying again in 1 minute")
     }
 
-    @Test func statusesLeftOutAreNamedOrCounted() {
-        #expect(LiveWords.leftOut([.backlog]) == "Backlog left out")
-        #expect(LiveWords.leftOut([.triage, .backlog, .unstarted]) == "3 statuses left out")
+    @Test func anEmptyLinearFolderSaysNoIssues() {
         #expect(LiveSource.linear(.assigned).nothingWording == "No issues")
     }
 }

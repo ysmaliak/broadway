@@ -155,6 +155,11 @@ enum PersonSettings {
         "live.folders": row("In Broadway", instead: "broadway live list"),
         "live.suggestions": row("In Broadway", instead: "broadway live add NAME SOURCE"),
         "live.offers": flag(\.suggestsLiveFolders),
+        LiveEvery.key: SettingAccess(takes: LiveEvery.allCases.map { "\($0.rawValue)" }.joined(separator: ", ") + " minutes", read: { $0.liveEvery.rawValue }, write: { prefs, text in
+            guard let every = Int(text).flatMap(LiveEvery.init) else { return false }
+            prefs.liveEvery = every
+            return true
+        }),
         "live.offers.again": row("In Broadway"),
         "look": choice(\.look),
         "app.icon": choice(\.appIcon),

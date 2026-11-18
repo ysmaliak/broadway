@@ -3098,7 +3098,14 @@ final class Bench {
                     taken.forEach { $0.0.isHidden = false }
                     glass.forEach { $0.isHidden = false }
                 }
-                guard let picture = frame.bitmapImageRepForCachingDisplay(in: frame.bounds) else {
+                let scaled = (request["scale"] as? Double).flatMap { scale -> NSBitmapImageRep? in
+                    let made = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(frame.bounds.width * scale), pixelsHigh: Int(frame.bounds.height * scale),
+                                                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                                colorSpaceName: .calibratedRGB, bytesPerRow: 0, bitsPerPixel: 0)
+                    made?.size = frame.bounds.size
+                    return made
+                }
+                guard let picture = scaled ?? frame.bitmapImageRepForCachingDisplay(in: frame.bounds) else {
                     answer(["error": "nothing drawn"])
                     return
                 }

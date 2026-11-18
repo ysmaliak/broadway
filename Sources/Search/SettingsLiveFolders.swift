@@ -393,11 +393,14 @@ extension SettingsPageView {
                     guard let made, let now = live.folder(id) else { return }
                     made.rename(now.name)
                     made.setAccessibilityLabel(now.name)
-                    made.tell(now.status)
+                    made.tell(LiveQuiet.status(now))
                     made.mark.show(count: nil, value: LiveFolderRows.tabs(id, in: browser, space: space))
                 }
                 put(made)
             }
+        }
+        section("Updates") {
+            settingRow(LiveEvery.key)
         }
         shape { LiveAdd.now(for: browser, space: space).map(\.id) }
         let adds = LiveAdd.now(for: browser, space: space)
@@ -477,9 +480,9 @@ extension SettingsPageView {
             let updating = line("Keep up to date", nil, id: "live.updating", control: keeps)
             update { [weak updating] in
                 updating?.say(live.folder(id)?.paused == true ? "Paused. Turn on to read it again."
-                    : "Reads every \(Int(LiveFolders.every / 60)) minutes while you use Broadway, less often while you are away, and when you open one of its pages")
+                    : "Updates \(LiveWords.every(live.folder(id).map { LivePace.pace($0, every: live.every()) } ?? live.every())) while you are at this Mac, less often while you are away, and when you open one of its pages")
             }
-            let now = button("Update Now") { live.update(id) }
+            let now = button("Update Now") { live.update(id, asked: true) }
             let reading = line("Last read", nil, id: "live.update", control: now)
             update { [weak reading, weak now] in
                 guard let folder = live.folder(id) else { return }

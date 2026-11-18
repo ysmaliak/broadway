@@ -120,19 +120,37 @@ final class FoldedSignInTests {
         #expect(pill(of: view)?.title == "Sign in")
     }
 
-    @Test func pausedAndFailedFoldersStillGiveWayToTheNameAndKeepTheCount() {
-        for (state, words) in [("paused", "Paused"), ("failed", "Can't read")] {
+    @Test func aPausedFolderGivesWayToTheNameAndAnOutOfDateOneKeepsAMark() {
+        for state in ["paused", "failed"] {
             let id = folder(Self.long)
-            if state == "paused" { LiveFolders.shared.pause(id, true) } else { LiveFolders.shared.apply(.failed, to: id) }
-            #expect(LiveFolders.shared.folder(id)?.status == words)
+            if state == "paused" {
+                LiveFolders.shared.pause(id, true)
+            } else {
+                let kept = LiveFolders.shared.folder(id)?.items ?? []
+                LiveFolders.shared.apply(.items(kept, nil), to: id, now: Date().addingTimeInterval(-3 * 3600))
+                LiveFolders.shared.apply(.failed, to: id)
+                LiveFolders.shared.benchHere(.distantPast)
+                LiveQuietClock.shared.benchStuck(id, for: 3 * 3600)
+            }
+            LiveQuietClock.shared.sync()
+            #expect(LiveFolders.shared.folder(id).flatMap(LiveQuiet.status) == (state == "paused" ? "Paused" : "Out of date"))
             let narrow = heading(id, Self.long, width: 200)
             let wide = heading(id, "PRs", width: 320)
+            let shown = [narrow, wide].map { $0.status as? LiveStatusView }
 
             #expect(pill(of: narrow) == nil, "\(state)")
             #expect(narrow.showsCount, "\(state)")
-            #expect(narrow.status?.isHidden == true, "\(state): the status should give way to the long name")
             #expect(wide.showsCount, "\(state)")
             #expect(wide.status?.isHidden == false, "\(state): the status should show beside a short name")
+            #expect(shown[1]?.said == (state == "paused" ? "Paused" : "Out of date"))
+            if state == "paused" {
+                #expect(narrow.status?.isHidden == true, "the status should give way to the long name")
+            } else {
+                #expect(narrow.status?.isHidden == false, "a list that misleads keeps its mark beside a long name")
+                #expect(shown.map { $0?.marked } == [true, false])
+                #expect(shown[0]?.toolTip?.contains("Couldn't read") == true)
+                #expect(shown[0]?.toolTip?.hasPrefix("Updated ") == true)
+            }
         }
     }
 

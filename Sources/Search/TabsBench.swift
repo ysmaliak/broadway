@@ -200,7 +200,8 @@ enum TabsBench {
             return browser.stackTops(in: group).map { ["id": String($0.key.uuidString.prefix(8)).lowercased(), "folded": $0.value] }
         }
         func state() -> [String: Any] {
-            ["on": browser.prefs.liveFolders, "folders": live.folders.map { folder in
+            LiveQuietClock.shared.sync()
+            return ["on": browser.prefs.liveFolders, "folders": live.folders.map { folder in
                 ["name": folder.name, "kind": folder.source.kind.rawValue, "address": folder.source.address,
                  "space": browser.spaces.first { $0.id == folder.space }?.name ?? "",
                  "state": folder.state.rawValue, "paused": folder.paused, "hidden": folder.hidden.count,
@@ -211,8 +212,14 @@ enum TabsBench {
                                               "checks": $0.checks?.rawValue ?? "", "list": $0.list?.rawValue ?? "", "url": $0.key,
                                               "fresh": $0.fresh, "merging": live.turning($0.key), "claimed": live.claimedRow($0.key), "draft": $0.draft == true,
                                               "unanswered": $0.unanswered ?? 0, "signsRead": $0.signsRead == true] as [String: Any] },
-                 "fresh": folder.freshCount,
-                 "age": LiveAge.words(folder, at: Date()) ?? "", "cause": folder.cause ?? "", "more": folder.more ?? "",
+                 "fresh": folder.freshCount, "reading": live.reading.contains(folder.id), "asked": live.requested.contains(folder.id),
+                 "said": LiveQuiet.status(folder) ?? "", "line": LiveQuiet.note(folder).map { "\($0)" } ?? "",
+                 "stale": LiveQuiet.stale(folder.id), "long": LiveQuiet.long(folder, every: live.every()),
+                 "grace": LiveQuiet.grace(folder, every: live.every(), online: live.online),
+                 "stuck": LiveQuietClock.shared.since[folder.id].map { Date().timeIntervalSince($0) } ?? -1,
+                 "detail": LiveQuiet.detail(folder, reading: live.reading.contains(folder.id), now: Date(), online: live.online),
+                 "help": LiveQuiet.help(folder, now: Date(), online: live.online), "every": live.every(), "online": live.online,
+                 "cause": folder.cause ?? "", "more": folder.more ?? "",
                  "failure": folder.state == .failed ? LiveWords.failure(folder, now: Date()) : "",
                  "good": folder.good.map { $0.timeIntervalSince1970 } ?? 0, "lost": live.lost,
                  "order": folder.order ?? [],
@@ -309,18 +316,30 @@ enum TabsBench {
             guard let heading = headings.first(where: { $0.group?.id == folder.id && $0.window != nil && !$0.isHiddenOrHasHiddenAncestor }) else {
                 answer(["error": "no heading on screen"]); return
             }
+            if Store.testing, args.count == 3 { heading.benchPillHover(args[2] == "hover") }
             heading.layoutSubtreeIfNeeded()
             let pill = (heading.status as? LiveStatusView)?.pill
             let frame = pill.map { heading.convert($0.bounds, from: $0) } ?? .zero
-            let bar = (heading.status as? LiveStatusView)?.loading
-            let barFrame = bar.map { heading.convert($0.bounds, from: $0) } ?? .zero
-            answer(["width": heading.bounds.width, "pill": pill != nil && !pill!.isHiddenOrHasHiddenAncestor,
+            let status = heading.status as? LiveStatusView
+            let ring = heading.liveRing
+            let ringFrame = ring.map { heading.convert($0.bounds, from: $0) } ?? .zero
+            let shownRing = ring?.isHiddenOrHasHiddenAncestor == false
+            let inWindow = heading.convert(heading.bounds, to: nil)
+            let top = (heading.window?.frame.height ?? 0) - inWindow.maxY
+            answer(["width": heading.bounds.width, "frame": [inWindow.minX, top, inWindow.width, inWindow.height],
+                    "pill": pill != nil && !pill!.isHiddenOrHasHiddenAncestor,
                     "title": pill?.title ?? "", "label": pill?.accessibilityLabel() ?? "", "tip": pill?.toolTip ?? "",
                     "pillFrame": [frame.minX, frame.minY, frame.width, frame.height],
-                    "loading": bar != nil && !bar!.isHiddenOrHasHiddenAncestor && barFrame.width > 0,
-                    "loadingFrame": [barFrame.minX, barFrame.minY, barFrame.width, barFrame.height],
-                    "spoken": (heading.status as? LiveStatusView)?.accessibilityLabel() ?? "",
-                    "nameEnd": heading.nameHost.frame.maxX, "chip": heading.showsCount, "count": heading.count])
+                    "loading": status?.loads == true, "ring": shownRing, "turning": shownRing && ring?.turning == true,
+                    "ringFrame": [ringFrame.minX, ringFrame.minY, ringFrame.width, ringFrame.height],
+                    "wait": LiveLoadingClock.shared.wait, "stay": LiveLoadingClock.shared.stay,
+                    "spoken": heading.liveSpoken ?? "", "said": status?.said ?? "", "marked": status?.marked == true,
+                    "statusTip": status?.toolTip ?? "", "statusShown": status.map { !$0.isHidden } ?? false,
+                    "statusFrame": status.map { let at = heading.convert($0.bounds, from: $0); return [at.minX, at.minY, at.width, at.height] } ?? [0, 0, 0, 0],
+                    "chipFrame": { let chip = heading.benchParts["chip"]?.frame ?? .zero; return [chip.minX, chip.minY, chip.width, chip.height] }(),
+                    "nameEnd": heading.nameHost.frame.maxX, "nameCut": heading.benchNameWidth > heading.nameHost.frame.width + 0.5,
+                    "chevron": heading.benchParts["chevron"]?.frame.minX ?? 0,
+                    "chip": heading.showsCount, "count": heading.count])
             return
         case "sign-in":
             guard let name = args.dropFirst().first, let folder = live.folders.first(where: { $0.name == name }) else {
@@ -356,6 +375,50 @@ enum TabsBench {
         case "menu":
             answer(["items": LiveMenu.menu(for: browser).items.map(\.title)])
             return
+        case "foldermenu":
+            guard let name = args.dropFirst().first, let folder = live.folders.first(where: { $0.name == name }),
+                  let group = browser.tabGroups.first(where: { $0.id == folder.id }) else {
+                answer(["error": "no live folder"]); return
+            }
+            answer(["items": FolderMenus.menu(browser: browser, group: group).items.map { item in
+                ["title": item.title, "header": item.isSectionHeader, "separator": item.isSeparatorItem, "enabled": item.isEnabled] as [String: Any]
+            }])
+            return
+        case "net":
+            guard Store.testing, args.count == 2, ["up", "down"].contains(args[1]) else { answer(["error": "live net up|down, test runs only"]); return }
+            live.network(args[1] == "up")
+        case "here":
+            guard Store.testing, args.count == 2, let minutes = args[1] == "away" ? -1 : Double(args[1]) else {
+                answer(["error": "live here away|MINUTES, the person away from the Mac or back at it for that long, test runs only"]); return
+            }
+            live.benchHere(minutes < 0 ? nil : Date().addingTimeInterval(-minutes * 60))
+            LiveQuietClock.shared.sync()
+        case "aged":
+            guard Store.testing, args.count == 3, let folder = live.folders.first(where: { $0.name == args[1] }), let minutes = Double(args[2]) else {
+                answer(["error": "live aged NAME MINUTES, the last good read moved back, test runs only"]); return
+            }
+            live.benchHere(.distantPast)
+            live.benchAged(folder.id, by: minutes * 60)
+            LiveQuietClock.shared.benchStuck(folder.id, for: minutes * 60)
+        case "strip":
+            let headings = browser.window?.contentView?.kitSubviews(of: GroupHeadingView.self) ?? []
+            guard Store.testing, args.count >= 3, let folder = live.folders.first(where: { $0.name == args[1] }),
+                  let heading = headings.first(where: { $0.group?.id == folder.id && $0.window != nil && !$0.isHiddenOrHasHiddenAncestor }) else {
+                answer(["error": "live strip NAME FOLDER [SECONDS] [FPS] [SCALE] [ask|look|SECONDS OF A STAND-IN READ], a heading on screen, test runs only"]); return
+            }
+            let numbers = args.dropFirst(3).prefix(3).map { Double($0) ?? 0 }
+            let how = args.count > 6 ? args[6] : "ask"
+            LiveLoadingStrip.take(heading, to: args[2], seconds: numbers.first ?? 2, fps: numbers.dropFirst().first ?? 20,
+                                  scale: CGFloat(numbers.dropFirst(2).first ?? 3),
+                                  begin: {
+                                      if how == "ask" { live.update(folder.id, asked: true) } else if let lasts = Double(how) { live.benchAsked(folder.id, for: lasts) }
+                                  }, answer)
+            return
+        case "ask":
+            guard let name = args.dropFirst().first, let folder = live.folders.first(where: { $0.name == name }) else {
+                answer(["error": "no live folder"]); return
+            }
+            live.update(folder.id, asked: true)
         case "update":
             guard let name = args.dropFirst().first, let folder = live.folders.first(where: { $0.name == name }) else {
                 answer(["error": "no live folder"]); return

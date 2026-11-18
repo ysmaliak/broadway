@@ -444,16 +444,6 @@ final class LiveSignInPill: KitButton {
     }
 }
 
-enum LiveLoading {
-    static let width: CGFloat = 32
-
-    static func shows(_ folder: LiveFolder, collapsed: Bool) -> Bool {
-        folder.state == .waiting && !folder.paused && (collapsed || !folder.items.isEmpty)
-    }
-
-    static func spoken(_ folder: LiveFolder) -> String { "Loading \(folder.name)" }
-}
-
 final class LiveStatusView: NSView, SideGrounded {
     let browser: Browser
     let id: UUID
@@ -463,18 +453,29 @@ final class LiveStatusView: NSView, SideGrounded {
             guard ground != oldValue else { return }
             dot.tone = ground.greys.dot
             dot.ink = ground.ink
-            loading?.ink = ground.ink
+            ring.ink = ground.ink
+            mark.ink = ground.ink
         }
     }
     private let count = KitLabel("", font: .monospacedDigitSystemFont(ofSize: 11, weight: .regular), color: KitColor.muted)
     private let dot = UnseenDotView()
     private let words = KitLabel("", font: .systemFont(ofSize: 11), color: KitColor.muted)
     private(set) var pill: LiveSignInPill?
-    private(set) var loading: GroupNameVeil?
+    private let mark = KitSymbol(LiveQuiet.symbol, style: KitSymbol.Style(size: 11), tint: KitColor.muted)
+    private(set) var warns = false
+    let ring = RingView()
+    private(set) var loads = false
+    private(set) var rings = false
     private var watch: AnyCancellable?
     private var size = NSSize.zero
     private(set) var asked: String?
     var asks: Bool { pill != nil }
+    var keeps: Bool { bare || warns }
+    var said: String? { words.isHidden ? (mark.isHidden ? nil : LiveQuiet.words) : words.text }
+    var marked: Bool { !mark.isHidden }
+    static var warnWidth: CGFloat { (LiveQuiet.words as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 11)]).width }
+    private var bare = false
+    var overCount = false { didSet { if overCount != oldValue { refresh(poke: false) } } }
     var short = false { didSet { if short != oldValue { refresh(poke: false) } } }
     static let shortSignIn = "Sign in"
 
@@ -483,8 +484,12 @@ final class LiveStatusView: NSView, SideGrounded {
         self.id = id
         self.collapsed = collapsed
         super.init(frame: .zero)
-        for view in [count, dot, words] as [NSView] { addSubview(view) }
+        for view in [count, dot, words, mark, ring] as [NSView] { addSubview(view) }
         dot.setAccessibilityElement(false)
+        mark.setAccessibilityElement(false)
+        mark.isHidden = true
+        ring.lead = 0
+        ring.isHidden = true
         watch = kitTrack { [weak self] in self?.refresh() }
     }
 
@@ -497,10 +502,19 @@ final class LiveStatusView: NSView, SideGrounded {
 
     private func refresh(poke: Bool = true) {
         let had = (asks, asked)
-        let folder = LiveFolders.shared.folder(id)
-        let loads = folder.map { LiveLoading.shows($0, collapsed: collapsed) } ?? false
-        let age = folder.flatMap { !loads && $0.status == nil ? LiveAge.words($0, at: Date()) : nil }
-        let fresh = folder.flatMap { !loads && age == nil && collapsed && $0.status == nil && $0.freshCount > 0 ? $0.freshCount : nil }
+        let live = LiveFolders.shared
+        let folder = live.folder(id)
+        let held = LiveLoadingClock.shared.shown.contains(id)
+        let stale = LiveQuiet.stale(id)
+        let status = folder.flatMap { LiveQuiet.status($0, stale: stale) }
+        let note = folder.flatMap { LiveQuiet.note($0, stale: stale) }
+        let claimed = folder == nil || (status != nil && (collapsed || note == nil))
+        loads = folder.map { LiveLoading.waits($0, asked: live.requested.contains(id)) } ?? false
+        let rang = rings
+        rings = held && (loads || (rang && (overCount || !claimed)))
+        let own = rings && !overCount
+        let quiet = own || folder?.state == .waiting
+        let fresh = folder.flatMap { !quiet && collapsed && status == nil && $0.freshCount > 0 ? $0.freshCount : nil }
         count.isHidden = fresh == nil
         dot.isHidden = fresh == nil
         var made = NSSize.zero
@@ -515,41 +529,40 @@ final class LiveStatusView: NSView, SideGrounded {
             made = NSSize(width: text.width + 4 + 7, height: max(text.height, 7))
         } else {
             setAccessibilityElement(false)
+            setAccessibilityLabel(nil)
             toolTip = nil
         }
         var button: (String, String, String, () -> Void)?
         var text: String?
-        if let folder, let status = folder.status, collapsed || folder.note == nil {
+        var warned = false
+        if !own, let folder, let status, collapsed || note == nil {
             if !folder.paused, folder.state == .signIn {
                 button = (short ? Self.shortSignIn : status, folder.signInWords, folder.signInWords, { [weak browser, id] in browser?.signInToLive(id) })
             } else {
                 text = status
+                warned = stale
             }
-        } else if let age {
-            text = age
         }
-        clock(age != nil)
-        asked = button == nil ? nil : folder?.status
-        if loads, let folder {
-            let shown = loading ?? {
-                let made = GroupNameVeil()
-                made.ink = ground.ink
-                addSubview(made)
-                loading = made
-                return made
-            }()
-            shown.isHidden = false
-            let said = LiveLoading.spoken(folder)
+        warns = warned
+        clock(warned)
+        asked = button == nil ? nil : status
+        if warned, let folder {
+            let help = LiveQuiet.help(folder, now: Date(), online: live.online)
             setAccessibilityElement(true)
             setAccessibilityRole(.staticText)
-            setAccessibilityLabel(said)
-            made = NSSize(width: LiveLoading.width, height: GroupNameReveal.barHeight)
-        } else if let shown = loading {
-            shown.removeFromSuperview()
-            loading = nil
+            setAccessibilityLabel("\(LiveQuiet.words). \(help)")
+            toolTip = help
         }
-        words.isHidden = text == nil
-        if let text {
+        if loads, let folder {
+            setAccessibilityElement(true)
+            setAccessibilityRole(.staticText)
+            setAccessibilityLabel(LiveLoading.spoken(folder))
+        }
+        mark.isHidden = !(warned && short)
+        words.isHidden = text == nil || !mark.isHidden
+        if !mark.isHidden {
+            made = NSSize(width: 14, height: 14)
+        } else if let text {
             words.text = text
             made = words.halfPointSize
         }
@@ -569,10 +582,15 @@ final class LiveStatusView: NSView, SideGrounded {
             shown.removeFromSuperview()
             pill = nil
         }
+        bare = made == .zero && !overCount
+        if bare { made = NSSize(width: LiveLoading.side, height: LiveLoading.side) }
+        ring.show(own, animated: bare && window != nil)
         if made != size || asks != had.0 || asked != had.1 {
             size = made
             invalidateIntrinsicContentSize()
             if poke { superview?.needsLayout = true }
+        } else if rings != rang, poke {
+            superview?.needsLayout = true
         }
         needsLayout = true
     }
@@ -605,8 +623,10 @@ final class LiveStatusView: NSView, SideGrounded {
             dot.kitSetFrame(NSRect(x: text.width + 4, y: (bounds.height - 7) / 2, width: 7, height: 7))
         }
         if !words.isHidden { words.kitSetFrame(bounds) }
+        mark.kitSetFrame(bounds)
         pill?.frame = bounds
-        loading?.kitSetFrame(bounds)
+        let side = LiveLoading.side
+        ring.kitSetFrame(NSRect(x: bounds.width - side, y: (bounds.height - side) / 2, width: side, height: side))
     }
 }
 
@@ -647,12 +667,13 @@ final class LiveNoteView: NSView, SideGrounded {
         layoutSubtreeIfNeeded()
         return ["text": line.isHidden ? "" : line.text, "detail": line.detail ?? "", "cut": !line.isHidden && line.cut,
                 "retry": !line.isHidden && line.detail == "Try again", "button": line.button, "width": bounds.width,
+                "tip": line.isHidden ? "" : line.toolTip ?? "",
                 "folder": LiveFolders.shared.folder(id)?.name ?? ""]
     }
 
     private func refresh() {
         let live = LiveFolders.shared
-        guard let folder = live.folder(id), let note = folder.note else {
+        guard let folder = live.folder(id), let note = LiveQuiet.note(folder), note != .loading else {
             clock(false)
             line.isHidden = true
             return
@@ -665,16 +686,12 @@ final class LiveNoteView: NSView, SideGrounded {
         var failed = false
         switch note {
         case .loading:
-            line.show(symbol: "ellipsis", text: "Loading…", strong: false)
-            label = "Loading \(folder.name)"
+            break
         case .empty:
+            let whole = folder.emptyWording
+            line.show(symbol: "tray", text: fits(whole, strong: false) ? whole : folder.source.nothingWording, strong: false)
+            label = whole
             if folder.noCycle != true, !folder.source.leftOut.isEmpty {
-                line.show(symbol: "tray", text: folder.source.nothingWording, detail: LiveWords.leftOut(folder.source.leftOut), strong: false)
-                label = "\(folder.emptyWording)"
-            } else {
-                line.show(symbol: "tray", text: folder.emptyWording, strong: false)
-            }
-            if !folder.source.leftOut.isEmpty {
                 help = "This folder leaves out issues in \(LinearStatus.words(folder.source.leftOut)). Change it in the folder's settings."
             }
         case .paused:
@@ -694,29 +711,28 @@ final class LiveNoteView: NSView, SideGrounded {
             label = folder.signInWords
             help = "Opens single sign-on. The folder reads again once you're back."
         case .failed:
-            let offline = folder.why == .offline
-            if folder.why == .limited {
-                let lines = LiveWords.limitedLines(site, until: folder.limitedUntil, now: Date())
-                let title = fits(lines.0, strong: false) ? lines.0 : LiveWords.limitedLines("this site", until: nil, now: Date()).0
-                line.show(symbol: "hourglass", text: title, detail: lines.1, strong: false)
-                label = "\(lines.0). \(lines.1)."
-            } else if offline {
-                line.show(symbol: "wifi.slash", text: LiveWords.failure(folder, now: Date()) ?? "You're offline", strong: false)
+            let now = Date()
+            help = LiveQuiet.help(folder, now: now, online: live.online)
+            if !live.online || folder.why == .offline {
+                line.show(symbol: "wifi.slash", text: "You're offline", strong: false)
             } else {
-                let words = LiveWords.failure(folder, now: Date()) ?? "Couldn't read \(site)"
-                let title = fits(words, strong: false) ? words : words.replacingOccurrences(of: site, with: "this site")
-                line.show(symbol: "exclamationmark.triangle", text: title, detail: "Try again", strong: false)
-                action = { [id] in LiveFolders.shared.update(id) }
-                label = "\(words). Try again."
-                failed = true
+                let words = "Couldn't read \(site)"
+                let title = fits(words, strong: false) ? words : "Couldn't read this site"
+                let waits = LiveLimit.holds(folder, at: now)
+                line.show(symbol: LiveQuiet.symbol, text: title, detail: waits ? nil : "Try again", strong: false)
+                label = waits ? words : "\(words). Try again."
+                if !waits {
+                    action = { [id] in LiveFolders.shared.update(id, asked: true) }
+                    failed = true
+                }
             }
         }
-        clock(folder.why == .limited)
+        clock(note == .failed)
         line.button = action != nil
         line.enabled = interactive && !(failed && live.reading.contains(id))
         line.setAccessibilityLabel(label ?? line.text)
         line.setAccessibilityRole(action != nil ? .button : .staticText)
-        line.toolTip = help ?? (folder.state == .failed ? LiveWords.failure(folder, now: Date()) : folder.state == .signIn ? folder.signInWords : nil)
+        line.toolTip = help ?? (folder.state == .signIn ? folder.signInWords : nil)
         paint(animated: false)
         needsLayout = true
     }

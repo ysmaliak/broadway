@@ -121,9 +121,16 @@ enum HeldInput {
 }
 
 final class RingView: NSView {
+    static let side: CGFloat = 11
+    static let turn: CFTimeInterval = 0.85
+    var ink: KitInk = .flat { didSet { if ink != oldValue { viewDidChangeEffectiveAppearance() } } }
+    var lead: CFTimeInterval = 0.2
+    var turning: Bool { ring.animation(forKey: "turn") != nil }
+    var shownOpacity: Swift.Float { isHiddenOrHasHiddenAncestor ? 0 : ring.presentation()?.opacity ?? ring.opacity }
+    var shownTurn: Double { ring.presentation()?.value(forKeyPath: "transform.rotation.z") as? Double ?? 0 }
     private let ring = CAShapeLayer()
     private var leaving: Int?
-    private var leaves = 0
+    private var left = 0
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -157,8 +164,8 @@ final class RingView: NSView {
             isHidden = true
             return
         }
-        leaves += 1
-        let token = leaves
+        left += 1
+        let token = left
         leaving = token
         ring.removeAnimation(forKey: "wait")
         CATransaction.begin()
@@ -190,6 +197,10 @@ final class RingView: NSView {
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
+        guard ink == .flat else {
+            ring.strokeColor = ink.color(KitColor.ink, .ink, opacity: 0.7, dark: kitDark).cgColor
+            return
+        }
         effectiveAppearance.performAsCurrentDrawingAppearance {
             ring.strokeColor = Palette.NS.muted.withAlphaComponent(0.7).cgColor
         }
@@ -213,21 +224,24 @@ final class RingView: NSView {
 
     private func begin() {
         guard window != nil, !isHiddenOrHasHiddenAncestor else { return end() }
+        ring.removeAnimation(forKey: "wait")
+        guard !Motion.reduced else {
+            ring.removeAnimation(forKey: "turn")
+            return
+        }
         if ring.animation(forKey: "turn") == nil {
             let turn = CABasicAnimation(keyPath: "transform.rotation.z")
             turn.fromValue = 0
             turn.toValue = -2 * Double.pi
-            turn.duration = 0.85
+            turn.duration = Self.turn
             turn.repeatCount = .infinity
             turn.isRemovedOnCompletion = false
             ring.add(turn, forKey: "turn")
         }
-        ring.removeAnimation(forKey: "wait")
-        guard !Motion.reduced else { return }
         let wait = CABasicAnimation(keyPath: "opacity")
         wait.fromValue = 0
         wait.toValue = 1
-        wait.beginTime = CACurrentMediaTime() + 0.2
+        wait.beginTime = CACurrentMediaTime() + lead
         wait.duration = 0.12
         wait.fillMode = .backwards
         ring.add(wait, forKey: "wait")

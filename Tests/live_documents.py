@@ -9,8 +9,9 @@ invented files, then a redirect to an invented sign-in page, then a page in a
 shape the reader does not know. Nothing is asked of Google: every request the
 world makes to the server is checked to be a staged one, and the rows are never
 opened. The folder with its three rows and a More on Google Drive row, signed
-out, and Couldn't read are pictured by the window's own id, light and dark,
-into .context/live-documents/.
+out, quiet after one failed read, and Out of date after three hours without a
+good one are pictured by the window's own id, light and dark, into
+.context/live-documents/.
 """
 import json
 import os
@@ -203,9 +204,14 @@ def main():
         t.ok("a shape the reader does not know is Couldn't read and keeps the rows", got["state"] == "failed" and len(got["items"]) == 3,
              (got["state"], len(got["items"])))
         shown = notes()
-        t.ok("the note says Couldn't read Google Drive over Try again, whole",
-             shown and shown[0]["text"] == "Couldn't read Google Drive" and shown[0]["detail"] == "Try again" and not shown[0]["cut"], shown)
+        t.ok("one failed read says nothing on the row and keeps the cause in the menu",
+             not shown and got["said"] == "" and got["detail"][-1] == "Couldn't read Google Drive", (shown, got["said"], got["detail"]))
         pictures("couldnt-read")
+        live("aged", NAME, "180")
+        got = read("odd")
+        t.ok("three hours without a good read, the row says Out of date and keeps the rows",
+             got["said"] == "Out of date" and len(got["items"]) == 3 and not notes(), (got["said"], len(got["items"]), got["help"]))
+        pictures("out-of-date")
 
         staged = [p for p in ASKED if not p.startswith("/stage/drive.google.com/") and not p.startswith("/stage/accounts.google.com/")]
         t.ok("every request the world made for the folder went to the local stage", ASKED and not staged, (ASKED, staged))

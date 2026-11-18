@@ -18,4 +18,6 @@ The code is `Motion` in `Sources/Search/Kit/Tokens.swift` and `Sources/Search/Ki
 
 New code that animates without a kit curve asks `Motion.reduced` itself and changes at once when it is on, as `CallShape.glide` does for the call window.
 
+The loading ring (`RingView` in `Sources/Search/TabBar.swift`) keeps the rule too. It turns while a tab or a live folder loads, and while Reduce Motion is on it stands still as an open arc and comes and goes without a fade.
+
 The unit tests are `Tests/SearchTests/ReduceMotionTests.swift`. The probe is `python3 Tests/float_review_shots.py --still`: it turns Reduce Motion on in a test world, draws every floating glass surface the bench has, and fails if any layer of one holds an animation that `Motion.staysUnderReduce` refuses.

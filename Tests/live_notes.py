@@ -5,11 +5,12 @@ Build first (`./build.sh`), then `python3 Tests/live_notes.py`. A world of its
 own opens in the background, kept below every ordinary window and never key.
 Five folders that are never read (GitHub, Linear, a Linear cycle, YouTube and
 a feed on an invented host) are given each state in turn, and the bench
-says, for every note on screen, its words and whether any line is cut. The
-limited note must be two lines, `Limited by <site>` over `Trying again in
-<time>`, with no Try Again, and no note may be cut at either width. The
-limited note is pictured by the window's own id at both widths, light and
-dark, into .context/live-limited/.
+says, for every note on screen, its words and whether any line is cut. A
+folder that has gone three hours without a good read and is limited by its
+site must say `Couldn't read <site>` in one line with no Try Again, keep the
+limit and the wait in its help tag, and no note may be cut at either width.
+That note is pictured by the window's own id at both widths, light and dark,
+into .context/live-limited/.
 """
 import os
 import shutil
@@ -100,15 +101,18 @@ def survey(width):
 def limited(width):
     sv.cmd({"do": "ui", "sideWidth": width})
     for name, _ in FOLDERS:
+        live("aged", name, "180")
         live("force", name, "limited")
     time.sleep(0.8)
     shown = {n["folder"]: n for n in notes()}
     pr = shown.get("PRs", {})
-    t.ok(f"{width} pt: the limited note says Limited by GitHub", pr.get("text") == "Limited by GitHub", pr)
-    t.ok(f"{width} pt: and under it when it reads again", pr.get("detail") == "Trying again in 10 minutes", pr)
-    t.ok(f"{width} pt: with no Try Again", pr.get("retry") is False, pr)
+    t.ok(f"{width} pt: a folder long out of date and limited says Couldn't read GitHub in one line", pr.get("text") == "Couldn't read GitHub" and pr.get("detail") == "", pr)
+    t.ok(f"{width} pt: with no Try Again while the limit holds", pr.get("retry") is False and pr.get("button") is False, pr)
+    t.ok(f"{width} pt: and the limit and the wait in its help tag", pr.get("tip", "").startswith("Updated ")
+         and pr.get("tip", "").endswith(". Limited by GitHub, trying again in 10 minutes."), pr)
     issues = shown.get("Issues", {})
-    t.ok(f"{width} pt: Linear says the same of itself", issues.get("text") == "Limited by Linear" and issues.get("detail") == "Trying again in 10 minutes", issues)
+    t.ok(f"{width} pt: Linear says the same of itself", issues.get("text") == "Couldn't read Linear" and issues.get("detail") == ""
+         and issues.get("tip", "").endswith(". Limited by Linear, trying again in 10 minutes."), issues)
     t.ok(f"{width} pt: nothing limited is cut", not any(n["cut"] for n in shown.values()), list(shown.values()))
     folder = next(f for f in live("force", "PRs", "limited")["folders"] if f["name"] == "PRs")
     t.ok(f"{width} pt: the whole sentence stays the folder's failure words", folder["failure"] == "GitHub is limiting requests. Trying again in 10 minutes.", folder["failure"])

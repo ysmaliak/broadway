@@ -680,6 +680,7 @@ final class TabRowView: KitHoverView {
         byline.ink = ground.ink
         mark.ink = ground.ink
         for symbol in [blank, flask, record] { symbol.ink = ground.ink }
+        ring.ink = ground.ink
         ring.needsLayout = true
         shortcut?.ink = ground.ink
     }

@@ -668,7 +668,8 @@ enum LiveMerge {
 @Observable
 final class LiveFolders {
     static let shared = LiveFolders()
-    static let every: TimeInterval = LivePace.seen
+    @ObservationIgnored var every: @MainActor () -> TimeInterval = { Shared.prefs.liveEvery.interval }
+    @ObservationIgnored private var paced: AnyCancellable?
     static let hold: TimeInterval = 1.6
     static let stagger: TimeInterval = 0.09
     static let settles: TimeInterval = 8
@@ -676,6 +677,7 @@ final class LiveFolders {
     private(set) var folders: [LiveFolder] = []
     private(set) var retired: Set<UUID> = []
     private(set) var reading: Set<UUID> = []
+    private(set) var requested: Set<UUID> = []
     @ObservationIgnored var syncing = false
     @ObservationIgnored var signInGap: TimeInterval = 15
     @ObservationIgnored var mergedHold: TimeInterval = LiveFolders.hold
@@ -715,7 +717,8 @@ final class LiveFolders {
     @ObservationIgnored private(set) var asleep: [String: Date] = [:]
     @ObservationIgnored private var actedReads: [UUID: Date] = [:]
     @ObservationIgnored private var locks: LiveLockWatch?
-    @ObservationIgnored private(set) var online = true
+    private(set) var online = true
+    private(set) var here: Date? = .distantPast
     @ObservationIgnored private var resigned: Date?
     @ObservationIgnored private var lastMoment: LiveMoment?
     @ObservationIgnored private var touched: [String: Date] = [:]
@@ -865,6 +868,7 @@ final class LiveFolders {
 
     private func finished(_ id: UUID) {
         reading.remove(id)
+        requested.remove(id)
         for waiter in waiters.removeValue(forKey: id) ?? [] { waiter.resume() }
     }
     func move(_ id: UUID, to address: String) { change(id) { $0.source.address = address } }
@@ -1345,8 +1349,28 @@ final class LiveFolders {
         }
     }
 
-    func update(_ id: UUID) {
-        guard let folder = begin(id) else { return }
+    func benchHere(_ since: Date?) {
+        guard Store.testing, here != since else { return }
+        here = since
+    }
+
+    func benchAged(_ id: UUID, by seconds: TimeInterval) {
+        guard Store.testing, let index = folders.firstIndex(where: { $0.id == id }), let good = folders[index].good else { return }
+        folders[index].good = good.addingTimeInterval(-seconds)
+    }
+
+    func benchAsked(_ id: UUID, for seconds: TimeInterval) {
+        guard Store.testing, folder(id) != nil else { return }
+        requested.insert(id)
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
+            MainActor.assumeIsolated { if self?.reading.contains(id) == false { self?.requested.remove(id) } }
+        }
+    }
+
+    func update(_ id: UUID, asked: Bool = false) {
+        let folder = begin(id)
+        if asked, reading.contains(id) { requested.insert(id) }
+        guard let folder else { return }
         Task { await read(folder) }
     }
 
@@ -1364,16 +1388,21 @@ final class LiveFolders {
         if active { resigned = nil } else if resigned == nil { resigned = now }
         asleep = asleep.filter { !LivePace.woke(since: $0.value, idle: idle, now: now) }
         return LiveMoment(active: active, away: LivePace.away(active: active, idle: idle, resigned: resigned, now: now),
-                          asleep: !asleep.isEmpty, online: online)
+                          asleep: !asleep.isEmpty, online: online, idle: idle)
     }
 
     @discardableResult
     func tick(at now: Date = Date()) -> [UUID] {
         let current = moment(at: now)
+        if !LivePace.attended(current) {
+            if here != nil { here = nil }
+        } else if here == nil {
+            here = now
+        }
         let back = LivePace.returned(from: lastMoment, to: current)
         let looked = looking()
         if !back || looked?.isEmpty != true { lastMoment = current }
-        let wanted = LivePace.wanted(folders, moment: current, looked: looked, returned: back, now: now)
+        let wanted = LivePace.wanted(folders, moment: current, looked: looked, returned: back, now: now, every: every())
             .filter { !signingOn($0, at: now) && held[$0] == nil }
         round(wanted)
         return wanted
@@ -1448,6 +1477,7 @@ final class LiveFolders {
         pageReads = [:]
         pageSoon = [:]
         asleep = [:]
+        if here != .distantPast { here = .distantPast }
         online = true
         resigned = nil
         lastMoment = nil
@@ -1654,9 +1684,11 @@ final class LiveFolders {
         timer?.invalidate()
         timer = nil
         unwatch()
+        paced = nil
         guard on else { return }
         watch()
         tick()
+        paced = kitObserve(initial: false, distinct: true, { Shared.prefs.liveEvery }) { [weak self] _ in _ = self?.tick() }
         let made = Timer(timeInterval: LivePace.tick, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { _ = self?.tick() }
         }

@@ -478,7 +478,7 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
     private var listItems: [Browser.ListItem] { scene.items }
 
     private func noteHeight(_ group: TabGroup) -> CGFloat {
-        let note = group.live && !group.collapsed && LiveFolders.shared.folder(group.id)?.note != nil ? rowHeight + Self.gap : 0
+        let note = group.live && !group.collapsed && LiveFolders.shared.folder(group.id).flatMap(LiveQuiet.note) != nil ? rowHeight + Self.gap : 0
         return note + moreHeight(group)
     }
 
@@ -1371,7 +1371,7 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
                                        rows: &seenRows, headings: &seenHeadings, cards: &seenCards, notes: &seenNotes)
                 at += childHeight
             }
-            if group.live, LiveFolders.shared.folder(group.id)?.note != nil {
+            if group.live, LiveFolders.shared.folder(group.id).flatMap(LiveQuiet.note) != nil {
                 at += Self.gap
                 let note = notes[group.id] ?? SideSigns.liveNote(browser: browser, id: group.id, height: rowHeight, interactive: true)
                 if notes[group.id] == nil { notes[group.id] = note }

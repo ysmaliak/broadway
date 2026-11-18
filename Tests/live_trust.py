@@ -110,20 +110,22 @@ def steps():
     tabs = [x["id"] for x in first["tabs"]]
     t.ok("the list reads three rows", first["state"] == "fine" and len(titles) == 3, (first["state"], titles))
     t.ok("each row is a tab", len(tabs) == 3, first["tabs"])
-    t.ok("a fresh read shows no age and no note", first["age"] == "" and first["note"] == "", (first["age"], first["note"]))
+    t.ok("a fresh read says nothing on its row", first["said"] == "" and first["line"] == "", (first["said"], first["line"]))
+    t.ok("and its menu says when it was updated", first["detail"] == ["Updated a moment ago"], first["detail"])
 
     def kept(st, step):
         got = folder(st, "Trust")
         t.ok(f"{step}: every row stays", [i["title"] for i in got["items"]] == titles, [i["title"] for i in got["items"]])
         t.ok(f"{step}: every tab stays", [x["id"] for x in got["tabs"]] == tabs, got["tabs"])
-        t.ok(f"{step}: no age while the last good read is new", got["age"] == "", got["age"])
+        t.ok(f"{step}: the row says nothing while the last good read is new", got["said"] == "" and got["line"] == "" and not got["stale"],
+             (got["said"], got["line"]))
         return got
 
     MODE["page"] = "error"
     got = kept(live("update", "Trust"), "a server error")
     t.ok("a server error is a failed read said as Couldn't read", got["state"] == "failed" and got["failure"].startswith("Couldn't read"),
          (got["state"], got["cause"], got["failure"]))
-    t.ok("folded, it says Can't read", got["status"] == "Can't read", got["status"])
+    t.ok("the cause stays in the folder's menu for someone who looks", got["detail"][-1].startswith("Couldn't read"), got["detail"])
 
     MODE["page"] = "empty"
     began = time.time()
@@ -136,7 +138,8 @@ def steps():
     got = kept(live("update", "Trust"), "a 429")
     t.ok("a 429 is a limit, never a sign-out", got["state"] == "failed" and got["cause"] == "limited", (got["state"], got["cause"]))
     t.ok("its words give the wait from Retry-After", got["failure"].endswith("is limiting requests. Trying again in 10 minutes."), got["failure"])
-    t.ok("folded, it says Limited", got["status"] == "Limited", got["status"])
+    t.ok("the menu says the limit and the wait", got["detail"][-1].startswith("Limited by ") and got["detail"][-1].endswith(", trying again in 10 minutes"),
+         got["detail"])
 
     MODE["page"] = "limit-page"
     got = kept(live("update", "Trust"), "a 403 limit page")
@@ -160,7 +163,7 @@ def pictures():
         "offline": ("failure", "You're offline"),
         "limited": ("failure", "GitHub is limiting requests. Trying again in 10 minutes."),
         "unread": ("failure", "Couldn't read GitHub"),
-        "old": ("age", "Read 3 hours ago"),
+        "old": ("said", ""),
         "more": ("more", "https://github.com/pulls?q=is%3Aopen+is%3Apr+author%3A%40me+archived%3Afalse"),
     }
     for look in ("light", "dark"):
@@ -169,10 +172,27 @@ def pictures():
         for state, (field, wanted) in words.items():
             live("force", "PRs", "rows")
             got = folder(live("force", "PRs", state), "PRs")
-            t.ok(f"{look}: {state} says {wanted}", got[field] == wanted, (got[field], got["state"], got["status"]))
+            t.ok(f"{look}: {state} says {wanted!r}", got[field] == wanted, (got[field], got["state"], got["status"]))
             t.ok(f"{look}: {state} keeps its three rows", len(got["items"]) == 3 and len(got["tabs"]) == 3, (len(got["items"]), len(got["tabs"])))
+            t.ok(f"{look}: {state} after one read leaves the row quiet", got["said"] == "" and got["line"] == "", (got["said"], got["line"]))
             time.sleep(0.7)
             shoot(f"live-trust-{state}-{look}")
+        live("aged", "PRs", "0")
+        live("force", "PRs", "rows")
+        live("force", "PRs", "old")
+        got = folder(live("force", "PRs", "failed"), "PRs")
+        t.ok(f"{look}: a list three hours old whose next read fails once still says nothing",
+             got["said"] == "" and not got["stale"] and got["line"] == "" and 0 <= got["stuck"] < got["grace"] == 360,
+             (got["said"], got["stuck"], got["grace"]))
+        t.ok(f"{look}: and its menu says how old it is and why", got["detail"][0].startswith("Updated ") and got["detail"][-1] == "Couldn't read GitHub",
+             got["detail"])
+        got = folder(live("aged", "PRs", "180"), "PRs")
+        t.ok(f"{look}: failing for three hours, the row says Out of date and keeps its rows",
+             got["said"] == "Out of date" and got["stale"] and got["line"] == "" and len(got["items"]) == 3, (got["said"], got["line"], got["help"]))
+        t.ok(f"{look}: and the help tag says since when and why", got["help"].startswith("Updated ") and got["help"].endswith(". Couldn't read GitHub."),
+             got["help"])
+        time.sleep(0.7)
+        shoot(f"live-trust-out-of-date-{look}")
     live("remove", "PRs")
 
 

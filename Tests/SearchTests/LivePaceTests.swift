@@ -9,32 +9,89 @@ struct LivePaceTests {
         LiveFolder(space: space, name: "PRs", source: .pullRequests, paused: paused, read: read)
     }
 
-    @Test func aUserAtTheMacReadsEveryFiveMinutesInTheSpaceOnScreen() {
-        let moment = LiveMoment(active: true, away: 10)
+    @Test func aPersonAtTheMacGetsTheirIntervalWhicheverSpaceOrAppIsInFront() {
+        let here = LiveMoment(active: true, away: 10, idle: 10)
+        let elsewhere = LiveMoment(active: false, away: 40 * 60, idle: 10)
 
-        let seen = LivePace.interval(moment, looked: true)
-        let unseen = LivePace.interval(moment, looked: false)
-
-        #expect(seen == 300.0)
-        #expect(unseen == 1200.0)
+        for every in LiveEvery.allCases {
+            #expect(LivePace.interval(here, every: every.interval) == every.interval)
+            #expect(LivePace.interval(elsewhere, every: every.interval) == every.interval)
+        }
+        #expect(LivePace.interval(here) == 300.0)
+        #expect(LiveEvery.allCases.map(\.interval) == [60, 300, 900, 1800, 3600])
+        #expect(LiveEvery.allCases.map(\.title) == ["Every minute", "Every 5 minutes", "Every 15 minutes", "Every 30 minutes", "Every hour"])
     }
 
-    @Test func anInactiveOrIdleBroadwayBacksOffAndStopsAfterTwoHours() {
-        let inactive = LiveMoment(active: false, away: 10 * 60)
-        let idle = LiveMoment(active: true, away: 6 * 60)
-        let gone = LiveMoment(active: false, away: 3 * 60 * 60)
+    @Test func anInstallationWithNoStoredIntervalReadsAsFiveMinutes() {
+        let settings = UserDefaults(suiteName: "live-pace-tests-\(UUID().uuidString)")!
 
-        #expect(LivePace.interval(inactive, looked: true) == 1200.0)
-        #expect(LivePace.interval(idle, looked: true) == 1200.0)
-        #expect(LivePace.interval(gone, looked: true) == nil)
+        #expect(LiveEvery.stored(settings.integer(forKey: LiveEvery.key)) == .five)
+        #expect(LiveEvery.stored(7) == .five)
+        #expect(LiveEvery.stored(30) == .half)
+        #expect(LiveEvery.usual.interval == 300)
+    }
+
+    @Test func aFolderInASpaceNobodyLooksAtKeepsTheSameInterval() {
+        let shown = UUID()
+        let seen = folder(read: now.addingTimeInterval(-6 * 60), space: shown)
+        let unseen = folder(read: now.addingTimeInterval(-6 * 60))
+        let recent = folder(read: now.addingTimeInterval(-2 * 60))
+        let here = LiveMoment(active: true, away: 0, idle: 0)
+
+        let five = LivePace.wanted([seen, unseen, recent], moment: here, looked: [shown], returned: false, now: now)
+        let quarter = LivePace.wanted([seen, unseen, recent], moment: here, looked: [shown], returned: false, now: now, every: 900)
+        let minute = LivePace.wanted([seen, unseen, recent], moment: here, looked: [shown], returned: false, now: now, every: 60)
+
+        #expect(five == [seen.id, unseen.id])
+        #expect(quarter.isEmpty)
+        #expect(minute == [seen.id, unseen.id, recent.id])
+    }
+
+    @Test func aFolderIsReadAtTheTickBeforeItWouldPassItsInterval() {
+        let here = LiveMoment(active: true, away: 0, idle: 0)
+        let ages: [TimeInterval] = [239, 241, 299]
+
+        let due = ages.map { age in
+            !LivePace.wanted([folder(read: now.addingTimeInterval(-age))], moment: here, looked: nil, returned: false, now: now).isEmpty
+        }
+        let minute = !LivePace.wanted([folder(read: now.addingTimeInterval(-5))], moment: here, looked: nil, returned: false, now: now, every: 60).isEmpty
+
+        #expect(due == [false, true, true])
+        #expect(minute)
+        #expect(LivePace.tick == 60)
+    }
+
+    @Test func awayFromTheMacFoldersSlowDownButNeverGoFasterThanTheIntervalAndStopAfterTwoHours() {
+        let inactive = LiveMoment(active: false, away: 10 * 60, idle: 10 * 60)
+        let idle = LiveMoment(active: true, away: 6 * 60, idle: 6 * 60)
+        let gone = LiveMoment(active: false, away: 3 * 60 * 60, idle: 3 * 60 * 60)
+
+        #expect(LivePace.interval(inactive) == 1200.0)
+        #expect(LivePace.interval(idle) == 1200.0)
+        #expect(LivePace.interval(idle, every: 60) == 1200.0)
+        #expect(LivePace.interval(idle, every: 3600) == 3600.0)
+        #expect(LivePace.interval(gone) == nil)
+    }
+
+    @Test func comingBackReadsEveryFolderThatIsPastTheInterval() {
+        let shown = UUID()
+        let old = folder(read: now.addingTimeInterval(-40 * 60), space: shown)
+        let elsewhere = folder(read: now.addingTimeInterval(-40 * 60))
+        let away = LiveMoment(active: false, away: 40 * 60, idle: 40 * 60)
+        let back = LiveMoment(active: true, away: 0, idle: 0)
+
+        let wanted = LivePace.wanted([old, elsewhere], moment: back, looked: [shown], returned: LivePace.returned(from: away, to: back),
+                                     now: now, every: 1800)
+
+        #expect(wanted == [old.id, elsewhere.id])
     }
 
     @Test func aSleepingLockedOrOfflineMacNeverPolls() {
         let asleep = LiveMoment(active: true, away: 0, asleep: true)
         let offline = LiveMoment(active: true, away: 0, online: false)
 
-        #expect(LivePace.interval(asleep, looked: true) == nil)
-        #expect(LivePace.interval(offline, looked: true) == nil)
+        #expect(LivePace.interval(asleep) == nil)
+        #expect(LivePace.interval(offline) == nil)
         #expect(!LivePace.due(nil, now: now, every: nil))
     }
 
@@ -84,18 +141,6 @@ struct LivePaceTests {
 
         #expect(back == [old.id, failed.id])
         #expect(steady.isEmpty)
-    }
-
-    @Test func aSpaceNobodyLooksAtWaitsTheLongerInterval() {
-        let shown = UUID()
-        let seen = folder(read: now.addingTimeInterval(-6 * 60), space: shown)
-        let unseen = folder(read: now.addingTimeInterval(-6 * 60))
-        let stale = folder(read: now.addingTimeInterval(-21 * 60))
-
-        let wanted = LivePace.wanted([seen, unseen, stale], moment: LiveMoment(active: true, away: 0), looked: [shown],
-                                     returned: false, now: now)
-
-        #expect(wanted == [seen.id, stale.id])
     }
 
     @Test func aPageEventIsReadAgainOnlyAfterItsGap() {

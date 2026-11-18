@@ -67,6 +67,7 @@ enum SettingsIndex {
         .init(id: "agents", page: .agents, title: "Agents", icon: "person.2"),
 
         .init(id: "live", page: .liveFolders, title: "Your live folders", icon: MenuSymbol.liveFolder),
+        .init(id: "live.pace", page: .liveFolders, title: "Updates", icon: "arrow.clockwise"),
         .init(id: "live.history", page: .liveFolders, title: "Add a live folder", icon: "folder.badge.plus"),
         .init(id: "live.offers", page: .liveFolders, title: "While you browse", icon: "folder.badge.plus"),
 
@@ -344,10 +345,16 @@ enum SettingsIndex {
 
         .init(id: "live.folders", group: "live", icon: MenuSymbol.liveFolder,
               title: "Live folders", detail: "Rename, pause, update or remove each live folder in this space",
-              more: "Live folders read their site or feed from this Mac every five minutes while you use Broadway, less often while you are away and never while it sleeps, and keep their items as tabs in the sidebar",
+              more: "Live folders read their site or feed from this Mac as often as you choose under Updates while you are at it, less often while you are away and never while it sleeps, and keep their items as tabs in the sidebar",
               words: ["live folders", "live", "folders", "feeds", "rss", "atom", "pull requests", "prs", "github", "linear", "youtube",
                       "rename", "pause", "update now", "remove folder", "hidden items", "statuses", "status", "backlog",
                       "triage", "filter"], kind: .note),
+        .init(id: LiveEvery.key, group: "live.pace", icon: "arrow.clockwise",
+              title: "Update live folders", detail: "While you are at this Mac and online",
+              more: "Every live folder in every space keeps this pace. While you are away they update less often and stop after two hours, then catch up when you are back. A site that limits how often it is read sets its own pace, and Google Drive is read every 15 minutes at most.",
+              keys: [LiveEvery.key],
+              words: ["live folders", "update", "interval", "how often", "refresh", "every", "minutes", "hour", "pace", "poll", "frequency",
+                      "reload", "sync"]),
         .init(id: "live.suggestions", group: "live.history", icon: "folder.badge.plus",
               title: "Live folders to add", detail: "GitHub, Linear, YouTube and the sites you open most, each ready to add",
               more: "Suggestions come first, read from this Mac's history only. Nothing is sent anywhere. Each space counts the visits made in it, and private windows keep no history. A folder reads its site with your sign-in in the space it is in.",
@@ -527,6 +534,7 @@ extension SettingsIndex {
             Preferences.hintsKey: prefs.hints,
             "video.quality": prefs.videoQuality.raw,
             "video.speed": prefs.remembersSpeed,
+            LiveEvery.key: prefs.liveEvery.rawValue,
             Preferences.miniKey: prefs.miniPlayer,
             Preferences.miniSkipKey: prefs.miniSkip,
             Preferences.miniSpokenKey: prefs.miniSpoken.rawValue,
@@ -591,6 +599,9 @@ extension SettingsIndex {
         case "live.offers":
             guard let on = value as? Bool else { return false }
             prefs.suggestsLiveFolders = on
+        case LiveEvery.key:
+            guard let every = (value as? NSNumber).flatMap({ LiveEvery(rawValue: $0.intValue) }) else { return false }
+            prefs.liveEvery = every
         case Preferences.meetingFoldersKey:
             guard let on = value as? Bool else { return false }
             prefs.meetingFolders = on

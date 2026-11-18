@@ -27,6 +27,8 @@ final class LiveSignInOverTests {
         LiveFolders.shared.reader = { await LiveReader.read($0) }
         LiveFolders.shared.signInGap = 15
         LiveFolders.shared.signOnLasts = LiveSignOn.lasts
+        LiveLoadingClock.shared.wait = LiveLoadingPace.wait
+        LiveLoadingClock.shared.stay = LiveLoadingPace.stay
         for folder in LiveFolders.shared.folders { LiveFolders.shared.remove(folder.id) }
         for browser in browsers { browser.closeAll() }
         browsers = []
@@ -297,28 +299,25 @@ final class LiveSignInOverTests {
         #expect(woken.map(\.items.count) == [3, 3])
     }
 
-    @Test func theLoadingBarShowsOnlyWhileAKeptOrFoldedFolderLoads() {
+    @Test func theLoadingRingShowsOnTheHeadingWhileAFolderWaitsOnItsRead() {
         var folder = LiveFolder(space: space, name: "PRs", source: .pullRequests)
-        let emptyOpen = LiveLoading.shows(folder, collapsed: false)
-        let emptyFolded = LiveLoading.shows(folder, collapsed: true)
+        let empty = LiveLoading.waits(folder)
         folder.items = kept
-        let keptOpen = LiveLoading.shows(folder, collapsed: false)
+        let held = LiveLoading.waits(folder)
         folder.paused = true
-        let paused = LiveLoading.shows(folder, collapsed: true)
+        let paused = LiveLoading.waits(folder)
         folder.paused = false
         let shown = [LiveFolder.State.fine, .signIn, .failed].map { state -> Bool in
             var other = folder
             other.state = state
-            return LiveLoading.shows(other, collapsed: true)
+            return LiveLoading.waits(other)
         }
 
-        #expect(!emptyOpen)
-        #expect(emptyFolded)
-        #expect(keptOpen)
+        #expect(empty)
+        #expect(held)
         #expect(!paused)
         #expect(shown == [false, false, false])
-        #expect(LiveLoading.width == 32)
-        #expect(GroupNameReveal.barHeight == 9)
+        #expect(LiveLoading.side == 11)
         #expect(LiveLoading.spoken(folder) == "Loading PRs")
     }
 
@@ -335,7 +334,9 @@ final class LiveSignInOverTests {
         return view
     }
 
-    @Test func theHeadingSwapsTheSignInButtonForTheLoadingBarOpenAndFolded() async throws {
+    @Test func theHeadingSwapsTheSignInButtonForTheLoadingRingOpenAndFolded() async throws {
+        LiveLoadingClock.shared.wait = 0.05
+        LiveLoadingClock.shared.stay = 0.05
         let id = asking()
         let reads = held()
         let folded = try await heading(id, collapsed: true)
@@ -350,25 +351,30 @@ final class LiveSignInOverTests {
             open.layoutSubtreeIfNeeded()
         }
         let views = [folded, open].map { $0.status as? LiveStatusView }
-        let bars = views.map { $0?.loading }
-        let frames = zip([folded, open], bars).map { heading, bar in bar.map { heading.convert($0.bounds, from: $0) } ?? .zero }
+        let rings = [folded, open].map(\.liveRing)
+        let frames = zip([folded, open], rings).map { heading, ring in ring.map { heading.convert($0.bounds, from: $0) } ?? .zero }
+        let counted = folded.showsCount
 
         #expect(asked)
         #expect(views.map { $0?.pill == nil } == [true, true])
-        #expect(bars.map { $0 != nil && !$0!.isHidden } == [true, true])
-        #expect(frames.map(\.width) == [32, 32])
-        #expect(frames.map(\.height) == [9, 9])
+        #expect(views.map { $0?.rings } == [true, true])
+        #expect(rings.map { $0 != nil && !$0!.isHidden } == [true, true])
+        #expect(frames.map(\.width) == [11, 11])
+        #expect(frames.map(\.height) == [11, 11])
+        #expect(!counted)
         #expect(frames.allSatisfy { $0.minX >= folded.nameHost.frame.maxX && $0.maxX <= 240 })
         #expect(views.map { $0?.accessibilityLabel() } == ["Loading PRs", "Loading PRs"])
 
         reads.answer(.items([fresh], nil))
         await until { self.folder(id)?.state == .fine }
-        for _ in 0..<5 {
+        for _ in 0..<10 {
             try await Task.sleep(for: .milliseconds(20))
             folded.layoutSubtreeIfNeeded()
         }
 
-        #expect((folded.status as? LiveStatusView)?.loading == nil)
+        #expect((folded.status as? LiveStatusView)?.rings == false)
+        #expect(folded.liveRing == nil)
+        #expect(folded.showsCount)
     }
 
     @Test func browsingTheSiteSignedOutKeepsTheNoteAndTheButtonThroughTheRead() async throws {

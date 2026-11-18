@@ -7,10 +7,32 @@ struct LiveMoment: Equatable {
     var away: TimeInterval
     var asleep = false
     var online = true
+    var idle: TimeInterval? = nil
+}
+
+enum LiveEvery: Int, CaseIterable {
+    case minute = 1, five = 5, quarter = 15, half = 30, hour = 60
+
+    static let key = "live.every"
+    static let usual = LiveEvery.five
+
+    static func stored(_ minutes: Int) -> LiveEvery { LiveEvery(rawValue: minutes) ?? usual }
+
+    var interval: TimeInterval { TimeInterval(rawValue) * 60 }
+
+    var title: String {
+        switch self {
+        case .minute: return "Every minute"
+        case .five: return "Every 5 minutes"
+        case .quarter: return "Every 15 minutes"
+        case .half: return "Every 30 minutes"
+        case .hour: return "Every hour"
+        }
+    }
 }
 
 enum LivePace {
-    static let seen: TimeInterval = 5 * 60
+    static let seen: TimeInterval = LiveEvery.usual.interval
     static let unseen: TimeInterval = 20 * 60
     static let idle: TimeInterval = 5 * 60
     static let gone: TimeInterval = 2 * 60 * 60
@@ -21,16 +43,28 @@ enum LivePace {
         moment.active && moment.away < idle && !moment.asleep && moment.online
     }
 
-    static func interval(_ moment: LiveMoment, looked: Bool) -> TimeInterval? {
-        guard !moment.asleep, moment.online else { return nil }
-        if engaged(moment) { return looked ? seen : unseen }
-        return moment.away < gone ? unseen : nil
+    static func attended(_ moment: LiveMoment) -> Bool {
+        (moment.idle ?? moment.away) < idle && !moment.asleep
     }
 
-    static func due(_ read: Date?, now: Date, every: TimeInterval?) -> Bool {
+    static func present(_ moment: LiveMoment) -> Bool {
+        attended(moment) && moment.online
+    }
+
+    static func interval(_ moment: LiveMoment, every: TimeInterval = seen) -> TimeInterval? {
+        guard !moment.asleep, moment.online else { return nil }
+        if present(moment) { return every }
+        return moment.away < gone ? max(every, unseen) : nil
+    }
+
+    static func pace(_ folder: LiveFolder, every: TimeInterval) -> TimeInterval {
+        folder.source.heavy ? max(every, LiveDrive.every) : every
+    }
+
+    static func due(_ read: Date?, now: Date, every: TimeInterval?, before next: TimeInterval = 0) -> Bool {
         guard let every else { return false }
         guard let read else { return true }
-        return read > now || now.timeIntervalSince(read) >= every
+        return read > now || now.timeIntervalSince(read) >= every - next
     }
 
     static func returned(from old: LiveMoment?, to new: LiveMoment) -> Bool {
@@ -51,12 +85,14 @@ enum LivePace {
         return max(idle, now.timeIntervalSince(resigned), 0)
     }
 
-    static func wanted(_ folders: [LiveFolder], moment: LiveMoment, looked: Set<UUID>?, returned: Bool, now: Date) -> [UUID] {
-        folders.filter { folder in
+    static func wanted(_ folders: [LiveFolder], moment: LiveMoment, looked: Set<UUID>?, returned: Bool, now: Date,
+                       every: TimeInterval = seen) -> [UUID] {
+        let pace = interval(moment, every: every)
+        return folders.filter { folder in
             guard !folder.paused, !LiveLimit.holds(folder, at: now) else { return false }
             if folder.source.heavy, let read = folder.read, read <= now, now.timeIntervalSince(read) < LiveDrive.every { return false }
             let seen = looked?.contains(folder.space) ?? true
-            if LivePace.due(folder.read, now: now, every: interval(moment, looked: seen)) { return true }
+            if LivePace.due(folder.read, now: now, every: pace, before: tick) { return true }
             return returned && seen && (stale(folder.read, now: now) || folder.state == .failed)
         }.map(\.id)
     }

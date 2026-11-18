@@ -602,9 +602,19 @@ final class GroupHeadingView: KitHoverView {
     private var chipShown: Swift.Float = 0
     private let chip = KitBox(fill: KitColor.ink.withAlphaComponent(0.07), corners: .capsule)
     private let tally = KitLabel("", font: .monospacedDigitSystemFont(ofSize: 11, weight: .medium), color: KitColor.muted)
-    var showsCount: Bool { count > 0 && group?.collapsed == true && !editing && !asksSignIn }
+    var showsCount: Bool { counts && !ringsOverCount }
+    private var counts: Bool { count > 0 && group?.collapsed == true && !editing && !asksSignIn }
+    private var ringsOverCount: Bool { counts && (status as? LiveStatusView)?.rings == true }
     private var asksSignIn: Bool { (status as? LiveStatusView)?.asks == true }
     private var askedBefore = false
+    private var rangBefore = false
+    private let countRing = RingView()
+    var liveRing: RingView? {
+        if ringsOverCount { return countRing }
+        guard let live = status as? LiveStatusView, live.rings, !live.isHidden else { return nil }
+        return live.ring
+    }
+    var liveSpoken: String? { (status as? LiveStatusView)?.accessibilityLabel() }
     private var field: FolderEditField?
     private(set) var status: NSView?
     private var shortcut: ShortcutNumberView?
@@ -634,6 +644,9 @@ final class GroupHeadingView: KitHoverView {
         chipFold.addSubview(chip)
         chip.addSubview(tally)
         tally.setAccessibilityElement(false)
+        addSubview(countRing)
+        countRing.lead = 0
+        countRing.isHidden = true
         addSubview(close)
         name.font = .systemFont(ofSize: 13, weight: SideLook.headingWeight)
         name.color = Palette.NS.inkStrong
@@ -842,6 +855,7 @@ final class GroupHeadingView: KitHoverView {
         close.ink = ink
         shortcut?.ink = ink
         tally.ink = ink
+        countRing.ink = ink
         chip.fill = ink.color(KitColor.ink, .ink, opacity: 0.07, dark: kitDark)
     }
 
@@ -920,29 +934,44 @@ final class GroupHeadingView: KitHoverView {
             made.removeFromSuperview()
             shortcut = nil
         }
-        if showsCount {
+        (status as? LiveStatusView)?.overCount = counts
+        let rings = ringsOverCount
+        if counts {
             let words = tally.intrinsicContentSize
             let width = words.width + 12
             chipFold.kitSetFrame(NSRect(x: right - width, y: (height - 17) / 2, width: width, height: 17))
             chip.kitSetFrame(chipFold.bounds)
             tally.kitSetFrame(NSRect(x: 6, y: (17 - words.height) / 2, width: words.width, height: words.height))
+            let side = LiveLoading.side
+            countRing.kitSetFrame(NSRect(x: right - side, y: (height - side) / 2, width: side, height: side))
             right -= width + 9
         }
         let asks = asksSignIn
-        foldChip(showsCount, curve: asks != askedBefore && !curve.animates ? Motion.kitQuick : curve)
+        foldChip(showsCount, curve: (asks != askedBefore || rings != rangBefore) && !curve.animates ? Motion.kitQuick : curve)
+        countRing.show(rings, animated: window != nil)
         askedBefore = asks
+        rangBefore = rings
         if let status, !editing {
             let inline = showsChevron && SideLook.chevronInline ? chevronSize.width + SideLook.chevronGap : 0
             if asks, let live = status as? LiveStatusView, let asked = live.asked {
                 let want = min(ceil(name.intrinsicContentSize.width), SideLook.headingNameRoom)
                 live.short = right - LiveSignInPill.size(asked).width - 9 - x - inline < want
+            } else if let live = status as? LiveStatusView, live.warns {
+                let want = min(ceil(name.intrinsicContentSize.width), SideLook.headingNameRoom)
+                live.short = right - LiveStatusView.warnWidth - 9 - x - inline < want
             }
             let size = status.fittingSize
             let nameRoom = right - size.width - 9 - x - inline
-            status.isHidden = !asks && size.width > 0 && nameRoom < SideLook.headingNameRoom
+            let live = status as? LiveStatusView
+            let keeps = asks || live?.keeps == true
+            status.isHidden = !keeps && size.width > 0 && nameRoom < SideLook.headingNameRoom
             if size.width > 0, !status.isHidden {
                 status.kitSetFrame(NSRect(x: right - size.width, y: (height - size.height) / 2, width: size.width, height: size.height))
                 right -= size.width + 9
+            } else if let live, live.overCount {
+                if live.loads { status.kitSetFrame(countRing.frame) }
+            } else if live != nil, status.isHidden {
+                right -= LiveLoading.side + 9
             }
         } else {
             status?.isHidden = true

@@ -22,7 +22,7 @@ under "Sign in to GitHub" when signed out, drop the note and refresh on
 recovery, and say "No pull requests" only for the real empty list. Between
 the two, the sign-on is done: the note's link opens its page in a tab, and
 when that tab moves on to the list the folder must stop asking at once and
-show it is loading (state `waiting`, no note, the loading bar on its
+show it is loading (state `waiting`, no note, the loading ring on its
 heading open and folded) while its own read, slowed to LOADS seconds, is
 under way. With SHOTS_DIR, the SSO, loading and recovery states are shot
 window-only (WindowShot.swift), light and dark.
@@ -330,9 +330,10 @@ def signed_on(folded):
         t.ok(f"{shape}: the three PRs stay in place while it loads", len(prs["items"]) == 3, len(prs["items"]))
         time.sleep(0.6)
         h = live("heading", "PRs")
-        x, _, w, _ = h.get("loadingFrame", [0, 0, 0, 0])
-        t.ok(f"{shape}: the loading bar right of the name, no button, spoken as loading",
-             h.get("loading") is True and not h.get("pill") and h.get("spoken") == "Loading PRs"
+        x, _, w, tall = h.get("ringFrame", [0, 0, 0, 0])
+        t.ok(f"{shape}: the loading ring turns right of the name, no button, spoken as loading",
+             h.get("loading") is True and h.get("ring") is True and h.get("turning") is True and not h.get("pill")
+             and h.get("spoken") == "Loading PRs" and (w, tall) == (11, 11)
              and x >= h.get("nameEnd", 1e9) and x + w <= h.get("width", 0), h)
         for look in ("light", "dark"):
             sv.cmd({"do": "ui", "look": look})
@@ -345,7 +346,7 @@ def signed_on(folded):
         prs = folder(live(), "PRs")
         t.ok(f"{shape}: the read answers with the rows", prs["state"] == "fine" and len(prs["items"]) == 3, (prs["state"], len(prs["items"])))
         h = live("heading", "PRs")
-        t.ok(f"{shape}: and the bar is gone", not h.get("loading"), h)
+        t.ok(f"{shape}: and the ring is gone", not h.get("loading") and not h.get("ring"), h)
         if folded:
             live("unfold", "PRs")
         time.sleep(0.4)

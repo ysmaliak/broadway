@@ -619,6 +619,9 @@ final class Preferences {
     var suggestsLiveFolders: Bool {
         didSet { store.set(suggestsLiveFolders, forKey: Preferences.suggestsLiveKey) }
     }
+    var liveEvery: LiveEvery {
+        didSet { store.set(liveEvery.rawValue, forKey: LiveEvery.key) }
+    }
     nonisolated static let suggestsLiveKey = "live.suggest"
     var meetingFolders: Bool {
         didSet { store.set(meetingFolders, forKey: Preferences.meetingFoldersKey) }
@@ -765,6 +768,7 @@ final class Preferences {
         popupSites = Set(store.stringArray(forKey: "privacy.popupSites") ?? [])
         sleepsTabs = true
         tabLife = TabLife(rawValue: store.integer(forKey: "tabs.close.after")) ?? .never
+        liveEvery = LiveEvery.stored(store.integer(forKey: LiveEvery.key))
         sleepPace = .normal
         lazyTabs = false
         newTabAfterLast = false

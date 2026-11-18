@@ -1,7 +1,7 @@
 <h2>Broadway 0.5</h2>
 <h3>New in this version</h3>
 <ul>
-  <li><strong>Live folders you can rely on.</strong> A folder changes only on a read that went well, so a failed or half-loaded read never empties it. It says why when it could not read: you are offline, the site is limiting requests, or the page could not be understood. It shows how old its list is once that matters, and a last row such as More on GitHub when there is more than it shows. Broadway closes a tab of a live folder only if it opened that tab and you are not using it, and Reopen Closed Tab brings it back.</li>
+  <li><strong>Live folders you can rely on.</strong> A folder changes only on a read that went well, so a failed or half-loaded read never empties it. Its row stays quiet while all is well: a read that fails once is not shown, and a folder says Out of date only when it has gone without a good read for long enough that its list misleads. The folder's menu says when it was last updated and, if a read failed, why. A last row such as More on GitHub shows when there is more than the folder holds. You choose how often live folders update in Settings › Live Folders, from every minute to every hour, and every folder in every space keeps that pace while you are at your Mac. Broadway closes a tab of a live folder only if it opened that tab and you are not using it, and Reopen Closed Tab brings it back.</li>
   <li><strong>Google Drive in a live folder.</strong> Settings › Live Folders offers Google Drive: the files you opened lately, newest edit first, with what kind each is and when it was edited. It reads Drive with the sign-in of the folder's own space.</li>
   <li><strong>Sites ask before they send a file.</strong> A file a site starts sending by itself waits on a card until you allow it. A file from a secure page that arrives over a plain connection asks every time. The Dock icon shows a bar while downloads are under way.</li>
   <li><strong>Leave this page?</strong> A page with unsaved changes asks on its own tab before you reload it, go elsewhere, close its tab or window, or quit. One Stay keeps the window open and calls a quit off.</li>
@@ -22,7 +22,8 @@
 <h3>Fixed in this version</h3>
 <ul>
   <li>Words on Broadway's floating bars and cards read clearly over any page, light or dark: the find bar, the bars that ask a question, link previews, the call bar, meeting reminders, the downloads list, the mini player, the keys on a floating video, the update card and the card of a page that stopped answering.</li>
-  <li>A live folder that a site is limiting says so in two short lines, with when it tries again. No note under a live folder is cut off in a narrow sidebar.</li>
+  <li>No note under a live folder is cut off in a narrow sidebar.</li>
+  <li>A live folder that is reading shows a small turning ring at the end of its row, the same one a loading tab shows, in place of a grey bar and of the Loading line under an empty folder. It also shows when you choose Update Now or Try again. With Reduce Motion on, the ring stands still.</li>
   <li>Small keys on floating bars and on a download's row, the signs in the address pill and the mini player's line take a click over a larger area, drawn as before.</li>
   <li>Settings › Agents no longer calls it a fault when Cursor, opencode or Gemini CLI has no Broadway skill yet.</li>
   <li>A Split View drags in the sidebar like any tab: into a folder, out of one, up and down the list, to another space or out to a new window, and both pages stay side by side.</li>

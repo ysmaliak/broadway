@@ -60,7 +60,7 @@ read three PRs, then got the banner and kept its rows under "Single sign-on
 for Octo Corp". The folder's own reads of the list take LOADS seconds there
 (the tab's do not), as GitHub's search pages do. Once the tab lands back the
 folder must stop asking at once: state `waiting`, the note row gone, the
-folded heading's sign-in button gone and its loading bar shown, the kept
+folded heading's sign-in button gone and its loading ring shown, the kept
 rows where they were, one read made, and then the rows read fresh. It runs
 in the dark Noir look of a fresh install and in light. With
 `--shots=DIR` the probe's own window is pictured (WindowShot.swift) before
@@ -429,11 +429,13 @@ def kept(look):
         time.sleep(0.4)
         window_shot(f"kept-loading-open-{look}")
         h = live("heading", "PRs")
-        t.ok("open, the heading shows the loading bar and no sign-in button", h.get("loading") is True and not h.get("pill"), h)
+        t.ok("open, the heading shows the loading ring and no sign-in button",
+             h.get("loading") is True and h.get("ring") is True and not h.get("pill"), h)
         live("fold", "PRs")
         time.sleep(0.5)
         h = live("heading", "PRs")
-        t.ok("folded, the heading shows the loading bar in place of the button", h.get("loading") is True and not h.get("pill"), h)
+        t.ok("folded, the heading shows the loading ring in place of the button",
+             h.get("loading") is True and h.get("ring") is True and not h.get("pill"), h)
         window_shot(f"kept-loading-folded-{look}")
         live("unfold", "PRs")
 
@@ -452,7 +454,7 @@ def kept(look):
         t.ok("one sign-on made one read", len(made) == 1, [round(a - landed, 2) for a in made])
         time.sleep(0.6)
         h = live("heading", "PRs")
-        t.ok("filled, the heading has no loading bar", not h.get("loading"), h)
+        t.ok("filled, the heading has no loading ring", not h.get("loading") and not h.get("ring"), h)
         window_shot(f"kept-filled-open-{look}")
     finally:
         WORLD.update(loads=0.0, open=False)

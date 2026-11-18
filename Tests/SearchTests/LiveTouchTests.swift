@@ -206,19 +206,43 @@ final class LiveTouchTests {
         #expect(row(made, key)?.label == "In Review")
     }
 
-    @Test func theFirstTickCatchesUpTheSpaceOnScreenThenWaitsForTheInterval() async throws {
+    @Test func theFirstTickCatchesUpTheSpaceOnScreenAndWhatIsPastTheIntervalElsewhereThenWaits() async throws {
         let old = folder([pull(1)], read: Date().addingTimeInterval(-6 * 60))
         let recent = folder([pull(2)], source: .reviewRequests, read: Date().addingTimeInterval(-2 * 60))
-        _ = folder([pull(3)], read: Date().addingTimeInterval(-6 * 60), in: UUID())
+        let elsewhere = folder([pull(3)], read: Date().addingTimeInterval(-6 * 60), in: UUID())
+        _ = folder([pull(5)], read: Date().addingTimeInterval(-2 * 60), in: UUID())
         _ = folder([pull(4)], read: Date().addingTimeInterval(-30))
 
         let first = live.tick()
         try await settle()
         let second = live.tick()
 
-        #expect(Set(first) == [old.id, recent.id])
-        #expect(Set(reads) == [old.id, recent.id])
+        #expect(Set(first) == [old.id, recent.id, elsewhere.id])
+        #expect(Set(reads) == [old.id, recent.id, elsewhere.id])
         #expect(second.isEmpty)
+    }
+
+    @Test func theTickKnowsSinceWhenThePersonHasBeenAtTheMac() async throws {
+        let start = Date()
+        idle = 10 * 60
+        _ = live.tick(at: start)
+        let away = live.here
+
+        idle = 0
+        _ = live.tick(at: start.addingTimeInterval(60))
+        let back = live.here
+        _ = live.tick(at: start.addingTimeInterval(120))
+        let still = live.here
+
+        live.network(false)
+        _ = live.tick(at: start.addingTimeInterval(180))
+        let offline = live.here
+        live.network(true)
+
+        #expect(away == nil)
+        #expect(back == start.addingTimeInterval(60))
+        #expect(still == back)
+        #expect(offline == back)
     }
 
     @Test func anIdleUserIsNotPolledAtTheActivePace() async throws {
