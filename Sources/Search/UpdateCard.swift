@@ -17,7 +17,7 @@ final class UpdateCardView: KitHoverView {
     var onRestart: () -> Void = {}
 
     private let card = KitFlippedView()
-    private let glass = KitGlass.floating(radius: SideLook.cardRadius)
+    private let glass = KitGlass.floating(radius: SideLook.cardRadius, ground: false)
     private let titleLabel = KitLabel(UpdateCardView.title, font: UpdateCardView.titleFont, color: KitColor.ink)
     private lazy var restart = KitBroadwayButton(Self.button, kind: .primary, small: true, label: UpdateWords.restart) { [weak self] in
         self?.onRestart()
@@ -26,7 +26,6 @@ final class UpdateCardView: KitHoverView {
         let made = KitButton(.plain(press: 0.9), label: "Hide") { [weak self] in self?.wait.hide() }
         let face = KitGlassFace(KitSymbol("xmark", style: KitSymbol.Style(size: 7, weight: .bold)))
         face.effectIsInteractive = true
-        face.plate = Palette.NS.glassGround
         made.content = face
         made.toolTip = "Hide"
         made.onHover = { [weak self] _ in self?.tintClose() }

@@ -38,7 +38,7 @@ final class MiniPlayerView: KitHoverView, NSViewToolTipOwner, KitOnGlass {
     var filming: [(time: Double, picture: CGImage)]?
 
     private let card = KitFlippedView()
-    private let glass = KitGlass.floating(radius: SideLook.cardRadius)
+    private let glass = KitGlass.floating(radius: SideLook.cardRadius, ground: false)
     private let open = KitButton(.plain(press: 1), label: "Go to Tab")
     private let face = KitFlippedView()
     private let cover = MiniCoverView()
@@ -1191,7 +1191,7 @@ final class MiniProgressView: KitHoverView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         track.backgroundColor = ink.color(KitColor.ink, .ink, opacity: 0.14, dark: dark).cgColor
-        fill.backgroundColor = ink.color(KitColor.ink, .ink, opacity: 0.6, dark: dark).cgColor
+        fill.backgroundColor = ink.color(KitColor.ink, .ink, opacity: dark ? 0.75 : 0.6, dark: dark).cgColor
         for part in [track, fill] { part.cornerRadius = drawn / 2 }
         track.bounds = CGRect(x: 0, y: 0, width: bounds.width, height: drawn)
         track.position = CGPoint(x: 0, y: foot - drawn)

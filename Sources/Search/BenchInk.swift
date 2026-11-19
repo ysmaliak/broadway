@@ -22,6 +22,7 @@ enum BenchInk {
             if here is FloatLiveView, !plated { return "video" }
             if here is MeetingFaceView || here is MeetingJoinButton || here is MiniToggle { return "own" }
             if let face = here as? KitGlassFace, let plate = face.plate, plate !== Palette.NS.glassGround { return "own" }
+            if here is MiniPlayerView || here is UpdateCardView { return "side" }
             if let row = here as? NSTableRowView, row.isSelected { return "picked" }
             if let key = here as? KitButton, !key.isEnabled, key.superview is FieldBarView { return "off" }
             at = here.superview
