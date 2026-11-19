@@ -248,6 +248,12 @@ enum SettingsIndex {
               title: "People's photos", detail: "Faces from Contacts on this Mac in meeting cards",
               more: "Broadway asks for Contacts only when you turn this on. Photos are looked up by email on this Mac and kept for a week. Nothing is sent anywhere.",
               keys: [ContactFaces.key], words: ["avatar", "photo", "picture", "face", "contacts", "attendees", "people"], parent: "calendars"),
+        .init(id: "meetings.spaces", group: "meetings", icon: "square.stack",
+              title: "Spaces for calls", detail: "A call from an account or calendar opens in the space you pick",
+              more: "Any Space opens a call in the space its account is signed in to, or where its calls opened before, or else where you are. Broadway learns an account from Gmail, Google Calendar and Google Meet when they show its address.",
+              keys: [MeetingSpacePlaces.accountsKey, MeetingSpacePlaces.calendarsKey],
+              words: ["space", "spaces", "profile", "work", "personal", "account", "calendar", "call", "meeting", "join", "zoom", "meet", "teams"],
+              kind: .wide, parent: "calendars"),
         .init(id: "links.open", group: "links.outside", icon: "arrow.up.forward.app",
               title: "Open in", detail: "Where a link from another app goes when no rule takes it",
               words: ["external links", "default space", "links from other apps", "mail", "slack"]),
@@ -470,6 +476,7 @@ enum SettingsIndex {
     @MainActor static func applies(_ item: SettingsItem, _ prefs: Preferences) -> Bool {
         switch item.id {
         case "meetings.calendars", "meetings.faces": return prefs.usesCalendars
+        case "meetings.spaces": return prefs.usesCalendars && prefs.usesSpaces
         case "passwords.never": return !Vault.never.isEmpty
         case "spaces.stacked": return prefs.usesSpaces
         case "ai.groups": return AIGroups.shared.deciding != nil
@@ -484,6 +491,7 @@ enum SettingsIndex {
     static func needs(_ item: SettingsItem) -> String {
         switch item.id {
         case "meetings.calendars", "meetings.faces": return "Only while Broadway uses your calendars"
+        case "meetings.spaces": return "Only while Broadway uses your calendars and spaces"
         case "passwords.never": return "No site has been told to stop offering"
         case "spaces.stacked": return "Only while you use spaces"
         case "ai.groups": return AIGroupWords.needs

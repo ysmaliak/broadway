@@ -148,6 +148,16 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         return false
     }
 
+    func benchRows() -> [[String: Any]] {
+        guard Store.testing else { return [] }
+        let roots = [window?.contentView].compactMap { $0 } + (Self.stands ? [] : Browsers.all.compactMap { $0.window?.contentView })
+        return roots.flatMap { Self.all(SettingsRowView.self, in: $0) }.filter { !$0.isHiddenOrHasHiddenAncestor }.map { row in
+            ["id": row.rowID, "title": row.title.stringValue, "detail": row.detail.stringValue,
+             "picked": Self.all(NSPopUpButton.self, in: row).first?.titleOfSelectedItem ?? "",
+             "items": Self.all(NSPopUpButton.self, in: row).first?.itemTitles.filter { !$0.isEmpty } ?? []] as [String: Any]
+        }
+    }
+
     func benchStage() -> [String: Any] {
         guard Store.testing, let split = benched else { return [:] }
         return split.benchStage()

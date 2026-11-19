@@ -4534,7 +4534,7 @@ extension Browser {
         let previousGroup = tab.groupID
         tab.groupID = group?.id
         letGoLive(tab, from: previousGroup)
-        if !quietly { LinkArrivals.moved(tab, to: id, in: self) }
+        if !quietly, !meetingMoved(tab, to: id) { LinkArrivals.moved(tab, to: id, in: self) }
         var row = parked[id] ?? loadRow(id)
         if let group {
             var groups = row.groups ?? readRow(id).groups ?? []
@@ -4560,7 +4560,11 @@ extension Browser {
         return true
     }
 
-    func moveToSpace(_ tab: Tab, id: UUID) -> Bool { finishMove(tab, toSpace: id) }
+    func moveToSpace(_ tab: Tab, id: UUID) -> Bool {
+        MeetingSpaceMemory.shared.quiet = true
+        defer { MeetingSpaceMemory.shared.quiet = false }
+        return finishMove(tab, toSpace: id)
+    }
 
     // MARK: - a tab to another window
 
@@ -7605,6 +7609,10 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         // pop-ups, takes the tab path as before. A window sized by the page,
         // "Sign in with…", is left alone, as is a modified click, and so is
         // anything that isn't a web page (about:blank, data:, blob:).
+        if clicked, !behind, !beside, !popup, let url = action.request.url, joinsMeeting(url, from: opener) {
+            tracePopup(opener, action, "meeting", clicked: clicked, sized: popup)
+            return nil
+        }
         if clicked, !behind, !beside, !popup, prefs.pinsPeek, peekTab == nil, opener.pin != nil,
            [.linkActivated, .other].contains(action.navigationType),
            action.modifierFlags.intersection([.shift, .command, .option, .control]).isEmpty,

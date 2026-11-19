@@ -167,6 +167,11 @@ enum PersonSettings {
             let skipped = MeetingAlertPrefs.shared.skipped.count
             return skipped == 0 ? "all" : "all but \(skipped)"
         }),
+        "meetings.spaces": SettingAccess(bar: .always, read: { _ in
+            let places = MeetingSpacePlaces.shared
+            let set = places.accounts.count + places.calendars.count
+            return set == 0 ? "any space" : "\(set) chosen"
+        }),
         "meetings.faces": SettingAccess(bar: .always, read: { _ in ContactFaces.on ? "from Contacts" : "initials" },
                                         instead: "Turn on People's photos in Settings › General › Calendars. Only the person can let Broadway read Contacts."),
         "newtab.floating": flag(\.floatingNewTab),

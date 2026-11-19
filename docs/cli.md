@@ -412,7 +412,7 @@ A site marked Never Here refuses every command on it. A site marked Always Here 
 | `groups.openrouter` | any change: a key only the person adds or removes |
 | `history.pageText` | any change |
 | `downloads.folder` | any change: where a download lands is not a shell's choice |
-| `meetings.calendars`, `meetings.faces` | any change |
+| `meetings.calendars`, `meetings.faces`, `meetings.spaces` | any change |
 | `search.engine` | setting a custom engine, which would see every search |
 | `shield`, `sites.keep`, `links.tracking`, `links.unwrap`, `updates.check`, `updates.install` | turning off. Turning on is fine |
 | `notifications.ask`, `search.suggest`, `calendars`, `ai.groups` | turning on. Turning off is fine |

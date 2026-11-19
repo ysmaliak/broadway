@@ -12,6 +12,8 @@ extension Bench {
                 "fireIn": alerts.fireAt.map { $0.timeIntervalSince(now) } ?? -1,
                 "frame": [alerts.panelFrame.minX, alerts.panelFrame.minY, alerts.panelFrame.width, alerts.panelFrame.height],
                 "opened": alerts.opened.map(\.absoluteString),
+                "space": browser.space.name, "notice": browser.linkNotice?.text ?? "",
+                "choice": MeetingSpaceMemory.shared.lastChoice?.rawValue ?? "",
                 "next": Meetings.shared.next?.event.title ?? "",
                 "pinLabel": browser.pinLabel(for: Meetings.shared.next, at: now).map { $0 == .join ? "join" : $0.text } ?? "",
                 "pinSaid": browser.pinLabel(for: Meetings.shared.next, at: now)
@@ -42,7 +44,8 @@ extension Bench {
                                      location: given["location"] as? String ?? "", notes: given["notes"] as? String ?? "",
                                      url: (given["link"] as? String).flatMap(URL.init(string:)), people: people,
                                      pending: given["pending"] as? Bool ?? false, calendar: given["calendar"] as? String ?? "work",
-                                     external: given["external"] as? String ?? "", account: given["account"] as? String ?? "")
+                                     external: given["external"] as? String ?? "", account: given["account"] as? String ?? "",
+                                     source: given["source"] as? String ?? "", sourceTitle: given["sourceTitle"] as? String ?? "")
             }
             MeetingLink.testHosts = (request["hosts"] as? [String: String] ?? [:]).compactMapValues { name in
                 MeetingLink.Service.allCases.first { $0.name == name }
@@ -52,7 +55,17 @@ extension Bench {
             prefs.chosen = request["on"] as? Bool ?? true
             alerts.forgetOpened()
             Meetings.testCalendars = Set(request["calendars"] as? [String] ?? [])
-            Meetings.shared.use(FixedCalendar(events: events))
+            let list = (request["calendarList"] as? [[String: String]] ?? []).map {
+                MeetingCalendar(id: $0["id"] ?? "", title: $0["title"] ?? "", account: $0["account"] ?? "", source: $0["source"] ?? "")
+            }
+            Meetings.shared.use(FixedCalendar(events: events, list: list))
+            for (key, name) in request["accountSpaces"] as? [String: String] ?? [:] {
+                MeetingSpacePlaces.shared.place(browser.spaces.first { $0.name == name }?.id, ofAccount: key)
+            }
+            for (id, name) in request["calendarSpaces"] as? [String: String] ?? [:] {
+                let place: MeetingCalendarPlace = name == "any" ? .any : browser.spaces.first { $0.name == name }.map { .space($0.id) } ?? .account
+                MeetingSpacePlaces.shared.place(place, ofCalendar: id)
+            }
             alerts.sync()
             alerts.reread()
             Task { @MainActor in

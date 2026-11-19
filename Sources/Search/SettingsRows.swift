@@ -24,6 +24,7 @@ extension SettingsPageView {
         case "calendars": calendarsRow()
         case "meetings.calendars": row(id, control: SettingsCalendars(), wide: true)
         case "meetings.faces": facesRow()
+        case "meetings.spaces": callSpacesRows()
         case "search.engine":
             let engines = Engine.allCases
             row(id, control: popUp(id, titles: engines.map(\.title), picked: { engines.firstIndex(of: prefs.engine) ?? 0 },

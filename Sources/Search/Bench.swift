@@ -1950,6 +1950,7 @@ final class Bench {
             reply["agentSetup"] = ["runs": setup.runs, "open": setup.open(), "marked": setup.marked, "on": browser.prefs.agentsOn] as [String: Any]
             if request["chrome"] as? Bool == true { reply["chrome"] = SettingsWindow.shared.benchChrome() }
             if request["stage"] as? Bool == true { reply["stage"] = SettingsWindow.shared.benchStage() }
+            if request["shown"] as? Bool == true { reply["shown"] = SettingsWindow.shared.benchRows() }
             answer(reply)
 
         case "floataway":

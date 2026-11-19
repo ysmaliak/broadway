@@ -3,11 +3,13 @@ import AppKit
 struct FixedCalendar: CalendarSource {
     let events: [CalendarEvent]
     var access = true
+    var list: [MeetingCalendar] = []
     var hasAccess: Bool { access }
     func requestAccess() async -> Bool { access }
     func events(from start: Date, to end: Date) -> [CalendarEvent] {
         events.filter { $0.end > start && $0.start < end }
     }
+    func calendars() -> [MeetingCalendar] { list }
 }
 
 final class FixedBoard: CopiedBoard {

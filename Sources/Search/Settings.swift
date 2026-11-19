@@ -492,6 +492,7 @@ extension SettingsPageView {
 
     private func general() {
         let prefs = prefs
+        let browser = browser
         section("The basics") {
             settingRow("general.default")
             settingRow("general.import")
@@ -511,8 +512,11 @@ extension SettingsPageView {
             if prefs.usesCalendars && Meetings.shared.hasAccess {
                 settingRow("meetings.calendars")
                 settingRow("meetings.faces")
+                shape { prefs.usesSpaces && browser.spaces.count > 1 }
+                if prefs.usesSpaces && browser.spaces.count > 1 { row("meetings.spaces") }
             }
         }
+        if prefs.usesCalendars && Meetings.shared.hasAccess && prefs.usesSpaces { callSpaceAccounts(apart: true) }
         let info = Bundle.main.infoDictionary
         let version = "Broadway \(info?["CFBundleShortVersionString"] as? String ?? "dev") (\(info?["CFBundleVersion"] as? String ?? "dev"))"
         let foot = SettingsText(version, font: .systemFont(ofSize: 11), color: .secondaryLabelColor)

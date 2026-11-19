@@ -467,6 +467,7 @@ extension Browser {
 
     func routeClicked(_ url: URL, foreground: Bool, from source: Tab?) -> LinkRouted {
         guard !isPrivate, let source, !source.shy, !source.bench, Browser.peekable(url) else { return .no }
+        if foreground, joinsMeeting(url, from: source) { return .yes(nil) }
         let store = LinkRules.shared
         let ruled = store.rules.contains { rule in
             rule.on && LinkRouter.accepts(rule.from, .page(space: spaceID, site: nil))

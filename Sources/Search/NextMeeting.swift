@@ -23,12 +23,15 @@ struct CalendarEvent: Equatable, Sendable {
     var calendar = ""
     var external = ""
     var account = ""
+    var source = ""
+    var sourceTitle = ""
 }
 
-struct MeetingCalendar: Equatable, Sendable, Identifiable {
+struct MeetingCalendar: Hashable, Sendable, Identifiable {
     let id: String
     let title: String
     var account = ""
+    var source = ""
 }
 
 protocol CalendarSource: Sendable {
@@ -71,7 +74,8 @@ final class MacCalendars: CalendarSource, @unchecked Sendable {
                                      location: event.location ?? "", notes: event.notes ?? "", url: event.url,
                                      people: people, pending: mine?.participantStatus == .pending,
                                      calendar: event.calendar?.calendarIdentifier ?? "",
-                                     external: event.calendarItemExternalIdentifier ?? "", account: account.lowercased())
+                                     external: event.calendarItemExternalIdentifier ?? "", account: account.lowercased(),
+                                     source: event.calendar?.source?.sourceIdentifier ?? "", sourceTitle: event.calendar?.source?.title ?? "")
             }
         }
     }
@@ -79,7 +83,8 @@ final class MacCalendars: CalendarSource, @unchecked Sendable {
     func calendars() -> [MeetingCalendar] {
         queue.sync {
             store.calendars(for: .event)
-                .map { MeetingCalendar(id: $0.calendarIdentifier, title: $0.title, account: $0.source?.title ?? "") }
+                .map { MeetingCalendar(id: $0.calendarIdentifier, title: $0.title, account: $0.source?.title ?? "",
+                                       source: $0.source?.sourceIdentifier ?? "") }
                 .sorted { ($0.account, $0.title) < ($1.account, $1.title) }
         }
     }
@@ -239,6 +244,8 @@ final class Meetings {
 
     private(set) var next: Meeting?
     private(set) var clock = Date()
+    private(set) var calendarList: [MeetingCalendar] = []
+    @ObservationIgnored private(set) var known: [Meeting] = []
 
     @ObservationIgnored private var source: CalendarSource?
     @ObservationIgnored private var timer: Timer?
@@ -251,6 +258,8 @@ final class Meetings {
 
     func use(_ source: CalendarSource?) {
         self.source = source
+        known = []
+        calendarList = []
         MeetingAlerts.shared.sync()
     }
 
@@ -259,6 +268,11 @@ final class Meetings {
     func calendars() async -> [MeetingCalendar] {
         guard let source, source.hasAccess else { return [] }
         return await Task.detached(priority: .utility) { source.calendars() }.value
+    }
+
+    func readCalendars() async {
+        let found = await calendars()
+        if found != calendarList { calendarList = found }
     }
 
     static func pick(_ events: [CalendarEvent], at now: Date) -> Meeting? {
@@ -274,12 +288,14 @@ final class Meetings {
         guard let source, source.hasAccess else {
             clock = now
             if next != nil { next = nil }
+            known = []
             return
         }
         let found = await Task.detached(priority: .utility) {
             source.events(from: now.addingTimeInterval(-12 * 3600), to: now.addingTimeInterval(36 * 3600))
         }.value
         clock = now
+        known = found.filter { !$0.declined }.map(Meeting.init(event:)).filter { $0.link != nil }
         let picked = Self.pick(found, at: now)
         if picked != next { next = picked }
     }
