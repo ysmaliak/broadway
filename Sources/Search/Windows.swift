@@ -685,6 +685,7 @@ final class PopupTroubleView: KitFlippedView {
 final class PopupOverlayView: KitFlippedView {
     let browser: Browser
     private let stack = BarStack()
+    private let book = NoticeBook()
     private var capture: CaptureQuestionView?
     private var screen: ScreenQuestionView?
     private var offer: PasswordOfferView?
@@ -712,21 +713,24 @@ final class PopupOverlayView: KitFlippedView {
         stack.frame = bounds.insetBy(dx: 12, dy: 12)
         var bars: [BarStack.Bar] = []
         guard browser.active != nil else {
+            book.begin()
+            book.end()
             stack.show([])
             return
         }
+        book.begin()
         if let ask = browser.asking, ask.screen {
             let view = screen ?? ScreenQuestionView(browser: browser, ask: ask)
             screen = view
             capture = nil
             view.ask = ask
-            bars.append(.init(view: view))
+            bars.append(.init(view: view, kind: .question))
         } else if let ask = browser.asking {
             let view = capture ?? CaptureQuestionView(browser: browser, ask: ask)
             capture = view
             screen = nil
             view.ask = ask
-            bars.append(.init(view: view))
+            bars.append(.init(view: view, kind: .question))
         } else {
             capture = nil
             screen = nil
@@ -735,7 +739,7 @@ final class PopupOverlayView: KitFlippedView {
             let view = offer ?? PasswordOfferView(browser: browser, offer: asked)
             offer = view
             view.offer = asked
-            bars.append(.init(view: view))
+            bars.append(.init(view: view, kind: .offer, clock: NoticeOffers.password(book, browser, asked, view)))
         } else {
             offer = nil
         }
@@ -746,7 +750,7 @@ final class PopupOverlayView: KitFlippedView {
             let view = fillCard ?? FormFillCard(forms: forms)
             fillCard = view
             view.show(up, addresses: book.addresses.map { ($0.id, $0.note) }, cards: book.cards.map { ($0.id, $0.title) })
-            bars.append(.init(view: view))
+            bars.append(.init(view: view, kind: .offer, clock: NoticeOffers.fill(self.book, browser, up, view)))
         } else {
             fillCard = nil
         }
@@ -754,7 +758,7 @@ final class PopupOverlayView: KitFlippedView {
             let view = fillDone ?? FormFillBar(forms: forms)
             fillDone = view
             view.kind = .done(up)
-            bars.append(.init(view: view))
+            bars.append(.init(view: view, kind: .action, clock: NoticeOffers.filled(book, browser, up, view)))
         } else {
             fillDone = nil
         }
@@ -762,10 +766,11 @@ final class PopupOverlayView: KitFlippedView {
             let view = fillOffer ?? FormFillBar(forms: forms)
             fillOffer = view
             view.kind = .offer(up)
-            bars.append(.init(view: view))
+            bars.append(.init(view: view, kind: .offer, clock: NoticeOffers.save(book, browser, up, view)))
         } else {
             fillOffer = nil
         }
+        book.end()
         stack.show(bars)
     }
 }

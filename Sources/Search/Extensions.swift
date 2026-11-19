@@ -735,7 +735,7 @@ final class Extensions: NSObject {
                 try ExtensionShims.prepare(staged, fresh: true)
                 try await admit(staged, as: id, fromStore: false, finalFolder: Extensions.folder(for: id), confirm: confirm || !Store.testing, source: source)
             } catch {
-                browser?.announce("Couldn't install the extension: \(error.localizedDescription)")
+                browser?.announce("Couldn't install the extension: \(error.localizedDescription)", kind: .error)
             }
         }
     }
@@ -761,7 +761,7 @@ final class Extensions: NSObject {
                     return
                 }
                 guard original.sourceKeepsID else {
-                    browser?.announce("\(original.name) wasn't reloaded, because its folder now leads somewhere else")
+                    browser?.announce("\(original.name) wasn't reloaded, because its folder now leads somewhere else", kind: .error)
                     return
                 }
                 do {
@@ -769,14 +769,14 @@ final class Extensions: NSObject {
                     try Extensions.unlinkOutside(staged)
                     try ExtensionShims.prepare(staged, fresh: true)
                 } catch {
-                    browser?.announce("Couldn't copy \(original.name) from its folder: \(error.localizedDescription)")
+                    browser?.announce("Couldn't copy \(original.name) from its folder: \(error.localizedDescription)", kind: .error)
                     return
                 }
             }
             let resource = staged ?? target
             let found = try? await WKWebExtension(resourceBaseURL: resource)
             if found == nil, staged != nil {
-                browser?.announce("\(original.name) wasn't reloaded, because its manifest couldn't be read")
+                browser?.announce("\(original.name) wasn't reloaded, because its manifest couldn't be read", kind: .error)
                 return
             }
             var wants: [String]?
@@ -786,7 +786,7 @@ final class Extensions: NSObject {
                 if !Set(permissions).isSubset(of: Set(original.permissions)) {
                     let name = [found.displayName ?? original.name, found.version].compactMap { $0 }.joined(separator: " ")
                     guard await ask(install: name, wants: Extensions.describe(found, in: resource), icon: found.icon(for: CGSize(width: 64, height: 64))) else {
-                        browser?.announce("\(original.name) wasn't reloaded, because it asks for more than before")
+                        browser?.announce("\(original.name) wasn't reloaded, because it asks for more than before", kind: .error)
                         return
                     }
                 }
@@ -798,7 +798,7 @@ final class Extensions: NSObject {
                 do {
                     try ExtensionFiles.replace(staged, at: target)
                 } catch {
-                    browser?.announce("Couldn't replace \(original.name): \(error.localizedDescription)")
+                    browser?.announce("Couldn't replace \(original.name): \(error.localizedDescription)", kind: .error)
                     return
                 }
             }
@@ -952,7 +952,7 @@ final class Extensions: NSObject {
         if await load(item) {
             browser?.announce("\(name) is installed")
         } else {
-            browser?.announce("\(name) is installed, but it couldn't start")
+            browser?.announce("\(name) is installed, but it couldn't start", kind: .error)
         }
     }
 

@@ -33,6 +33,9 @@ final class UpdateCardView: KitHoverView {
         return made
     }()
     private var closeOut = false
+    private var out = false
+    private var placed = false
+    private var clock: NoticeClock?
     private var shownArrival: Int
     private var focusWatch: NSKeyValueObservation?
     private var follow: AnyCancellable?
@@ -98,7 +101,7 @@ final class UpdateCardView: KitHoverView {
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        guard !isHidden else { return nil }
+        guard !isHidden, !out else { return nil }
         let local = convert(point, from: superview)
         let grow = (Self.closeReach - Self.closeSize) / 2
         if closeOut, close.frame.insetBy(dx: -grow, dy: -grow).offsetBy(dx: card.frame.minX, dy: card.frame.minY).contains(local) {
@@ -142,11 +145,52 @@ final class UpdateCardView: KitHoverView {
     private func arrive() {
         guard wait.arrivals != shownArrival, !isHiddenOrHasHiddenAncestor, window != nil, card.frame.width > 0 else { return }
         shownArrival = wait.arrivals
-        card.kitArrive(false, .rise(by: 8), animated: false)
+        time()
+        NoticeMotion.show(card, false, animated: false)
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            self.card.kitArrive(true, .rise(by: 8))
+            NoticeMotion.show(self.card, true)
         }
+    }
+
+    func shown(_ on: Bool) {
+        defer { placed = true }
+        if on {
+            guard out || isHidden || !placed else { return }
+            out = false
+            isHidden = false
+            time()
+            guard placed, window != nil else { return NoticeMotion.show(card, true, animated: false) }
+            NoticeMotion.enter(card)
+            return
+        }
+        clock?.cancel()
+        clock = nil
+        guard !out, !isHidden else { return }
+        out = true
+        guard placed, window != nil else {
+            isHidden = true
+            return
+        }
+        NoticeMotion.show(card, false)
+        let timer = Timer(timeInterval: NoticeMotion.leaveTime, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.out else { return }
+                self.isHidden = true
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func time() {
+        let staged = wait.staged
+        clock?.cancel()
+        let made = NoticeClock(.offer, window: { [weak self] in self?.window }) { [weak self] in
+            guard let self, wait.staged == staged else { return }
+            wait.hide()
+        }
+        made.view = self
+        clock = made
     }
 
     private func tintClose(dark: Bool? = nil) {

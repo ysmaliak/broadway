@@ -136,7 +136,7 @@ struct BarStackTests {
         defer { window.close() }
         let lower = Block(), upper = Block()
 
-        stack.show([.init(view: upper), .init(view: lower)])
+        stack.show([.init(view: upper, kind: .note), .init(view: lower, kind: .note)])
         stack.layoutSubtreeIfNeeded()
 
         #expect(lower.frame.maxY == stack.bounds.height - stack.bottom)
@@ -147,14 +147,14 @@ struct BarStackTests {
         #expect(stack.hitTest(on) === lower)
     }
 
-    @Test func aRisingBarArrivesAndLeavesAndCanComeBack() async throws {
+    @Test func aBarArrivesAndLeavesAndCanComeBack() async throws {
         let (window, stack) = stage()
         defer { window.close() }
         let bar = Block()
         stack.show([])
 
         for _ in 0..<2 {
-            stack.show([.init(view: bar, rises: true)])
+            stack.show([.init(view: bar, kind: .note)])
             try await Task.sleep(for: .milliseconds(400))
 
             #expect(bar.superview === stack)
@@ -172,7 +172,7 @@ struct BarStackTests {
         defer { window.close() }
         let bar = Block()
 
-        stack.show([.init(view: bar, pane: CGRect(x: 200, y: 0, width: 200, height: 300))])
+        stack.show([.init(view: bar, kind: .note, pane: CGRect(x: 200, y: 0, width: 200, height: 300))])
         stack.layoutSubtreeIfNeeded()
 
         #expect(bar.frame.midX == 300)
@@ -183,7 +183,7 @@ struct BarStackTests {
         defer { window.close() }
         let bar = Block()
 
-        stack.show([.init(view: bar, pane: CGRect(x: 280, y: 0, width: 120, height: 300))])
+        stack.show([.init(view: bar, kind: .note, pane: CGRect(x: 280, y: 0, width: 120, height: 300))])
         stack.layoutSubtreeIfNeeded()
 
         #expect(bar.frame.midX == stack.bounds.midX)

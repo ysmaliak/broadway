@@ -172,7 +172,7 @@ final class HintWatch {
     private func show(_ id: HintID, _ line: String, in browser: Browser) {
         pending = nil
         HintBook.shared.change { Hints.shown(id, record: &$0, trail: &trail, now: HintClock.now) }
-        browser.announce(line, seconds: Hints.stays)
+        browser.announce(line, kind: .note)
         showing = line
     }
 

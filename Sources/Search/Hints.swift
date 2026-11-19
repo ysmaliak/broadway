@@ -81,7 +81,6 @@ enum Hints {
     static let findPresses = 3
     static let afterStart: TimeInterval = 2 * 60
     static let windowGap: TimeInterval = 60 * 60
-    static let stays: TimeInterval = 6
 
     static func note(_ event: HintEvent, trail: inout HintTrail, now: Date) -> HintID? {
         switch event {

@@ -54,7 +54,7 @@ try:
     t.ok("the line is the hint and nothing else", st["showing"] == LINE and st["shown"] == ["close"], st)
     t.ok("light: a picture of the window", shoot("hint-light", False))
     time.sleep(2.2)
-    t.ok("it stays longer than a plain line", hints()["announcement"] == LINE)
+    t.ok("it is still there after two seconds", hints()["announcement"] == LINE)
 
     st = hints("press")
     t.ok("a click on the line, where the window sends it, sends it away", st["announcement"] == "" and st["hit"] != "", st)

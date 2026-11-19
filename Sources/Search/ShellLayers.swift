@@ -148,8 +148,16 @@ final class ShellPanelLayer: ShellLayer {
 final class BarStack: KitFlippedView {
     struct Bar {
         let view: NSView
-        var rises = false
+        let kind: NoticeKind
+        var clock: NoticeClock?
         var pane: CGRect?
+
+        init(view: NSView, kind: NoticeKind, clock: NoticeClock? = nil, pane: CGRect? = nil) {
+            self.view = view
+            self.kind = kind
+            self.clock = clock
+            self.pane = pane
+        }
     }
 
     var bottom: CGFloat = 30
@@ -157,6 +165,7 @@ final class BarStack: KitFlippedView {
     var page: CGRect?
     private var bars: [Bar] = []
     private var leaving: [ObjectIdentifier: NSView] = [:]
+    private var sizes: [ObjectIdentifier: CGSize] = [:]
     private var placed = false
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -164,35 +173,50 @@ final class BarStack: KitFlippedView {
         return hit === self ? nil : hit
     }
 
-    static let arrival = KitArrival.rise(by: 18)
-    static var leaveTime: TimeInterval { Motion.calm ? 0.16 : 0.3 }
+    static var arrival: KitArrival { NoticeMotion.arrival }
+    static var leaveTime: TimeInterval { NoticeMotion.leaveTime }
+
+    var shown: [Bar] { bars }
 
     func show(_ next: [Bar]) {
         let wanted = Set(next.map { ObjectIdentifier($0.view) })
-        for bar in bars where !wanted.contains(ObjectIdentifier(bar.view)) { leave(bar) }
+        let going = bars.filter { !wanted.contains(ObjectIdentifier($0.view)) }
+        for bar in going { leave(bar) }
         var arriving: [NSView] = []
         for bar in next where bar.view.superview !== self || leaving[ObjectIdentifier(bar.view)] != nil {
             if leaving.removeValue(forKey: ObjectIdentifier(bar.view)) == nil { addSubview(bar.view) }
-            if bar.rises, placed, window != nil { arriving.append(bar.view) }
+            if placed, window != nil { arriving.append(bar.view) }
         }
+        for bar in next { bar.clock?.view = bar.view }
         bars = next
         place(animated: placed && window != nil)
         placed = true
+        let waits = !going.isEmpty && going.contains { old in
+            arriving.contains { $0.frame.intersects(old.view.frame) }
+        }
         for view in arriving {
-            view.kitArrive(false, Self.arrival, animated: false)
-            view.kitArrive(true, Self.arrival)
+            NoticeMotion.show(view, false, animated: false)
+            guard waits else {
+                NoticeMotion.show(view, true)
+                continue
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + NoticeMotion.waitTime) { [weak self, weak view] in
+                guard let self, let view, view.superview === self, leaving[ObjectIdentifier(view)] == nil else { return }
+                NoticeMotion.show(view, true)
+            }
         }
     }
 
     private func leave(_ bar: Bar) {
         let view = bar.view
-        guard bar.rises, window != nil else {
+        sizes[ObjectIdentifier(view)] = nil
+        guard window != nil else {
             view.removeFromSuperview()
             return
         }
         let key = ObjectIdentifier(view)
         leaving[key] = view
-        view.kitArrive(false, Self.arrival)
+        NoticeMotion.show(view, false)
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.leaveTime) { [weak self, weak view] in
             guard let self, let view, leaving[key] === view else { return }
             leaving[key] = nil
@@ -232,6 +256,11 @@ final class BarStack: KitFlippedView {
             let x = Self.centre(size.width, pane: bar.pane ?? page, across: bounds.width) - size.width / 2
             let frame = kitSnap(CGRect(x: x, y: y, width: size.width, height: size.height))
             let was = bar.view.frame
+            let key = ObjectIdentifier(bar.view)
+            if animated, let old = sizes[key], old != frame.size, bar.view.layer?.animation(forKey: "arrive") == nil {
+                NoticeMotion.change(bar.view)
+            }
+            sizes[key] = frame.size
             if was != frame {
                 bar.view.frame = frame
                 if animated, was.width > 0, was.size == frame.size, let layer = bar.view.layer, layer.animation(forKey: "arrive") == nil {
@@ -337,6 +366,9 @@ final class AnnouncementView {
     func sync() {
         guard let browser else { return }
         if let text = browser.announcement {
+            if note.label.text != text, !note.label.text.isEmpty, note.superview != nil, note.layer?.animation(forKey: "arrive") == nil {
+                NoticeMotion.change(note)
+            }
             note.label.text = text
             file = browser.announcedFile
             undoes = browser.announcedUndo != nil
@@ -366,6 +398,7 @@ final class ShellLowerLayer: ShellLayer {
     }
 
     private let stack = BarStack()
+    private let book = NoticeBook()
     private let announcement: AnnouncementView
     private var capture: CaptureQuestionView?
     private var screen: ScreenQuestionView?
@@ -409,9 +442,10 @@ final class ShellLowerLayer: ShellLayer {
         stack.bottom = agentCard?().map { max(30, bounds.height - $0.minY + stack.spacing) } ?? 30
         stack.page = paneSpot?()
         var bars: [BarStack.Bar] = []
+        book.begin()
         announcement.sync()
         if !browser.fieldShowing, announcement.shown {
-            bars.append(.init(view: announcement.note, rises: true))
+            bars.append(.init(view: announcement.note, kind: browser.announcedKind ?? .note, clock: browser.hush))
         }
         if let notice = browser.linkNotice, !browser.fieldShowing {
             if linkBar?.id != notice.id {
@@ -419,7 +453,7 @@ final class ShellLowerLayer: ShellLayer {
                 made.identifier = NSUserInterfaceItemIdentifier("link.notice")
                 linkBar = (notice.id, made)
             }
-            if let view = linkBar?.view { bars.append(.init(view: view, rises: true)) }
+            if let view = linkBar?.view { bars.append(.init(view: view, kind: notice.kind, clock: browser.linkNoticeHush)) }
         } else {
             linkBar = nil
         }
@@ -428,12 +462,12 @@ final class ShellLowerLayer: ShellLayer {
             let view = kept(&screen, true) { ScreenQuestionView(browser: browser, ask: ask) }
             view?.ask = ask
             capture = nil
-            if let view { bars.append(.init(view: view, rises: true)) }
+            if let view { bars.append(.init(view: view, kind: .question)) }
         } else if let ask {
             let view = kept(&capture, true) { CaptureQuestionView(browser: browser, ask: ask) }
             view?.ask = ask
             screen = nil
-            if let view { bars.append(.init(view: view, rises: true)) }
+            if let view { bars.append(.init(view: view, kind: .question)) }
         } else {
             capture = nil
             screen = nil
@@ -441,14 +475,14 @@ final class ShellLowerLayer: ShellLayer {
         if let card = SiteFileAsk.shared.card(for: browser.active?.id) {
             let view = kept(&siteFile, true) { SiteFileQuestionView(browser: browser, card: card) }
             view?.card = card
-            if let view { bars.append(.init(view: view, rises: true)) }
+            if let view { bars.append(.init(view: view, kind: .question)) }
         } else {
             siteFile = nil
         }
         if let asked = browser.offering {
             let view = kept(&offer, true) { PasswordOfferView(browser: browser, offer: asked) }
             view?.offer = asked
-            if let view { bars.append(.init(view: view, rises: true)) }
+            if let view { bars.append(.init(view: view, kind: .offer, clock: NoticeOffers.password(book, browser, asked, view))) }
         } else {
             offer = nil
         }
@@ -460,7 +494,7 @@ final class ShellLowerLayer: ShellLayer {
             if let view = store?.view {
                 view.busy = extensions.busy == id
                 view.onAdd = { extensions.install(from: id) }
-                bars.append(.init(view: view))
+                bars.append(.init(view: view, kind: .offer, clock: NoticeOffers.store(book, browser, id, view)))
             }
         } else {
             store = nil
@@ -471,49 +505,51 @@ final class ShellLowerLayer: ShellLayer {
             let book = AutofillBook.shared
             let view = kept(&fillCard, true) { FormFillCard(forms: forms) }
             view?.show(up, addresses: book.addresses.map { ($0.id, $0.note) }, cards: book.cards.map { ($0.id, $0.title) })
-            if let view { bars.append(.init(view: view)) }
+            if let view { bars.append(.init(view: view, kind: .offer, clock: NoticeOffers.fill(self.book, browser, up, view))) }
         } else {
             fillCard = nil
         }
         if let up = forms.done, up.tab == tab {
             let view = kept(&fillDone, true) { FormFillBar(forms: forms) }
             view?.kind = .done(up)
-            if let view { bars.append(.init(view: view)) }
+            if let view { bars.append(.init(view: view, kind: .action, clock: NoticeOffers.filled(book, browser, up, view))) }
         } else {
             fillDone = nil
         }
         if let up = forms.offer, up.tab == tab {
             let view = kept(&fillOffer, true) { FormFillBar(forms: forms) }
             view?.kind = .offer(up)
-            if let view { bars.append(.init(view: view)) }
+            if let view { bars.append(.init(view: view, kind: .offer, clock: NoticeOffers.save(book, browser, up, view))) }
         } else {
             fillOffer = nil
         }
         if let host = Shield.shared.offer, host == browser.hereHost {
             let view = kept(&shield, true) { ShieldOfferView(browser: browser, shield: .shared, host: host) }
             view?.host = host
-            if let view { bars.append(.init(view: view)) }
+            if let view { bars.append(.init(view: view, kind: .offer, clock: NoticeOffers.shield(book, browser, host, view))) }
         } else {
             shield = nil
         }
         let developing = Developer.shared
         if let key = developing.offer, key == LocalServer.key(browser.active?.pageAddress) {
+            let notNow = {
+                developing.offer = nil
+                developing.set(key, false)
+            }
             if developer?.key != key {
                 let browser = browser
-                developer = (key, DeveloperOfferView.make(key: key, turnOn: { browser.setDeveloperMode(true, key: key) }, notNow: {
-                    developing.offer = nil
-                    developing.set(key, false)
-                }))
+                developer = (key, DeveloperOfferView.make(key: key, turnOn: { browser.setDeveloperMode(true, key: key) }, notNow: notNow))
             }
             if let view = developer?.view {
-                bars.append(.init(view: view, pane: barPane(paned: browser.prefs.splitView && browser.activeSplit != nil)))
+                bars.append(.init(view: view, kind: .offer, clock: NoticeOffers.developer(book, browser, key, view, notNow: notNow),
+                                  pane: barPane(paned: browser.prefs.splitView && browser.activeSplit != nil)))
             }
         } else {
             developer = nil
         }
         if browser.veiling {
             if let view = kept(&veil, true, { CapsuleNote("Click anything to hide it   ⌘Z undo   esc done", size: 11.5) }) {
-                bars.append(.init(view: view, rises: true))
+                bars.append(.init(view: view, kind: .question))
             }
         } else {
             veil = nil
@@ -522,16 +558,17 @@ final class ShellLowerLayer: ShellLayer {
         if let tab = browser.active, let doing = tab.agentActing, !tab.driving {
             let view = kept(&acting, true) { AgentActingBadgeView(doing: doing) }
             view?.doing = doing
-            if let view { bars.append(.init(view: view, rises: true, pane: agentPane)) }
+            if let view { bars.append(.init(view: view, kind: .progress, pane: agentPane)) }
         } else {
             acting = nil
         }
         if browser.active?.driving == true {
             let view = kept(&driving, true) { AgentDrivingBarView { [weak browser] in _ = browser?.handBack() } }
-            if let view { bars.append(.init(view: view, rises: true, pane: agentPane)) }
+            if let view { bars.append(.init(view: view, kind: .question, pane: agentPane)) }
         } else {
             driving = nil
         }
+        book.end()
         stack.show(bars)
         if browser.prefs.showsLinks, !immersed {
             let view = link ?? {
@@ -585,7 +622,7 @@ final class ShellUpperLayer: ShellLayer {
         super.layout()
         stack.frame = bounds
         announcement.sync()
-        stack.show(browser.fieldShowing && announcement.shown ? [.init(view: announcement.note, rises: true)] : [])
+        stack.show(browser.fieldShowing && announcement.shown ? [.init(view: announcement.note, kind: browser.announcedKind ?? .note, clock: browser.hush)] : [])
         downloads.frame = bounds
         downloads.sync()
         plus.frame = bounds

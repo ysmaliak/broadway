@@ -171,7 +171,7 @@ extension Browser {
     func copyImage(at url: URL, in tab: Tab) {
         Task {
             guard let data = await imageData(at: url, in: tab), Browser.reasonable(data), let image = NSImage(data: data) else {
-                announce("Couldn't copy that image")
+                announce("Couldn't copy that image", kind: .error)
                 return
             }
             NSPasteboard.general.clearContents()

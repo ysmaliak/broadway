@@ -81,7 +81,7 @@ extension Browser {
         (export ?? PasswordsExport()).run { [weak self] outcome in
             switch outcome {
             case .cancelled: break
-            case .failed: self?.announce("The passwords couldn't be written to that file")
+            case .failed: self?.announce("The passwords couldn't be written to that file", kind: .error)
             case .exported(let count): self?.announce(count == 1 ? "Exported 1 password" : "Exported \(count) passwords")
             }
         }

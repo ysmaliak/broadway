@@ -247,11 +247,11 @@ final class SideColumnView: NSView {
         let miniFrame = NSRect(x: 0, y: agentsFrame.maxY, width: width, height: miniHeight)
         if mini.frame != miniFrame { mini.frame = miniFrame }
         mini.listBottom = pagesFrame.maxY
-        update.isHidden = updateHeight == 0
         update.ink = ground.ink
         update.greys = onFrame ? .frame : .white
-        let updateFrame = NSRect(x: 0, y: miniFrame.maxY - UpdateCardView.closeOut, width: width, height: updateHeight == 0 ? 0 : UpdateCardView.room)
-        if update.frame != updateFrame { update.frame = updateFrame }
+        let updateFrame = NSRect(x: 0, y: miniFrame.maxY - UpdateCardView.closeOut, width: width, height: UpdateCardView.room)
+        if updateHeight != 0, update.frame != updateFrame { update.frame = updateFrame }
+        update.shown(updateHeight != 0)
         spaceFoot.ground = ground
         spaceFoot.frame = NSRect(x: 0, y: height - spotsHeight, width: width, height: spotsHeight)
     }

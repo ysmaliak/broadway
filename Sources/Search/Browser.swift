@@ -798,6 +798,7 @@ final class Browser: NSObject {
     /// A name and password a page has just sent, waiting to be offered a place
     /// in the keychain. Held only until you answer.
     private(set) var offering: Offer?
+    @ObservationIgnored private(set) var offeringTab: Tab.ID?
 
     struct Offer: Equatable {
         let login: Login
@@ -896,7 +897,7 @@ final class Browser: NSObject {
                 Vault.save(host: login.host, user: login.user, password: login.password, used: Date(), clear: login.clear)
             }
             guard let self else { return }
-            guard saved else { return announce("The keychain refused it") }
+            guard saved else { return announce("The keychain refused it", kind: .error) }
             relist()
             announce(offer.changed ? "Password updated for \(login.host)" : "Password saved for \(login.host)")
         }
@@ -1089,7 +1090,7 @@ final class Browser: NSObject {
             let found = await keeper.password(for: apple.user, host: appleHost, tab: tab.id)
             guard let self else { return }
             guard let found else {
-                announce("Apple Passwords didn't hand that password over")
+                announce("Apple Passwords didn't hand that password over", kind: .error)
                 return
             }
             // Touch ID can take a while: the page must still be the one
@@ -1222,7 +1223,7 @@ final class Browser: NSObject {
         Task { [weak self] in
             let read = await Vault.off { Vault.login(login) }
             guard let self else { return }
-            guard let read else { return announce("The keychain refused it") }
+            guard let read else { return announce("The keychain refused it", kind: .error) }
             guard tabs.contains(where: { $0 === tab }), tab.pageAddress == page else { return }
             tab.keptFill = FillMark(host: list.host, user: read.user, password: read.password)
             tab.fill(user: read.user, password: read.password, onlyOn: page) { [weak self] worked in
@@ -1342,7 +1343,7 @@ final class Browser: NSObject {
 
     func keep(host: String, user: String, password: String) {
         guard Vault.save(host: host, user: user, password: password) else {
-            announce("The keychain refused it")
+            announce("The keychain refused it", kind: .error)
             return
         }
         relist()
@@ -1404,7 +1405,7 @@ final class Browser: NSObject {
             Task { [weak self] in
                 let read = await Vault.off { Vault.secret(of: login) }
                 guard let self else { return }
-                guard let password = read else { return announce("The keychain refused it") }
+                guard let password = read else { return announce("The keychain refused it", kind: .error) }
                 let board = NSPasteboard.general
                 board.prepareForNewContents(with: .currentHostOnly)
                 board.setString(password, forType: .string)
@@ -1445,7 +1446,7 @@ final class Browser: NSObject {
             let locked = found.undecrypted > 0 ? ", \(found.undecrypted) couldn't be decrypted" : ""
             announce((kept == 0 ? "Nothing new in \(name)" : kept == 1 ? "1 password from \(name)" : "\(kept) passwords from \(name)") + locked)
         case .failure(Chromium.Trouble.noPassphrase):
-            announce("\(name) didn't give up its keychain key")
+            announce("\(name) didn't give up its keychain key", kind: .error)
         case .failure(Mozilla.Trouble.primaryPassword):
             announce("\(name) has a primary password. Export your passwords from its Settings › Passwords › ⋯ › Export, then bring in the CSV file.")
         case .failure:
@@ -2193,7 +2194,7 @@ final class Browser: NSObject {
     private(set) var announcedFile: URL?
     private(set) var announcedUndo: (@MainActor () -> Void)?
     var linkNotice: LinkNotice?
-    @ObservationIgnored var linkNoticeHush: DispatchWorkItem?
+    @ObservationIgnored var linkNoticeHush: NoticeClock?
     /// Downloads while they happen (see Fetching.swift).
     let fetches = Shared.fetches
     @ObservationIgnored lazy var mini = MiniPlayer(self)
@@ -2221,19 +2222,23 @@ final class Browser: NSObject {
         LinkCopy.markdown(title, url)
     }
 
-    func announce(_ text: String, file: URL? = nil, undo: (@MainActor () -> Void)? = nil, seconds: TimeInterval? = nil) {
+    func announce(_ text: String, file: URL? = nil, undo: (@MainActor () -> Void)? = nil, kind: NoticeKind? = nil) {
         announcement = text
         announcedFile = file
         announcedUndo = undo
+        let kind = kind ?? (file == nil && undo == nil ? .note : .action)
+        let view = hush?.view
         hush?.cancel()
-        let work = DispatchWorkItem { [weak self] in
+        let clock = NoticeClock(kind, window: { [weak self] in self?.window }) { [weak self] in
             self?.announcement = nil
             self?.announcedFile = nil
             self?.announcedUndo = nil
         }
-        hush = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + (seconds ?? (file == nil && undo == nil ? 1.7 : 4)), execute: work)
+        clock.view = view
+        hush = clock
     }
+
+    var announcedKind: NoticeKind? { announcement == nil ? nil : hush?.kind }
 
     func dismissAnnounced() {
         hush?.cancel()
@@ -2329,7 +2334,7 @@ final class Browser: NSObject {
     @ObservationIgnored var unlisted: Set<ObjectIdentifier> = []
     /// The Chrome Web Store's pages, told when installs come and go. See StoreRelay.swift.
     @ObservationIgnored var storeWatch: AnyCancellable?
-    @ObservationIgnored private var hush: DispatchWorkItem?
+    @ObservationIgnored private(set) var hush: NoticeClock?
     @ObservationIgnored private var zoomShown = 100
     @ObservationIgnored private var remembering = false
     /// Spaces (see Spaces.swift): every one, the one on screen, and the
@@ -5685,7 +5690,7 @@ extension Browser {
                 self?.announce("Saved \(file.lastPathComponent)", file: file)
                 finished?(true)
             } catch {
-                self?.announce("Couldn't export page")
+                self?.announce("Couldn't export page", kind: .error)
                 finished?(false)
             }
         }
@@ -5704,7 +5709,7 @@ extension Browser {
                 self?.announce("Saved \(file.lastPathComponent)", file: file)
                 finished?(true)
             } catch {
-                self?.announce("Couldn't save page")
+                self?.announce("Couldn't save page", kind: .error)
                 finished?(false)
             }
         }
@@ -6441,15 +6446,17 @@ extension Browser {
             if strongPasswordSent(tab, host: host, user: user, password: password) { return }
             let sent = SentSignIn(host: host, user: user, password: password)
             let marks = [tab.appleFill, tab.keptFill]
+            let tabID = tab.id
             Task { [weak self] in
                 guard let offer = await SavedAlready.offer(for: sent, marks: marks, clear: clear),
                       let self, offering != offer
                 else { return }
+                offeringTab = tabID
                 offering = offer
             }
         }
         tab.onPickTrouble = { [weak self] _, _ in
-            self?.announce("Couldn't hide that")
+            self?.announce("Couldn't hide that", kind: .error)
         }
 
         // The line at the bottom doubles as the zoom read-out: it keeps being
@@ -8590,7 +8597,7 @@ extension Browser: WKDownloadDelegate {
                 saved(file, from: originatingURL)
             }
         } catch {
-            announce("That download didn't finish")
+            announce("That download didn't finish", kind: .error)
         }
     }
 
@@ -8646,7 +8653,7 @@ extension Browser: WKDownloadDelegate {
         AgentDownloadWatch.failed(download, error.localizedDescription)
         guard let ended = fetches.fail(download, error: error, resumeData: resumeData) else { return }
         ended.owner.relinquish(download)
-        if ended.announceFailure { announce("That download didn't finish") }
+        if ended.announceFailure { announce("That download didn't finish", kind: .error) }
     }
 
     /// WebKit refuses to write over a file that is already there, so the name

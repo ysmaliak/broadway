@@ -388,8 +388,10 @@ final class AgentCardView: NSView {
     private let reason = AgentCardView.wrapping(lines: 3)
     private var buttons: [NSView] = []
     private var choices: [AgentChoiceRow] = []
+    var frozen = false
 
     override func hitTest(_ point: NSPoint) -> NSView? {
+        guard !frozen else { return nil }
         let hit = super.hitTest(point)
         guard let hit, let superview, !choices.isEmpty, !KitReach.pressable(hit, under: self) else { return hit }
         let local = stage.convert(point, from: superview)
@@ -549,12 +551,17 @@ final class AgentCardView: NSView {
 
     override func layout() {
         super.layout()
+        guard !frozen else { return }
         guard let question = desk.front else {
             isHidden = true
             return
         }
         isHidden = false
-        if question.id != shownID || desk.pending.count != shownCount { rebuild(question); invalidateIntrinsicContentSize() }
+        if question.id != shownID || desk.pending.count != shownCount {
+            if shownID != nil, shownID != question.id { NoticeMotion.change(self) }
+            rebuild(question)
+            invalidateIntrinsicContentSize()
+        }
         let width = min(Self.widest, bounds.width)
         let height = contentHeight(width: width)
         glass.frame = NSRect(x: 0, y: bounds.height - height, width: width, height: height)

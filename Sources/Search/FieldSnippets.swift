@@ -255,7 +255,7 @@ extension Browser {
             guard snippetField.submitWhenReady else { return }
             snippetField.reset()
             snippetField.checked = "expired"
-            announce("That snippet didn't go in")
+            announce("That snippet didn't go in", kind: .error)
         }
         Task { [weak self, weak tab] in
             var frame: WKFrameInfo?
@@ -344,7 +344,7 @@ extension Browser {
                 guard active?.id == target.tab, tab.shownURL == target.url, tab.built === target.web,
                       snippetField.target?.token == target.token,
                       status == (target.editor ? "editor" : "none")
-                else { retype(); announce("The field changed, so the snippet didn't go in"); return }
+                else { retype(); announce("The field changed, so the snippet didn't go in", kind: .error); return }
                 if target.editor {
                     let filled = Snippet.fill(snippet.text, clipboard: AnswerBoard.board.string(forType: .string))
                     quitField()
@@ -353,7 +353,7 @@ extension Browser {
                         SnippetStore.shared.used(snippet.id)
                         if active?.id == tab.id { tab.built?.window?.makeFirstResponder(tab.built) }
                         announce("Inserted snippet")
-                    } else { announce("That snippet didn't go in") }
+                    } else { announce("That snippet didn't go in", kind: .error) }
                     return
                 }
             }

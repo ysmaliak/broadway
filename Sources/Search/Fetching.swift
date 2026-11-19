@@ -276,7 +276,7 @@ final class Fetches {
     }
 
     /// How long the circle stays once the last download is in.
-    static let linger: TimeInterval = 5
+    static var linger: TimeInterval { NoticeKind.progress.seconds ?? 3 }
 
     struct StopOperation {
         let download: WKDownload
@@ -325,7 +325,7 @@ final class Fetches {
     }
 
     private var running: [ObjectIdentifier: Running] = [:]
-    private var leaving: DispatchWorkItem?
+    private var leaving: NoticeClock?
 
     /// A download has begun. Private downloads are tracked for cleanup and
     /// aggregate progress, but never become entries in the shared panel.
@@ -606,14 +606,13 @@ final class Fetches {
         }
         fraction = 1
         done = true
-        let work = DispatchWorkItem { [weak self] in
+        leaving?.cancel()
+        leaving = NoticeClock(.progress, window: { NSApp?.mainWindow }) { [weak self] in
             guard let self, running.isEmpty else { return }
             showing = false
             done = false
             fraction = nil
         }
-        leaving = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + Fetches.linger, execute: work)
     }
 
     /// The running downloads, together, in whole percents; each file's own

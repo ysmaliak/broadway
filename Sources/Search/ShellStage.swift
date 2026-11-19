@@ -546,6 +546,7 @@ final class AIOverlayView: KitFlippedView {
     let browser: Browser
     private let pointer = AgentPointerView()
     private var card: AgentCardView?
+    private weak var leavingCard: AgentCardView?
     private(set) var cardFrame: CGRect? { didSet { if cardFrame != oldValue { onCard?() } } }
     var onCard: (() -> Void)?
 
@@ -572,12 +573,14 @@ final class AIOverlayView: KitFlippedView {
         pointer.tab = tab?.id
         pointer.driving = tab?.driving ?? false
         if AgentDesk.shared.front != nil {
+            let fresh = card == nil
             let view = card ?? {
                 let made = AgentCardView(browser: browser, desk: .shared)
                 addSubview(made)
                 card = made
                 return made
             }()
+            defer { if fresh { arrive(view) } }
             view.sync()
             view.invalidateIntrinsicContentSize()
             let size = view.intrinsicContentSize
@@ -585,12 +588,29 @@ final class AIOverlayView: KitFlippedView {
             let width = size.width == NSView.noIntrinsicMetric ? min(AgentCardView.widest, room) : min(size.width, AgentCardView.widest, room)
             view.frame = kitSnap(CGRect(x: (bounds.width - width) / 2, y: bounds.height - 14 - size.height, width: width, height: size.height))
             cardFrame = view.frame
-        } else if let card {
-            card.removeFromSuperview()
-            self.card = nil
+        } else if let going = card {
+            card = nil
             cardFrame = nil
+            going.frozen = true
+            leavingCard = going
+            guard window != nil else { return going.removeFromSuperview() }
+            NoticeMotion.show(going, false)
+            DispatchQueue.main.asyncAfter(deadline: .now() + NoticeMotion.leaveTime) { [weak going] in going?.removeFromSuperview() }
         } else {
             cardFrame = nil
+        }
+    }
+
+    private func arrive(_ view: AgentCardView) {
+        guard window != nil else { return }
+        NoticeMotion.show(view, false, animated: false)
+        guard let going = leavingCard, going.superview != nil, going.frame.intersects(view.frame) else {
+            NoticeMotion.show(view, true)
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + NoticeMotion.waitTime) { [weak self, weak view] in
+            guard let self, let view, card === view else { return }
+            NoticeMotion.show(view, true)
         }
     }
 }

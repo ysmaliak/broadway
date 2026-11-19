@@ -164,7 +164,7 @@ final class CodeWatch {
         stop()
         Task {
             if await !page.put(code: code.code, origin: origin) {
-                browser?.announce("Couldn't find the code box anymore")
+                browser?.announce("Couldn't find the code box anymore", kind: .error)
             }
         }
     }

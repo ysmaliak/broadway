@@ -361,6 +361,8 @@ final class Bench {
 
         case _ where BenchSurfaces.verbs.contains(verb):
             BenchSurfaces.run(verb, request, answer)
+        case _ where BenchNotices.verbs.contains(verb):
+            BenchNotices.run(verb, request, answer)
 
         case _ where BenchPages.verbs.contains(verb):
             BenchPages.run(request, browser: browser, answer)
@@ -4365,9 +4367,9 @@ final class Bench {
             if Store.testing, request["linkChooserDrop"] as? Bool == true { LinkChooser.shown?.drop() }
             if Store.testing, request["linkChooserDrop"] as? String == "fade" { LinkChooser.shown?.drop(animated: true) }
             if Store.testing, let on = request["linkNotice"] as? Bool {
-                browser.showLinkNotice(on ? LinkNotice("Opened in Work by a rule", choices: [
+                browser.showLinkNotice(on ? LinkNotice("Opened in Work by a rule", kind: .question, choices: [
                     .init("Undo", id: "link.notice.undo") {}, .init("Edit Rule", id: "link.notice.edit") {},
-                ]) : nil, for: 60)
+                ]) : nil)
             }
             if Store.testing, let name = request["settingsDetail"] as? String, name == "linkrule", let rule = LinkRules.shared.rules.first {
                 browser.settingsRule = rule.id

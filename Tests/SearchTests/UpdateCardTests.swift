@@ -67,6 +67,7 @@ struct UpdateCardTests {
         #expect(after.benchState["hide"] as? String == "Hide")
         updates.unpretend()
         settle(view)
+        waitFor { card(in: view) == nil }
         #expect(card(in: view) == nil)
         #expect(view.footHeight == bare)
     }
@@ -289,6 +290,7 @@ struct UpdateCardTests {
         let landed = hit.map { $0 === hide || $0.isDescendant(of: hide) } ?? false
         if landed { hide.action?() }
         settle(view)
+        waitFor { card(in: view) == nil }
 
         #expect(closeBox[2] == UpdateCardView.closeSize)
         #expect(abs(closeBox[0] - (box[0] - UpdateCardView.closeOut)) < 0.5)

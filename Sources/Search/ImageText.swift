@@ -104,7 +104,7 @@ extension Browser {
                 ImageText.board.setString(lines.joined(separator: "\n"), forType: .string)
                 announce("Copied \(lines.count) \(lines.count == 1 ? "line" : "lines")")
             } catch {
-                if !Task.isCancelled { announce("Couldn't read text in that image") }
+                if !Task.isCancelled { announce("Couldn't read text in that image", kind: .error) }
             }
         }
     }

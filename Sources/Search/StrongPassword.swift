@@ -152,7 +152,7 @@ extension Browser {
                 guard let self, let tab else { return }
                 switch took {
                 case .refused:
-                    announce("The keychain refused it")
+                    announce("The keychain refused it", kind: .error)
                 case .waits:
                     tab.strongTaken = StrongTaken(host: host, user: user, password: password, clear: clear, saved: false)
                 case .kept:

@@ -162,7 +162,7 @@ final class FormFill {
         book.release(card: row) { [weak self] secret in
             guard let self else { return }
             guard let secret else {
-                browser?.announce("Not filled: your card needs Touch ID")
+                browser?.announce("Not filled: your card needs Touch ID", kind: .error)
                 return
             }
             guard tab.pageAddress == up.page else { return }
@@ -178,7 +178,7 @@ final class FormFill {
             lastReport = applied
             if let card { tab.seal(card.number) }
             guard applied.filled > 0 else {
-                browser?.announce("Couldn't find those boxes anymore")
+                browser?.announce("Couldn't find those boxes anymore", kind: .error)
                 return
             }
             done = Done(tab: tab.id, filled: applied.filled, stays: max(0, up.plan.total - applied.filled))

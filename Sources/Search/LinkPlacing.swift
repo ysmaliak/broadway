@@ -12,9 +12,13 @@ final class LinkNotice {
     let id = UUID()
     let text: String
     let choices: [OfferBarView.Choice]
+    let kind: NoticeKind
+    let page: (() -> String?)?
 
-    init(_ text: String, choices: [OfferBarView.Choice]) {
+    init(_ text: String, kind: NoticeKind = .action, page: (() -> String?)? = nil, choices: [OfferBarView.Choice]) {
         self.text = text
+        self.kind = kind
+        self.page = page
         self.choices = choices
     }
 }
@@ -44,28 +48,32 @@ enum LinkArrivals {
               LinkRules.shared.target(of: arrival.site) != .space(space, folder: nil) else { return }
         offered.insert(arrival.site)
         let site = arrival.site
-        browser.showLinkNotice(LinkNotice("Always open \(site) in \(name)?", choices: [
+        browser.showLinkNotice(LinkNotice("Always open \(site) in \(name)?", kind: .offer, page: { [weak tab] in
+            tab?.pageAddress.flatMap { LinkRouter.site(of: $0) }
+        }, choices: [
             .init("Not Now", id: "link.notice.notNow") { [weak browser] in browser?.showLinkNotice(nil) },
             .init("Always", .primary, id: "link.notice.always") { [weak browser] in
                 LinkRules.shared.always(site, to: .space(space, folder: nil))
                 browser?.showLinkNotice(nil)
                 browser?.announce("\(site) opens in \(name) from now on")
             },
-        ]), for: 6)
+        ]))
     }
 }
 
 extension Browser {
-    func showLinkNotice(_ notice: LinkNotice?, for seconds: Double = 4) {
+    func showLinkNotice(_ notice: LinkNotice?) {
+        let view = linkNoticeHush?.view
         linkNoticeHush?.cancel()
+        linkNoticeHush = nil
         linkNotice = notice
         guard let notice else { return }
-        let work = DispatchWorkItem { [weak self] in
+        let clock = NoticeClock(notice.kind, window: { [weak self] in self?.window }, page: notice.page) { [weak self] in
             guard self?.linkNotice?.id == notice.id else { return }
             self?.linkNotice = nil
         }
-        linkNoticeHush = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
+        clock.view = view
+        linkNoticeHush = clock
     }
 
     func openAway(_ url: URL, space: UUID, folder: UUID? = nil) -> Tab {
