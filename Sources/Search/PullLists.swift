@@ -35,7 +35,11 @@ enum PullList: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    var query: String { "is:open is:pr archived:false \(words)" }
+    func words(hidingDrafts: Bool) -> String {
+        hidingDrafts && asksForReview ? words + " draft:false" : words
+    }
+
+    func query(hidingDrafts: Bool) -> String { "is:open is:pr archived:false \(words(hidingDrafts: hidingDrafts))" }
 
     var label: String? {
         switch self {
@@ -52,8 +56,8 @@ enum PullList: String, Codable, CaseIterable, Identifiable {
 
     var asksForReview: Bool { self == .reviewRequests || self == .teamReviews }
 
-    var page: URL {
-        URL(string: "https://github.com/pulls?q=\(LiveSource.escaped(query).replacingOccurrences(of: "%20", with: "+"))")!
+    func page(hidingDrafts: Bool) -> URL {
+        URL(string: "https://github.com/pulls?q=\(LiveSource.escaped(query(hidingDrafts: hidingDrafts)).replacingOccurrences(of: "%20", with: "+"))")!
     }
 
     static func named(_ text: String) -> PullList? {

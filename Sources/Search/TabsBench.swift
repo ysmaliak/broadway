@@ -207,7 +207,7 @@ enum TabsBench {
                  "state": folder.state.rawValue, "paused": folder.paused, "hidden": folder.hidden.count,
                  "status": folder.status ?? "", "sso": folder.sso?.url ?? "", "ssoOrg": folder.sso?.org ?? "",
                  "note": folder.note.map { "\($0)" } ?? "", "lists": folder.source.pullLists?.map(\.rawValue) ?? [],
-                 "statuses": folder.source.linearStatuses?.map(\.rawValue) ?? [], "empty": folder.source.emptyWording,
+                 "statuses": folder.source.linearStatuses?.map(\.rawValue) ?? [], "hidesDrafts": folder.source.leavesOutDraftReviews, "empty": folder.source.emptyWording,
                  "items": folder.items.map { ["title": $0.title, "label": $0.label ?? "", "byline": $0.byline ?? "",
                                               "checks": $0.checks?.rawValue ?? "", "list": $0.list?.rawValue ?? "", "url": $0.key,
                                               "fresh": $0.fresh, "merging": live.turning($0.key), "claimed": live.claimedRow($0.key), "draft": $0.draft == true,
@@ -266,6 +266,11 @@ enum TabsBench {
             }
             let lists = args[2].split(separator: ",").compactMap { PullList.named(String($0)) }
             live.setLists(folder.id, lists)
+        case "drafts":
+            guard args.count == 3, let folder = live.folders.first(where: { $0.name == args[1] }), args[2] == "hide" || args[2] == "show" else {
+                answer(["error": "live drafts NAME hide|show"]); return
+            }
+            live.setHidesDraftReviews(folder.id, args[2] == "hide")
         case "statuses":
             guard args.count == 3, let folder = live.folders.first(where: { $0.name == args[1] }) else {
                 answer(["error": "live statuses NAME STATUS,STATUS"]); return
@@ -380,8 +385,18 @@ enum TabsBench {
                   let group = browser.tabGroups.first(where: { $0.id == folder.id }) else {
                 answer(["error": "no live folder"]); return
             }
-            answer(["items": FolderMenus.menu(browser: browser, group: group).items.map { item in
-                ["title": item.title, "header": item.isSectionHeader, "separator": item.isSeparatorItem, "enabled": item.isEnabled] as [String: Any]
+            let menu = FolderMenus.menu(browser: browser, group: group)
+            if args.count == 3 {
+                guard let at = menu.items.firstIndex(where: { $0.title == args[2] && $0.isEnabled }) else {
+                    answer(["error": "no item \(args[2])"]); return
+                }
+                menu.performActionForItem(at: at)
+                answer(["picked": args[2]])
+                return
+            }
+            answer(["items": menu.items.map { item in
+                ["title": item.title, "header": item.isSectionHeader, "separator": item.isSeparatorItem, "enabled": item.isEnabled,
+                 "on": item.state == .on] as [String: Any]
             }])
             return
         case "net":

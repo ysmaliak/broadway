@@ -76,9 +76,9 @@ final class IntegrationTests {
     }
 
     @Test func everyListIsASearchOnGitHub() {
-        #expect(PullList.reviewRequests.page.absoluteString == "https://github.com/pulls?q=is%3Aopen+is%3Apr+archived%3Afalse+review-requested%3A%40me")
+        #expect(PullList.reviewRequests.page(hidingDrafts: false).absoluteString == "https://github.com/pulls?q=is%3Aopen+is%3Apr+archived%3Afalse+review-requested%3A%40me")
         #expect(PullList.allCases.first == .reviewRequests)
-        #expect(Set(PullList.allCases.map { $0.query }).count == PullList.allCases.count)
+        #expect(Set(PullList.allCases.map { $0.query(hidingDrafts: false) }).count == PullList.allCases.count)
         #expect(PullList.named("ready to merge") == .ready)
         #expect(PullList.named("teamReviews") == .teamReviews)
         #expect(PullList.ordered([.assigned, .reviewRequests]) == [.reviewRequests, .assigned])

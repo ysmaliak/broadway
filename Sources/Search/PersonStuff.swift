@@ -62,6 +62,17 @@ enum PersonStuff {
         try PersonCommands.pick(LiveFolders.shared.folders, id: \.id, named: try call.need("id"), what: "Live Folder")
     }
 
+    private static func draftChoice(_ call: PersonCall, in folder: LiveFolder) throws -> Bool {
+        guard folder.source.asksForReview else {
+            throw PersonRefusal("refused", "\(folder.name) has no review requests", hint: "Only a pull request folder with Review Requests or Team Reviews hides drafts")
+        }
+        switch call.string("choice")?.lowercased() {
+        case "hide": return true
+        case "show": return false
+        default: throw PersonRefusal.usage("Say hide or show", hint: "broadway live drafts ID hide")
+        }
+    }
+
     private static func statuses(_ call: PersonCall, in folder: LiveFolder) throws -> [LinearStatus] {
         guard folder.source.linearStatuses != nil else {
             throw PersonRefusal("refused", "\(folder.name) has no statuses to choose",
@@ -241,6 +252,7 @@ enum PersonStuff {
                 ["title": $0.title, "label": $0.label ?? "", "byline": $0.byline ?? "", "checks": $0.checks?.rawValue ?? "", "url": address($0.key), "fresh": $0.fresh] as [String: Any]
             }]
             if let lists = found.source.pullLists { shown["lists"] = lists.map(\.title) }
+            if found.source.asksForReview { shown["hidesDraftReviewRequests"] = found.source.leavesOutDraftReviews }
             if let statuses = found.source.linearStatuses {
                 shown["statuses"] = statuses.map(\.title)
                 shown["leftOut"] = found.source.leftOut.map(\.title)
@@ -256,6 +268,15 @@ enum PersonStuff {
             let left = LiveFolders.shared.folder(found.id)?.source.leftOut ?? []
             return ["id": short(found.id), "statuses": LinearStatus.ordered(chosen).map(\.title), "leftOut": left.map(\.title),
                     "message": left.isEmpty ? "Shows every open status" : "Leaves out \(LinearStatus.words(left))"]
+        },
+        PersonVerb("live", "drafts", .arrange, first: { call in
+            _ = try draftChoice(call, in: try live(call))
+        }) { call in
+            let found = try live(call)
+            let hides = try draftChoice(call, in: found)
+            LiveFolders.shared.setHidesDraftReviews(found.id, hides)
+            return ["id": short(found.id), "hidesDraftReviewRequests": hides,
+                    "message": hides ? "Leaves out draft review requests" : "Shows draft review requests"]
         },
         PersonVerb("live", "add", .arrange, first: { call in
             guard call.browser.prefs.liveFolders else {

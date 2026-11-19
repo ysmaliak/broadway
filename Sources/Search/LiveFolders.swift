@@ -38,6 +38,7 @@ struct LiveSource: Codable, Equatable {
     var range: LiveRange? = nil
     var lists: [PullList]? = nil
     var statuses: [String]? = nil
+    var hidesDraftReviews: Bool? = nil
 
     var linearStatuses: [LinearStatus]? {
         guard kind == .linear, LinearAPI.List(address: address)?.choosesStatus == true else { return nil }
@@ -80,6 +81,36 @@ struct LiveSource: Codable, Equatable {
         return service == .gitHub && GitHubAPI.search(for: URL(string: address))?.contains("review-requested:@me") == true
     }
 
+    var leavesOutDraftReviews: Bool { hidesDraftReviews == true && asksForReview }
+
+    func page(_ list: PullList) -> URL { list.page(hidingDrafts: leavesOutDraftReviews) }
+
+    func shownWithoutDraftReviews(_ item: LiveItem) -> LiveItem? {
+        guard leavesOutDraftReviews, item.label != PullState.merged, item.label != PullState.closed,
+              item.draft == true || item.label == PullState.draft else { return item }
+        guard pullLists != nil else { return nil }
+        guard let on = item.on else { return item.list?.asksForReview == true ? nil : item }
+        let rest = on.filter { !$0.asksForReview }
+        guard let first = rest.first else { return nil }
+        guard rest != on else { return item }
+        var kept = item
+        kept.on = rest
+        if kept.list?.asksForReview != false { kept.list = first }
+        if kept.label == PullList.reviewRequests.label || kept.label == PullList.teamReviews.label { kept.label = PullState.draft }
+        return kept
+    }
+
+    private var withoutDrafts: URL? {
+        guard var parts = URLComponents(string: address), let search = GitHubAPI.search(for: parts.url), !search.contains("draft:") else {
+            return URL(string: address)
+        }
+        var pairs = (parts.percentEncodedQuery ?? "").split(separator: "&").map(String.init)
+        guard let at = pairs.firstIndex(where: { $0.hasPrefix("q=") }) else { return URL(string: address) }
+        pairs[at] += "+draft%3Afalse"
+        parts.percentEncodedQuery = pairs.joined(separator: "&")
+        return parts.url
+    }
+
     var assignsToYou: Bool { kind == .linear && LinearAPI.List(address: address) == .assigned }
 
     var personal: Bool {
@@ -118,6 +149,7 @@ struct LiveSource: Codable, Equatable {
     }
 
     func reading(at now: Date = Date(), zone: TimeZone = .current) -> URL? {
+        if kind == .pullRequests, pullLists == nil, leavesOutDraftReviews { return withoutDrafts }
         guard kind == .repository, let days = range?.days, var parts = URLComponents(string: address) else {
             return URL(string: address)
         }
@@ -885,6 +917,17 @@ final class LiveFolders {
         change(id) { folder in
             folder.source.statuses = LinearStatus.ordered(statuses).map(\.rawValue)
             folder.items = folder.items.filter { !folder.source.leavesOut($0) }
+        }
+        update(id)
+    }
+
+    func setHidesDraftReviews(_ id: UUID, _ hides: Bool) {
+        guard let current = folder(id), current.source.asksForReview, current.source.leavesOutDraftReviews != hides else { return }
+        change(id) { folder in
+            folder.source.hidesDraftReviews = hides ? true : nil
+            guard hides else { return }
+            let kept = folder.items.compactMap { folder.source.shownWithoutDraftReviews($0) }
+            folder.items = kept.contains(where: { $0.branch != nil }) ? LiveStacks.arranged(kept) : kept
         }
         update(id)
     }

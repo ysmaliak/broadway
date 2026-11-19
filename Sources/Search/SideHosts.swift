@@ -499,6 +499,10 @@ enum FolderMenus {
                 })
             }))
         }
+        if folder.source.asksForReview {
+            let hides = folder.source.leavesOutDraftReviews
+            items.append(.action("Hide Draft Review Requests", on: hides, run: { live.setHidesDraftReviews(id, !hides) }))
+        }
         if let statuses = folder.source.linearStatuses {
             items.append(.submenu("Statuses", LinearStatus.allCases.map { status in
                 let on = statuses.contains(status)

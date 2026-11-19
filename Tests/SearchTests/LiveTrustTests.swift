@@ -183,14 +183,14 @@ struct LiveTrustTests {
 
         let answer = await LiveReader.readLists(.pullRequests, before: before, pause: .zero) { url in
             asked.append(url)
-            if url == PullList.created.page { return .read(LiveRead(items: [])) }
-            if url == PullList.reviewRequests.page { return .read(LiveRead(items: [pull(1)], marked: true)) }
+            if url == PullList.created.page(hidingDrafts: false) { return .read(LiveRead(items: [])) }
+            if url == PullList.reviewRequests.page(hidingDrafts: false) { return .read(LiveRead(items: [pull(1)], marked: true)) }
             return .read(LiveRead(items: [], marked: true))
         }
 
         guard case .read(let read) = answer else { Issue.record("not a read: \(answer)"); return }
         #expect(read.missed[.created]?.cause == .unread)
-        #expect(asked.filter { $0 == PullList.created.page }.count == 2)
+        #expect(asked.filter { $0 == PullList.created.page(hidingDrafts: false) }.count == 2)
         #expect(Set(numbers(LiveTrust.after(folder(before), answer, now: now))) == [1, 2])
     }
 

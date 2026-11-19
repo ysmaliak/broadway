@@ -178,7 +178,7 @@ final class LiveFolderTests {
 
     @Test func aSignedInEmptyListIsFineNotSignIn() {
         let source = LiveSource.pullRequests
-        let page = PullList.reviewRequests.page
+        let page = PullList.reviewRequests.page(hidingDrafts: false)
 
         let answer = LiveLabels.needsSignIn(asked: page, landed: page, password: false, found: 0, status: 200, user: "octo-sam",
                                             signInLink: true, personal: source.personal, hidesPrivate: source.hidesPrivate)
@@ -228,7 +228,7 @@ final class LiveFolderTests {
         }
 
         #expect(answer == .signIn)
-        #expect(asked == [PullList.reviewRequests.page])
+        #expect(asked == [PullList.reviewRequests.page(hidingDrafts: false)])
     }
 
     @Test func oldPullRequestFolderNamesBecomePRsAndChosenNamesStay() {
