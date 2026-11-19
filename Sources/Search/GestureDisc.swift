@@ -12,6 +12,13 @@ final class GestureDisc: NSView {
             case .top: return "arrow.clockwise"
             }
         }
+
+        var hub: CGPoint {
+            switch self {
+            case .left, .right: return CGPoint(x: -0.5, y: 0.5)
+            case .top: return CGPoint(x: -0.35, y: 1.85)
+            }
+        }
     }
 
     nonisolated static let size: CGFloat = 44
@@ -74,9 +81,8 @@ final class GestureDisc: NSView {
         ring.path = path
         ring.frame = body.bounds
         body.layer?.addSublayer(ring)
-        let glyph = arrow.intrinsicContentSize
-        turner.frame = kitSnap(NSRect(x: (size - glyph.width) / 2, y: (size - glyph.height) / 2, width: glyph.width, height: glyph.height))
         body.addSubview(turner)
+        placeGlyph()
         arrow.alphaValue = GestureDisc.faint
     }
 
@@ -84,6 +90,24 @@ final class GestureDisc: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     override var isFlipped: Bool { true }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        placeGlyph()
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        placeGlyph()
+    }
+
+    private func placeGlyph() {
+        let size = GestureDisc.size
+        let glyph = arrow.intrinsicContentSize
+        let spot = kitSnap(NSRect(x: (size - glyph.width) / 2 - edge.hub.x, y: (size - glyph.height) / 2 - edge.hub.y,
+                                  width: glyph.width, height: glyph.height))
+        if turner.frame != spot { turner.frame = spot }
+    }
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
@@ -246,15 +270,21 @@ final class GestureDisc: NSView {
         setFace(scale: 1, curve: Motion.kitSettle)
     }
 
+    var pivot: CGPoint {
+        CGPoint(x: turner.frame.midX + edge.hub.x, y: turner.frame.midY + edge.hub.y)
+    }
+
+    func turned(_ angle: CGFloat) -> CATransform3D {
+        let middle = CGPoint(x: turner.bounds.midX + edge.hub.x, y: turner.bounds.midY + edge.hub.y)
+        var matrix = CATransform3DMakeTranslation(middle.x, middle.y, 0)
+        matrix = CATransform3DRotate(matrix, angle, 0, 0, 1)
+        return CATransform3DTranslate(matrix, -middle.x, -middle.y, 0)
+    }
+
     func spin() {
         guard !gone, !Motion.reduced, let layer = turner.layer else { return }
-        let middle = CGPoint(x: turner.bounds.midX, y: turner.bounds.midY)
         let turn = CAKeyframeAnimation(keyPath: "sublayerTransform")
-        turn.values = (0...32).map { step -> NSValue in
-            var matrix = CATransform3DMakeTranslation(middle.x, middle.y, 0)
-            matrix = CATransform3DRotate(matrix, CGFloat(step) * .pi / 16, 0, 0, 1)
-            return NSValue(caTransform3D: CATransform3DTranslate(matrix, -middle.x, -middle.y, 0))
-        }
+        turn.values = (0...32).map { NSValue(caTransform3D: turned(CGFloat($0) * .pi / 16)) }
         turn.calculationMode = .linear
         turn.duration = GestureDisc.turn
         turn.repeatCount = .infinity

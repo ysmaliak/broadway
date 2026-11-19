@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Films of pull to refresh, of the probe's own window only, with the disc's place sampled beside them.
 
-Build first (`./build.sh`), then `python3 Tests/pull_refresh_film.py [label] [reduced]`.
+Build first (`./build.sh`), then `python3 Tests/pull_refresh_film.py [label] [reduced] [slow]`.
+With `slow` the reload answers after three seconds and only one pull is filmed,
+so the arrow turns for several whole turns.
 A probe shown on screen in a world of its own (never brought to the front),
 filmed by its window id with Tests/WindowCapture.swift, never a region of the
 display. Each scene leaves frames, a contact sheet of the page's top middle
@@ -23,6 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 label = sys.argv[1] if len(sys.argv) > 1 else "pull"
 reduced = "reduced" in sys.argv[2:]
+slow = "slow" in sys.argv[2:]
 sys.argv = sys.argv[:1]
 sys.path.insert(0, str(ROOT / "Tests"))
 import split_view as sv  # noqa: E402
@@ -44,6 +47,8 @@ hits = {"n": 0}
 class H(BaseHTTPRequestHandler):
     def do_GET(self):
         hits["n"] += 1
+        if slow and hits["n"] > 1:
+            time.sleep(3)
         body = PAGE.replace("<span id=n></span>", f"<span id=n>{hits['n']}</span>").encode()
         self.send_response(200); self.send_header("Content-Type", "text/html"); self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
@@ -140,10 +145,12 @@ def main():
             ("back", {"dy": 170, "steps": 50, "ms": 550, "legs": [[0, -110]], "hold": 120}, False),
             ("deep", {"dy": 420, "steps": 80, "ms": 800, "hold": 200}, True),
         ]
+        if slow:
+            scenes = [("spin", {"dy": 190, "steps": 60, "ms": 650, "hold": 250}, True)]
         for name, wheel, reloads in scenes:
             was = hits["n"]
-            folder, samples, state = film(pid, number, tab, name, wheel)
-            sheet(name, folder, middle)
+            folder, samples, state = film(pid, number, tab, name, wheel, seconds=3.2 if slow else 2.2)
+            sheet(name, folder, middle, span=3.0 if slow else 1.6)
             seen = smooth(name, samples, 14)
             print("   ", steps_of(samples)[::6], flush=True)
             t.ok(f"{name}: {'reloads' if reloads else 'no reload'}", (hits["n"] > was) == reloads, (was, hits["n"], state["end"], state["why"]))
@@ -151,12 +158,13 @@ def main():
                 t.ok(f"{name}: it starts hidden above the page's top edge", seen[0]["top"] <= -30, seen[0]["top"])
             time.sleep(1.2)
 
-        sv.ev(tab, "scrollTo(0, 220)"); time.sleep(0.4)
-        was = hits["n"]
-        folder, samples, state = film(pid, number, tab, "coast", {"dy": 160, "steps": 6, "ms": 80, "glide": 60})
-        sheet("coast", folder, middle)
-        t.ok("coast: a flick that glides to the top shows no disc and reloads nothing",
-             hits["n"] == was and not [s for s in samples if s.get("disc")] and sv.ev(tab, "scrollY") == 0, (state["why"], sv.ev(tab, "scrollY")))
+        if not slow:
+            sv.ev(tab, "scrollTo(0, 220)"); time.sleep(0.4)
+            was = hits["n"]
+            folder, samples, state = film(pid, number, tab, "coast", {"dy": 160, "steps": 6, "ms": 80, "glide": 60})
+            sheet("coast", folder, middle)
+            t.ok("coast: a flick that glides to the top shows no disc and reloads nothing",
+                 hits["n"] == was and not [s for s in samples if s.get("disc")] and sv.ev(tab, "scrollY") == 0, (state["why"], sv.ev(tab, "scrollY")))
     finally:
         sv.finish()
         t.done()
