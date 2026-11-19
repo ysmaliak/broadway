@@ -321,7 +321,8 @@ def joined_after_relaunch(name):
         t.ok(f"{name}: after a relaunch, the row that joined the stack tops it and every chip says n/4",
              bylines == ["dana", "4/4", "octo-sam 3/4 • Draft", "octo-sam 2/4 • Changes requested", "octo-sam 1/4 • Approved",
                          "octo-sam", "lee • Approved", "dana • Changes requested"], bylines)
-        t.ok(f"{name}: only the joined row, the old top and the other members were read", set(HITS) == {36, 37, 38, 46}, dict(HITS))
+        t.ok(f"{name}: readings kept longer than the folder's interval are read again, each page once",
+             set(HITS) == {36, 37, 38, 41, 44, 45, 46, 512} and set(HITS.values()) == {1}, dict(HITS))
     finally:
         BRANCHES[46] = ("main", "acme", "nameless")
         STACK.pop(46, None)

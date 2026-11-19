@@ -743,6 +743,8 @@ final class LiveFolders {
     @ObservationIgnored var pointReader: @MainActor ([LiveTouch.Ask]) async -> [LiveItem] = { asks in
         Store.testing ? [] : await IntegrationReader.point(asks)
     }
+    @ObservationIgnored var pageFetcher: @MainActor (LiveFolder) async -> LiveReader.PageFetch? = { await LiveReader.pageFetch($0) }
+    @ObservationIgnored private var pageReading: Set<String> = []
     @ObservationIgnored var looking: @MainActor () -> Set<UUID>? = { LiveFolders.lookedAt() }
     @ObservationIgnored var idleness: @MainActor () -> TimeInterval = { LiveFolders.idleSeconds() }
     @ObservationIgnored var frontmost: @MainActor () -> Bool = { NSApp?.isActive ?? false }
@@ -1018,6 +1020,7 @@ final class LiveFolders {
             folder.items = holding(folder.items, before: before.items, in: id)
             folder.items = keeping(folder.items, in: id, now: now)
             folder.items = withheld(folder.items, in: id, verdicts: verdicts)
+            folder.items = fresher(folder.items, space: folder.space)
             let was = Dictionary(before.items.map { (LiveIdentity.of($0.key), $0.label) }, uniquingKeysWith: { a, _ in a })
             for item in folder.items where item.label == PullState.merged {
                 let identity = LiveIdentity.of(item.key)
@@ -1045,17 +1048,99 @@ final class LiveFolders {
 
     var rereads: Set<String> { claimed.union(pageAsks.keys) }
 
-    func pageShown(_ url: URL, space: UUID, now: Date = Date()) {
+    func pageShown(_ url: URL, space: UUID, person: Bool = false, now: Date = Date()) {
         let identity = LiveIdentity.of(url.absoluteString)
-        guard LiveIdentity.typed(identity), !LiveRefs.young(pageAsked[identity], at: now, within: LiveRefs.fresh) else { return }
-        let ids = folders.filter { folder in
+        guard LiveIdentity.typed(identity) else { return }
+        let near = folders.filter { folder in
             folder.space == space && !folder.paused && (folder.source.kind == .pullRequests || folder.source.kind == .repository)
-                && folder.items.contains { LiveIdentity.of($0.key) == identity && LiveRefs.open($0) }
-        }.map(\.id)
-        guard !ids.isEmpty else { return }
+        }
+        let ids = near.filter { folder in folder.items.contains { LiveIdentity.of($0.key) == identity && LiveRefs.open($0) } }.map(\.id)
+        if ids.isEmpty {
+            guard person, PullPageRelay.pull(url), !LiveRefs.young(pageAsked[identity], at: now, within: LiveRefs.fresh),
+                  !near.contains(where: { $0.items.contains { LiveIdentity.of($0.key) == identity } }) else { return }
+            let own = near.filter { LiveFolders.listsOwn($0.source) }.map(\.id)
+            guard !own.isEmpty else { return }
+            pageAsked[identity] = now
+            for id in own { readSoon(id, now: now) }
+            return
+        }
+        guard !LiveRefs.young(pageAsked[identity], at: now, within: person ? LiveTouch.gap(.landed) : LiveRefs.fresh) else { return }
         pageAsked[identity] = now
         pageAsks[identity] = now
         for id in ids { readSoon(id, now: now) }
+    }
+
+    static func listsOwn(_ source: LiveSource) -> Bool {
+        source.kind == .pullRequests && (source.pullLists ?? []).contains { $0.words.contains("author:@me") || $0.words.contains("involves:@me") }
+    }
+
+    func keep(_ folder: LiveFolder) -> TimeInterval {
+        max(LivePace.pace(folder, every: every()), LiveEvery.usual.interval) - LivePace.tick
+    }
+
+    private func fresher(_ items: [LiveItem], space: UUID) -> [LiveItem] {
+        guard !LiveRefs.known.isEmpty else { return items }
+        var restack = false
+        let out = items.map { item -> LiveItem in
+            guard LiveRefs.open(item), let known = LiveRefs.known[LiveRefs.slot(item.key, space: space)],
+                  known.read > (item.pageRead ?? .distantPast), known.read != .distantPast else { return item }
+            var next = item
+            if let branch = known.branch { next.branch = branch }
+            LiveRefs.signed(&next, known.signs)
+            next.pageRead = known.read
+            if next.branch?.stack != item.branch?.stack || next.branch?.position != item.branch?.position { restack = true }
+            return next
+        }
+        return restack ? LiveStacks.arranged(out) : out
+    }
+
+    func readPages(_ asks: [LiveTouch.Ask], now: Date = Date()) async {
+        for space in Set(asks.map(\.space)) {
+            let wanted = Set(asks.filter { $0.space == space }.map { LiveIdentity.of($0.key) }).subtracting(pageReading)
+            let near = folders.filter { $0.space == space && !$0.paused && LiveFolders.follows($0.source) }
+            guard !wanted.isEmpty, let first = near.first(where: { folder in
+                folder.items.contains { wanted.contains(LiveIdentity.of($0.key)) && LiveRefs.open($0) }
+            }), let pages = await pageFetcher(first) else { continue }
+            var rows: [LiveItem] = []
+            var seen: Set<String> = []
+            for folder in near {
+                for item in folder.items where seen.insert(LiveIdentity.of(item.key)).inserted { rows.append(item) }
+            }
+            pageReading.formUnion(wanted)
+            for identity in wanted where rows.contains(where: { LiveIdentity.of($0.key) == identity && LiveRefs.open($0) }) {
+                pageAsks[identity] = max(pageAsks[identity] ?? .distantPast, now)
+            }
+            let read = await LiveRefs.filled(rows, previous: rows, space: space, host: pages.host, also: pages.also, at: now,
+                                             again: wanted, only: true, fetch: pages.fetch)
+            pageReading.subtract(wanted)
+            pagesRead()
+            let fresh = Dictionary(read.filter { $0.pageRead == now }.map { (LiveIdentity.of($0.key), $0) }, uniquingKeysWith: { first, _ in first })
+            guard !fresh.isEmpty else { continue }
+            for folder in folders where folder.space == space && LiveFolders.follows(folder.source) {
+                change(folder.id) { folder in
+                    var restack = false
+                    let items = folder.items.map { row -> LiveItem in
+                        let identity = LiveIdentity.of(row.key)
+                        guard let new = fresh[identity] else { return row }
+                        var next = row
+                        if let branch = new.branch { next.branch = branch }
+                        next.activity = new.activity
+                        next.unanswered = new.unanswered
+                        next.signsRead = new.signsRead
+                        next.pageRead = new.pageRead
+                        if wanted.contains(identity) { next.noticed = new.activity ?? row.noticed }
+                        if next.branch?.stack != row.branch?.stack || next.branch?.position != row.branch?.position { restack = true }
+                        return next
+                    }
+                    folder.items = restack ? LiveStacks.arranged(items) : items
+                }
+            }
+            for (identity, item) in fresh where claims[identity] == nil && turned[identity] == nil {
+                guard let known = LiveRefs.known[LiveRefs.slot(item.key, space: space)], let state = known.state,
+                      state != .open || known.headed == true, let url = URL(string: item.key) else { continue }
+                pageSays(state, at: url, space: space, now: now)
+            }
+        }
     }
 
     func pagesRead() {
@@ -1479,7 +1564,7 @@ final class LiveFolders {
         return CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: any)
     }
 
-    func touch(_ url: URL, space: UUID, cause: LiveTouch.Cause, now: Date = Date()) {
+    func touch(_ url: URL, space: UUID, cause: LiveTouch.Cause, agent: Bool = false, now: Date = Date()) {
         let identity = LiveIdentity.of(url.absoluteString)
         guard LiveIdentity.typed(identity) else { return }
         let matches = folders.filter { $0.space == space && !$0.paused && LiveTouch.follows($0.source) }.compactMap { folder in
@@ -1493,7 +1578,7 @@ final class LiveFolders {
                 recheck(id, early: true)
             }
         }
-        guard LiveTouch.wanted(cause, last: touched[identity], now: now) else { return }
+        guard !(agent && PullPageRelay.pull(url)), LiveTouch.wanted(cause, last: touched[identity], now: now) else { return }
         touched[identity] = now
         asked[identity] = LiveTouch.Ask(key: key, space: space)
         flushing?.cancel()
@@ -1519,6 +1604,7 @@ final class LiveFolders {
         pageAsked = [:]
         pageReads = [:]
         pageSoon = [:]
+        pageReading = []
         asleep = [:]
         if here != .distantPast { here = .distantPast }
         online = true
@@ -1534,6 +1620,8 @@ final class LiveFolders {
         guard !asks.isEmpty else { return }
         let fresh = await pointReader(asks)
         refreshed(fresh, asks: asks, now: now)
+        let pulls = asks.filter { URL(string: $0.key).map(PullPageRelay.pull) ?? false }
+        if !pulls.isEmpty { await readPages(pulls, now: Date()) }
     }
 
     func refreshed(_ fresh: [LiveItem], asks: [LiveTouch.Ask], now: Date = Date()) {
@@ -1830,21 +1918,21 @@ extension Browser {
         web.evaluateInSearch(PullPageRelay.again)
     }
 
-    func livePullAsk(_ tab: Tab, at url: URL) {
+    func livePullAsk(_ tab: Tab, at url: URL, person: Bool = false) {
         guard prefs.liveFolders, !tab.shy, !isPopup, !tab.agent, tab.id == activeID, PullPageRelay.pull(url) else { return }
-        LiveFolders.shared.pageShown(url, space: spaceID)
+        LiveFolders.shared.pageShown(url, space: spaceID, person: person)
     }
 
     func liveTouch(_ tab: Tab, at url: URL, _ cause: LiveTouch.Cause) {
         guard prefs.liveFolders, !tab.shy, !isPopup, tab.id == activeID, windowSeen, NSApp.isActive else { return }
-        LiveFolders.shared.touch(url, space: spaceID, cause: cause)
+        LiveFolders.shared.touch(url, space: spaceID, cause: cause, agent: tab.agent)
     }
 
     func liveTabLanded(_ tab: Tab, at url: URL) {
         guard prefs.liveFolders, !tab.shy, !isPopup else { return }
         liveTouch(tab, at: url, .landed)
         liveSeen(tab, at: url)
-        livePullAsk(tab, at: url)
+        livePullAsk(tab, at: url, person: true)
         guard !tab.bench else { return }
         let arrival = LiveFolders.shared.opened(tab.id) ? .signOnTab : tab.arrival
         LiveFolders.shared.signOnTab(tab.id, at: url)
@@ -1856,6 +1944,7 @@ extension Browser {
         guard prefs.liveFolders, !tab.shy, !isPopup else { return }
         LiveFolders.shared.signOnTab(tab.id, at: url)
         liveSeen(tab, at: url)
+        livePullAsk(tab, at: url, person: true)
     }
 
     func liveSeen(_ tab: Tab, at url: URL) {

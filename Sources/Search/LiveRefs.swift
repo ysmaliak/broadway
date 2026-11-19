@@ -7,23 +7,30 @@ enum LiveRefs {
         var signs: PullSigns.Read? = nil
         var read: Date
         var state: PullPageState? = nil
+        var headed: Bool? = nil
     }
 
     struct Page: Equatable {
         var branch: LiveBranch?
         var signs: PullSigns.Read?
         var state: PullPageState? = nil
+        var members: [Int] = []
+        var headed = false
     }
 
     static func page(in html: String, repository: String, number: Int? = nil) -> Page {
         Page(branch: branch(in: html, repository: repository), signs: PullSigns.page(html).map(PullSigns.read),
-             state: state(in: html, number: number))
+             state: state(in: html, number: number), members: stack(in: html)?.members ?? [], headed: header(in: html) != nil)
+    }
+
+    static func header(in html: String) -> PullPageState? {
+        let statuses: [String: PullPageState] = ["pullOpened": .open, "pullMerged": .merged, "pullClosed": .closed, "draft": .draft]
+        let header = #"data-component="(?:PH_LeadingVisual|PageHeader[^"]*)"[^>]*>\s*<span[^>]*?data-component="StateLabel"[^>]*?data-status="([A-Za-z]+)""#
+        return first(header, in: html).flatMap { statuses[$0] }
     }
 
     static func state(in html: String, number: Int? = nil) -> PullPageState? {
-        let statuses: [String: PullPageState] = ["pullOpened": .open, "pullMerged": .merged, "pullClosed": .closed, "draft": .draft]
-        let header = #"data-component="(?:PH_LeadingVisual|PageHeader[^"]*)"[^>]*>\s*<span[^>]*?data-component="StateLabel"[^>]*?data-status="([A-Za-z]+)""#
-        if let said = first(header, in: html), let state = statuses[said] { return state }
+        if let state = header(in: html) { return state }
         guard let number else { return nil }
         let states: [String: PullPageState] = ["OPEN": .open, "MERGED": .merged, "CLOSED": .closed]
         let after = #""number"\s*:\s*\#(number)\s*,[^{}]*?"state"\s*:\s*"(OPEN|MERGED|CLOSED)""#
@@ -94,14 +101,15 @@ enum LiveRefs {
         return linked(html, repository: repository)
     }
 
-    static func stack(in html: String) -> (number: Int, position: Int)? {
+    static func stack(in html: String) -> (number: Int, position: Int, members: [Int])? {
         guard let regex = try? NSRegularExpression(pattern: #""stack"\s*:\s*\{"#) else { return nil }
         for match in regex.matches(in: html, range: NSRange(html.startIndex..., in: html)) {
             guard let found = Range(match.range, in: html), let open = html[found].lastIndex(of: "{"),
                   let object = object(in: html, from: open),
                   let stack = (try? JSONSerialization.jsonObject(with: Data(object.utf8))) as? [String: Any],
                   let number = stack["number"] as? Int, let position = stack["position"] as? Int else { continue }
-            return (number, position)
+            let members = (stack["pullRequests"] as? [Any] ?? []).compactMap { ($0 as? [String: Any])?["number"] as? Int }
+            return (number, position, members)
         }
         return nil
     }
@@ -184,7 +192,7 @@ enum LiveRefs {
 
     @MainActor
     static func filled(_ items: [LiveItem], previous: [LiveItem], space: UUID? = nil, host: String? = nil, also: String? = nil, limit: Int = .max, at now: Date = Date(), width: Int = width,
-                       budget: TimeInterval = budget, again: Set<String> = [],
+                       budget: TimeInterval = budget, again: Set<String> = [], keep: TimeInterval = stale, only: Bool = false,
                        fetch: @escaping @Sendable (URL) async -> (Data, Int)?) async -> [LiveItem] {
         let before = Dictionary(previous.map { (LiveIdentity.of($0.key), $0) }, uniquingKeysWith: { first, _ in first })
         func at(_ key: String) -> String { slot(key, space: space) }
@@ -231,9 +239,9 @@ enum LiveRefs {
         var aged: [Int] = []
         for want in listed {
             guard let reused = held[want.index] else { continue }
-            if !young(reused.read, at: now, within: stale) {
+            if !young(reused.read, at: now, within: min(stale, keep)) {
                 aged.append(want.index)
-            } else if chained.contains(want.index), !young(reused.read, at: now, within: fresh) {
+            } else if chained.contains(want.index), !young(reused.read, at: now, within: min(fresh, keep)) {
                 chain.append(want.index)
             }
         }
@@ -243,8 +251,9 @@ enum LiveRefs {
         func oldestFirst(_ indices: [Int]) -> [Int] {
             indices.sorted { (held[$0]?.read ?? .distantPast, $0) < (held[$1]?.read ?? .distantPast, $1) }
         }
-        let order = hard.filter { called.contains($0) } + suspect + plain + oldestFirst(chain) + oldestFirst(aged)
-        let asked = Set(order)
+        let order = only ? hard.filter { called.contains($0) }
+            : hard.filter { called.contains($0) } + suspect + plain + oldestFirst(chain) + oldestFirst(aged)
+        var asked = Set(order)
         for want in listed where !asked.contains(want.index) {
             guard let reused = held[want.index] else { continue }
             let item = items[want.index]
@@ -255,8 +264,17 @@ enum LiveRefs {
         }
         guard !order.isEmpty else { return out }
         let places = Dictionary(listed.map { ($0.index, $0) }, uniquingKeysWith: { first, _ in first })
+        var numbered: [String: Int] = [:]
+        for want in listed {
+            guard let place = place(of: items[want.index].key) else { continue }
+            numbered[line(place.repository, String(place.number))] = numbered[line(place.repository, String(place.number))] ?? want.index
+        }
         let began = ContinuousClock.now
         var moved: Set<String> = []
+        var near: Set<Int> = []
+        func linked(_ branch: LiveBranch, to other: LiveBranch) -> Bool {
+            other.repository.lowercased() == branch.repository.lowercased() && (other.head == branch.base || other.base == branch.head)
+        }
         func take(_ wants: [Want]) async -> Set<Int> {
             let found = await read(wants.map { ($0.url, $0.repository) }, width: width, budget: budget - (ContinuousClock.now - began).seconds,
                                    fetch: fetch)
@@ -274,23 +292,42 @@ enum LiveRefs {
                     continue
                 }
                 known[at(item.key)] = Known(updated: item.updated, branch: page.branch ?? staleBranch, signs: page.signs ?? staleSigns, read: now,
-                                        state: page.state)
+                                        state: page.state, headed: page.headed)
                 out[want.index].pageRead = now
-                if let fresh = page.branch, let old = staleBranch, old.stackRead == true,
-                   old.stack != fresh.stack || old.position != fresh.position {
-                    for stack in [old.stack, fresh.stack].compactMap({ $0 }) { moved.insert(line(fresh.repository, String(stack))) }
+                guard let fresh = page.branch else { continue }
+                let changed = staleBranch.map { old in old.stackRead == true && (old.stack != fresh.stack || old.position != fresh.position) }
+                    ?? (fresh.stack != nil)
+                guard changed else { continue }
+                for stack in [staleBranch?.stack, fresh.stack].compactMap({ $0 }) { moved.insert(line(fresh.repository, String(stack))) }
+                for number in page.members {
+                    if let index = numbered[line(fresh.repository, String(number))] { near.insert(index) }
+                }
+                for other in listed where other.index != want.index {
+                    guard let branch = out[other.index].branch else { continue }
+                    if linked(fresh, to: branch) || staleBranch.map({ linked($0, to: branch) }) == true { near.insert(other.index) }
                 }
             }
             return missed
         }
         _ = await take(order.compactMap { places[$0] })
-        guard !moved.isEmpty else { return out }
-        let members = listed.filter { want in
-            guard !asked.contains(want.index), let branch = out[want.index].branch, let stack = branch.stack else { return false }
-            return moved.contains(line(branch.repository, String(stack)))
+        var missed: Set<Int> = []
+        while !moved.isEmpty || !near.isEmpty {
+            let members = listed.filter { want in
+                guard !asked.contains(want.index) else { return false }
+                if near.contains(want.index) { return true }
+                guard let branch = out[want.index].branch, let stack = branch.stack else { return false }
+                return moved.contains(line(branch.repository, String(stack)))
+            }
+            moved = []
+            near = []
+            guard !members.isEmpty else { break }
+            asked.formUnion(members.map(\.index))
+            if (ContinuousClock.now - began).seconds < budget {
+                missed.formUnion(await take(members))
+            } else {
+                missed.formUnion(members.map(\.index))
+            }
         }
-        guard !members.isEmpty else { return out }
-        let missed = (ContinuousClock.now - began).seconds < budget ? await take(members) : Set(members.map(\.index))
         for index in missed {
             known[at(items[index].key)]?.read = .distantPast
             out[index].pageRead = nil

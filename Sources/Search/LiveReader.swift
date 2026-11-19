@@ -279,12 +279,9 @@ final class LiveReader: NSObject, WKNavigationDelegate {
             ? await readLists(folder.source, before: folder.items, known: known) { await readPage(staged($0), source: folder.source, store: store) }
             : await LiveTrust.looked(folder.items, known: known) { await readPage(url, source: folder.source, store: store) }.more(asked)
         guard folder.source.kind == .pullRequests || folder.source.kind == .repository, let items = answer.found else { return answer }
-        let page = folder.source.pullLists?.first.map { staged(folder.source.page($0)) } ?? url
-        let root = Integrations.fixture(.gitHub)
-        let fetch = await branchFetch(page, store: store, staging: root)
-        let also = root == nil ? nil : (folder.source.pullLists?.first.map(folder.source.page) ?? asked).host()
-        let branched = await LiveRefs.filled(items, previous: folder.items, space: folder.space, host: page.host(), also: also, limit: folder.source.cap,
-                                             again: LiveFolders.shared.rereads, fetch: fetch)
+        let pages = await pageFetch(folder, asked: asked, store: store)
+        let branched = await LiveRefs.filled(items, previous: folder.items, space: folder.space, host: pages.host, also: pages.also, limit: folder.source.cap,
+                                             again: LiveFolders.shared.rereads, keep: LiveFolders.shared.keep(folder), fetch: pages.fetch)
         LiveFolders.shared.pagesRead()
         switch answer {
         case .read(var read):
@@ -295,6 +292,26 @@ final class LiveReader: NSObject, WKNavigationDelegate {
         default:
             return answer
         }
+    }
+
+    struct PageFetch {
+        var host: String?
+        var also: String?
+        var fetch: @Sendable (URL) async -> (Data, Int)?
+    }
+
+    static func pageFetch(_ folder: LiveFolder, asked: URL, store: WKWebsiteDataStore) async -> PageFetch {
+        let page = folder.source.pullLists?.first.map { staged(folder.source.page($0)) } ?? staged(asked)
+        let root = Integrations.fixture(.gitHub)
+        let fetch = await branchFetch(page, store: store, staging: root)
+        let also = root == nil ? nil : (folder.source.pullLists?.first.map(folder.source.page) ?? asked).host()
+        return PageFetch(host: page.host(), also: also, fetch: fetch)
+    }
+
+    static func pageFetch(_ folder: LiveFolder) async -> PageFetch? {
+        guard folder.source.kind == .pullRequests || folder.source.kind == .repository, let asked = folder.source.reading(),
+              !Store.testing || Integrations.fixture(.gitHub) != nil else { return nil }
+        return await pageFetch(folder, asked: asked, store: Spaces.store(for: folder.space))
     }
 
     @MainActor static func staged(_ url: URL) -> URL {

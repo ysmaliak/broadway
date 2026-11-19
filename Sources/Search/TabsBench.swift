@@ -459,6 +459,12 @@ enum TabsBench {
             }
             live.pageSays(said, at: url, space: browser.spaceID)
             browser.syncLive()
+        case "reload":
+            guard Store.testing, args.count == 2, let url = URL(string: args[1]), PullPageRelay.pull(url) else {
+                answer(["error": "live reload URL, a pull request's page loaded again by the person, test runs only"]); return
+            }
+            live.pageShown(url, space: browser.spaceID, person: true)
+            live.touch(url, space: browser.spaceID, cause: .landed)
         case "seen":
             guard args.count == 2, let url = URL(string: args[1]) else { answer(["error": "live seen URL"]); return }
             live.landed(url, space: browser.spaceID)
