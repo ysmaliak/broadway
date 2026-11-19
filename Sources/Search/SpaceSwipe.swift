@@ -27,7 +27,14 @@ final class SpaceSwipe {
     private var trail: [(time: CFTimeInterval, travel: CGFloat)] = []
     private var stamp: CFTimeInterval?
     private var finish: (() -> Void)?
-    private var heading: Int?
+    private var heading: Int? {
+        didSet {
+            if let headed, headed !== browser { headed.spaceNeighbour.heading = nil }
+            headed = browser
+            if browser?.spaceNeighbour.heading != heading { browser?.spaceNeighbour.heading = heading }
+        }
+    }
+    private weak var headed: Browser?
     var held = false
 
     func target(of browser: Browser) -> Int? {

@@ -13,6 +13,7 @@ final class HelmView: NSView {
     private weak var tab: Tab?
     private var kicks = Tab.Kicks()
     private var lit: [ObjectIdentifier: Bool] = [:]
+    private var looks: [ObjectIdentifier: Bool] = [:]
     private var queued = false
     private var button: Bool?
 
@@ -69,20 +70,20 @@ final class HelmView: NSView {
                 reload.adopt(loading: now.loading, reloads: now.kicks.reload, stops: now.kicks.stop)
             }
         }
+        let ahead = leading()
+        look(back, on: ahead.back, animated: animated)
+        look(forward, on: ahead.forward, animated: animated)
+        look(reload, on: ahead.reload, animated: animated)
+        let here = keys(for: tab)
+        lit[ObjectIdentifier(back)] = here.back
+        lit[ObjectIdentifier(forward)] = here.forward
+        lit[ObjectIdentifier(reload)] = here.reload
         guard let tab else {
-            set(back, on: false, animated: animated)
-            set(forward, on: false, animated: animated)
-            set(reload, on: false, animated: animated)
             back.held = nil
             forward.held = nil
             reload.allowed = false
             return
         }
-        let backOn = !tab.isBlank && browser.backGoes(tab)
-        let forwardOn = !tab.isBlank && tab.canGoForward
-        set(back, on: backOn, animated: animated)
-        set(forward, on: forwardOn, animated: animated)
-        set(reload, on: tab.isWeb, animated: false)
         back.held = { [weak tab] in tab.flatMap { Rewind.menu($0, back: true) } }
         forward.held = { [weak tab] in tab.flatMap { Rewind.menu($0, back: false) } }
         reload.allowed = tab.isWeb
@@ -92,12 +93,30 @@ final class HelmView: NSView {
         kicks = tab.kicks
     }
 
-    private func set(_ door: NSView, on: Bool, animated: Bool) {
+    private func keys(for tab: Tab?, in row: Parked? = nil) -> (back: Bool, forward: Bool, reload: Bool) {
+        guard let tab else { return (false, false, false) }
+        return (!tab.isBlank && browser.backGoes(tab, in: row), !tab.isBlank && tab.canGoForward, tab.isWeb)
+    }
+
+    private func leading() -> (back: Bool, forward: Bool, reload: Bool) {
+        browser.spaceNeighbour.watch()
+        let at = browser.spaceAt
+        let ahead = browser.spaceNeighbour.heading ?? browser.spaceSeen
+        guard ahead != at, !browser.stacked else { return keys(for: tab) }
+        guard browser.spaces.indices.contains(ahead) else { return (false, false, false) }
+        let id = browser.spaces[ahead].id
+        if id == browser.spaceID { return keys(for: browser.active) }
+        guard let row = browser.parked[id] else { return keys(for: tab) }
+        return keys(for: row.active.flatMap { active in row.tabs.first { $0.id == active } }, in: row)
+    }
+
+    private func look(_ door: NSView, on: Bool, animated: Bool) {
         let key = ObjectIdentifier(door)
-        guard lit[key] != on else { return }
-        lit[key] = on
-        door.alphaValue = on ? 1 : 0.3
+        guard looks[key] != on else { return }
+        looks[key] = on
+        if Store.testing { HelmTrace.note(door, on: on, animated: animated) }
         door.layer?.kitAnimate("opacity", to: Swift.Float(on ? 1 : 0.3), curve: animated ? Motion.kitQuick : .none, key: "lit")
+        door.alphaValue = on ? 1 : 0.3
     }
 
     private func nudge(_ door: DoorView, by reach: CGFloat) {

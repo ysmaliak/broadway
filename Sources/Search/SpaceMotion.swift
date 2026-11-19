@@ -251,6 +251,7 @@ final class SpaceNeighbour {
     }
     @ObservationIgnored var onTurn: (() -> Void)?
     private(set) var revision = 0
+    var heading: Int?
 
     func watch() { _ = revision }
 }

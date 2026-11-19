@@ -24,9 +24,11 @@ enum BackLeave {
 
 @MainActor
 extension Browser {
-    func backSource(for tab: Tab) -> Tab? {
+    func backSource(for tab: Tab, in row: Parked? = nil) -> Tab? {
         let named = [tab.linkedFrom, tab.opener].compactMap { $0 }.filter { $0 != tab.id }
-        let source = named.lazy.compactMap { id in self.tabs.first { $0.id == id } }.first
+        let tabs = row?.tabs ?? self.tabs
+        let source = named.lazy.compactMap { id in tabs.first { $0.id == id } }.first
+        let split = row.map { row in prefs.splitView && row.splits.contains { $0.contains(tab.id) } } ?? (split(for: tab) != nil)
         let facts = BackLeaveCase(
             ownBack: tab.canGoBack,
             stuck: tab.isStuck,
@@ -35,7 +37,7 @@ extension Browser {
             sourceOpen: source != nil,
             sourceAgent: source.map { $0.agent || $0.bench } ?? false,
             pinned: tab.pin != nil,
-            split: split(for: tab) != nil,
+            split: split,
             agent: tab.agent || tab.bench,
             privateTab: !tab.store.isPersistent,
             privateSource: source.map { !$0.store.isPersistent } ?? false
@@ -43,9 +45,9 @@ extension Browser {
         return BackLeave.leaves(facts) ? source : nil
     }
 
-    func backGoes(_ tab: Tab?) -> Bool {
+    func backGoes(_ tab: Tab?, in row: Parked? = nil) -> Bool {
         guard let tab else { return false }
-        return tab.canGoBack || backSource(for: tab) != nil
+        return tab.canGoBack || backSource(for: tab, in: row) != nil
     }
 
     @discardableResult
