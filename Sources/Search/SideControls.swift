@@ -28,10 +28,24 @@ final class CloseMarkView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override var intrinsicContentSize: NSSize { NSSize(width: side, height: side) }
 
-    private var glyph: CGFloat { min(13.5, max(9, side * 0.44)) }
+    private static func glyph(_ side: CGFloat) -> CGFloat { min(13.5, max(9, side * 0.44)) }
+
+    static func style(side: CGFloat) -> KitSymbol.Style {
+        KitSymbol.Style(size: glyph(side), weight: side >= 24 ? IconLook.weight : IconLook.control)
+    }
+
+    private static var inks: [CGFloat: CGFloat] = [:]
+
+    static func ink(side: CGFloat) -> CGFloat {
+        if let known = inks[side] { return known }
+        let style = style(side: side)
+        let width = KitGlyph.image("xmark", style).map { KitGlyph.ink(of: $0).width } ?? style.size
+        inks[side] = width
+        return width
+    }
 
     private func restyle() {
-        mark.style = face ?? KitSymbol.Style(size: glyph, weight: side >= 24 ? IconLook.weight : IconLook.control)
+        mark.style = face ?? Self.style(side: side)
         ground.radius = Metrics.closeCorner(side)
         invalidateIntrinsicContentSize()
         needsLayout = true
@@ -91,6 +105,7 @@ class CloseSpotView: NSView {
         set { mark.face = newValue }
     }
     var act: () -> Void = {}
+    var ready: () -> Bool = { true }
     var onHover: ((Bool) -> Void)?
 
     let mark = CloseMarkView()
@@ -168,7 +183,7 @@ class CloseSpotView: NSView {
         return super.hitTest(point)
     }
 
-    override func mouseDown(with event: NSEvent) { pressing = true }
+    override func mouseDown(with event: NSEvent) { pressing = ready() }
 
     override func mouseDragged(with event: NSEvent) {
         mark.pressed = pressing && bounds.contains(convert(event.locationInWindow, from: nil))

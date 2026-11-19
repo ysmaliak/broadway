@@ -288,7 +288,7 @@ final class PullSignsTests {
         for mark in marks {
             let row = try #require(rows.first { mark.isDescendant(of: $0) })
             let frame = mark.convert(mark.bounds, to: row)
-            #expect(frame.maxX < row.bounds.maxX - Metrics.closeSquare(row.bounds.height))
+            #expect(abs(frame.maxX - TalkPlace.crossRight(width: row.bounds.width, height: row.bounds.height)) <= 0.5)
             #expect(abs(frame.midY - row.bounds.midY) <= 1)
         }
         window.close()

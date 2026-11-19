@@ -53,6 +53,7 @@ final class RowTitleView: NSView {
     private let mask = CAGradientLayer()
     private var fadeAnimated = false
     private var fadeSettles = false
+    private var fadeWait: CFTimeInterval = 0
     private var fades = false
 
     override init(frame: NSRect) {
@@ -81,11 +82,12 @@ final class RowTitleView: NSView {
 
     var natural: CGFloat { ceil(title.measure(width: .greatestFiniteMagnitude).width) }
 
-    func keep(_ room: CGFloat, sweeps: Bool) {
+    func keep(_ room: CGFloat, sweeps: Bool, after wait: CFTimeInterval = 0) {
         guard room != reserve else { return }
         reserve = room
         fadeAnimated = sweeps
         fadeSettles = !sweeps
+        fadeWait = sweeps ? wait : 0
         needsLayout = true
     }
 
@@ -169,7 +171,11 @@ final class RowTitleView: NSView {
         mask.frame = bounds
         CATransaction.commit()
         if animate {
-            mask.kitAnimate("locations", to: locations, curve: Motion.kitQuick)
+            if fadeWait > 0 {
+                RowSweep.run(mask, "locations", to: locations, after: fadeWait)
+            } else {
+                mask.kitAnimate("locations", to: locations, curve: Motion.kitQuick)
+            }
         } else {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
@@ -180,6 +186,7 @@ final class RowTitleView: NSView {
         fades = wanted
         fadeAnimated = false
         fadeSettles = false
+        fadeWait = 0
     }
 }
 
@@ -191,6 +198,7 @@ final class BylineView: NSView {
     var item: LiveItem? { didSet { if item != oldValue { rebuild() } } }
     var stateTint: NSColor? { didSet { if stateTint != oldValue { tinted() } } }
     var reserve: CGFloat = 0 { didSet { if reserve != oldValue { needsLayout = true } } }
+    private var sweepWait: CFTimeInterval?
     private var was: (text: String, color: NSColor, opacity: Double)?
     private var wasDot = ""
     private(set) var arrivals = 0
@@ -355,7 +363,20 @@ final class BylineView: NSView {
         let fades = natural > end + 0.5 && room > 0
         let start = fades ? max(0, (end - TitleFadeWidth.width) / room) : 1
         fade.frame = bounds
-        fade.locations = [0, NSNumber(value: Double(start)), NSNumber(value: Double(fades ? end / max(1, room) : 1))]
+        let locations: [NSNumber] = [0, NSNumber(value: Double(start)), NSNumber(value: Double(fades ? end / max(1, room) : 1))]
+        if let wait = sweepWait, Motion.kitQuick.animates, fade.locations != locations {
+            RowSweep.run(fade, "locations", to: locations, after: wait)
+        } else if sweepWait != nil || fade.locations != locations {
+            fade.removeAnimation(forKey: "locations")
+            fade.locations = locations
+        }
+        sweepWait = nil
+    }
+
+    func keep(_ room: CGFloat, sweeps: Bool, after wait: CFTimeInterval) {
+        guard room != reserve else { return }
+        sweepWait = sweeps ? wait : nil
+        reserve = room
     }
 }
 
@@ -363,6 +384,7 @@ final class RowCloseZone: NSView {
     var armed = false
     var takes = false
     var act: () -> Void = {}
+    var ready: () -> Bool = { true }
     private var down = false
 
     override var isFlipped: Bool { true }
@@ -382,7 +404,7 @@ final class RowCloseZone: NSView {
 
     override func mouseDown(with event: NSEvent) {
         handed = modified(event)
-        if handed { superview?.mouseDown(with: event) } else { down = true }
+        if handed { superview?.mouseDown(with: event) } else { down = ready() }
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -462,6 +484,9 @@ final class TabRowView: KitHoverView {
     private var pressedAt: CFTimeInterval = 0
     private var hoverLeaving = false
     private var benchShown = false
+    private var talkSlide: CFTimeInterval?
+    private var closeReadyAt: CFTimeInterval = 0
+    static var clock: () -> CFTimeInterval = CACurrentMediaTime
     private var join: MergedJoin?
     private var joined: ObjectIdentifier?
     private(set) var mergedForm: MergedForm?
@@ -506,7 +531,9 @@ final class TabRowView: KitHoverView {
         ring.isHidden = true
         unseenDot.isHidden = true
         closeZone.act = { [weak self] in self?.closeTapped() }
+        closeZone.ready = { [weak self] in self?.closeReady ?? false }
         closeSpot.act = { [weak self] in self?.pointerClose() }
+        closeSpot.ready = { [weak self] in self?.closeReady ?? false }
         speakerSpot.act = { [weak self] in self?.tab?.toggleMute() }
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
@@ -800,18 +827,31 @@ final class TabRowView: KitHoverView {
         guard let tab, let count = tab.liveItem?.unanswered, count > 0 else { return 0 }
         return !state.editing && !status && !peeking && state.number == nil ? count : 0
     }
-    private static let talkGap: CGFloat = 3
-    private var talkRoom: CGFloat { talk.map { ceil($0.intrinsicContentSize.width) + Self.talkGap } ?? 0 }
+    private var talkWidth: CGFloat { talk.map { ceil($0.intrinsicContentSize.width) } ?? 0 }
+    private var talkRoom: CGFloat { talk == nil ? 0 : talkWidth + TalkPlace.gap }
+    private var talkAside: Bool { unseen || (isHovering && !state.editing) }
     private var closeFromEnd: CGFloat? {
         let close = Metrics.closeSquare(state.height) + Metrics.closeInset(state.height)
+        if talk != nil, !talkAside { return TalkPlace.fromEnd(height: state.height, talk: talkWidth, aside: false) }
         if ((isHovering && state.interactive) || unseen) && !state.editing { return close + talkRoom }
         return talk == nil ? nil : close + talkRoom
     }
+
+    private var closeReady: Bool { !closeSpot.isHidden && Self.clock() >= closeReadyAt }
+
+    private var talkWaits: Bool {
+        guard let tab, talk != nil, let end, end.tab == ObjectIdentifier(tab), end.talk, !end.aside else { return false }
+        return window != nil && !pooled && Motion.kitQuick.animates
+    }
+
+    private static let sliding = "slide"
+    private static let revealing = "reveal"
 
     private struct RowEnd: Equatable {
         var tab: ObjectIdentifier
         var dot: Bool
         var talk: Bool
+        var aside: Bool
         var hovering: Bool
         var title: NSRect
     }
@@ -822,19 +862,30 @@ final class TabRowView: KitHoverView {
     private func settleEnd(for tab: Tab, room: CGFloat?) {
         let dot = room != nil && !isHovering && unseen
         let before = end
+        talkSlide = nil
         guard let room else {
             end = nil
             leave(unseenDot)
             return
         }
-        let now = RowEnd(tab: ObjectIdentifier(tab), dot: dot, talk: talk != nil, hovering: isHovering, title: title.frame)
+        let now = RowEnd(tab: ObjectIdentifier(tab), dot: dot, talk: talk != nil, aside: talkAside, hovering: isHovering, title: title.frame)
         end = now
         let same = before?.tab == now.tab && window != nil && !pooled
+        if !same { talk?.layer?.removeAnimation(forKey: Self.sliding) }
         let still = same && before?.title == now.title
         var comers: [NSView] = []
         if dot, before?.dot != true { comers.append(unseenDot) }
         if let talk, before?.talk != true { comers.append(talk) }
         if !dot { leave(unseenDot) }
+        if same, before?.talk == true, now.talk, before?.aside != now.aside {
+            let sweeps = Motion.kitQuick.animates
+            let wait = !now.aside && before?.hovering == true ? RowSweep.back : 0
+            if sweeps { talkSlide = wait }
+            title.keep(room, sweeps: sweeps, after: wait)
+            if sweeps { title.sweepFade() } else { title.settleFade() }
+            for view in comers { arrive(view, after: RowSweep.wait, fading: true) }
+            return
+        }
         let marked = dot || now.talk
         let stays = marked && comers.count < (dot ? 1 : 0) + (now.talk ? 1 : 0)
         let swapped = comers == [unseenDot] && before?.hovering == true && room == title.reserve
@@ -1074,7 +1125,14 @@ final class TabRowView: KitHoverView {
         closeZone.takes = state.interactive
         let closes = hovering && !editing
         if closeSpot.isHidden == closes {
-            closeSpot.layer?.kitTransition(Motion.kitQuick)
+            let waits = closes && talkWaits
+            closeReadyAt = Self.clock() + (waits ? RowSweep.wait : 0)
+            closeSpot.layer?.removeAnimation(forKey: Self.revealing)
+            if waits, let fade = Motion.kitQuick.animation("opacity", from: 0, to: 1) {
+                closeSpot.layer?.add(RowSweep.held(fade, after: RowSweep.wait), forKey: Self.revealing)
+            } else {
+                closeSpot.layer?.kitTransition(Motion.kitQuick)
+            }
             closeSpot.isHidden = !closes
             if closes { closeSpot.settle() }
         }
@@ -1164,8 +1222,12 @@ final class TabRowView: KitHoverView {
                 "x": x, "room": room, "natural": Double(title.natural), "titled": !title.isHidden,
                 "shown": places(fade.shown), "model": places(fade.model),
                 "dot": seen(unseenDot), "dotTurning": turning(unseenDot), "dotX": Double(unseenDot.frame.minX),
-                "talk": seen(talk), "talkX": Double(talk?.frame.minX ?? 0),
-                "cross": seen(closeSpot), "crossTurning": turning(closeSpot)]
+                "talk": seen(talk), "talkX": Double(talk?.frame.minX ?? 0), "talkRight": Double(talk?.frame.maxX ?? 0),
+                "talkShownX": Double(talk.map { ($0.layer?.presentation() ?? $0.layer)?.frame.minX ?? $0.frame.minX } ?? 0),
+                "talkAside": talkAside, "talkSliding": talk?.layer?.animation(forKey: Self.sliding) != nil,
+                "crossRight": Double(TalkPlace.crossRight(width: bounds.width, height: state.height)),
+                "crossLeft": Double(TalkPlace.crossRight(width: bounds.width, height: state.height) - CloseMarkView.ink(side: Metrics.closeSquare(state.height))),
+                "cross": seen(closeSpot), "crossTurning": turning(closeSpot) || closeSpot.layer?.animation(forKey: Self.revealing) != nil]
     }
 
     func noteBench() {
@@ -1254,7 +1316,7 @@ final class TabRowView: KitHoverView {
             settleEnd(for: tab, room: RowTitleFade.reserve(closeFromEnd: closeFromEnd, toEnd: titleToEnd))
             if !byline.isHidden {
                 byline.kitSetFrame(NSRect(x: cursor, y: top + lineHeight, width: titleWidth, height: bylineHeight))
-                byline.reserve = title.reserve
+                byline.keep(title.reserve, sweeps: talkSlide != nil, after: talkSlide ?? 0)
             }
         }
 
@@ -1264,14 +1326,34 @@ final class TabRowView: KitHoverView {
         unseenDot.kitSetFrame(NSRect(x: width - inset - square + (square - 7) / 2, y: (height - 7) / 2, width: 7, height: 7))
         if let talk {
             let size = talk.intrinsicContentSize
-            talk.kitSetFrame(NSRect(x: width - inset - square - Self.talkGap - ceil(size.width), y: ((height - size.height) / 2).rounded(),
-                                    width: ceil(size.width), height: size.height))
+            let wide = ceil(size.width)
+            slide(talk, to: NSRect(x: TalkPlace.x(width: width, height: height, talk: wide, aside: talkAside),
+                                   y: ((height - size.height) / 2).rounded(), width: wide, height: size.height))
         }
+        talkSlide = nil
         if let callLeft {
             let size = callLeft.fittingSize
             callLeft.kitSetFrame(NSRect(x: width - 7 - size.width, y: (height - size.height) / 2, width: size.width, height: size.height))
         }
         _ = tab
+    }
+
+    private func slide(_ talk: TalkMarkView, to next: NSRect) {
+        let old = talk.frame.minX
+        guard let layer = talk.layer else {
+            talk.kitSetFrame(next)
+            return
+        }
+        let shown = layer.animation(forKey: Self.sliding) == nil ? 0 : (layer.presentation().map { $0.frame.minX - layer.frame.minX } ?? 0)
+        talk.kitSetFrame(next)
+        let moved = talk.frame.minX - old
+        guard moved != 0 else { return }
+        guard let wait = talkSlide, let move = Motion.kitQuick.animation("transform.translation.x", from: shown - moved, to: 0) as? CAPropertyAnimation else {
+            layer.removeAnimation(forKey: Self.sliding)
+            return
+        }
+        move.isAdditive = true
+        layer.add(RowSweep.held(move, after: wait), forKey: Self.sliding)
     }
 
     private func settleSpeaker(for tab: Tab) {
@@ -1432,6 +1514,57 @@ final class TabRowView: KitHoverView {
         guard let tab, let browser else { return false }
         browser.select(tab)
         return true
+    }
+}
+
+@MainActor
+enum RowSweep {
+    static let wait: CFTimeInterval = 0.06
+    static let back: CFTimeInterval = 0.09
+
+    static func run(_ layer: CALayer, _ keyPath: String, to value: Any, after wait: CFTimeInterval) {
+        let from = layer.animation(forKey: keyPath) == nil ? layer.value(forKeyPath: keyPath)
+            : (layer.presentation()?.value(forKeyPath: keyPath) ?? layer.value(forKeyPath: keyPath))
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.setValue(value, forKeyPath: keyPath)
+        if let move = Motion.kitQuick.animation(keyPath, from: from, to: value) {
+            layer.add(held(move, after: wait), forKey: keyPath)
+        } else {
+            layer.removeAnimation(forKey: keyPath)
+        }
+        CATransaction.commit()
+    }
+
+    static func held(_ animation: CAAnimation, after wait: CFTimeInterval) -> CAAnimation {
+        guard wait > 0 else { return animation }
+        animation.beginTime = wait
+        animation.fillMode = .backwards
+        let group = CAAnimationGroup()
+        group.animations = [animation]
+        group.duration = wait + animation.duration
+        return group
+    }
+}
+
+@MainActor
+enum TalkPlace {
+    static let gap: CGFloat = 3
+
+    static func x(width: CGFloat, height: CGFloat, talk: CGFloat, aside: Bool) -> CGFloat {
+        let square = Metrics.closeSquare(height)
+        let inset = Metrics.closeInset(height)
+        return aside ? width - inset - square - gap - talk : crossRight(width: width, height: height) - talk
+    }
+
+    static func fromEnd(height: CGFloat, talk: CGFloat, aside: Bool) -> CGFloat {
+        -x(width: 0, height: height, talk: talk, aside: aside)
+    }
+
+    static func crossRight(width: CGFloat, height: CGFloat) -> CGFloat {
+        let square = Metrics.closeSquare(height)
+        let inset = Metrics.closeInset(height)
+        return width - inset - square / 2 + CloseMarkView.ink(side: square) / 2
     }
 }
 

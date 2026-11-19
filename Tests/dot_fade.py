@@ -12,7 +12,10 @@ is shown and as it will rest.
 
 The rule, per frame and per row: while the dot (or the count beside it)
 shows at any strength, the fade is where it rests, and the title's ink ends
-before the mark. A hover on a row with no dot is the control: its fade must
+before the mark. The one move allowed is the count's own: with no dot it
+sits at the row's end and slides aside for the cross on hover, or for a dot
+that comes, and the fade sweeps with it, so the ink is held to where the
+count is shown in that frame. A hover on a row with no dot is the control: its fade must
 be seen sweeping, as it always has.
 
 With `film`, each case is also filmed from the test copy's own window by its
@@ -124,7 +127,7 @@ def judge(samples, ids=None):
     while a mark shows. `moved`: frames in which the fade was between places
     at all, mark or no mark. `lit`: rows whose mark is at full strength in
     the last frame."""
-    found = {"frames": 0, "marked": 0, "under": 0, "sweeping": 0, "moved": 0, "worst": 0.0, "first": [], "lit": 0}
+    found = {"frames": 0, "marked": 0, "under": 0, "sweeping": 0, "moved": 0, "slid": 0, "worst": 0.0, "first": [], "lit": 0}
     for r in samples[-1]["rows"] if samples else []:
         if (ids is None or r["id"] in ids) and r["seen"] and (r["dot"] > 0.99 or r["talk"] > 0.99):
             found["lit"] += 1
@@ -145,7 +148,10 @@ def judge(samples, ids=None):
             if not (dot or talk):
                 continue
             found["marked"] += 1
-            limit = r["talkX"] - 2 if talk else r["width"] - REST["fromEnd"]
+            sliding = talk and r.get("talkSliding", False)
+            if sliding:
+                found["slid"] += 1
+            limit = r.get("talkShownX", r["talkX"]) - 2 if talk else r["width"] - REST["fromEnd"]
             over = min(ink, r["shown"][1]) - limit
             full = min(ink, r["shown"][0]) - (limit - (28 if ink > limit + 0.5 else 0))
             bad = None
@@ -153,7 +159,7 @@ def judge(samples, ids=None):
                 found["under"] += 1
                 found["worst"] = max(found["worst"], round(max(over, full), 1))
                 bad = "under"
-            elif reaches and apart > 0.5:
+            elif reaches and apart > 0.5 and not sliding:
                 found["sweeping"] += 1
                 bad = "sweeping"
             if bad and len(found["first"]) < 6:
@@ -240,7 +246,7 @@ def sheet(name, folder, samples, ids, span=0.4, columns=6):
 BRIEF = {"tab-rename-begins"}
 ARRIVES = {"tab-arrive", "tab-command-let-go", "tab-loading", "tab-fits-arrive", "tab-short-arrive",
            "tab-arrive-under-a-passing-pointer", "tab-rename-ends", "live-arrive", "live-count-arrives",
-           "live-count-beside-a-dot", "live-dot-beside-a-count", "calm-arrive"}
+           "live-count-beside-a-dot", "live-dot-beside-a-count", "live-dot-beside-a-resting-count", "calm-arrive"}
 
 
 def unread(id):
@@ -381,6 +387,18 @@ def main():
         case("live-clear-by-landing", lambda: pr.live("seen", "https://github.com/acme/rocket/pull/512/files"), ids)
         case("live-clear-by-select", lambda: sv.sp("select", id=pulls[37]), ids, seconds=1.2,
              after=lambda: sv.sp("select", id=opened["front"]))
+        time.sleep(0.6)
+        lone = row(pulls[37])
+        t.ok("a count with no dot to hover: the row shows the count and no dot", lone and lone["talk"] > 0.99 and lone["dot"] == 0,
+             lone and {k: lone[k] for k in ("talk", "dot")})
+        count_in = case("live-count-hover-in", lambda: hover(pulls[37], True), [pulls[37]])
+        count_out = case("live-count-hover-out", lambda: hover(pulls[37], False), [pulls[37]])
+        if count_in and count_out:
+            t.ok("a count with no dot slides aside on hover and back when the pointer leaves, its fade with it",
+                 count_in["slid"] >= 3 and count_out["slid"] >= 3, (count_in, count_out))
+        beside = case("live-dot-beside-a-resting-count", comment(37, hour=15), [pulls[37]], seconds=1.2)
+        if beside:
+            t.ok("a dot that comes beside a resting count moves the count aside first, its fade with it", beside["slid"] >= 3, beside)
         subprocess.run(["defaults", "write", sv.SUITE, "motion.testReduced", "-bool", "true"], check=True)
         time.sleep(1.5)
         calm = [case("calm-hover-in", lambda: hover(opened["front"], True), None),
