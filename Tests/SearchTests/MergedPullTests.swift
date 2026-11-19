@@ -16,10 +16,12 @@ final class MergedPullTests {
         browser.leaveFiles()
         browser.prefs.usesTabGroups = true
         browser.prefs.liveFolders = true
+        MergedCrowd.forget()
         for folder in LiveFolders.shared.folders { LiveFolders.shared.remove(folder.id) }
     }
 
     private func tearDown() async {
+        MergedCrowd.forget()
         LiveFolders.shared.mergedHold = LiveFolders.hold
         for folder in LiveFolders.shared.folders { LiveFolders.shared.remove(folder.id) }
         browser.prefs.liveFolders = false
@@ -133,7 +135,7 @@ final class MergedPullTests {
     }
 
     @Test func theMergedBadgeIsTheDoneCheckInGitHubsPurple() throws {
-        let made = prs([pull(1, checks: nil)])
+        let made = prs([pull(2)])
         let window = NSWindow(contentRect: NSRect(x: -20_000, y: -20_000, width: 258, height: 600), styleMask: .borderless,
                               backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
@@ -146,7 +148,7 @@ final class MergedPullTests {
             window.close()
         }
 
-        LiveFolders.shared.pageMerged(URL(string: pull(1).key)!, space: browser.spaceID)
+        LiveFolders.shared.apply(.items([pull(1, label: "Merged", checks: nil), pull(2)], nil), to: made.id)
         browser.syncLive()
         column.layoutSubtreeIfNeeded()
 
@@ -160,7 +162,7 @@ final class MergedPullTests {
         #expect(ChecksTint.primer(.failing, dark: true, merged: true) == "A371F7")
     }
 
-    @Test func theCelebrationPlaysOnceInTheRowWhenItTurnsMergedOnScreen() throws {
+    @Test func theJoinPlaysOnceInTheRowWhenItTurnsMergedOnScreen() throws {
         let made = prs([pull(1), pull(2)])
         let (column, window) = shown(made)
         defer {
@@ -174,12 +176,14 @@ final class MergedPullTests {
         browser.syncLive()
         column.layoutSubtreeIfNeeded()
 
-        #expect(shownRow.cheers == 1)
-        #expect(shownRow.kitSubviews(of: ChecksMarkView.self).first?.cheerLayers == 7)
-        #expect(try #require(row(2, in: column)).cheers == 0)
+        #expect(shownRow.plays == 1)
+        #expect(shownRow.mergedForm == .full)
+        #expect(shownRow.mergedLayers == 4)
+        #expect(shownRow.kitSubviews(of: ChecksMarkView.self).first?.isHidden == true)
+        #expect(try #require(row(2, in: column)).plays == 0)
     }
 
-    @Test func noCelebrationPlaysUnderReduceMotionButTheBadgeAndWordChange() throws {
+    @Test func nothingPlaysUnderReduceMotionButTheSignAndTheWordChange() throws {
         keepSettings("motion.testReduced")
         Store.settings.set(true, forKey: "motion.testReduced")
         let made = prs([pull(1)])
@@ -192,12 +196,14 @@ final class MergedPullTests {
         merge(1, column: column)
 
         let shownRow = try #require(row(1, in: column))
-        #expect(shownRow.cheers == 0)
+        #expect(shownRow.plays == 0)
+        #expect(shownRow.mergedForm == .still)
+        #expect(shownRow.mergedMoving == 0)
         #expect(shownRow.kitSubviews(of: ChecksMarkView.self).first?.merged == true)
         #expect(item(made, 1)?.label == "Merged")
     }
 
-    @Test func noCelebrationPlaysWhileTheWindowIsOffScreen() throws {
+    @Test func nothingPlaysWhileTheWindowIsOffScreen() throws {
         let made = prs([pull(1)])
         let (column, window) = shown(made, onScreen: false)
         defer {
@@ -207,8 +213,9 @@ final class MergedPullTests {
 
         merge(1, column: column)
 
-        #expect(try #require(row(1, in: column)).cheers == 0)
-        #expect(tab(made, 1)?.cheer == false)
+        #expect(try #require(row(1, in: column)).plays == 0)
+        #expect(try #require(row(1, in: column)).mergedForm == .still)
+        #expect(tab(made, 1)?.leads == false)
     }
 
     @Test func theRowLeavesAfterTheHoldAndDoesNotComeBackOnTheNextRead() async throws {
@@ -378,7 +385,7 @@ final class MergedPullTests {
         #expect(item(two, 1) == nil)
     }
 
-    @Test func aRowFoundMergedByAReadCelebratesToo() throws {
+    @Test func aRowFoundMergedByAReadPlaysTheJoinToo() throws {
         let made = prs([pull(1), pull(2)])
         let (column, window) = shown(made)
         defer {
@@ -391,6 +398,7 @@ final class MergedPullTests {
         browser.syncLive()
         column.layoutSubtreeIfNeeded()
 
-        #expect(shownRow.cheers == 1)
+        #expect(shownRow.plays == 1)
+        #expect(shownRow.mergedForm == .full)
     }
 }

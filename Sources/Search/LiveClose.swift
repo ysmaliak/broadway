@@ -71,7 +71,7 @@ extension Browser {
         tab.groupID = nil
         tab.liveKey = nil
         tab.liveItem = nil
-        tab.cheer = false
+        tab.leads = false
         tab.arrives = false
     }
 }

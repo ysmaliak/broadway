@@ -112,8 +112,6 @@ final class ChecksMarkView: NSView {
     private let glyph = CAShapeLayer()
     private(set) var checks: LiveChecks?
     private(set) var merged = false
-    private(set) var cheers = 0
-    private var cheering: [CALayer] = []
     private var glyphColour: NSColor?
     private var haloColour: NSColor?
     var tab: Tab.ID? {
@@ -188,86 +186,6 @@ final class ChecksMarkView: NSView {
         guard let window, let content = window.contentView else { return nil }
         let rect = convert(bounds, to: nil)
         return CGRect(x: rect.minX, y: content.bounds.height - rect.maxY, width: rect.width, height: rect.height)
-    }
-
-    func cheer(_ colour: NSColor) {
-        guard let layer else { return }
-        stopCheer()
-        cheers += 1
-        let box = bounds
-        let centre = CGPoint(x: box.midX, y: box.midY)
-        let scale = window?.backingScaleFactor ?? 2
-        let cg = colour.cgColor
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        for shape in [halo, glyph] {
-            shape.add(KitSpring.settle.animation("transform.scale", from: 0.6, to: 1), forKey: "cheer")
-        }
-        let ring = CAShapeLayer()
-        let across: CGFloat = 14
-        ring.bounds = CGRect(x: 0, y: 0, width: across, height: across)
-        ring.position = centre
-        ring.contentsScale = scale
-        ring.path = CGPath(ellipseIn: ring.bounds.insetBy(dx: 0.75, dy: 0.75), transform: nil)
-        ring.fillColor = nil
-        ring.strokeColor = cg
-        ring.lineWidth = 1.5
-        ring.opacity = 0
-        layer.addSublayer(ring)
-        let start = (box.width + 2 * Self.ring) / across
-        let grow = CABasicAnimation(keyPath: "transform.scale")
-        grow.fromValue = start
-        grow.toValue = 1
-        let fade = CABasicAnimation(keyPath: "opacity")
-        fade.fromValue = 0.5
-        fade.toValue = 0
-        let ringGroup = CAAnimationGroup()
-        ringGroup.animations = [grow, fade]
-        ringGroup.duration = 0.45
-        ringGroup.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        ring.add(ringGroup, forKey: "cheer")
-        cheering.append(ring)
-        for index in 0..<6 {
-            let dot = CALayer()
-            dot.bounds = CGRect(x: 0, y: 0, width: 2, height: 2)
-            dot.cornerRadius = 1
-            dot.backgroundColor = cg
-            dot.position = centre
-            dot.opacity = 0
-            dot.contentsScale = scale
-            layer.addSublayer(dot)
-            let angle = -Double.pi / 2 + Double(index) * Double.pi / 3
-            let travel = 9 + 1.5 * Double(index % 3)
-            let move = CABasicAnimation(keyPath: "position")
-            move.fromValue = NSValue(point: centre)
-            move.toValue = NSValue(point: CGPoint(x: centre.x + travel * cos(angle), y: centre.y + travel * sin(angle)))
-            let out = CABasicAnimation(keyPath: "opacity")
-            out.fromValue = 1
-            out.toValue = 0
-            let group = CAAnimationGroup()
-            group.animations = [move, out]
-            group.duration = 0.5
-            group.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            dot.add(group, forKey: "cheer")
-            cheering.append(dot)
-        }
-        CATransaction.commit()
-        let made = cheering
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) { [weak self] in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                for done in made { done.removeFromSuperlayer() }
-                self.cheering.removeAll { layer in made.contains { $0 === layer } }
-            }
-        }
-    }
-
-    var cheerLayers: Int { cheering.count }
-
-    func stopCheer() {
-        for shape in [halo, glyph] { shape.removeAnimation(forKey: "cheer") }
-        for done in cheering { done.removeFromSuperlayer() }
-        cheering = []
     }
 
     static func path(_ checks: LiveChecks, in box: CGRect) -> CGPath {

@@ -125,10 +125,12 @@ final class MergedStackTests {
         LiveFolders.shared.reader = { _ in .failed }
         LiveFolders.shared.stackStagger = 0
         LiveFolders.shared.settles = 0
+        MergedCrowd.forget()
         for folder in LiveFolders.shared.folders { LiveFolders.shared.remove(folder.id) }
     }
 
     private func tearDown() async {
+        MergedCrowd.forget()
         LiveFolders.shared.mergedHold = LiveFolders.hold
         LiveFolders.shared.stackStagger = LiveFolders.stagger
         LiveFolders.shared.settles = LiveFolders.settles
@@ -204,7 +206,7 @@ final class MergedStackTests {
         #expect(third[61] == "Merged" && third[64] == "Approved")
     }
 
-    @Test func onlyTheRowInFrontCheersAndEveryTurnedRowGetsTheWord() throws {
+    @Test func onlyTheRowInFrontPlaysTheJoinAndEveryTurnedRowGetsTheWord() throws {
         let made = prs([pull(61, position: 1, label: nil)] + rail.dropFirst())
         let window = NSWindow(contentRect: NSRect(x: -20_000, y: -20_000, width: 258, height: 700), styleMask: .borderless,
                               backing: .buffered, defer: false)
@@ -226,7 +228,8 @@ final class MergedStackTests {
         column.layoutSubtreeIfNeeded()
 
         let shown = try rows.map { try #require($0) }
-        #expect(shown.map(\.cheers) == [0, 0, 1, 0])
+        #expect(shown.map(\.plays) == [0, 0, 1, 0])
+        #expect(shown.map(\.mergedForm) == [.quiet, .quiet, .full, nil])
         #expect(shown.map(\.arrivals) == [1, 1, 1, 0])
         #expect(browser.tabs(in: made.id).allSatisfy { !$0.arrives })
     }
@@ -406,7 +409,7 @@ final class MergedStackTests {
         #expect(labels(made)[62] == "Approved")
     }
 
-    @Test func underReduceMotionTheStackTurnsAtOnceWithNoCheer() {
+    @Test func underReduceMotionTheStackTurnsAtOnceAndNoRowLeads() {
         keepSettings("motion.testReduced")
         Store.settings.set(true, forKey: "motion.testReduced")
         LiveFolders.shared.stackStagger = 5
@@ -415,6 +418,6 @@ final class MergedStackTests {
         merge(63)
 
         #expect(labels(made)[61] == "Merged")
-        #expect(browser.tabs(in: made.id).allSatisfy { !$0.cheer && !$0.arrives })
+        #expect(browser.tabs(in: made.id).allSatisfy { !$0.leads && !$0.arrives })
     }
 }

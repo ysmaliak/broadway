@@ -462,6 +462,19 @@ final class TabRowView: KitHoverView {
     private var pressedAt: CFTimeInterval = 0
     private var hoverLeaving = false
     private var benchShown = false
+    private var join: MergedJoin?
+    private var joined: ObjectIdentifier?
+    private(set) var mergedForm: MergedForm?
+    private(set) var plays = 0
+    var mergedLayers: Int { join?.layers.count ?? 0 }
+    var benchLive: Bool? {
+        didSet {
+            guard let benchLive, state.live != benchLive else { return }
+            var made = state
+            made.live = benchLive
+            state = made
+        }
+    }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -516,7 +529,11 @@ final class TabRowView: KitHoverView {
             self.tab = tab
             self.browser = browser
         }
-        self.state = state
+        self.state = benchLive.map { lit in
+            var made = state
+            made.live = lit
+            return made
+        } ?? state
         if changed { refresh() }
         registerBench()
     }
@@ -533,6 +550,7 @@ final class TabRowView: KitHoverView {
 
     func recycle() {
         forget()
+        unjoin()
         StackFoldButton.on(self)?.removeFromSuperview()
         ringTab = nil
         laidSpeaker = nil
@@ -576,15 +594,35 @@ final class TabRowView: KitHoverView {
             if let browser { browser.hoverCards.leave(.tab(tab.id)) }
         }
         benchShown = false
+        benchLive = nil
         tab = nil
         end = nil
-        checks.stopCheer()
         hoverEnded()
         endHover()
     }
 
-    var cheers: Int { checks.cheers }
     var arrivals: Int { byline.arrivals }
+
+    private func unjoin() {
+        guard join != nil else { return }
+        join?.end()
+        join = nil
+        joined = nil
+        mergedForm = nil
+    }
+
+    var mergedTraces: Int {
+        kitSubviews(of: MergedCanvas.self).count + (mark.alphaValue == 1 ? 0 : 1)
+    }
+
+    var mergedMoving: Int {
+        var seen = Set<ObjectIdentifier>()
+        func count(_ layer: CALayer) -> Int {
+            guard seen.insert(ObjectIdentifier(layer)).inserted else { return 0 }
+            return (layer.animationKeys() ?? []).filter { $0.hasPrefix(MergedMotion.key + ".") }.count + (layer.sublayers ?? []).map(count).reduce(0, +)
+        }
+        return ([layer, mark.layer] + kitSubviews(of: MergedCanvas.self).map(\.layer)).compactMap { $0 }.map(count).reduce(0, +)
+    }
 
     private func registerBench() {
         guard Store.testing, let tab, state.interactive, window != nil else { return }
@@ -877,6 +915,15 @@ final class TabRowView: KitHoverView {
             mark.draft = draft
         }
         let merged = tab.liveItem?.label == PullState.merged
+        let turning = merged && showsMark && (tab.liveItem.map { LiveFolders.shared.turning($0.key) } ?? false)
+        if !turning || joined != ObjectIdentifier(tab) { unjoin() }
+        if turning, join == nil {
+            join = MergedJoin()
+            joined = ObjectIdentifier(tab)
+        }
+        var leading = false
+        var arrived = false
+        var sign: NSColor?
         var mergedTint: NSColor?
         if showsMark, let item = tab.liveItem, let made = merged ? .passing : item.checks {
             checks.isHidden = false
@@ -890,9 +937,13 @@ final class TabRowView: KitHoverView {
                                          dark: dark, lift: state.ground.ink.lift)
             checks.show(made, merged: merged, glyph: tint.color, halo: .checks(halo))
             if merged { mergedTint = tint.color }
-            if tab.cheer, merged, LiveFolders.shared.turning(item.key), window != nil, !Motion.reduced {
-                tab.cheer = false
-                checks.cheer(tint.color)
+            if tab.leads, merged, LiveFolders.shared.turning(item.key), window != nil, !Motion.reduced {
+                tab.leads = false
+                leading = true
+            }
+            if join != nil {
+                sign = tint.color
+                checks.isHidden = true
             }
         } else {
             checks.isHidden = true
@@ -953,6 +1004,7 @@ final class TabRowView: KitHoverView {
         if tab.arrives, merged {
             tab.arrives = false
             if arriving, !byline.isHidden { byline.arrive() }
+            arrived = arriving
         }
 
         if editing {
@@ -1038,6 +1090,17 @@ final class TabRowView: KitHoverView {
         setAccessibilityIdentifier(nil)
         toolTip = state.hoverCards ? nil : tab.label
         place()
+        if let join, let sign {
+            if mergedForm == nil {
+                let form: MergedForm = Motion.reduced || window == nil ? .still
+                    : leading && MergedCrowd.first() ? .full : leading || arrived ? .quiet : .still
+                mergedForm = form
+                if form == .full { plays += 1 }
+                join.wear(on: mark, in: content, tint: sign, scale: window?.backingScaleFactor ?? 2, form: form)
+            } else {
+                join.fit(tint: sign)
+            }
+        }
         if Store.testing, state.interactive, let frame = benchFrame() { Bench.rowFrames[tab.id] = frame }
     }
 

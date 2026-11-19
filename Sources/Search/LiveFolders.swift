@@ -1902,7 +1902,7 @@ extension Browser {
                 for tab in tabs where tab.groupID == group.id {
                     tab.liveKey = nil
                     tab.liveItem = nil
-                    tab.cheer = false
+                    tab.leads = false
                     tab.arrives = false
                 }
                 changed = true
@@ -1957,7 +1957,7 @@ extension Browser {
                     if tab.liveItem != item {
                         if item.label == PullState.merged, tab.liveItem?.label != PullState.merged, live.turning(item.key),
                            !Motion.reduced, windowSeen {
-                            tab.cheer = live.leads(item.key)
+                            tab.leads = live.leads(item.key)
                             tab.arrives = true
                         }
                         tab.liveItem = item

@@ -593,7 +593,7 @@ final class Tab: Identifiable {
     @ObservationIgnored var onPullState: ((Tab, URL, PullPageState) -> Void)?
     @ObservationIgnored var onPageActed: ((Tab, URL) -> Void)?
     @ObservationIgnored var onAddress: ((Tab, URL) -> Void)?
-    @ObservationIgnored var cheer = false
+    @ObservationIgnored var leads = false
     @ObservationIgnored var arrives = false
     /// The middle button was let go over a link. The browser opens it in a
     /// tab of its own beside this one, without leaving the page you are on.
