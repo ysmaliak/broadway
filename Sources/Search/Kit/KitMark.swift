@@ -62,6 +62,29 @@ final class RowMarkView: NSView {
     }
 
     private(set) var dress = PinTint.Dress.plain
+    private weak var drawnIcon: NSImage?
+    private var drewNothing = true
+    private var settling = false
+
+    func settle() {
+        settling = true
+        needsDisplay = true
+    }
+
+    var benchPicture: [String: Any] {
+        let shown = picture.presentation()
+        let place = (shown ?? picture).frame
+        let inside = place.intersection(bounds)
+        return ["icon": icon != nil, "contents": picture.contents != nil, "pictureHidden": picture.isHidden,
+                "fresh": icon == nil ? true : !drewNothing && drawnIcon === icon,
+                "fading": [tile, plate, rim, picture, monogram].flatMap { $0.animationKeys() ?? [] },
+                "placed": !inside.isNull && inside.width >= size * 0.5 && inside.height >= size * 0.5,
+                "frame": [place.minX, place.minY, place.width, place.height].map { Double($0) },
+                "bounds": [bounds.width, bounds.height].map { Double($0) },
+                "dress": "\(dress)",
+                "rendered": shown != nil, "shownContents": shown?.contents != nil, "shownHidden": shown?.isHidden ?? true,
+                "monogram": !monogram.isHidden]
+    }
 
     override func layout() {
         super.layout()
@@ -69,11 +92,21 @@ final class RowMarkView: NSView {
     }
 
     override func updateLayer() {
+        let still = settling
+        settling = false
+        if still {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            for part in [tile, plate, rim, picture, monogram] { part.removeAllAnimations() }
+        }
+        defer { if still { CATransaction.commit() } }
         let dark = kitDark
         let scale = window?.backingScaleFactor ?? 2
         let box = CGRect(x: (bounds.width - size) / 2, y: (bounds.height - size) / 2, width: size, height: size)
         layer?.opacity = Swift.Float((dim ? 0.45 : 1) * (draft ? 0.5 : 1))
         let shown = icon != nil
+        drawnIcon = icon
+        drewNothing = false
         tile.frame = box
         tile.cornerRadius = size * PinTint.cornerRatio
         tile.backgroundColor = tiled && !shown ? KitTone.ink.opacity(0.06).resolved(ink, dark: dark).cgColor : nil

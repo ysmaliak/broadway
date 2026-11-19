@@ -4565,6 +4565,7 @@ final class Bench {
             if Store.testing, let ask = request["peektrace"] as? [String: Any] { return PeekTrace.run(ask, browser: browser, answer) }
             if Store.testing, let ask = request["endtrace"] as? [String: Any] { return EndTrace.run(ask, browser: browser, answer) }
             if Store.testing, let ask = request["helmtrace"] as? [String: Any] { return HelmTrace.run(ask, browser: browser, answer) }
+            if Store.testing, let ask = request["icontrace"] as? [String: Any] { return IconTrace.run(ask, browser: browser, answer) }
             if Store.testing, let on = request["pointerless"] as? Bool { Fold.pointerIgnored = on }
             if Store.testing, let on = request["covered"] as? Bool { ContentView.seenWhenCovered = on }
             answer(["ok": true])

@@ -468,6 +468,7 @@ final class TabRowView: KitHoverView {
     private let speakerSpot = CloseSpotView(swaps: true)
     private let ring = RingView()
     private var ringTab: ObjectIdentifier?
+    private var shownTab: ObjectIdentifier?
     private var laidSpeaker: (tab: ObjectIdentifier, sounding: Bool)?
     private var speakerTurn = 0
     private var speakerLeaving = false
@@ -580,6 +581,7 @@ final class TabRowView: KitHoverView {
         unjoin()
         StackFoldButton.on(self)?.removeFromSuperview()
         ringTab = nil
+        shownTab = nil
         laidSpeaker = nil
         restSpeaker(shown: false)
         host = nil
@@ -934,6 +936,9 @@ final class TabRowView: KitHoverView {
         let hovering = isHovering
         let draft = tab.liveItem?.draft == true
         let editing = state.editing
+        let repointed = shownTab != ObjectIdentifier(tab)
+        shownTab = ObjectIdentifier(tab)
+        if repointed { mark.settle() }
 
         let picked = state.interactive && state.picked
         pickedGround.isHidden = !picked
@@ -1068,7 +1073,13 @@ final class TabRowView: KitHoverView {
 
         if speaker {
             speakerSpot.side = Metrics.closeSquare(height)
-            speakerSpot.symbol = tab.speakerSymbol
+            if repointed {
+                speakerSpot.swaps = false
+                speakerSpot.symbol = tab.speakerSymbol
+                speakerSpot.swaps = true
+            } else {
+                speakerSpot.symbol = tab.speakerSymbol
+            }
             speakerSpot.label = tab.muted ? "Unmute Tab" : "Mute Tab"
             speakerSpot.toolTip = speakerSpot.label
         }
@@ -1193,6 +1204,40 @@ final class TabRowView: KitHoverView {
                 "meant": [meant.redComponent, meant.greenComponent, meant.blueComponent, meant.alphaComponent].map { Double($0) },
                 "shown": shown, "lift": state.ground.ink.lift, "dark": state.ground.dark,
                 "frame": [rect.minX, top, min(rect.width, title.natural), rect.height].map { Double($0) }]
+    }
+
+    var benchIcon: [String: Any]? {
+        guard let tab else { return nil }
+        var shown = 1.0
+        var hidden = false
+        var keys: [String] = []
+        var layer: CALayer? = mark.layer
+        while let at = layer {
+            let seen = at.presentation() ?? at
+            shown *= Double(seen.opacity)
+            if seen.isHidden { hidden = true }
+            keys += at.animationKeys() ?? []
+            layer = at.superlayer
+        }
+        var made = mark.benchPicture
+        made["id"] = Bench.short(tab)
+        made["label"] = tab.label
+        made["known"] = tab.icon != nil
+        made["markHidden"] = mark.isHiddenOrHasHiddenAncestor
+        made["shown"] = shown
+        made["chainHidden"] = hidden
+        made["keys"] = keys
+        made["pooled"] = pooled
+        made["seen"] = benchSeen
+        return made
+    }
+
+    static func iconDrawn(_ read: [String: Any]) -> Bool {
+        guard read["known"] as? Bool == true else { return true }
+        return read["markHidden"] as? Bool == false && read["contents"] as? Bool == true && read["pictureHidden"] as? Bool == false
+            && read["placed"] as? Bool == true && read["fresh"] as? Bool == true && (read["fading"] as? [String])?.isEmpty != false
+            && read["shownContents"] as? Bool == true && read["shownHidden"] as? Bool == false
+            && read["chainHidden"] as? Bool == false && (read["shown"] as? Double ?? 0) > 0.9
     }
 
     var benchEnd: [String: Any]? {

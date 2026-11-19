@@ -82,6 +82,7 @@ final class SpaceMotion: NSObject {
         self.width = width
         show(x)
         CATransaction.flush()
+        if Store.testing { IconTrace.shared.flushed() }
         idle = 0
         run()
     }
