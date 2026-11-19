@@ -34,18 +34,25 @@ struct AgentsAreaTests {
         #expect(height == (AgentsLayout.row + 2 * AgentsLayout.step + AgentsLayout.margin))
     }
 
-    @Test func severalAgentsEachGetAHeadingOverTheirTabs() {
-        let two = [AgentsLayout.Section(rows: 2, headed: AgentsLayout.headed(2)), AgentsLayout.Section(rows: 0, headed: AgentsLayout.headed(2))]
+    @Test func severalAgentsEachGetAHeadingAndKeepTheirOtherTabsFoldedUnderIt() {
+        let two = [AgentsLayout.Section(rows: AgentsLayout.fold(3, headed: AgentsLayout.headed(2)), headed: AgentsLayout.headed(2)),
+                   AgentsLayout.Section(rows: AgentsLayout.fold(0, headed: AgentsLayout.headed(2)), headed: AgentsLayout.headed(2))]
+        var opened = two
+        opened[0].open = true
 
         let content = AgentsLayout.content(two)
 
         #expect(AgentsLayout.headed(2))
-        #expect(content == (4 * AgentsLayout.step))
-        #expect(AgentsLayout.height(two, folded: false, column: 800) == (AgentsLayout.row + 4 * AgentsLayout.step + AgentsLayout.margin))
+        #expect(two.map(\.rows) == [2, 0])
+        #expect(AgentsLayout.fold(3, headed: false) == 3)
+        #expect(content == (2 * AgentsLayout.step))
+        #expect(AgentsLayout.content(opened) == (4 * AgentsLayout.step))
+        #expect(AgentsLayout.height(two, folded: false, column: 800) == (AgentsLayout.row + 2 * AgentsLayout.step + AgentsLayout.margin))
+        #expect(AgentsLayout.height(opened, folded: false, column: 800) == (AgentsLayout.row + 4 * AgentsLayout.step + AgentsLayout.margin))
     }
 
     @Test func theAreaNeverTakesMoreThanItsShareOfTheColumn() {
-        let many = Array(repeating: AgentsLayout.Section(rows: 8, headed: true), count: 4)
+        let many = Array(repeating: AgentsLayout.Section(rows: 8, headed: true, open: true), count: 4)
 
         let height = AgentsLayout.height(many, folded: false, column: 700)
 
@@ -144,14 +151,16 @@ struct AgentsAreaTests {
 
     @Test func aSessionWithManyTabsShowsFourAndAMoreRowUntilOpenedWhole() {
         let five = AgentsLayout.Section(rows: 5)
-        let eight = AgentsLayout.Section(rows: 8, headed: true)
+        let eight = AgentsLayout.Section(rows: 8, headed: true, open: true)
         let whole = AgentsLayout.Section(rows: 8, whole: true)
+        let shut = AgentsLayout.Section(rows: 8, headed: true)
 
-        let rows = [five, eight, whole].map(AgentsLayout.rows)
+        let rows = [five, eight, whole, shut].map(AgentsLayout.rows)
 
-        #expect(rows == [5, 5, 8])
+        #expect(rows == [5, 5, 8, 0])
         #expect(AgentsLayout.shown(8, whole: false) == 4)
         #expect(AgentsLayout.sectionHeight(eight) == (6 * AgentsLayout.step))
+        #expect(AgentsLayout.sectionHeight(shut) == AgentsLayout.step)
     }
 
     @Test func aPressGoesToTheQuestionFirstAndFoldsOnceItIsInFront() {

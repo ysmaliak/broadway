@@ -707,6 +707,7 @@ final class Tab: Identifiable {
     @ObservationIgnored var agentSeen = false
     @ObservationIgnored var agentFinished: Date?
     var agentMood: AgentMood?
+    @ObservationIgnored var agentLed = 0
     @ObservationIgnored var agentSteered: Date?
 
     /// The tab whose page opened this one, when a script did. Sign-in flows

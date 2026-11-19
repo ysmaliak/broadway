@@ -10,6 +10,10 @@ stand-in agents. Two spaces, Work and Home:
 3. mark: an agent asking on its Home tab while Work is shown puts the asking dot on Home's
    icon at the foot and leaves Work's card quiet. Answered, the dot goes. Asked again and
    Home entered, the dot goes and Home's card asks.
+4. lead: Home has two agents, so each has a heading that is the tab it is on in Home, with
+   its other Home tabs folded under it. Work has one, so its tab sits under the row with no
+   heading. The agent that asks in Home has the asking tab as its heading, still shut.
+5. switch: a switch of space draws the other space's card at once, with no travel or fade.
 
 Pictures are of the probe window by its number (screencapture -l), in light and dark. Where
 that has no grant (over ssh on the mini) the app draws the window itself instead (bench
@@ -141,6 +145,21 @@ def go(index):
     time.sleep(0.6)
 
 
+def lead():
+    return bench({"do": "agentcard"})
+
+
+def switched(index):
+    spaces("go", index=index)
+    seen = []
+    until = time.time() + 0.9
+    while time.time() < until:
+        card = lead().get("card") or {}
+        seen.append((bool(card.get("moving")), bool(card.get("fading")), round(card.get("room", 0), 2)))
+        time.sleep(0.03)
+    return seen
+
+
 def picture(name, dark):
     window = agents("stage", dark=dark, size=list(SIZE), shown=False).get("window")
     time.sleep(0.8)
@@ -235,7 +254,35 @@ def main():
         front = [short(tab["id"]) for tab in agents("state").get("agentTabs", []) if tab.get("active")]
         t.ok("press", "a row on Home's card brings its tab and stays in Home", here["current"] == "Home" and front == [short(mail)], (here["current"], front, mail))
 
-        go(1)
+        calendar = broadway("open", base + "calendar", env=CLAUDE)["data"]["id"]
+        broadway("wait", "--tab", calendar, env=CLAUDE)
+        if agents("state").get("folded"):
+            agents("fold")
+        time.sleep(1.2)
+        at_home = lead()
+        rows = {row["title"]: row for row in at_home.get("agents", [])}
+        seen = {head["title"]: head for head in (at_home.get("card") or {}).get("heads", [])}
+        ours, theirs = seen.get("Claude Code", {}), seen.get("Mail sorter", {})
+        t.ok("lead", "Home has two agents, so each has a heading with its fold shut",
+             len(seen) == 2 and len(rows) == 2 and all(row["headed"] and not row["open"] and row["rows"] == 0 for row in rows.values()), at_home.get("agents"))
+        t.ok("lead", "Claude Code's heading counts its one other Home tab and the mail sorter's has no count",
+             ours.get("countText") == "1" and ours.get("countShown") is True and theirs.get("countShown") is False, (ours, theirs))
+        t.ok("lead", "the heading is one of the agent's Home tabs, not its Work tab",
+             short(rows.get("Claude Code", {}).get("lead", "")) in (short(mail), short(calendar)), rows.get("Claude Code"))
+        home_room = (at_home.get("card") or {}).get("room", 0)
+        t.ok("lead", "Home's card is its row and two headings tall", abs(home_room - (34 + 2 * 37 + 18)) < 0.01, home_room)
+        pictures("card-home-open")
+
+        frames = switched(1)
+        at_work = lead()
+        alone = at_work.get("agents", [])
+        work_room = (at_work.get("card") or {}).get("room", 0)
+        t.ok("switch", "Home to Work: the card neither travels nor fades", bool(frames) and not any(moving or fading for moving, fading, _ in frames), frames)
+        t.ok("switch", "it is Home's height and then Work's, with nothing between", {room for _, _, room in frames} <= {round(home_room, 2), round(work_room, 2)}
+             and frames[-1][2] == round(work_room, 2), (home_room, work_room, frames))
+        t.ok("lead", "Work has one agent, so its tab sits under the row with no heading",
+             len(alone) == 1 and not alone[0]["headed"] and alone[0]["rows"] == 1 and not (at_work.get("card") or {}).get("heads")
+             and abs(work_room - (34 + 37 + 18)) < 0.01, (alone, work_room))
         work = listed()
         t.ok("card", "Work's card lists only Claude Code's Work tab",
              list(work) == ["Claude Code"] and work["Claude Code"] == [short(report)], work)
@@ -270,6 +317,12 @@ def main():
         own = next((row for row in entered.get("area", []) if row["name"] == "Claude Code"), {})
         t.ok("mark", "asked again while Work is shown, Home is marked again", bool(lit), agents("state").get("askingSpaces"))
         t.ok("mark", "Home entered, the dot goes and Home's card asks", not entered.get("askingSpaces") and own.get("attention") is True and not any(marks().values()), (entered.get("askingSpaces"), own))
+        asked = lead()
+        row = next((each for each in asked.get("agents", []) if each["title"] == "Claude Code"), {})
+        head = next((each for each in (asked.get("card") or {}).get("heads", []) if each["title"] == "Claude Code"), {})
+        t.ok("lead", "the asking agent's heading is the tab that asks, with the question, and its fold stays shut",
+             short(row.get("lead", "")) == short(mail) and row.get("open") is False and head.get("attention") is True
+             and "Which account?" in head.get("line", ""), (row, head))
         pictures("card-home-asking")
         agents("answer", **{"with": "1"})
         asking.communicate(timeout=30)

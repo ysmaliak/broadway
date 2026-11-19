@@ -4344,6 +4344,9 @@ final class Bench {
         case "mergedturn":
             BenchMergedTurn.run(request, browser: browser, answer)
 
+        case "agentcard":
+            BenchAgentCard.run(request, browser: browser, answer)
+
         case "ui":
             if request["toggleFold"] as? Bool == true, Store.testing { browser.toggleFold() }
             if Store.testing, let width = request["sideWidth"] as? Double { browser.prefs.sideWidth = CGFloat(width) }

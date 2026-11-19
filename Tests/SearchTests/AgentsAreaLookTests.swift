@@ -14,6 +14,7 @@ final class AgentsAreaLookTests {
         NSApp.setActivationPolicy(.prohibited)
         AgentLinks.shared.reset()
         keepSetting(AgentsFolds.shared, \.folded, AgentsFolds.key)
+        AgentsFolds.shared.open = []
         browser = Browser(record: WindowRecord())
         let mine = Search.Tab(configuration: Web.configuration(space: browser.spaceID))
         mine.restore(url: URL(string: "https://example.com/mine")!, title: "Mine")
@@ -174,8 +175,8 @@ final class AgentsAreaLookTests {
         #expect(headings(in: alone) == [])
         #expect(rows(in: alone) == 2)
         #expect(aloneHeight == (AgentsLayout.row + 2 * AgentsLayout.step + AgentsLayout.margin))
-        #expect(headings(in: both) == ["Claude Code: Thinking", "Codex: Thinking"])
-        #expect(rows(in: both) == 3)
+        #expect(headings(in: both) == ["Claude Code: Thinking · Pull requests", "Codex: Thinking · Inbox"])
+        #expect(rows(in: both) == 0)
     }
 
     private func list(in area: AgentsAreaView) -> [NSView] {

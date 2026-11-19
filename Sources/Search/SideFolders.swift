@@ -580,7 +580,7 @@ final class GroupHeadingView: KitHoverView {
     var depth = 0 { didSet { if depth != oldValue { needsLayout = true } } }
     var progress: CGFloat = 1 { didSet { if progress != oldValue { progressChanged() } } }
     var number: Int? { didSet { if number != oldValue { needsLayout = true } } }
-    var count = 0 { didSet { if count != oldValue { tally.text = "\(count)"; needsLayout = true } } }
+    var count = 0 { didSet { if count != oldValue { chipFold.count = count; needsLayout = true } } }
     var greys = KitGreys.white { didSet { if greys != oldValue { paint() } } }
     var ink: KitInk = .flat { didSet { if ink != oldValue { applyInk() } } }
     var dropping = false { didSet { if dropping != oldValue { paint() } } }
@@ -598,10 +598,7 @@ final class GroupHeadingView: KitHoverView {
     private let chevron = KitSymbol("chevron.right", style: KitSymbol.Style(size: SideLook.chevron, weight: .semibold), tint: Palette.NS.muted)
     private lazy var chevronTurn = KitTurnView(chevron)
     private let close = CloseSpotView()
-    let chipFold = KitFlippedView()
-    private var chipShown: Swift.Float = 0
-    private let chip = KitBox(fill: KitColor.ink.withAlphaComponent(0.07), corners: .capsule)
-    private let tally = KitLabel("", font: .monospacedDigitSystemFont(ofSize: 11, weight: .medium), color: KitColor.muted)
+    let chipFold = SideCountView()
     var showsCount: Bool { counts && !ringsOverCount }
     private var counts: Bool { count > 0 && group?.collapsed == true && !editing && !asksSignIn }
     private var ringsOverCount: Bool { counts && (status as? LiveStatusView)?.rings == true }
@@ -638,12 +635,6 @@ final class GroupHeadingView: KitHoverView {
         veil.isHidden = true
         addSubview(chevronTurn)
         addSubview(chipFold)
-        chipFold.wantsLayer = true
-        chipFold.layer?.opacity = 0
-        chipFold.isHidden = true
-        chipFold.addSubview(chip)
-        chip.addSubview(tally)
-        tally.setAccessibilityElement(false)
         addSubview(countRing)
         countRing.lead = 0
         countRing.isHidden = true
@@ -854,9 +845,8 @@ final class GroupHeadingView: KitHoverView {
         chevron.ink = ink
         close.ink = ink
         shortcut?.ink = ink
-        tally.ink = ink
         countRing.ink = ink
-        chip.fill = ink.color(KitColor.ink, .ink, opacity: 0.07, dark: kitDark)
+        chipFold.dress(ink)
     }
 
     private func paint() {
@@ -876,25 +866,11 @@ final class GroupHeadingView: KitHoverView {
         close.armed = closes
         chevronTurn.alphaValue = closes && chevronUnderClose ? 0 : 1
         shortcut?.alphaValue = closes ? 0 : 1
-        chip.alphaValue = closes ? 0 : 1
+        chipFold.yields = closes
     }
 
     private func foldChip(_ shows: Bool, curve: KitCurve) {
-        let target: Swift.Float = shows ? 1 : 0
-        guard target != chipShown, let layer = chipFold.layer else { return }
-        chipShown = target
-        let wasHidden = chipFold.isHidden
-        chipFold.isHidden = false
-        let from = wasHidden ? Swift.Float(0) : (layer.presentation()?.opacity ?? layer.opacity)
-        let carry = layer.kitCarry("fold.opacity", from: NSNumber(value: from), to: NSNumber(value: target))
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        layer.opacity = target
-        CATransaction.commit()
-        layer.removeAnimation(forKey: "fold.opacity")
-        guard window != nil, let fade = curve.animation("opacity", from: from, to: target, velocity: carry) else { return }
-        fade.fillMode = .backwards
-        layer.add(fade, forKey: "fold.opacity")
+        chipFold.fold(shows, curve: curve)
     }
 
     private func progressChanged() {
@@ -937,11 +913,8 @@ final class GroupHeadingView: KitHoverView {
         (status as? LiveStatusView)?.overCount = counts
         let rings = ringsOverCount
         if counts {
-            let words = tally.intrinsicContentSize
-            let width = words.width + 12
-            chipFold.kitSetFrame(NSRect(x: right - width, y: (height - 17) / 2, width: width, height: 17))
-            chip.kitSetFrame(chipFold.bounds)
-            tally.kitSetFrame(NSRect(x: 6, y: (17 - words.height) / 2, width: words.width, height: words.height))
+            let width = chipFold.width
+            chipFold.kitSetFrame(NSRect(x: right - width, y: (height - SideCountView.height) / 2, width: width, height: SideCountView.height))
             let side = LiveLoading.side
             countRing.kitSetFrame(NSRect(x: right - side, y: (height - side) / 2, width: side, height: side))
             right -= width + 9

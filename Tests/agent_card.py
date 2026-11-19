@@ -10,6 +10,11 @@ in a world of its own, started hidden behind every window, driven by the real
 2. fold: a press folds and unfolds the card by easing its height, the list above
    following it, with no jump on the first or last frame, a reversal carried on
    from where it is, and a short crossfade with Reduce Motion.
+   enter, leave: the first agent's card makes room over many frames and the last
+   one's closes it the same way.
+   lead: with several agents each heading is the tab its agent is on, its other
+   tabs fold under it and start shut, the count is a folder's count, on hover it
+   gives way to the sidebar's close button, and needs you opens nothing.
 3. rim: the agent's tab wears the agent's colour round its page, another tab does
    not, and in Split View only the agent's pane does.
 4. pills: what the agent is doing and "You're driving" show at the bottom of the
@@ -49,6 +54,8 @@ PID = [0]
 CLAUDE = {"BROADWAY_AGENT": "claude-card", "BROADWAY_AGENT_NAME": "Claude Code"}
 CODEX = {"BROADWAY_AGENT": "codex-card", "BROADWAY_AGENT_NAME": "Codex"}
 SCRIPT = {"BROADWAY_AGENT": "script-card", "BROADWAY_AGENT_NAME": "Nightly check"}
+MAIL = {"BROADWAY_AGENT": "mail-card", "BROADWAY_AGENT_NAME": "Mail sorter"}
+WARM = {"BROADWAY_AGENT": "warm-card", "BROADWAY_AGENT_NAME": "Warm up"}
 
 LOOKS = {
     "noir": {"colours": ["000000"], "intensity": 1.0, "transparency": 0.12, "grain": 0.45, "glass": False},
@@ -151,6 +158,50 @@ def area():
 
 def card(named):
     return next((row for row in area() if named == row["name"] or named.startswith(row["title"])), None)
+
+
+def lead():
+    return bench({"do": "agentcard"})
+
+
+def lead_do(action, link=""):
+    return bench({"do": "agentcard", "action": action, "link": link})
+
+
+def heads():
+    return {head["title"]: head for head in (lead().get("card") or {}).get("heads", [])}
+
+
+def agent(title):
+    return next((row for row in lead().get("agents", []) if row["title"] == title), {})
+
+
+def looks_shots(name):
+    for dark in (False, True):
+        stage(dark)
+        for each in LOOKS:
+            look(each)
+            foot_shot(f"{name}-{each}-{'dark' if dark else 'light'}")
+    stage(False)
+    look("pale")
+
+
+def beside(name, boxes):
+    path = shoot(name)
+    if not path:
+        return
+    pic = Picture(path)
+    parts = []
+    for index, box in enumerate(boxes):
+        x, y, w, h = [int(v * pic.k) for v in box]
+        part = OUT / f"{name}-{index}.png"
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", str(path), "-vf", f"crop={w}:{h}:{x}:{y},scale=iw*3:ih*3:flags=neighbor",
+                        str(part)], capture_output=True, stdin=subprocess.DEVNULL)
+        parts.append(part)
+    if len(parts) == 2 and all(part.exists() for part in parts):
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", str(parts[0]), "-i", str(parts[1]), "-filter_complex",
+                        "[0:v][1:v]scale2ref=iw:ow/mdar[a][b];[b][a]vstack", str(OUT / f"{name}-beside.png")],
+                       capture_output=True, stdin=subprocess.DEVNULL)
 
 
 def wait_for(condition, seconds=10):
@@ -314,6 +365,27 @@ def main():
         loose = [sp("open", url=base + f"loose-{n}", foreground=True).get("resultID") for n in range(5)]
         time.sleep(1)
 
+        before = chrome().get("card") or {}
+        broadway("open", base + "warm", env=WARM)
+        time.sleep(1.5)
+        entered = chrome().get("card") or {}
+        rooms = [r for _, r in entered.get("trace") or []]
+        t.ok("enter", "with no agent there is no card", not before.get("room"), before)
+        t.ok("enter", "the first agent's card makes room over many frames", len(rooms) >= 8 and rooms[0] < rooms[-1] / 2, rooms)
+        t.ok("enter", "the room only grows, to the folded card's height", bool(rooms) and all(b >= a - 0.01 for a, b in zip(rooms, rooms[1:]))
+             and abs(rooms[-1] - 52) < 0.01, rooms)
+        t.ok("enter", "entered, the card is drawn in full and at rest",
+             entered.get("presence") == 1 and not entered.get("fading") and not entered.get("moving"), entered)
+        warm = card("Warm up") or {}
+        agents("closelink", link=warm.get("id", "")[:8])
+        broadway("agents", "done", env=WARM)
+        gone = wait_for(lambda: (lambda c: c if not c.get("room") and not c.get("moving") else None)(chrome().get("card") or {}), 6) or {}
+        rooms = [r for _, r in gone.get("trace") or []]
+        t.ok("leave", "the last agent gone, the room closes over many frames", len(rooms) >= 8 and rooms[0] > 26, rooms)
+        t.ok("leave", "the room only shrinks, to nothing", bool(rooms) and all(b <= a + 0.01 for a, b in zip(rooms, rooms[1:]))
+             and abs(rooms[-1]) < 0.01, rooms)
+        time.sleep(0.5)
+
         one = broadway("open", base + "pulls", env=CLAUDE)["data"]["id"]
         broadway("open", base + "issue-42", env=CLAUDE)
         broadway("wait", "--tab", one, env=CLAUDE)
@@ -362,18 +434,145 @@ def main():
         t.ok("rows", "the rows keep the regular gap above and between them", bool(listed) and abs(listed[0][1] - 3) < 0.01 and all(abs(g - 3) < 0.01 for g in gaps), listed)
 
         codex_tab = broadway("open", base + "release-notes", env=CODEX)["data"]["id"]
-        for n in range(6):
-            broadway("open", base + f"check-{n}", env=CODEX)
-        broadway("open", base + "status", env=SCRIPT)
+        checks = [broadway("open", base + f"check-{n}", env=CODEX)["data"]["id"] for n in range(2)]
+        for tab in [codex_tab] + checks:
+            broadway("wait", "--tab", tab, env=CODEX)
         agents("row", link=claude["id"][:8], index=0)
+        time.sleep(1.0)
+        two = lead()
+        both = {row["title"]: row for row in two.get("agents", [])}
+        seen = heads()
+        codex = both.get("Codex", {})
+        t.ok("lead", "two agents: each has a heading and every fold starts shut",
+             len(seen) == 2 and len(both) == 2 and all(row["headed"] and not row["open"] and row["rows"] == 0 for row in both.values()), two.get("agents"))
+        t.ok("lead", "the count is the number of tabs in the fold, with no plus",
+             (seen.get("Claude Code", {}).get("countText"), seen.get("Codex", {}).get("countText")) == ("1", "2")
+             and all(head["countShown"] for head in seen.values()), seen)
+        t.ok("lead", "shut, the card is its row and two headings tall", abs((two.get("card") or {}).get("room", 0) - (34 + 2 * 37 + 18)) < 0.01,
+             (two.get("card") or {}).get("room"))
+        broadway("scroll", "--tab", codex_tab, env=CODEX)
+        first = wait_for(lambda: (lambda row: row if row.get("lead", "")[:8].lower() == codex_tab[:8].lower() else None)(agent("Codex")), 5) or agent("Codex")
+        t.ok("lead", "the heading names the tab the agent is on", "release-notes" in first.get("line", ""), first)
+        broadway("scroll", "--tab", checks[1], env=CODEX)
+        moved_on = wait_for(lambda: (lambda row: row if row.get("lead", "")[:8].lower() == checks[1][:8].lower() else None)(agent("Codex")), 5) or agent("Codex")
+        t.ok("lead", "and follows it to another tab", "check-1" in moved_on.get("line", ""), moved_on)
+        time.sleep(2.5)
+        rested = agent("Codex")
+        t.ok("lead", "and stays there once the agent rests", rested.get("lead", "")[:8].lower() == checks[1][:8].lower(), rested)
+
+        folder_tabs = loose[3:5]
+        bench({"do": "group", "id": folder_tabs[0], "new": True, "name": "Reading"})
+        bench({"do": "group", "id": folder_tabs[1], "name": "Reading"})
+        bench({"do": "group", "name": "Reading", "fold": True})
         time.sleep(1.0)
         for dark in (False, True):
             stage(dark)
-            for name in LOOKS:
-                look(name)
-                foot_shot(f"pic-3-three-open-{name}-{'dark' if dark else 'light'}")
+            look("pale")
+            said = lead()
+            folder = next((row for row in said.get("folders", []) if row["name"] == "Reading"), {})
+            head = next((row for row in (said.get("card") or {}).get("heads", []) if row["title"] == "Codex"), {})
+            mode = "dark" if dark else "light"
+            if folder and head:
+                beside(f"count-match-{mode}", [folder["box"], head["box"]])
+            fbox, cbox = folder.get("countBox") or [0, 0, 0, 0], head.get("countBox") or [0, 0, 0, 1]
+            hbox, abox = folder.get("box") or [0, 0, 0, 0], head.get("box") or [0, 0, 0, 0]
+            t.ok("lead", f"{mode}: a folded folder of two tabs and the agent's heading both show 2",
+                 folder.get("countText") == "2" and head.get("countText") == "2" and folder.get("countShown") and head.get("countShown"), (folder, head))
+            t.ok("lead", f"{mode}: the two counts are the same size", abs(fbox[2] - cbox[2]) < 0.01 and abs(fbox[3] - cbox[3]) < 0.01 and cbox[3] == 17, (fbox, cbox))
+            t.ok("lead", f"{mode}: each sits ten points from its row's end, in the row's middle",
+                 abs((hbox[0] + hbox[2]) - (fbox[0] + fbox[2]) - 10) < 0.01 and abs((abox[0] + abox[2]) - (cbox[0] + cbox[2]) - 10) < 0.01
+                 and abs((fbox[1] + fbox[3] / 2) - (hbox[1] + hbox[3] / 2)) < 0.51 and abs((cbox[1] + cbox[3] / 2) - (abox[1] + abox[3] / 2)) < 0.51,
+                 (hbox, fbox, abox, cbox))
         stage(False)
         look("pale")
+        looks_shots("pic-3-two-shut")
+
+        shut_room = (lead().get("card") or {}).get("room", 0)
+        trace, rest = moved("agent-unfold", lambda: lead_do("open", codex.get("id", "")[:8]))
+        rooms = [r for _, r in trace]
+        opened, row = heads().get("Codex", {}), agent("Codex")
+        listed = (rest or {}).get("listed") or []
+        t.ok("lead", "opened, the fold lists the agent's other tabs and the count goes, as a folder's does",
+             row.get("open") and row.get("rows") == 2 and opened.get("open") and not opened.get("countShown"), (row, opened))
+        t.ok("lead", "headings sit at the card's edge and the fold's rows are set in", sorted({round(f[0]) for f in listed}) == [0, 12] and len(listed) == 4, listed)
+        t.ok("lead", "opening an agent eases the card's height over many frames", len(rooms) >= 8 and abs(rooms[-1] - shut_room - 74) < 0.01
+             and all(b >= a - 0.01 for a, b in zip(rooms, rooms[1:])), (shut_room, rooms))
+        looks_shots("pic-3-two-open")
+        trace, rest = moved("agent-fold", lambda: lead_do("open", codex.get("id", "")[:8]))
+        rooms = [r for _, r in trace]
+        t.ok("lead", "folding it eases the height back", len(rooms) >= 8 and abs(rooms[-1] - shut_room) < 0.01, (shut_room, rooms))
+
+        for n in range(3):
+            broadway("open", base + f"mail-{n}", env=MAIL)
+        broadway("open", base + "status", env=SCRIPT)
+        for n in range(2):
+            broadway("open", base + f"night-{n}", env=SCRIPT)
+        agents("row", link=claude["id"][:8], index=0)
+        time.sleep(1.2)
+        four = lead()
+        rows = four.get("agents", [])
+        t.ok("lead", "four agents, all shut: four headings and no rows", len(rows) == 4 and all(row["headed"] and row["rows"] == 0 for row in rows), rows)
+        t.ok("lead", "four shut agents fit: the card is its row and four headings tall",
+             abs((four.get("card") or {}).get("room", 0) - (34 + 4 * 37 + 18)) < 0.01, (four.get("card") or {}).get("room"))
+        looks_shots("pic-4-four-shut")
+        for row in rows:
+            lead_do("open", row["id"][:8])
+        time.sleep(1.0)
+        wide = lead()
+        full = 34 + 37 * (4 + sum(row["fold"] for row in wide.get("agents", []))) + 18
+        room = (wide.get("card") or {}).get("room", 0)
+        t.ok("lead", "all four open: the card stops at its share of the column and the list scrolls", 200 < room < full - 1, (room, full))
+        looks_shots("pic-4-four-open")
+        lead_do("shut")
+        time.sleep(1.0)
+
+        rest_head = heads().get("Codex", {})
+        box = rest_head.get("box") or [0, 0, 0, 0]
+        agents("hover", at=[box[0] + box[2] / 2, box[1] + box[3] - 6])
+        time.sleep(0.4)
+        over = heads().get("Codex", {})
+        t.ok("lead", "at rest a heading shows its count and no close button", rest_head.get("countShown") and not rest_head.get("close"), rest_head)
+        t.ok("lead", "on hover the count gives way to the sidebar's close button", over.get("close") and not over.get("countShown") and over.get("hovering"), over)
+        cbox = over.get("closeBox") or [0, 0, 0, 0]
+        t.ok("lead", "the close button is the tab row's own square at the row's end", cbox[2] == 26 and cbox[3] == 26
+             and abs((box[0] + box[2]) - (cbox[0] + cbox[2]) - 4) < 0.01, (box, cbox))
+        looks_shots("pic-5-hover")
+        agents("hover")
+        time.sleep(0.3)
+
+        plain = {k: v for k, v in os.environ.items() if not k.startswith("BROADWAY_")}
+        asking = subprocess.Popen([BROADWAY, "--world", WORLD, "ask", "Which account?", "--choice", "Work", "--choice", "Personal",
+                                   "--tab", checks[0], "--json"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                  stdin=subprocess.DEVNULL, env=dict(plain, **CODEX))
+        asked = wait_for(lambda: (lambda head: head if head.get("attention") else None)(heads().get("Codex", {})), 15) or {}
+        if not asked and asking.poll() is not None:
+            print("  the ask ended:", asking.communicate()[0][:400], flush=True)
+        row = agent("Codex")
+        t.ok("lead", "needs you: the heading shows the question", "Which account?" in asked.get("line", "") and asked.get("line", "").startswith("Needs you"), asked)
+        t.ok("lead", "needs you: the heading is the tab that asks", row.get("lead", "")[:8].lower() == checks[0][:8].lower(), row)
+        t.ok("lead", "needs you opens nothing", not any(each["open"] for each in lead().get("agents", [])) and lead().get("folded") is False, lead().get("agents"))
+        looks_shots("pic-6-needs-you")
+        pressed = lead_do("lead", codex.get("id", "")[:8])
+        t.ok("lead", "a press on the heading goes to the tab that asks", pressed.get("active", "")[:8].lower() == checks[0][:8].lower(), pressed.get("active"))
+        time.sleep(0.6)
+        chosen = heads().get("Codex", {})
+        t.ok("lead", "there, the heading wears the selected row's look", chosen.get("selected") is True, chosen)
+        agents("answer", **{"with": "1"})
+        try:
+            asking.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            asking.kill()
+        mail = card("Mail sorter") or {}
+        agents("closelink", link=mail.get("id", "")[:8])
+        broadway("agents", "done", env=MAIL)
+        for n in range(2, 6):
+            broadway("open", base + f"check-{n}", env=CODEX)
+        agents("row", link=claude["id"][:8], index=0)
+        wait_for(lambda: len(lead().get("agents", [])) == 3, 6)
+        if not agent("Codex").get("open"):
+            lead_do("open", codex.get("id", "")[:8])
+        time.sleep(1.0)
+        looks_shots("pic-7-three-open")
         open_state = card_checks("three agents, open")
         open_box = (open_state.get("card") or {}).get("box")
 
@@ -386,7 +585,7 @@ def main():
             stage(dark)
             for name in LOOKS:
                 look(name)
-                foot_shot(f"pic-4-three-folded-{name}-{'dark' if dark else 'light'}")
+                foot_shot(f"pic-8-three-folded-{name}-{'dark' if dark else 'light'}")
         stage(False)
         look("pale")
         closed_box = (card_checks("three agents, folded").get("card") or {}).get("box")
@@ -407,7 +606,7 @@ def main():
             stage(dark)
             for name in LOOKS:
                 look(name)
-                foot_shot(f"pic-5-player-update-{name}-{'dark' if dark else 'light'}")
+                foot_shot(f"pic-9-player-update-{name}-{'dark' if dark else 'light'}")
         stage(False)
         look("pale")
         family = card_checks("with the player and the update card")
