@@ -666,9 +666,6 @@ final class Preferences {
             if agentMode != .bypass { AgentConsent.revokeBypass() }
         }
     }
-    var agentTabsClose: Int {
-        didSet { store.set(agentTabsClose, forKey: "agents.tabsClose") }
-    }
     var agentsOn: Bool {
         didSet {
             if agentsOn, !AgentConsent.grant() { agentsOn = false }
@@ -822,7 +819,6 @@ final class Preferences {
         let keepsSite = true
         pinsGoHome = keepsSite
         agentMode = AgentMode.read(store.string(forKey: "agents.mode"), bypassConsent: AgentConsent.bypassGiven)
-        agentTabsClose = 60
         agentsOn = store.bool(forKey: "agents.on") && AgentConsent.given
         commandBar = false
         nowRows = true

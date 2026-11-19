@@ -2,18 +2,11 @@ import AppKit
 import Observation
 import Foundation
 
-struct SkillAction: Equatable, Sendable {
-    var title: String
-    var path: String?
-    var prompt: String
-}
-
 struct Skill: Identifiable, Equatable, Sendable {
     var id: String
     var name: String
     var sites: [String]
     var body: String
-    var actions: [SkillAction]
     var builtIn: Bool
     var text: String
 
@@ -41,8 +34,6 @@ struct Skill: Identifiable, Equatable, Sendable {
         var name: String?
         var sites: [String] = []
         var bodyLines: [String] = []
-        var actions: [SkillAction] = []
-        var inActions = false
         for raw in text.components(separatedBy: .newlines) {
             let line = raw.trimmingCharacters(in: .whitespaces)
             if name == nil, line.hasPrefix("# ") {
@@ -53,33 +44,11 @@ struct Skill: Identifiable, Equatable, Sendable {
                 sites = line.dropFirst("sites:".count).split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
                 continue
             }
-            if line.lowercased() == "## actions" {
-                inActions = true
-                continue
-            }
-            if inActions, line.hasPrefix("## ") { inActions = false }
-            if inActions {
-                if let action = action(line) { actions.append(action) }
-            } else {
-                bodyLines.append(raw)
-            }
+            bodyLines.append(raw)
         }
         guard let name, !name.isEmpty, !sites.isEmpty else { return nil }
         let body = bodyLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-        return Skill(id: slug(name), name: name, sites: sites, body: body, actions: actions, builtIn: builtIn, text: text)
-    }
-
-    private static func action(_ line: String) -> SkillAction? {
-        guard line.hasPrefix("- "), let colon = line.firstIndex(of: ":") else { return nil }
-        var title = String(line[line.index(line.startIndex, offsetBy: 2)..<colon]).trimmingCharacters(in: .whitespaces)
-        let prompt = String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
-        var path: String?
-        if title.hasSuffix("]"), let open = title.lastIndex(of: "[") {
-            path = String(title[title.index(after: open)...].dropLast())
-            title = String(title[..<open]).trimmingCharacters(in: .whitespaces)
-        }
-        guard !title.isEmpty, !prompt.isEmpty else { return nil }
-        return SkillAction(title: title, path: path, prompt: prompt)
+        return Skill(id: slug(name), name: name, sites: sites, body: body, builtIn: builtIn, text: text)
     }
 }
 
@@ -165,8 +134,5 @@ final class SkillStore {
     sites: example.com
 
     What an agent should know about working on this site.
-
-    ## Actions
-    - Do something: What the agent should do on this page.
     """
 }

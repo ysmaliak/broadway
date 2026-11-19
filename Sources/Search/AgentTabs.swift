@@ -29,6 +29,7 @@ struct TaskFolder: Identifiable {
 @MainActor
 enum AgentBoard {
     private static var clock: Timer?
+    private static var sweeping = false
     private static let homes = NSHashTable<Browser>.weakObjects()
 
     static func note(_ browser: Browser) { homes.add(browser) }
@@ -69,16 +70,15 @@ enum AgentBoard {
         }
         clock = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
             MainActor.assumeIsolated {
-                for browser in browsers { browser.sweepAgentTabs() }
-                AgentLinks.sweepAll()
-                AgentAwake.refresh()
+                guard !sweeping else { return }
+                sweeping = true
+                Task { @MainActor in
+                    await AgentLinks.sweepAll()
+                    AgentAwake.refresh()
+                    sweeping = false
+                }
             }
         }
-    }
-
-    static func expired(_ tab: Tab, active: Bool, minutes: Int, at now: Date) -> Bool {
-        guard tab.agent, minutes > 0, tab.agentSeen, !active, let finished = tab.agentFinished else { return false }
-        return now.timeIntervalSince(max(finished, tab.touched)) >= Double(minutes) * 60
     }
 }
 
@@ -142,6 +142,9 @@ extension Browser {
         tab.agentSeen = true
         if let url = tab.address, !tab.shy { history.record(url, title: tab.title, space: spaceOf(tab)) }
         writeSession(now: true)
+        if let space = parked.first(where: { $0.value.tabs.contains { $0 === tab } })?.key, let row = parked[space] {
+            writeSession(now: true, space: space, row: row)
+        }
         revision &+= 1
     }
 
@@ -149,11 +152,6 @@ extension Browser {
         for found in AgentBoard.allTabs(of: task) where found.browser === self { keepAgentTab(found.tab) }
     }
 
-    func sweepAgentTabs(at now: Date = Date()) {
-        for tab in tabs where AgentBoard.expired(tab, active: visibleTabIDs.contains(tab.id), minutes: prefs.agentTabsClose, at: now) {
-            closeAgentTab(tab)
-        }
-    }
 }
 
 extension Bench {
@@ -293,8 +291,10 @@ extension Bench {
         case "closelink":
             guard let found = card(request["link"] as? String) else { return answer(["error": "agent closelink LINK"]) }
             for tab in found.tabs { browser.closeAgentTab(tab) }
-            AgentLinks.sweepAll()
-            answer(state())
+            Task { @MainActor in
+                await AgentLinks.sweepAll()
+                answer(state())
+            }
         case "codex":
             if let running = request["running"] as? Bool { CodexDesktop.shared.running = { running } }
             CodexDesktop.shared.update()
@@ -307,11 +307,17 @@ extension Bench {
             CodexDesktop.shared.opener = { NSWorkspace.shared.open($0) }
             answer(["opened": opened])
         case "linksweep":
-            AgentLinks.sweepAll(at: Date().addingTimeInterval(request["after"] as? Double ?? 0))
-            answer(state())
+            Task { @MainActor in
+                await AgentLinks.sweepAll(at: Date().addingTimeInterval(request["after"] as? Double ?? 0))
+                answer(state())
+            }
         case "sweep":
-            browser.sweepAgentTabs(at: Date().addingTimeInterval(request["after"] as? Double ?? 0))
-            answer(state())
+            Task { @MainActor in
+                let said = await AgentEndTabs.settle(at: Date().addingTimeInterval(request["after"] as? Double ?? 0))
+                var shown = state()
+                shown["swept"] = said.object
+                answer(shown)
+            }
         case "windows":
             answer(["windows": NSApp.windows.map(Self.row)])
         case "screens":

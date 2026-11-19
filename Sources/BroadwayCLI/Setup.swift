@@ -33,7 +33,7 @@ public enum Setup {
     static let closing = "# <<< broadway <<<"
     static let mark = "written by broadway setup"
 
-    static let guideVersion = "0.4"
+    static let guideVersion = "0.5"
     static let codexToolTimeout = 900
 
     static let skill = """
@@ -51,7 +51,10 @@ public enum Setup {
 
         broadway open https://example.com     # a tab of your own. go URL moves the tab you are in
         broadway click "Sign in"              # by words or @ref, answers with what changed
-        broadway agents done --summary "…"    # always, at the end
+        broadway agents done --keep           # instead, to give the person your tabs after one yes
+        broadway agents done --summary "…"    # always, at the end. It closes your tabs
+
+    A session left 20 minutes without a command ends by itself and its tabs close.
 
     """
 
@@ -555,7 +558,7 @@ extension Builtins {
 
     static let setupCommands: [Builtin] = [
         Builtin(name: "setup", usage: "broadway setup [command] [completions] [claude] [codex] [cursor] [opencode] [gemini] [--refresh]", summary: "Put broadway on your PATH, with completions and agent skills", group: "Setup",
-                details: "Links ~/.local/bin/broadway to this app's copy, writes fish, bash and zsh completions, and installs a skill for Claude Code and Codex where they are present, and for Cursor, opencode and Gemini CLI in their own skills folders when their folders are there. Cursor gets no copy of its own when it already reads broadway's skill in ~/.claude/skills or ~/.codex/skills. The skill is short and sends agents to broadway guide. It also adds a Stop and a SessionEnd hook, in ~/.claude/settings.json and ~/.codex/hooks.json, that run broadway agents idle --hook so the agent's card reads finished when its turn ends. It adds only its own entries and keeps the rest of each file as it was. It leaves files that aren't its own alone. broadway remove undoes it. Broadway runs this by itself when agents are turned on, and again for an agent it finds for the first time. When nothing is at ~/.local/bin/broadway, the run when agents are turned on also links the command there, unless Broadway is running from its disk image or a download folder. It never moves or replaces what is already there.\n--refresh  only rewrite skills broadway wrote that are older than this Broadway, and bring broadway's own hook entries up to date where they are already there. It creates no skill and adds no hook. Broadway runs it at each launch.",
+                details: "Links ~/.local/bin/broadway to this app's copy, writes fish, bash and zsh completions, and installs a skill for Claude Code and Codex where they are present, and for Cursor, opencode and Gemini CLI in their own skills folders when their folders are there. Cursor gets no copy of its own when it already reads broadway's skill in ~/.claude/skills or ~/.codex/skills. The skill is short and sends agents to broadway guide. It also adds a Stop and a SessionEnd hook, in ~/.claude/settings.json and ~/.codex/hooks.json, that run broadway agents idle --hook so the agent's card reads finished when its turn ends, and its session ends and its tabs close when the agent's own session ends. It adds only its own entries and keeps the rest of each file as it was. It leaves files that aren't its own alone. broadway remove undoes it. Broadway runs this by itself when agents are turned on, and again for an agent it finds for the first time. When nothing is at ~/.local/bin/broadway, the run when agents are turned on also links the command there, unless Broadway is running from its disk image or a download folder. It never moves or replaces what is already there.\n--refresh  only rewrite skills broadway wrote that are older than this Broadway, and bring broadway's own hook entries up to date where they are already there. It creates no skill and adds no hook. Broadway runs it at each launch.",
                 examples: ["broadway setup", "broadway setup completions", "broadway setup claude codex --refresh"]) { context, words in
             let refreshing = words.contains("--refresh")
             let parts = try wanted(words.filter { $0 != "--refresh" }, verb: "setup")

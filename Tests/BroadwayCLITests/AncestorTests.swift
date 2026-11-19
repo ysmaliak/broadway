@@ -98,6 +98,16 @@ struct AncestorTests {
         #expect(names == ["claude", "codex", "node"])
     }
 
+    @Test func geminiAndOpencodeRunByAnInterpreterAreNamedForThemselves() {
+        let gemini = ["node", "/opt/homebrew/lib/node_modules/@google/gemini-cli/dist/index.js"]
+        let opencode = ["bun", "/Users/me/.opencode/bin/opencode"]
+
+        let names = [gemini, opencode].map { AgentAncestor.named(arguments: $0, path: nil, command: $0[0]) }
+
+        #expect(names == ["gemini", "opencode"])
+        #expect(AgentAncestor.isAgent("gemini") && AgentAncestor.isAgent("opencode"))
+    }
+
     @Test func withoutArgumentsThePathThenTheCommandNameIt() {
         let path = "/Users/me/.codex/packages/bin/codex-code-mode-host"
 

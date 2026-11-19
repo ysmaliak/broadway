@@ -31,6 +31,12 @@ enum AgentRest: Equatable {
     case quiet
 }
 
+struct AgentGoneTab: Equatable {
+    var key: AgentLinkKey?
+    var handed: Bool
+    var how: AgentLinkEnding
+}
+
 struct AgentProcessID: Equatable {
     var pid: Int32
     var started: Int64
@@ -48,6 +54,7 @@ struct AgentLink: Identifiable, Equatable {
     var process: AgentProcessID?
     var announced = false
     var codex: CodexThread?
+    var person = false
     var number = 1
     var space: UUID?
 
@@ -76,6 +83,10 @@ final class AgentLinks {
     @ObservationIgnored private var waits: [UUID: Double] = [:]
     @ObservationIgnored private var passes: [UUID: [String: Date]] = [:]
     @ObservationIgnored private var calls: [UUID: Int] = [:]
+    @ObservationIgnored private var gone: [String: AgentGoneTab] = [:]
+    @ObservationIgnored private var goneOrder: [String] = []
+    @ObservationIgnored private var endedKeys: [AgentLinkKey: AgentLinkEnding] = [:]
+    static let goneLimit = 500
     static let defaultPatience: Double = 100
     static let passLife: TimeInterval = 120
     @ObservationIgnored var idleLimit: TimeInterval = 20 * 60
@@ -165,6 +176,15 @@ final class AgentLinks {
         waits[id] ?? Self.defaultPatience
     }
 
+    func setPerson(_ id: UUID, _ on: Bool) {
+        update(id) { $0.person = on }
+    }
+
+    static func agentExecutable(_ executable: String?) -> Bool {
+        let base = ((executable ?? "") as NSString).lastPathComponent.lowercased()
+        return ["claude", "codex", "cursor", "opencode", "gemini"].contains { base.hasPrefix($0) }
+    }
+
     func setPatience(_ id: UUID, _ seconds: Double?) {
         waits[id] = seconds.map { max(0, $0) }
     }
@@ -216,6 +236,26 @@ final class AgentLinks {
 
     func setCurrentTab(_ id: UUID, _ tab: String?) {
         tabs[id] = tab
+        if tab != nil, let key = link(id)?.key { endedKeys[key] = nil }
+    }
+
+    func noteGone(_ tab: String, from link: AgentLink?, handed: Bool) {
+        let how = link?.ended ?? .left
+        if gone[tab] == nil { goneOrder.append(tab) }
+        gone[tab] = AgentGoneTab(key: link?.key, handed: handed, how: how)
+        if let key = link?.key { endedKeys[key] = how }
+        while goneOrder.count > Self.goneLimit { gone[goneOrder.removeFirst()] = nil }
+    }
+
+    func goneTab(_ named: String) -> AgentGoneTab? {
+        let wanted = String(named.lowercased().prefix(8))
+        guard !wanted.isEmpty else { return nil }
+        if let exact = gone[wanted] { return exact }
+        return goneOrder.last { $0.hasPrefix(wanted) }.flatMap { gone[$0] }
+    }
+
+    func takeEnded(_ key: AgentLinkKey) -> AgentLinkEnding? {
+        endedKeys.removeValue(forKey: key)
     }
 
     @discardableResult
@@ -253,13 +293,13 @@ final class AgentLinks {
         var gone: [UUID] = []
         for link in links where link.live {
             let quiet = now.timeIntervalSince(heardAt[link.id] ?? link.connected)
-            if case .process(let pid, let started) = link.key, !alive(pid, started) {
+            if !link.person, case .process(let pid, let started) = link.key, !alive(pid, started) {
                 end(link.id, .done(nil), at: now)
                 gone.append(link.id)
-            } else if let process = link.process, !alive(process.pid, process.started) {
+            } else if !link.person, let process = link.process, !alive(process.pid, process.started) {
                 end(link.id, .done(nil), at: now)
                 gone.append(link.id)
-            } else if !busy(link.id), quiet >= idleLimit {
+            } else if quiet >= idleLimit, quiet >= 2 * idleLimit || inFlight(link.id) == 0 && !busy(link.id) && !asking(link.id) {
                 end(link.id, .left, at: now)
                 gone.append(link.id)
             } else if link.rest == nil, inFlight(link.id) == 0, !busy(link.id), !asking(link.id), quiet >= quietLimit {
@@ -289,6 +329,9 @@ final class AgentLinks {
         waits = [:]
         passes = [:]
         calls = [:]
+        gone = [:]
+        goneOrder = []
+        endedKeys = [:]
     }
 
     private func drop(_ id: UUID) {

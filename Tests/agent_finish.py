@@ -6,10 +6,10 @@ world of its own, driven by the real `broadway` as three invented agents:
 
 1. A Claude Code session acts, its Stop hook arrives on stdin and the card reads
    finished with the last thing it did. A new command makes the same card work again.
-   With a question up, the hook leaves it asking. SessionEnd ends it and its tabs stay.
+   With a question up, the hook leaves it asking. SessionEnd ends it and its tabs close.
 2. A Codex session with no hook reads Thinking at first, and Idle after the quiet
    time, which the bench's shortened clock skips to. A question up keeps it out of idle.
-3. A session whose agent process exits ends at the next sweep.
+3. A session whose agent process exits ends at the next sweep, and its tab closes.
 4. The hook never starts Broadway, prints nothing and exits 0.
 5. setup and remove against an invented home add only broadway's hooks, twice gives
    the same bytes, and remove gives the original bytes back.
@@ -268,9 +268,9 @@ def helper_session(base, scratch):
     process.wait()
     swept = agent("linksweep", after=0)
     ended = next((row for row in swept["links"] if link.lower().startswith(row["id"])), None)
-    check("its process exiting ends the session at the next sweep", ended and ended["state"] == "done", ended)
+    check("its process exiting ends the session at the next sweep, and with its tab closed it is forgotten", ended is None or ended["state"] == "done", ended)
     gone = next((row for row in swept["area"] if row["id"] == link), None)
-    check("with the ended face, and its tab stays", gone and gone["face"] == "ended" and len(gone["tabs"]) == 1, gone)
+    check("its tab closes, so its card leaves", gone is None, swept["area"])
 
 
 def mcp_lines(url):
@@ -427,8 +427,8 @@ def main():
         result, _ = hook("claude", "SessionEnd", CLAUDE, reason="prompt_input_exit")
         ended = wait_for(lambda: (lambda r: r if r and r["state"] == "done" else None)(link_row(link)), 5)
         check("SessionEnd ends the session", ended is not None and result.returncode == 0, link_row(link))
-        kept = card(link)
-        check("its tabs stay open with the ended face", kept and kept["tabs"] == tabs and kept["face"] == "ended", kept)
+        left = wait_for(lambda: True if card(link) is None else None, 10)
+        check("its tabs close, so its card leaves", left is True, card(link))
         film("06-ended")
         windows = agent("windows").get("windows", [])
         (OUT / "windows.json").write_text(json.dumps(windows, indent=2))

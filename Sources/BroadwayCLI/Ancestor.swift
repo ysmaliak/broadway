@@ -36,7 +36,7 @@ public struct AgentAncestor: Equatable {
 
     static func isAgent(_ name: String) -> Bool {
         let base = (name as NSString).lastPathComponent.lowercased()
-        return ["claude", "codex", "cursor", "windsurf"].contains { base.hasPrefix($0) }
+        return ["claude", "codex", "cursor", "windsurf", "opencode", "gemini"].contains { base.hasPrefix($0) }
     }
 
     public static func current() -> AgentAncestor? {
@@ -66,6 +66,8 @@ public struct AgentAncestor: Equatable {
         let base = (script as NSString).lastPathComponent
         if script.contains("claude-code") || base == "claude" || base == "claude.js" { return "claude" }
         if script.contains("@openai/codex") || base == "codex" || base == "codex.js" { return "codex" }
+        if script.contains("gemini-cli") || base == "gemini" { return "gemini" }
+        if script.contains("opencode") || base == "opencode" { return "opencode" }
         return name
     }
 

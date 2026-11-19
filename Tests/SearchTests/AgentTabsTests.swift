@@ -130,35 +130,6 @@ final class AgentTabsTests {
         #expect(answers == [false])
     }
 
-    @Test func autoCloseTakesOpenedFinishedTabsOnly() async {
-        let task = UUID()
-        let opened1 = await opened("https://example.com/1", task: task)
-        let unopened = await opened("https://example.com/2", task: task)
-        opened1.agentSeen = true
-        keepSetting(Shared.prefs, \.agentTabsClose, "agents.tabsClose")
-        browser.prefs.agentTabsClose = 15
-        AgentBoard.finish(task, mood: .done, at: Date(timeIntervalSinceNow: -3600))
-        opened1.touch(at: Date(timeIntervalSinceNow: -3600))
-
-        browser.sweepAgentTabs()
-
-        #expect(!browser.tabs.contains { $0.id == opened1.id })
-        #expect(browser.tabs.contains { $0.id == unopened.id })
-    }
-
-    @Test func autoCloseIsOffAtNeverAndLeavesARunningTask() {
-        let tab = Tab(bench: true)
-        tab.agent = true
-        tab.agentSeen = true
-        let later = Date(timeIntervalSinceNow: 100_000)
-
-        #expect(!AgentBoard.expired(tab, active: false, minutes: 15, at: later))
-        tab.agentFinished = Date()
-        #expect(AgentBoard.expired(tab, active: false, minutes: 15, at: later))
-        #expect(!AgentBoard.expired(tab, active: true, minutes: 15, at: later))
-        #expect(!AgentBoard.expired(tab, active: false, minutes: 0, at: later))
-    }
-
     @Test func keepingATabMakesItTheUsersOwn() async {
         let task = UUID()
         let tab = await opened("https://example.com/1", task: task)

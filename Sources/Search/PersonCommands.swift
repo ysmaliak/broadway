@@ -41,6 +41,9 @@ struct PersonCall {
     var tab: (tab: Tab, browser: Browser)?
     var askedAt: URL?
     var link: AgentLink?
+    var hook = false
+    var request: [String: Any] = [:]
+    var channel: PersonChannel?
 
     func string(_ key: String) -> String? {
         guard let text = arguments[key] as? String else { return nil }
@@ -186,10 +189,13 @@ enum PersonCommands {
         do {
             var call = PersonCall(noun: noun, verb: verb, arguments: request["arguments"] as? [String: Any] ?? [:], browser: browser, box: box)
             call.link = link()
+            call.hook = request["hook"] as? Bool == true
+            call.request = request
+            call.channel = channel
             if entry.tabbed {
                 let named = call.arguments["tab"] as? String
                 switch await socket.target(named, browser: browser, link: call.link?.id) {
-                case .failure(let refused): throw PersonRefusal(refused.code, refused.message)
+                case .failure(let refused): throw PersonRefusal(refused.code, refused.message, hint: refused.hint)
                 case .success(let id):
                     call.tab = box.find(["tab": id])
                     if named != nil { socket.remember(id, link: call.link?.id) }
@@ -233,6 +239,11 @@ enum PersonCommands {
             }
         }
         let site = call.tab.flatMap { AgentSites.site(of: $0.tab.pageAddress) }
+        try await approve(kind, call, site: site, request: request, channel: channel)
+    }
+
+    static func approve(_ kind: PersonClass, _ call: PersonCall, site: String?, request: [String: Any], channel: PersonChannel,
+                        title: String? = nil) async throws {
         switch decide(kind, mode: call.browser.prefs.agentMode, rule: AgentSites.shared.rule(for: site)) {
         case .go:
             return
@@ -243,10 +254,10 @@ enum PersonCommands {
                 throw PersonRefusal("needs_task", "This needs the person's yes, and only a connected agent can ask for it. Nothing was done.")
             }
             if AgentDesk.shared.isGranted(.tab, task: link.id, site: site) { return }
-            try await PersonAsk.yes(.tab, call: call, site: site, request: request, channel: channel)
+            try await PersonAsk.yes(.tab, call: call, site: site, request: request, channel: channel, title: title)
             AgentDesk.shared.grant(.tab, task: link.id, site: site)
         case .person(let act):
-            try await PersonAsk.yes(act, call: call, site: site, request: request, channel: channel)
+            try await PersonAsk.yes(act, call: call, site: site, request: request, channel: channel, title: title)
         }
     }
 
@@ -328,7 +339,7 @@ enum PersonAsk {
         return words.replacingOccurrences(of: "SITE", with: site ?? "this page")
     }
 
-    static func yes(_ act: AgentAct, call: PersonCall, site: String?, request: [String: Any], channel: PersonChannel) async throws {
+    static func yes(_ act: AgentAct, call: PersonCall, site: String?, request: [String: Any], channel: PersonChannel, title asked: String? = nil) async throws {
         var wait = request["wait"] as? Double ?? (request["wait"] as? Int).map(Double.init) ?? 0
         if let link = call.link, wait == 0 { wait = AgentLinks.shared.patience(link.id) }
         guard reachable(wait: wait, request: request) else {
@@ -336,7 +347,7 @@ enum PersonAsk {
                                 hint: "Tell the person, or run it with --wait-person MIN while they are at Broadway")
         }
         if channel.gone { throw PersonRefusal("needs_you", "Nobody answered in Broadway. Nothing was done.") }
-        var question = AgentQuestion(kind: .approval(act), title: title(noun: call.noun, verb: call.verb, site: site))
+        var question = AgentQuestion(kind: .approval(act), title: asked ?? title(noun: call.noun, verb: call.verb, site: site))
         question.tab = call.tab?.tab.id
         question.site = site
         question.quote = AgentQuestion.clean(call.line)

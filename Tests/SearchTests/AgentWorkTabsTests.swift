@@ -441,22 +441,28 @@ final class AgentWorkTabsTests {
         #expect(socket.box.find(["tab": id])?.tab.pageAddress?.path == "/shop")
     }
 
-    @Test func agentsDoneKeepsTheTabsAndListsThem() async throws {
+    @Test func agentsDoneKeepHandsTheTabsToThePersonAndListsThem() async throws {
         let link = session()
         let first = await open("/shop", link)
         let second = await open("/basket", link)
         let verb = try #require(PersonCommands.find("agents", "done"))
-        var call = PersonCall(noun: "agents", verb: "done", arguments: ["summary": "Looked at the shop"], browser: browser, box: socket.box)
+        var call = PersonCall(noun: "agents", verb: "done", arguments: ["summary": "Looked at the shop", "keep": true], browser: browser, box: socket.box)
         call.link = AgentLinks.shared.link(link)
 
-        let said = try await verb.run(call)
+        let fixed = call
+        let running = Task { try await verb.run(fixed) }
+        if let asked = await question() { AgentDesk.shared.take(asked.id, .yes) }
+        let said = try await running.value
 
-        #expect((said["tabs"] as? [[String: Any]])?.map { $0["id"] as? String } == [first, second])
-        #expect((said["message"] as? String)?.components(separatedBy: "\n").first == "Ended. 2 tabs of yours left open for the person: \(first), \(second).")
-        #expect(AgentWorkTabs.tabs(of: link, in: socket.box).count == 2)
+        #expect(said["handed"] as? [String] == [first, second])
+        #expect(said["keep"] as? String == "yes")
+        #expect((said["message"] as? String)?.components(separatedBy: "\n").dropFirst().first == "2 tabs are the person's now: \(first), \(second)")
+        #expect(AgentWorkTabs.tabs(of: link, in: socket.box).isEmpty)
+        #expect(socket.box.find(["tab": first])?.tab.agent == false)
+        #expect(socket.box.find(["tab": second])?.tab.agent == false)
     }
 
-    @Test func agentsDoneCloseClosesOnlyWhatThePersonNeverSaw() async throws {
+    @Test func agentsDoneCloseClosesSeenAndUnseenTabsAlike() async throws {
         let link = session()
         let seen = await open("/shop", link)
         let unseen = await open("/basket", link)
@@ -467,20 +473,25 @@ final class AgentWorkTabsTests {
 
         let said = try await verb.run(call)
 
-        #expect(said["closed"] as? [String] == [unseen])
-        #expect((said["tabs"] as? [[String: Any]])?.map { $0["id"] as? String } == [seen])
-        #expect((said["message"] as? String)?.hasPrefix("Ended. 1 tab of yours left open for the person: \(seen).") == true)
-        #expect(AgentWorkTabs.tabs(of: link, in: socket.box).map { short($0.tab) } == [seen])
+        #expect(Set(said["closed"] as? [String] ?? []) == [seen, unseen])
+        #expect((said["tabs"] as? [[String: Any]])?.isEmpty == true)
+        #expect(AgentWorkTabs.tabs(of: link, in: socket.box).isEmpty)
     }
 
-    @Test func agentsDoneRefusesCloseWithKeep() async throws {
+    @Test func agentsDoneTakesCloseWithKeepAsKeep() async throws {
         let link = session()
+        let mine = await open("/shop", link)
         let verb = try #require(PersonCommands.find("agents", "done"))
         var call = PersonCall(noun: "agents", verb: "done", arguments: ["close": true, "keep": true], browser: browser, box: socket.box)
         call.link = AgentLinks.shared.link(link)
 
-        await #expect(throws: PersonRefusal.self) { try await verb.run(call) }
-        #expect(AgentLinks.shared.link(link)?.live == true)
+        let fixed = call
+        let running = Task { try await verb.run(fixed) }
+        if let asked = await question() { AgentDesk.shared.take(asked.id, .yes) }
+        let said = try await running.value
+
+        #expect(said["handed"] as? [String] == [mine])
+        #expect(AgentLinks.shared.link(link)?.live == false)
     }
 
     private func agent(_ id: String) -> UUID? {
@@ -502,7 +513,7 @@ final class AgentWorkTabsTests {
         (data(outcome)["tabs"] as? [[String: Any]])?.compactMap { $0["id"] as? String } ?? []
     }
 
-    @Test func afterDoneTheSameAgentsNextCommandTakesBackItsTabs() async throws {
+    @Test func afterDoneTheSameAgentsNextCommandHasNoTabsAndHearsTheSessionEnded() async throws {
         let key = UUID().uuidString
         let old = try #require(agent(key))
         let first = await open("/shop", old)
@@ -512,19 +523,17 @@ final class AgentWorkTabsTests {
         let next = try #require(agent(key))
         let listed = await call("tabs", [:], next)
         let went = await call("navigate", ["url": address("/help")], next)
-        let closed = await call("close", ["others": true], next)
+        let again = await call("navigate", ["url": address("/help")], next)
 
         #expect(next != old)
-        #expect((said["tabs"] as? [[String: Any]])?.compactMap { $0["id"] as? String } == [first, second])
-        #expect((said["message"] as? String)?.hasPrefix("Ended. 2 tabs of yours left open for the person: \(first), \(second).") == true)
-        #expect(ids(listed) == [first, second])
-        #expect(data(listed)["current"] as? String == second)
-        #expect(!went.failed)
-        #expect(socket.box.find(["tab": second])?.tab.address?.path == "/help")
-        #expect(!closed.failed)
-        #expect(AgentWorkTabs.tabs(of: next, in: socket.box).map { short($0.tab) } == [second])
-        #expect(AgentWorkTabs.tabs(of: old, in: socket.box).isEmpty)
+        #expect(Set(said["closed"] as? [String] ?? []) == [first, second])
+        #expect((said["tabs"] as? [[String: Any]])?.isEmpty == true)
+        #expect((said["message"] as? String)?.hasPrefix("Ended\nClosed 2 tabs") == true)
+        #expect(ids(listed).isEmpty)
+        #expect(went.code == "session_ended")
+        #expect(again.code != "session_ended")
         #expect(socket.box.find(["tab": first]) == nil)
+        #expect(socket.box.find(["tab": second]) == nil)
     }
 
     @Test func afterTheHookEndsTheSessionTheNextCommandTakesBackItsTabsWithTheLastCurrent() async throws {
@@ -543,40 +552,37 @@ final class AgentWorkTabsTests {
         #expect(AgentWorkTabs.tabs(of: next, in: socket.box).allSatisfy { $0.tab.agentFinished == nil })
     }
 
-    @Test func aTabsCallAloneTakesBackTheTabsButMakesNoSessionForANewAgent() async throws {
+    @Test func aTabsCallAloneMakesNoSessionAfterDoneClosedTheTabs() async throws {
         let key = UUID().uuidString
         let old = try #require(agent(key))
-        let mine = await open("/shop", old)
+        _ = await open("/shop", old)
         _ = try await done(old)
         let request: [String: Any] = ["agent": ["session": "claude:\(key)", "pid": 4242, "started": 1]]
         let stranger: [String: Any] = ["agent": ["session": "claude:\(UUID().uuidString)", "pid": 4343, "started": 1]]
 
         let plain = socket.link(for: request, create: false)
-        let back = try #require(socket.link(for: request, create: false, rejoin: true))
-        made.append(back.id)
+        let back = socket.link(for: request, create: false, rejoin: true)
         let none = socket.link(for: stranger, create: false, rejoin: true)
-        let listed = await call("tabs", [:], back.id)
 
         #expect(plain == nil)
+        #expect(back == nil)
         #expect(none == nil)
-        #expect(ids(listed) == [mine])
-        #expect(data(listed)["current"] as? String == mine)
     }
 
     @Test func aTabThePersonKeptStaysTheirsWhenTheAgentComesBack() async throws {
         let key = UUID().uuidString
         let old = try #require(agent(key))
         let kept = await open("/shop", old)
-        let left = await open("/basket", old)
-        _ = try await done(old)
+        _ = await open("/basket", old)
         let found = try #require(socket.box.find(["tab": kept]))
         found.browser.keepAgentTab(found.tab)
+        _ = try await done(old)
 
         let next = try #require(agent(key))
         let listed = await call("tabs", [:], next)
         _ = await call("close", ["others": true], next)
 
-        #expect(ids(listed) == [left])
+        #expect(ids(listed).isEmpty)
         #expect(!found.tab.agent)
         #expect(found.tab.agentTask == nil)
         #expect(socket.box.find(["tab": kept]) != nil)
@@ -631,27 +637,6 @@ final class AgentWorkTabsTests {
         #expect(again.asked)
     }
 
-    @Test func aQuestionStillUpFromTheEndedSessionIsNeitherAnsweredNorDroppedByTheTakeBack() async throws {
-        let key = UUID().uuidString
-        let old = try #require(agent(key))
-        let mine = await open("/shop", old)
-        let tab = try #require(socket.box.find(["tab": mine])?.tab)
-        _ = try await done(old)
-        let up = AgentQuestion(kind: .approval(.send), title: "Send the order?", task: nil, tab: tab.id, site: "shop.example")
-        let waiting = Task { await AgentDesk.shared.ask(up) }
-        await until { AgentDesk.shared.pending.contains { $0.id == up.id } }
-
-        let next = try #require(agent(key))
-        let listed = await call("tabs", [:], next)
-        let still = AgentDesk.shared.pending.contains { $0.id == up.id }
-        AgentDesk.shared.take(up.id, .no)
-        let answer = await waiting.value
-
-        #expect(ids(listed) == [mine])
-        #expect(still)
-        #expect(answer == .no)
-    }
-
     @Test func afterDoneCloseThereIsNothingToTakeBack() async throws {
         let key = UUID().uuidString
         let old = try #require(agent(key))
@@ -669,7 +654,7 @@ final class AgentWorkTabsTests {
         #expect(AgentWorkTabs.tabs(of: old, in: socket.box).isEmpty)
     }
 
-    @Test func afterTheSessionEndHookTheNextCommandTakesBackTheTabs() async throws {
+    @Test func afterTheSessionEndHookTheTabsClose() async throws {
         let key = UUID().uuidString
         let old = try #require(agent(key))
         let mine = await open("/shop", old)
@@ -677,8 +662,10 @@ final class AgentWorkTabsTests {
         let verb = try #require(PersonCommands.find("agents", "done"))
         var ending = PersonCall(noun: "agents", verb: "done", arguments: [:], browser: browser, box: socket.box)
         ending.link = socket.link(for: hook, create: false, rejoin: false)
+        ending.hook = true
         let found = ending.link?.id
         _ = try await verb.run(ending)
+        await until { socket.box.find(["tab": mine]) == nil }
         let again = socket.link(for: hook, create: false, rejoin: false)
 
         let next = try #require(agent(key))
@@ -687,8 +674,8 @@ final class AgentWorkTabsTests {
         #expect(found == old)
         #expect(again == nil)
         #expect(AgentLinks.shared.link(old)?.live == false)
-        #expect(ids(listed) == [mine])
-        #expect(data(listed)["current"] as? String == mine)
+        #expect(socket.box.find(["tab": mine]) == nil)
+        #expect(ids(listed).isEmpty)
     }
 
     @Test func afterTheAgentsProcessExitsTheNextCommandTakesBackTheTabs() async throws {
@@ -873,7 +860,7 @@ final class AgentWorkTabsTests {
         #expect(AgentAwake.holding)
     }
 
-    @Test func anEndedSessionWithTabsLeftReleasesTheHoldAndANewCommandTakesIt() async {
+    @Test func anEndedSessionReleasesTheHoldAndANewCommandTakesIt() async {
         let link = session()
         _ = await open("/shop", link)
 
@@ -885,7 +872,6 @@ final class AgentWorkTabsTests {
         await until { AgentAwake.holding }
 
         #expect(!ended)
-        #expect(!AgentBoard.allTabs(of: link).isEmpty)
         #expect(released)
         #expect(atWork(next))
     }

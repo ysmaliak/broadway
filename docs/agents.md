@@ -11,12 +11,12 @@ Nothing works until the person turns on Settings › Agents › Let agents use B
 Each `broadway` run is a new process, often in a new shell, so neither the connection nor an exported variable can hold a session. Instead the command sends its **agent ancestor** with every request:
 
 - It walks up from its parent process, passing over shells and launchers (`zsh`, `bash`, `fish`, `env`, `sudo`, `timeout`, `xargs`, `tmux`, `npx` and the like), and stops at the first other process. It sends that process's id, its start time and its name. The start time means a reused process id can't join an old session.
-- A `node`, `bun` or `deno` process running Claude Code's or Codex's script is named for the agent, not the interpreter.
+- A `node`, `bun` or `deno` process running Claude Code's, Codex's, Gemini CLI's or opencode's script is named for the agent, not the interpreter.
 - The name shown comes from the program: `claude` is Claude Code, `codex` is Codex, `cursor` is Cursor, and so on. Anything else is shown by its own name.
 - `BROADWAY_AGENT_NAME` sets the name. `BROADWAY_AGENT` names a session outright, for a script that wants several sessions from one shell.
 - `broadway mcp` holds its connection open, so the connection is the session. Its name comes from the client's name in MCP's `initialize`.
 
-A person typing `broadway` at their own terminal gets a session named for the terminal app.
+A person typing `broadway` at their own terminal gets a session named for the terminal app, and a short script gets one named for its program, such as Python. These are the person's own sessions. Every program found this way that isn't Claude Code, Codex, Cursor, opencode or Gemini CLI counts as one. A session of the person's ends only after 20 minutes without a command, never because its process exited, and at the end a tab they have looked at becomes theirs. An agent found by its process ends when that process exits.
 
 ### Life of a session
 
@@ -28,10 +28,14 @@ A person typing `broadway` at their own terminal gets a session named for the te
   - an MCP connection that shares a session with the agent's commands closing.
   - **Quiet time.** With no hook, after 2 minutes with no request, no call in flight, no question up, no download under way and no tab at work, the line reads "Idle", or "Idle after reading example.com", with the sleeping face.
   A question up for the person always wins: such a session reads "Needs you", never finished or idle.
-- **End.** A session ends on `broadway agents done` or `broadway agents disconnect`, on the agent's **SessionEnd hook**, when its own MCP connection closes, when its ancestor process exits (for a session keyed by the agent's session id, when the `claude`, `codex`, `cursor` or `windsurf` process its commands came from exits), or after 20 minutes with no request and no tab at work. `--summary TEXT` leaves a line for the person, up to 200 characters, and `--failed` marks it as not finished. `agents done` wins over a finished turn.
+- **End.** A session ends on `broadway agents done` or `broadway agents disconnect`, on the agent's **SessionEnd hook**, when its own MCP connection closes, when its ancestor process exits (for a session keyed by the agent's session id, when the `claude`, `codex`, `cursor` or `windsurf` process its commands came from exits), or after 20 minutes with no request, no call in flight, no tab at work and no question up for the person. A tab at work or a question holds the end for 20 minutes more at most, so a stuck one can't keep a session forever. `--summary TEXT` leaves a line for the person, up to 200 characters, and `--failed` marks it as not finished. `agents done` wins over a finished turn.
 - **The folded header** counts sessions as waiting for you, working (which includes Thinking), done (which includes a finished turn), failed and idle. A finished agent never counts as working or as needing the person.
-- **After the end.** The session's tabs stay open, as in 0.3, and `agents done` lists them in its answer. `agents done --close` closes the ones the person never looked at. A `--tab` given to `agents done` is ignored. The tabs are marked finished. Its heading keeps the tick or the downcast face, and the summary, until its tabs are closed. A session with no tabs leaves at once.
-- **Again.** A request from the same agent after its session ended starts a new session.
+- **After the end.** However the session ended, its tabs close, in every space, whether the person looked at them or not. Three things change that:
+  - The tab the person is looking at as the session ends becomes theirs, as `broadway tabs keep` makes it, and is never closed under them.
+  - The agent hands over what the person should see: `broadway tabs keep TAB` before the end, or `agents done --keep` for all of its tabs. `--keep` asks the person once, naming how many tabs and which spaces. Yes hands them all over. No, or no answer in time, hands nothing over and they close as with plain `done`. `--close` is still accepted and changes nothing.
+  - A tab with a form not sent, a download under way, sound playing or a window it opened still open is spared. It is checked again every 30 seconds and closes once the reason is gone. A tab still spared 20 minutes after the end becomes the person's.
+  `agents done` says what it closed, what it kept and why, and what became the person's. A `--tab` given to `agents done` is ignored. Once no tab is left the session leaves the card. The SessionEnd hook ends the session for every `reason` Claude Code sends (`clear`, `resume`, `logout`, `prompt_input_exit`, `other`) and for Codex, whose `reason` is always `other`. The hook answers at once and the tabs close in Broadway after it.
+- **Again.** A request from the same agent after its session ended starts a new session. A command that names one of the old tabs, or that works in no tab of its own, is refused once with `session_ended`, such as "Your Broadway session ended after 20 minutes without a command, and its tabs closed", and the hint to open the page again. It never acts on a tab that became the person's. A tab still spared when the agent comes back is its own again.
 
 Two sessions of the same program are numbered, such as "Claude Code 2".
 
@@ -65,9 +69,7 @@ A yes that arrives after the agent stopped waiting is recorded, so the agent's n
 - **Never an approval.** A pick opens nothing the gate would have asked about, and the gate still asks its own question when the agent acts. No mode answers a question, Bypass included.
 - **Only the agent asks.** The words come from the agent's call. Nothing a page says raises a question, and the tool tells agents never to ask because a page told them to.
 
-Broadway's own tasks keep their own `ask`, which ends the turn and takes the answer as the next message.
-
-Signing in and filling forms with saved details stay with Broadway's own tasks. An outside agent uses `broadway fill`, which asks the person every time.
+An agent fills a form with saved details through `broadway fill`, which asks the person every time.
 
 ## What the person decides
 
@@ -91,8 +93,8 @@ The area is one row at the foot of the sidebar, below the tabs. It is shaped lik
 - **Unfolded**, it lists each session's tabs as rows, indented as in a folder, with a live dot while the agent is acting in a tab. With several sessions each gets a heading with its face, name and status line. With one session its tabs sit straight under the row.
 - **Needs you.** When a question waits, the row says "Claude Code needs you" with the question, and a press goes to the tab that asks.
 - **Height.** The area takes at most 40 percent of the sidebar. Past that it scrolls, with the session that needs the person kept in view. The tab list ends above it.
-- **Which window.** A window shows the sessions that have tabs in it, in any of its spaces. A session with no tab yet shows in the front window.
-- **Menu.** A session's menu has Keep Tabs, Close Tabs, and Disconnect while it is connected. Disconnecting ends the session from Broadway's side, and the agent's next command starts a new one. Broadway's own tasks show here too, with Stop Task instead.
+- **Which space.** A window's card lists only the agent tabs of the space it shows. A session with tabs in two spaces shows in each with the tabs of that space. A session with no tab yet shows in the space that was in front when it connected. While an agent in another space needs the person, that space's icon at the foot of the sidebar carries a small dot in the asking colour.
+- **Menu.** A session's menu has Keep Tabs, Close Tabs, and Disconnect while it is connected. Disconnecting ends the session from Broadway's side and closes its tabs as any end does, and the agent's next command starts a new one.
 
 A session's tabs live only in the area, not in the tab list. A tab of the person's that an agent works in stays where it is, with a small face on its row.
 
@@ -103,7 +105,7 @@ A session's tabs live only in the area, not in the tab list. A tab of the person
 - **Take over.** A click in the page, or ⌘., takes over the tab. A "You're driving" bar shows at the foot of the page, the agent's commands on that tab are refused, and the agent's face looks up at the person. ⌘↩ or Hand Back gives it back. The agent's next command on that tab is refused once, so it looks at the page again before going on.
 - **Never forward.** Agent tabs never come forward by themselves, and their visits stay out of history.
 - **Keep.** Keep Tabs, or `broadway tabs keep`, makes an agent's tab the person's.
-- **Closing.** A finished agent tab the person has opened closes an hour after it finished or was last looked at. A tab nobody opened stays until it is closed.
+- **Closing.** An agent's tabs close when its session ends, as above. Nothing else closes them, and no setting changes when.
 
 ## The face
 

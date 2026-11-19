@@ -32,7 +32,9 @@ extension AgentSocket {
             if let live = links.liveLink(for: key) {
                 found = live
             } else if create {
-                found = links.join(key, name: named ?? AgentLinks.displayName(executable: said["executable"] as? String ?? ""))
+                let made = links.join(key, name: named ?? AgentLinks.displayName(executable: said["executable"] as? String ?? ""))
+                links.setPerson(made.id, !AgentLinks.agentExecutable(said["executable"] as? String))
+                found = links.link(made.id) ?? made
             }
         }
         guard let found else { return nil }
@@ -81,9 +83,11 @@ extension AgentLinks {
         if links.rejoining == nil { links.rejoining = AgentWorkTabs.takeBack }
         guard links.ending == nil else { return }
         links.ending = { link in
+            let now = link.endedAt ?? Date()
             TaskLedger.shared.close(link.id)
-            AgentBoard.finish(link.id, mood: link.ended?.failed == true ? .failed : .done)
+            AgentBoard.finish(link.id, mood: link.ended?.failed == true ? .failed : .done, at: now)
             for found in AgentBoard.allTabs(of: link.id) { AgentPointers.shared.clear(found.tab.id) }
+            AgentEndTabs.begin(link.id, at: now)
         }
         links.asking = { id in
             let mine = Set(AgentBoard.allTabs(of: id).map(\.tab.id))
@@ -99,12 +103,13 @@ extension AgentLinks {
         }
     }
 
-    static func sweepAll(at now: Date = Date()) {
+    static func sweepAll(at now: Date = Date()) async {
         let links = AgentLinks.shared
         links.sweep(at: now) { id in
             AgentBoard.allTabs(of: id).contains { $0.tab.agentActing != nil }
         }
         CodexDesktop.shared.settle(at: now)
+        await AgentEndTabs.settle(at: now)
         links.forgetEnded { id in
             !AgentBoard.allTabs(of: id).isEmpty || links.link(id).map { CodexDesktop.holding($0, at: now) } == true
         }
@@ -173,28 +178,42 @@ enum PersonAgents {
         } else {
             target = try PersonCommands.pick(links.live, id: \.id, named: call.need("id"), what: "agent session")
         }
-        if call.flag("close"), call.flag("keep") { throw PersonRefusal.usage("--close and --keep pull opposite ways, so pick one") }
         let summary = call.string("summary")
-        let here = links.currentTab(target.id)
-        links.end(target.id, call.flag("failed") ? .failed(summary) : .done(summary))
-        var data: [String: Any] = ["ended": links.link(target.id).map(links.row) ?? [:]]
-        var lines: [String] = []
-        if call.flag("close") {
-            let found = AgentWorkTabs.tabs(of: target.id, in: call.box)
-            let unseen = found.filter { AgentWorkTabs.unseen($0.tab, in: $0.browser) }
-            let every = call.box.browsers.flatMap { $0.tabs + $0.parkedAgentTabs }
-            let said = await AgentWorkTabs.tidy(unseen, everyTab: every)
-            data["closed"] = said.closed
-            data["tidy"] = said.object
-            if !said.closed.isEmpty { lines.append("Closed \(said.closed.count) tab\(said.closed.count == 1 ? "" : "s") the person never looked at: " + said.closed.joined(separator: ", ")) }
-            lines += said.lines
+        var given: [(tab: Tab, browser: Browser)] = []
+        var answer: String?
+        let offered = AgentBoard.allTabs(of: target.id)
+        if call.flag("keep"), !call.hook, !offered.isEmpty {
+            do {
+                try await PersonCommands.approve(.person(.tab), call, site: nil, request: call.request, channel: call.channel ?? PersonChannel { _ in },
+                                                 title: AgentEndTabs.keepTitle(offered))
+                given = AgentBoard.allTabs(of: target.id)
+                answer = "yes"
+            } catch let refused as PersonRefusal {
+                answer = refused.code
+            }
         }
-        let left = AgentWorkTabs.tabs(of: target.id, in: call.box)
-        data["tabs"] = left.map { AgentWorkTabs.row($0.tab, current: here) }
+        for found in given { found.browser.keepAgentTab(found.tab) }
+        links.end(target.id, call.flag("failed") ? .failed(summary) : .done(summary))
+        let ended = links.link(target.id)
+        for found in given { links.noteGone(AgentWorkTabs.short(found.tab.id), from: ended, handed: true) }
+        var said = AgentEndTabs.Outcome()
+        if !call.hook, let ending = AgentEndTabs.ending(target.id) { said = await ending.value }
+        said.handed = given.map { AgentWorkTabs.short($0.tab.id) } + said.handed
+        let left = AgentBoard.allTabs(of: target.id)
+        var data: [String: Any] = ["ended": ended.map(links.row) ?? [:]]
+        data.merge(said.object) { _, new in new }
+        data["tabs"] = left.map { AgentWorkTabs.row($0.tab, current: nil) }
         data["left"] = left.count
-        let ids = left.map { AgentWorkTabs.short($0.tab.id) }.joined(separator: ", ")
-        lines.insert(left.isEmpty ? "Ended. 0 tabs of yours are left open." : "Ended. \(left.count) tab\(left.count == 1 ? "" : "s") of yours left open for the person: \(ids).", at: 0)
-        data["message"] = lines.joined(separator: "\n")
+        if let answer { data["keep"] = answer }
+        let none = said.closed.isEmpty && said.handed.isEmpty && said.kept.isEmpty && !call.hook
+        let first = none ? "Ended. You had no tabs open." : "Ended"
+        let why: [String]
+        switch answer {
+        case nil, "yes": why = []
+        case "said_no": why = ["The person said no to keeping your tabs, so they closed"]
+        default: why = ["Nobody answered about keeping your tabs, so they closed"]
+        }
+        data["message"] = ([first] + why + AgentEndTabs.lines(said)).joined(separator: "\n")
         return data
     }
 }

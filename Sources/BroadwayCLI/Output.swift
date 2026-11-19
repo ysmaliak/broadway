@@ -51,6 +51,7 @@ struct Failure: Error {
         "person_only": "Only the person can change this, in Broadway",
         "question_open": "Wait for the answer to the question you already asked",
         "too_many_questions": "Go on with what you already know, or wait before you ask again",
+        "session_ended": "Open the page again with broadway open URL",
     ]
 }
 

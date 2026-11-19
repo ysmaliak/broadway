@@ -252,15 +252,16 @@ def drive(base):
     done = envelope("agents", "done", "--close", "--summary", "Looked at the tea shop", "--tab", unseen_id)
     left = [t["id"] for t in data(done).get("tabs", [])]
     check("agents done takes --tab without failing", done.get("ok"), done)
-    check("agents done --close closes the tab the person never looked at", data(done).get("closed") == [unseen_id], done)
-    check("agents done keeps and lists the tab the person looked at", left == [kept_id], done)
-    check("agents done gives the count in its first line", (data(done).get("message") or "").startswith("Ended. 1 tab of yours left open"), done)
+    check("agents done closes the tab the person looked at and the one they never looked at",
+          sorted(data(done).get("closed") or []) == sorted([kept_id, unseen_id]), done)
+    check("agents done leaves none of its tabs", left == [] and data(done).get("left") == 0, done)
+    check("agents done says what it closed", (data(done).get("message") or "").startswith("Ended\nClosed 2 tabs"), done)
     extra_id = data(envelope("open", base + "help", agent=f"{WORLD}-other")).get("id")
     back = data(envelope("tabs"))
-    check("after done the same agent's next command takes back its open tab as current", [t["id"] for t in back.get("tabs", [])] == [kept_id]
-          and back.get("current") == kept_id, back)
+    check("after done none of the same agent's tabs are left", not ({kept_id, unseen_id} & {t.get("id") for t in back.get("tabs", [])}), back)
+    check("naming a tab that closed with the session says the session ended", code(envelope("tab", kept_id)) == "session_ended")
     went = envelope("go", base + "gift")
-    check("after done go works in the tab taken back", went.get("ok") and data(envelope("tab")).get("id") == kept_id, went)
+    check("after done a command in no tab of its own says the session ended, once", code(went) == "session_ended", went)
     spare = data(envelope("open", base + "basket")).get("id")
     envelope("tab", spare)
     others = envelope("close", "--others")

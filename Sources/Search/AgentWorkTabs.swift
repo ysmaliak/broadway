@@ -178,10 +178,6 @@ enum AgentWorkTabs {
                            data: ["tabs": rows, "others": others, "current": shown ?? NSNull(), "message": message])
     }
 
-    static func unseen(_ tab: Tab, in browser: Browser) -> Bool {
-        !tab.agentSeen && browser.active !== tab && !browser.visibleTabIDs.contains(tab.id)
-    }
-
     static func busy(_ tab: Tab, among all: [Tab]) async -> String? {
         if tab.noisy { return "it is playing sound" }
         if let record = AgentDownloadWatch.latest(tab.id, since: Date().addingTimeInterval(-600)), !record.done, record.failed == nil {
@@ -265,7 +261,7 @@ extension AgentSocket {
             let named = given ?? preferred.flatMap { $0.isEmpty ? nil : $0 }
             switch await target(named, browser: browser, link: link, reads: AgentWorkTabs.readsWithoutTab.contains(name)) {
             case .failure(let refused):
-                guard name == "ask", named == nil else { return (.failure(refused.message, code: refused.code), nil) }
+                guard name == "ask", named == nil else { return (.failure(refused.message, code: refused.code, hint: refused.hint), nil) }
             case .success(let id):
                 arguments["tab"] = id
                 used = id
@@ -316,6 +312,10 @@ extension AgentSocket {
         }
         guard let only = matches.first else {
             let anywhere = box.tabIDs.contains { $0.hasPrefix(String(wanted.prefix(8))) }
+            if let gone = AgentLinks.shared.goneTab(wanted), !anywhere || gone.handed {
+                let refused = AgentEndTabs.refusal(gone.how, tab: String(wanted.prefix(8)), handed: anywhere)
+                return .failure(refused.message, code: refused.code, hint: refused.hint)
+            }
             return anywhere
                 ? .failure("Tab \(wanted) isn't one of yours", code: .notYours)
                 : .failure("No such tab: \(wanted)", code: .noTab)

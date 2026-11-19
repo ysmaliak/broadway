@@ -38,23 +38,39 @@ final class SkillsTests {
         for name in wanted { #expect(names.contains(name), "\(name)") }
     }
 
-    @Test func aSkillReadsItsHeaderBodyAndActions() throws {
+    @Test func aSkillReadsItsHeaderAndBody() throws {
         let skill = try #require(Skill.parse("""
         # My Tool
         sites: tool.example, other.example/app
 
         Know this first.
-
-        ## Actions
-        - Check it [/item/]: Check this item.
-        - Sum it: Sum it up.
         """))
 
         #expect(skill.id == "my-tool")
         #expect(skill.sites == ["tool.example", "other.example/app"])
         #expect(skill.body == "Know this first.")
-        #expect(skill.actions == [SkillAction(title: "Check it", path: "/item/", prompt: "Check this item."),
-                                       SkillAction(title: "Sum it", path: nil, prompt: "Sum it up.")])
+    }
+
+    @Test func anOlderActionsListIsPlainTextOfTheBody() throws {
+        let skill = try #require(Skill.parse("""
+        # My Tool
+        sites: tool.example
+
+        Know this first.
+
+        ## Actions
+        - Check it [/item/]: Check this item.
+        """))
+
+        #expect(skill.body == "Know this first.\n\n## Actions\n- Check it [/item/]: Check this item.")
+        #expect(skill.summary == "Know this first.")
+    }
+
+    @Test func noBuiltInCarriesPromptsForAChatThatIsGone() {
+        for text in BuiltInSkills.texts + [SkillStore.template] {
+            #expect(!text.contains("## Actions"))
+            #expect(!text.contains("in my voice"))
+        }
     }
 
     @Test func aSkillNeedsANameAndSites() {
@@ -73,12 +89,12 @@ final class SkillsTests {
         let github = try #require(store.skill(named: "GitHub"))
 
         let copy = try #require(store.duplicate(github))
-        store.save(copy.text.replacingOccurrences(of: "Review pull request", with: "Look over"), replacing: copy)
+        store.save(copy.text.replacingOccurrences(of: "Read the conversation before the diff.", with: "Read the diff first."), replacing: copy)
 
         #expect(store.skills(for: url("https://github.com/a")).map(\.builtIn) == [false])
-        let titles = store.skills(for: url("https://github.com/a/b/pull/1")).flatMap(\.actions).map(\.title)
-        #expect(titles.contains("Look over"))
-        #expect(!titles.contains("Review pull request"))
+        let bodies = store.skills(for: url("https://github.com/a/b/pull/1")).map(\.body)
+        #expect(bodies.contains { $0.contains("Read the diff first.") })
+        #expect(!bodies.contains { $0.contains("Read the conversation before the diff.") })
         #expect(store.all.filter { $0.id == "github" }.count == 1)
     }
 

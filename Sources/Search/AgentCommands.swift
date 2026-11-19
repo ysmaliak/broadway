@@ -180,6 +180,7 @@ enum ToolCode: String, CaseIterable {
     case pageTooLarge = "page_too_large"
     case questionOpen = "question_open"
     case tooManyQuestions = "too_many_questions"
+    case sessionEnded = "session_ended"
 
     var mayHaveLanded: Bool {
         switch self {
@@ -240,6 +241,7 @@ enum ToolCode: String, CaseIterable {
         case .pageTooLarge: "Load it again only if you need it, and do less on it"
         case .questionOpen: "Wait for the answer to the question you already asked"
         case .tooManyQuestions: "Go on with what you already know, or wait before you ask again"
+        case .sessionEnded: "Open the page again with broadway open URL"
         }
     }
 }
@@ -429,7 +431,7 @@ extension AgentSocket {
             switch await self.target(named, browser: browser, link: link) {
             case .failure(let refused):
                 if name == "ask", named == nil { return .go(arguments) }
-                return .refuse(.failure(refused.message, code: refused.code))
+                return .refuse(.failure(refused.message, code: refused.code, hint: refused.hint))
             case .success(let id):
                 arguments["tab"] = id
                 if named != nil { self.remember(id, link: link) }
@@ -460,6 +462,7 @@ extension AgentSocket {
     struct TabRefusal: Error {
         let code: String
         let message: String
+        var hint: String?
     }
 
     func target(_ named: String?, browser: Browser, link: UUID? = nil, reads: Bool = true) async -> Result<String, TabRefusal> {
@@ -473,7 +476,15 @@ extension AgentSocket {
             let wanted = String(named.lowercased().prefix(8))
             let matches = wanted.isEmpty ? [] : tabs.filter { $0.hasPrefix(wanted) }
             if matches.count > 1 { return .failure(TabRefusal(code: "ambiguous_tab", message: "\(named) fits \(matches.count) tabs: give more of its id")) }
-            guard let only = matches.first else { return .failure(TabRefusal(code: "no_tab", message: "No such tab: \(named)")) }
+            let links = AgentLinks.shared
+            guard let only = matches.first else {
+                if let gone = links.goneTab(wanted) { return .failure(AgentEndTabs.refusal(gone.how, tab: wanted, handed: false)) }
+                return .failure(TabRefusal(code: "no_tab", message: "No such tab: \(named)"))
+            }
+            if let gone = links.goneTab(only), gone.handed, gone.key != nil, gone.key == link.flatMap({ links.link($0)?.key }),
+               box.find(["tab": only])?.tab.agent != true {
+                return .failure(AgentEndTabs.refusal(gone.how, tab: only, handed: true))
+            }
             return .success(only)
         }
         if let currentTab = current(link), tabs.contains(currentTab) { return .success(currentTab) }
@@ -481,6 +492,9 @@ extension AgentSocket {
             let id = AgentWorkTabs.short(last.tab.id)
             remember(id, link: link)
             return .success(id)
+        }
+        if let key = link.flatMap({ AgentLinks.shared.link($0)?.key }), let how = AgentLinks.shared.takeEnded(key) {
+            return .failure(AgentEndTabs.refusal(how, tab: nil, handed: false))
         }
         if reads, let front, tabs.contains(front) { return .success(front) }
         return .failure(TabRefusal(code: "no_tab", message: reads ? "No tab to work in" : "You have no tab. Open one with broadway open URL, or name one with --tab ID."))

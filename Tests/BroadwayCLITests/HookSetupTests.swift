@@ -295,6 +295,15 @@ final class HookSetupTests {
         #expect((request["agent"] as? [String: Any])?["session"] as? String == "codex:abc")
     }
 
+    @Test func aSessionEndNeverAsksToKeepTabs() throws {
+        for agent in ["claude", "codex"] {
+            let request = try #require(AgentHook.request(agent: agent, event: ["session_id": "x", "hook_event_name": "SessionEnd", "reason": "other"], environment: [:]))
+
+            #expect((request["arguments"] as? [String: Any])?.isEmpty == true)
+            #expect(request["wait"] as? Int == 0)
+        }
+    }
+
     @Test func aSessionEndEndsAndOtherEventsDoNothing() {
         let end = AgentHook.request(agent: "claude", event: ["session_id": "x", "hook_event_name": "SessionEnd", "reason": "other"], environment: [:])
         let busy = AgentHook.request(agent: "claude", event: ["session_id": "x", "hook_event_name": "Stop", "background_tasks": [["id": "1"]]], environment: [:])
