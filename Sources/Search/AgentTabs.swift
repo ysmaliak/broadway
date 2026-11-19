@@ -174,6 +174,7 @@ extension Bench {
                   "seen": tab.agentSeen, "active": tab.id == browser.activeID, "driving": tab.driving] as [String: Any]
              },
              "links": AgentLinks.shared.links.map(AgentLinks.shared.row),
+             "askingSpaces": browser.agentAskingSpaces.map(\.uuidString),
              "area": browser.agentSessions(links: AgentLinks.shared.links, front: true).map { session in
                  let said = session.state(pending: AgentDesk.shared.pending)
                  return ["id": session.id.uuidString, "name": session.link.name, "title": session.link.title, "status": said.line,

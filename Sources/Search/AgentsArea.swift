@@ -158,6 +158,7 @@ enum AgentsLayout {
 struct AgentSession: Identifiable, Equatable {
     let link: AgentLink
     let tabs: [Tab]
+    var elsewhere: Set<Tab.ID> = []
 
     var id: UUID { link.id }
 
@@ -175,7 +176,9 @@ struct AgentSession: Identifiable, Equatable {
             return AgentLinkState.TabFacts(acting: tab.agentActing, mood: tab.agentMood, driving: tab.driving,
                                            host: tab.pageAddress?.host(), question: asked?.title, asking: asked != nil)
         }
-        let loose = pending.first { question in question.task == link.id && !tabs.contains { $0.id == question.tab } }
+        let loose = pending.first { question in
+            question.task == link.id && !tabs.contains { $0.id == question.tab } && !(question.tab.map(elsewhere.contains) ?? false)
+        }
         let extra = loose.map { [AgentLinkState.TabFacts(question: $0.title, asking: true)] } ?? []
         return AgentLinkState.of(facts + extra, ended: link.ended, rest: link.rest, last: link.last)
     }
@@ -190,21 +193,48 @@ struct AgentSession: Identifiable, Equatable {
     }
 }
 
+extension AgentLinks {
+    static func frontSpace() -> UUID? {
+        guard let front = Browsers.front, front.showsSpaces else { return nil }
+        return front.spaceID
+    }
+}
+
 extension Browser {
     var agentsInFront: Bool { Browsers.front === self || Browsers.front == nil }
 
-    func agentSessions(links: [AgentLink], front: Bool) -> [AgentSession] {
+    func agentSessions(links: [AgentLink], front: Bool, in space: UUID? = nil) -> [AgentSession] {
+        let shown = space ?? spaceID
+        let row = shown == spaceID ? tabs : parked[shown]?.tabs ?? []
         let sessions = links.compactMap { link -> AgentSession? in
             let everywhere = AgentBoard.allTabs(of: link.id)
-            let mine = everywhere.filter { $0.browser === self }.map(\.tab)
+            let held = everywhere.filter { $0.browser === self }.map(\.tab)
+            let mine = held.filter { tab in row.contains { $0 === tab } }
             if mine.isEmpty {
-                return everywhere.isEmpty && (link.live || link.codex != nil) && link.announced && front ? AgentSession(link: link, tabs: []) : nil
+                let waits = everywhere.isEmpty && (link.live || link.codex != nil) && link.announced
+                return waits && tablessShown(link, in: shown, front: front) ? AgentSession(link: link, tabs: []) : nil
             }
-            return AgentSession(link: link, tabs: mine)
+            let away = held.filter { tab in !mine.contains { $0 === tab } }
+            return AgentSession(link: link, tabs: mine, elsewhere: Set(away.map(\.id)))
         }
         return sessions.enumerated().sorted { one, two in
             one.element.link.connected == two.element.link.connected ? one.offset < two.offset : one.element.link.connected < two.element.link.connected
         }.map(\.element)
+    }
+
+    func tablessShown(_ link: AgentLink, in space: UUID, front: Bool) -> Bool {
+        guard showsSpaces, let home = link.space, spaces.contains(where: { $0.id == home }) else { return front && space == spaceID }
+        return home == space && (front || space != spaceID)
+    }
+
+    func agentAsks(in space: UUID) -> Bool {
+        guard showsSpaces, space != spaceID, spaces.contains(where: { $0.id == space }) else { return false }
+        let pending = AgentDesk.shared.pending
+        return agentSessions(links: AgentLinks.shared.links, front: false, in: space).contains { $0.state(pending: pending).attention }
+    }
+
+    var agentAskingSpaces: [UUID] {
+        spaces.map(\.id).filter(agentAsks(in:))
     }
 
     func agentSections(_ sessions: [AgentSession]) -> [AgentsLayout.Section] {

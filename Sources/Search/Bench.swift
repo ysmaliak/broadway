@@ -3074,7 +3074,7 @@ final class Bench {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { whenLoaded(80) }
                 return
             }
-            let shown = pages(in: frame).filter { !$0.isHidden && $0.alphaValue > 0 && !$0.frame.isEmpty }
+            let shown = request["webs"] as? Bool == false ? [] : pages(in: frame).filter { !$0.isHidden && $0.alphaValue > 0 && !$0.frame.isEmpty }
             var taken: [(WKWebView, NSImage)] = []
             var left = shown.count
             func draw() {

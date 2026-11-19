@@ -49,6 +49,7 @@ struct AgentLink: Identifiable, Equatable {
     var announced = false
     var codex: CodexThread?
     var number = 1
+    var space: UUID?
 
     var live: Bool { ended == nil }
 
@@ -84,6 +85,7 @@ final class AgentLinks {
     @ObservationIgnored var resting: ((UUID) -> Void)?
     @ObservationIgnored var rejoining: ((UUID, [UUID]) -> Void)?
     @ObservationIgnored var asking: (UUID) -> Bool = { _ in false }
+    @ObservationIgnored var here: () -> UUID? = { AgentLinks.frontSpace() }
 
     var live: [AgentLink] { links.filter(\.live) }
 
@@ -107,6 +109,7 @@ final class AgentLinks {
         let before = links.filter { $0.key == key && !$0.live }
             .sorted { ($0.endedAt ?? $0.connected) < ($1.endedAt ?? $1.connected) }.map(\.id)
         made.number = number(for: made.name, besides: id)
+        made.space = here()
         heardAt[id] = now
         links.append(made)
         if !before.isEmpty { rejoining?(id, before) }

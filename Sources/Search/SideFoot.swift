@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 
 final class SpaceFootView: NSView, SpaceFollowing {
     let browser: Browser
@@ -332,7 +333,8 @@ final class SpaceFootView: NSView, SpaceFollowing {
                 "focus": Double(focus ?? 0), "pan": Double(pan),
                 "marks": zip(fresh, row.marks).map { spot, mark -> [String: Any] in
                     ["name": spots[spot.kind]?.name ?? "", "from": Double(mark.from), "to": Double(mark.to), "share": Double(mark.share),
-                     "size": Double(mark.size), "dot": Double(mark.dot), "alpha": Double(mark.alpha), "here": spot.here, "small": mark.small]
+                     "size": Double(mark.size), "dot": Double(mark.dot), "alpha": Double(mark.alpha), "here": spot.here, "small": mark.small,
+                     "asking": spots[spot.kind]?.asking ?? false]
                 }]
     }
 
@@ -354,9 +356,13 @@ final class SpaceSpotView: KitHoverView {
     private var light: CGFloat = 0
     private var ink: KitInk = .flat
     private let bead = KitPlate(fill: .ink, radius: 7)
+    private let ask = UnseenDotView()
+    private var askWatch: AnyCancellable?
+    private(set) var asking = false
     private(set) var name = ""
     private(set) var small = false
     private var share: CGFloat = 1
+    private var beaded: CGFloat = 0
     weak var foot: SpaceFootView?
 
     init(browser: Browser, kind: FootSpot.Kind, icon: TabIcon, here: Bool, next: Bool) {
@@ -370,12 +376,18 @@ final class SpaceSpotView: KitHoverView {
         wash.alphaValue = 0
         addSubview(wash)
         addSubview(lit)
+        ask.tone = .unsafe
+        ask.toolTip = nil
+        ask.setAccessibilityElement(false)
+        ask.isHidden = true
+        addSubview(ask)
         lit.bead = bead
         lit.tint = { [weak self] amount in self?.tinted(amount) }
         setAccessibilityElement(true)
         if case .space(let id) = kind {
             setAccessibilityRole(.button)
             setAccessibilityIdentifier("space-" + id.uuidString)
+            askWatch = kitTrack { [weak self] in self?.reask(id) }
         } else {
             setAccessibilityRole(.image)
             setAccessibilityLabel("New Space")
@@ -387,6 +399,15 @@ final class SpaceSpotView: KitHoverView {
     required init?(coder: NSCoder) { fatalError() }
 
     override var isFlipped: Bool { true }
+
+    private func reask(_ id: UUID) {
+        let now = browser.agentAsks(in: id)
+        guard now != asking else { return }
+        asking = now
+        ask.isHidden = !now
+        setAccessibilityValue(now ? "An agent needs you" : nil)
+        needsLayout = true
+    }
 
     private func tinted(_ amount: CGFloat) {
         light = amount
@@ -436,6 +457,7 @@ final class SpaceSpotView: KitHoverView {
         lit.size = mark.size
         lit.dot = mark.dot
         small = mark.small
+        beaded = mark.dot
         self.share = mark.size
         let alpha = mark.alpha * share
         if alphaValue != alpha { alphaValue = alpha }
@@ -453,7 +475,13 @@ final class SpaceSpotView: KitHoverView {
         wash.radius = 7 * share
         wash.frame = NSRect(x: (bounds.width - box) / 2, y: (bounds.height - box) / 2, width: box, height: box)
         lit.frame = NSRect(x: (bounds.width - side) / 2, y: (bounds.height - side) / 2, width: side, height: side)
+        let dot = Self.askSide * share
+        let reach = Self.askReach * share * (1 - beaded)
+        ask.kitSetFrame(NSRect(x: bounds.midX + reach - dot / 2, y: bounds.midY - reach - dot / 2, width: dot, height: dot))
     }
+
+    static let askSide: CGFloat = 7
+    static let askReach: CGFloat = 6.5
 
     override func hoverChanged() {
         let over = hovering
