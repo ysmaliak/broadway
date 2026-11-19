@@ -114,10 +114,10 @@ Each agent has a face drawn in code: a rounded square head in the agent's colour
 | idle | eyes open and still |
 | reading | eyes scan along a line and blink now and then |
 | typing | eyes look down |
-| waving (needs the person) | eyes look up and a hand waves |
+| waving (needs the person) | large round eyes look up and the head sways |
 | driving (the person took over) | eyes look up at the person |
 | done | happy eyes and a tick |
-| failed | eyes look down |
+| failed | small round eyes sit low and the head slumps |
 
 A session's heading shows the strongest state over its tabs: waving, then driving, then typing, then reading, then idle. It shows done or failed only once the session has ended. The face moves only while it is reading, typing or waving and on screen. Under Reduce Motion or Low Power Mode it shows a still frame. Blinks come from the session's id rather than a random clock, so a frame depends only on the state, the time and the session, and can be tested.
 

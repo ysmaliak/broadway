@@ -31,10 +31,6 @@ enum AgentCharacter {
         }
     }
 
-    enum Brows: Equatable {
-        case none, raised, worried
-    }
-
     struct Frame: Equatable {
         var look = CGPoint.zero
         var open: CGFloat = 1
@@ -43,7 +39,6 @@ enum AgentCharacter {
         var tilt: CGFloat = 0
         var squash: CGFloat = 0
         var smile: CGFloat = 0
-        var brows = Brows.none
         var tick = false
         var dim: CGFloat = 0
     }
@@ -68,9 +63,10 @@ enum AgentCharacter {
             frame.look = CGPoint(x: 0, y: 0.12)
             frame.open = 0.85
         case .waving:
-            frame.look = CGPoint(x: 0.03, y: -0.05)
+            frame.look = CGPoint(x: 0, y: -0.06)
+            frame.open = 0.825
+            frame.wide = 1.65
             frame.tilt = askTilt
-            frame.brows = .raised
         case .driving:
             frame.look = CGPoint(x: 0.12, y: -0.04)
             frame.open = 0.7
@@ -79,10 +75,9 @@ enum AgentCharacter {
             frame.smile = 1
             frame.tick = true
         case .failed:
-            frame.look = CGPoint(x: 0, y: 0.12)
-            frame.open = 0.9
-            frame.brows = .worried
-            frame.squash = 0.07
+            frame.look = CGPoint(x: 0, y: 0.16)
+            frame.open = 0.5
+            frame.squash = 0.09
             frame.nod = 0.02
             frame.tilt = -0.06
         case .ended:
@@ -268,10 +263,6 @@ enum AgentCharacter {
         var arc: CGFloat
         var arcScale: CGFloat
         var arcOpacity: Swift.Float
-        var brows: [CGPoint]
-        var brow: CGFloat
-        var browTurn: [CGFloat]
-        var browOpacity: Swift.Float
         var badge: CGPoint
         var badgeSide: CGFloat
         var badgeScale: CGFloat
@@ -294,16 +285,12 @@ enum AgentCharacter {
         let eyes = [CGPoint(x: centre.x - gap, y: eyeY), CGPoint(x: centre.x + gap, y: eyeY)]
         let shut = min(1, abs(frame.smile))
         let arcY = eyeY + (frame.smile >= 0 ? 0.04 : -0.01) * unit
-        let raised = frame.brows == .raised
-        let browY = max(inner.minY + line * 0.4 - gaze.y, eyeY - eye.height / 2 - unit * (raised ? 0.09 : 0.07))
-        let turn: CGFloat = frame.brows == .worried ? 0.4 : 0
         let badgeSide = unit * 0.3
         return Pose(unit: unit, line: line, pivot: CGPoint(x: centre.x, y: head.maxY), head: head, radius: side * 0.42,
                     scale: CGSize(width: 1 + frame.squash * 0.6, height: 1 - frame.squash), tilt: frame.tilt, nod: frame.nod * unit,
                     opacity: Swift.Float(1 - frame.dim), gaze: gaze, eyes: eyes, eye: eye, eyeOpacity: Swift.Float(1 - shut),
                     arcs: eyes.map { CGPoint(x: $0.x, y: arcY) }, arc: unit * 0.075, arcScale: frame.smile < 0 ? -1 : 1,
-                    arcOpacity: Swift.Float(shut), brows: eyes.map { CGPoint(x: $0.x, y: browY) }, brow: unit * 0.14,
-                    browTurn: [-turn, turn], browOpacity: frame.brows == .none ? 0 : 1,
+                    arcOpacity: Swift.Float(shut),
                     badge: CGPoint(x: head.maxX - unit * 0.09, y: head.maxY - unit * 0.09), badgeSide: badgeSide,
                     badgeScale: frame.tick ? 1 : 0.4, badgeOpacity: frame.tick ? 1 : 0)
     }
@@ -349,7 +336,6 @@ final class AgentCharacterFace: KitFlippedView {
     private let scan = CALayer()
     private let eyes = [CALayer(), CALayer()]
     private let arcs = [CAShapeLayer(), CAShapeLayer()]
-    private let brows = [CAShapeLayer(), CAShapeLayer()]
     private let badge = CAShapeLayer()
     private let tick = CAShapeLayer()
     private let shown = KitWindowShown()
@@ -367,12 +353,12 @@ final class AgentCharacterFace: KitFlippedView {
         life.addSublayer(gaze)
         gaze.addSublayer(scan)
         for eye in eyes { scan.addSublayer(eye) }
-        for part in arcs + brows + [badge, tick] {
+        for part in arcs + [badge, tick] {
             part.lineCap = .round
             part.lineJoin = .round
             part.fillColor = nil
         }
-        for part in arcs + brows { scan.addSublayer(part) }
+        for part in arcs { scan.addSublayer(part) }
         life.addSublayer(badge)
         badge.addSublayer(tick)
         shown.changed = { [weak self] _ in self?.relive() }
@@ -393,7 +379,7 @@ final class AgentCharacterFace: KitFlippedView {
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
         let scale = window?.backingScaleFactor ?? 2
-        for part in arcs + brows + [badge, tick] { part.contentsScale = scale }
+        for part in arcs + [badge, tick] { part.contentsScale = scale }
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -453,14 +439,6 @@ final class AgentCharacterFace: KitFlippedView {
             part.path = arc
             part.lineWidth = base.line
         }
-        let brow = CGMutablePath()
-        brow.move(to: CGPoint(x: -base.brow / 2, y: 0))
-        brow.addLine(to: CGPoint(x: base.brow / 2, y: 0))
-        for part in brows {
-            part.bounds = .zero
-            part.path = brow
-            part.lineWidth = base.line * 0.8
-        }
         let side = base.badgeSide
         badge.bounds = CGRect(x: -side / 2, y: -side / 2, width: side, height: side)
         badge.path = CGPath(ellipseIn: badge.bounds, transform: nil)
@@ -519,11 +497,6 @@ final class AgentCharacterFace: KitFlippedView {
             move(arc, "position", NSValue(point: to.arcs[index]))
             move(arc, "transform.scale.y", number(to.arcScale))
             move(arc, "opacity", NSNumber(value: to.arcOpacity))
-        }
-        for (index, brow) in brows.enumerated() {
-            move(brow, "position", NSValue(point: to.brows[index]))
-            move(brow, "transform.rotation.z", number(to.browTurn[index]))
-            move(brow, "opacity", NSNumber(value: to.browOpacity))
         }
         move(badge, "position", NSValue(point: to.badge))
         move(badge, "transform.scale", number(to.badgeScale))
@@ -608,7 +581,7 @@ final class AgentCharacterFace: KitFlippedView {
         head.kitAnimate("backgroundColor", to: fill, curve: curve)
         head.kitAnimate("borderColor", to: line, curve: curve)
         for eye in eyes { eye.kitAnimate("backgroundColor", to: line, curve: curve) }
-        for part in arcs + brows { part.kitAnimate("strokeColor", to: line, curve: curve) }
+        for part in arcs { part.kitAnimate("strokeColor", to: line, curve: curve) }
         badge.kitAnimate("fillColor", to: line, curve: curve)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -618,6 +591,39 @@ final class AgentCharacterFace: KitFlippedView {
 }
 
 extension AgentCharacter {
+    @MainActor static func sheet(lift: Double) -> NSView {
+        let places: [(String, CGFloat)] = [("Tab row 14", 14), ("Card 16", 16), ("Question 18", 18)]
+        let moods = Mood.allCases
+        let lead: CGFloat = 70
+        let step: CGFloat = 78
+        let top: CGFloat = 18
+        let row: CGFloat = 30
+        let grid = KitFlippedView()
+        for (column, mood) in moods.enumerated() {
+            let title = KitLabel(mood.title, font: .systemFont(ofSize: 9), color: KitColor.muted)
+            title.alignment = .center
+            title.frame = NSRect(x: lead + CGFloat(column) * step, y: 2, width: step, height: 12)
+            grid.addSubview(title)
+        }
+        for (line, place) in places.enumerated() {
+            let side = place.1
+            let y = top + CGFloat(line) * row
+            let name = KitLabel(place.0, font: .systemFont(ofSize: 9), color: KitColor.muted)
+            name.frame = NSRect(x: 4, y: y + (row - 12) / 2, width: lead - 6, height: 12)
+            grid.addSubview(name)
+            for (column, mood) in moods.enumerated() {
+                let face = AgentCharacterFace()
+                face.columnShown = false
+                face.mood = mood
+                face.colour = mood == .waving && side < 18 ? Palette.NS.unsafe : side == 14 ? KitColor.ink : accentColor(4)
+                face.ink = KitInk(lift: lift)
+                face.frame = NSRect(x: lead + CGFloat(column) * step + (step - side) / 2, y: y + (row - side) / 2, width: side, height: side)
+                grid.addSubview(face)
+            }
+        }
+        return BenchFloating.sized(grid, NSSize(width: lead + CGFloat(moods.count) * step + 4, height: top + CGFloat(places.count) * row + 4))
+    }
+
     @MainActor static func surface(lift: Double) -> NSView {
         let moods: [Mood] = [.idle, .driving, .done, .failed]
         let row = KitFlippedView()

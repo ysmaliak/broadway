@@ -24,7 +24,7 @@ enum BenchFloating {
         case "reload-door":
             return ReloadFace.surface(stop: request["stop"] as? Bool ?? false, lift: lift, frame: frame)
         case "agent-character":
-            return AgentCharacter.surface(lift: lift)
+            return request["sheet"] as? Bool == true ? AgentCharacter.sheet(lift: lift) : AgentCharacter.surface(lift: lift)
         case "agent-pointer":
             return AgentPointers.surface(kind: AgentPointer.Kind(rawValue: request["kind"] as? String ?? "type") ?? .type)
         case "link-bubble":

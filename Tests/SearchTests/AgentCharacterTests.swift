@@ -26,12 +26,12 @@ struct AgentCharacterTests {
         let driving = still(.driving), done = still(.done), failed = still(.failed), ended = still(.ended)
 
         #expect(still(.idle) == AgentCharacter.Frame())
-        #expect(hello.open > 1 && hello.wide > 1 && hello.look.y < 0 && hello.brows == .none)
+        #expect(hello.open > 1 && hello.wide > 1 && hello.look.y < 0)
         #expect(reading.look.y > 0 && typing.look.y > reading.look.y)
-        #expect(waving.brows == .raised && waving.look.y < 0 && waving.tilt == AgentCharacter.askTilt)
-        #expect(driving.look.x > 0 && driving.open < 1 && driving.brows == .none)
+        #expect(waving.wide > 1.5 && waving.open < 1 && waving.look.y < 0 && waving.tilt == AgentCharacter.askTilt)
+        #expect(driving.look.x > 0 && driving.open < 1)
         #expect(done.smile == 1 && done.tick)
-        #expect(failed.brows == .worried && failed.look.y > 0 && failed.squash > 0 && !failed.tick)
+        #expect(failed.open <= 0.5 && failed.wide == 1 && failed.look.y > typing.look.y && failed.squash > 0 && !failed.tick)
         #expect(ended.smile == -1 && ended.dim > 0 && !ended.tick)
     }
 
@@ -216,7 +216,7 @@ struct AgentCharacterTests {
         #expect(!ended.0 && ended.1 == 0)
     }
 
-    @Test func eyesAndBrowsStayInsideTheHead() {
+    @Test func eyesStayInsideTheHead() {
         let sizes: [CGFloat] = [14, 16, 18, 22]
 
         for side in sizes {
@@ -227,9 +227,53 @@ struct AgentCharacterTests {
                                        width: pose.eye.width, height: pose.eye.height)
                     #expect(pose.head.insetBy(dx: pose.line / 2, dy: pose.line / 2).contains(shown), "\(mood) at \(side) pt")
                 }
-                for brow in pose.brows where pose.browOpacity > 0 {
-                    #expect(brow.y + pose.gaze.y > pose.head.minY, "\(mood) at \(side) pt")
+            }
+        }
+    }
+
+    @Test func needsYouAndCouldNotFinishReadByTheirEyesAtEverySize() throws {
+        let sizes: [CGFloat] = [14, 16, 18]
+        let eyes = { (mood: AgentCharacter.Mood, side: CGFloat) -> CGRect? in
+            let pose = AgentCharacter.pose(AgentCharacter.still(mood), size: CGSize(width: side, height: side))
+            guard pose.eyeOpacity > 0 else { return nil }
+            return CGRect(x: pose.eyes[0].x + pose.gaze.x - pose.eye.width / 2, y: pose.eyes[0].y + pose.gaze.y - pose.eye.height / 2,
+                          width: pose.eye.width, height: pose.eye.height)
+        }
+
+        for side in sizes {
+            let asking = try #require(eyes(.waving, side))
+            let failed = try #require(eyes(.failed, side))
+            let idle = try #require(eyes(.idle, side))
+            #expect(abs(asking.width - asking.height) < 0.001 && asking.width > idle.width + 1 && asking.midY < idle.midY, "asking at \(side) pt")
+            #expect(abs(failed.width - failed.height) < 0.001 && failed.height < idle.height - 1 && failed.midY > idle.midY + 1, "failed at \(side) pt")
+            #expect(asking.width > failed.width + 1 && failed.midY > asking.midY + 2, "asking against failed at \(side) pt")
+            for mood in moods where mood != .waving && mood != .failed {
+                guard let other = eyes(mood, side) else { continue }
+                for (name, mine) in [("asking", asking), ("failed", failed)] {
+                    let apart = max(abs(mine.width - other.width), abs(mine.height - other.height), abs(mine.midX - other.midX), abs(mine.midY - other.midY))
+                    #expect(apart >= 1, "\(name) eyes are \(apart) pt from \(mood) at \(side) pt")
                 }
+            }
+        }
+    }
+
+    @Test func noMoodDrawsABrow() {
+        let named = { (value: Any) in Mirror(reflecting: value).children.compactMap(\.label).filter { $0.lowercased().contains("brow") } }
+        func layers(_ layer: CALayer) -> [CALayer] { [layer] + (layer.sublayers ?? []).flatMap(layers) }
+
+        for side in [CGFloat(14), 16, 18, 22] {
+            let face = AgentCharacterFace(frame: NSRect(x: 0, y: 0, width: side, height: side))
+            face.layoutSubtreeIfNeeded()
+            for mood in moods {
+                face.mood = mood
+                face.layoutSubtreeIfNeeded()
+                let all = face.layer.map(layers) ?? []
+                let strokes = all.compactMap { $0 as? CAShapeLayer }
+                let fills = all.filter { !($0 is CAShapeLayer) && ($0.backgroundColor != nil || $0.borderWidth > 0) }
+                let pose = AgentCharacter.pose(AgentCharacter.still(mood), size: CGSize(width: side, height: side))
+                #expect(strokes.count == 4, "\(mood) at \(side) pt draws \(strokes.count) strokes, not two closed eyes, a badge and a tick")
+                #expect(fills.count == 3, "\(mood) at \(side) pt fills \(fills.count) shapes, not a head and two eyes")
+                #expect(named(AgentCharacter.still(mood)).isEmpty && named(pose).isEmpty)
             }
         }
     }

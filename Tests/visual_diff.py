@@ -119,6 +119,7 @@ SURFACES = {
     "reload-door-vivid": {"surface": {"name": "reload-door", "ground": VIVID, "lift": 0.8, "frame": True}},
     "agent-character": {"surface": {"name": "agent-character"}},
     "agent-character-vivid": {"surface": {"name": "agent-character", "ground": VIVID, "lift": 0.8}},
+    "agent-faces": {"surface": {"name": "agent-character", "sheet": True}},
     "agent-pointer-type": {"surface": {"name": "agent-pointer", "ground": PALE, "kind": "type"}},
     "agent-pointer-click": {"surface": {"name": "agent-pointer", "ground": PALE, "kind": "click"}},
     "link-bubble": {"surface": {"name": "link-bubble"}},
