@@ -294,20 +294,19 @@ struct FloatOpticsTests {
         #expect(view.rewind.symbol?.frame == view.forward.symbol?.frame)
     }
 
-    @Test func theToggleGivesEachMarkTheNudgeThatSetsItsWeightOnTheCentre() {
-        let style = KitSymbol.Style(size: 21, weight: .semibold)
+    @Test func theToggleKeepsOnePlaceForBothMarks() {
         let (view, chrome) = transport(playing: true)
-        let pause = view.toggle.nudge
+        let pause = (nudge: view.toggle.nudge, frame: view.toggle.glyph?.frame)
 
         chrome.playing = false
         view.needsLayout = true
         view.layoutSubtreeIfNeeded()
 
-        #expect(pause == FloatOptics.nudge("pause.fill", style))
-        #expect(view.toggle.nudge == FloatOptics.nudge("play.fill", style))
-        #expect(view.toggle.symbol?.name == "play.fill")
-        #expect(view.toggle.nudge.dx > pause.dx + 0.5)
-        #expect(abs(pause.dx) < 0.5)
+        #expect(pause.nudge == .zero)
+        #expect(view.toggle.nudge == .zero)
+        #expect(view.toggle.glyph?.name == "play.fill")
+        #expect(view.toggle.glyph?.frame == pause.frame)
+        #expect(pause.frame == NSRect(x: 0, y: 0, width: FloatLayout.play, height: FloatLayout.play))
     }
 
     @Test func theToggleSwapsWithTheSystemsReplaceAndNoMotionOfBroadwaysOwn() {
@@ -321,11 +320,11 @@ struct FloatOpticsTests {
         chrome.playing = false
         view.needsLayout = true
         view.layoutSubtreeIfNeeded()
-        let layer = view.toggle.symbol?.layer
+        let layer = view.toggle.glyph?.layer
 
-        #expect(view.toggle.symbol?.name == "play.fill")
-        #expect(view.toggle.symbol?.replaced == 1)
-        #expect(view.toggle.symbol?.played == KitSwap.downUp)
+        #expect(view.toggle.glyph?.name == "play.fill")
+        #expect(view.toggle.glyph?.replaced == 1)
+        #expect(view.toggle.glyph?.played == KitSwap.downUp)
         #expect(layer?.animation(forKey: KitSwap.leave) == nil)
         #expect(layer?.animation(forKey: KitSwap.arrive) == nil)
         #expect(layer?.animation(forKey: KitSwap.crossKey) == nil)

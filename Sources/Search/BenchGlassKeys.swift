@@ -301,10 +301,12 @@ enum BenchGlassKeys {
         }
         guard let gallery else { return answer(["error": "no gallery"]) }
         func mark(_ transport: FloatTransportView?) -> [String: Any] {
-            guard let key = transport?.toggle, let symbol = key.symbol else { return ["swaps": -1, "mark": ""] }
-            return ["swaps": symbol.replaced, "mark": symbol.name.replacingOccurrences(of: ".fill", with: ""),
-                    "downUp": symbol.played == KitSwap.downUp, "nudge": [Double(key.nudge.dx), Double(key.nudge.dy)],
-                    "rests": key.held == nil && key.nudge == FloatOptics.nudge(symbol.name, symbol.style), "reduced": Motion.reduced]
+            guard let key = transport?.toggle, let glyph = key.glyph else { return ["swaps": -1, "mark": ""] }
+            let frame = glyph.frame
+            return ["swaps": glyph.replaced, "mark": glyph.name.replacingOccurrences(of: ".fill", with: ""),
+                    "downUp": glyph.played == KitSwap.downUp, "nudge": [Double(key.nudge.dx), Double(key.nudge.dy)],
+                    "frame": [frame.minX, frame.minY, frame.width, frame.height].map(Double.init),
+                    "rests": key.nudge == .zero && frame == glyph.superview?.bounds, "reduced": Motion.reduced]
         }
         func frame(_ key: GlassKeyGallery.Key) -> [Double] {
             let rect = key.view.convert(key.view.bounds, to: nil)

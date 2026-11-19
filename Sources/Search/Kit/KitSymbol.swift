@@ -12,7 +12,6 @@ enum KitSwap {
     static let small: CGFloat = 0.6
     static let spring = KitSpring(response: 0.26, damping: 0.62)
     static let downUp: ReplaceSymbolEffect = .replace.downUp.byLayer
-    static let dot: CFTimeInterval = 0.115
 }
 
 final class KitSymbol: NSImageView {
@@ -149,29 +148,13 @@ final class KitSymbol: NSImageView {
 
     private var swapping = false
     private var turn = 0
-    private var replacing = false
-    private(set) var replaced = 0
-    private(set) var played: ReplaceSymbolEffect?
-
-    func replace(to name: String) {
-        guard name != self.name else { return }
-        guard kitReplaces, let next = Self.image(name, style) else {
-            self.name = name
-            return
-        }
-        replacing = true
-        self.name = name
-        replacing = false
-        replaced += 1
-        played = kitReplace(with: next)
-    }
 
     static func image(_ name: String, _ style: Style) -> NSImage? {
         KitGlyph.image(name, style)
     }
 
     private func refresh() {
-        if !swapping, !replacing {
+        if !swapping {
             let next = Self.image(name, style)
             if next !== image { image = next }
         }

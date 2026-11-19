@@ -738,7 +738,7 @@ final class MiniKey: KitButton {
 }
 
 final class MiniToggle: KitButton {
-    private let glyph = MiniGlyph()
+    let glyph = PlayGlyph(style: PlayGlyph.sidebar)
     private(set) var showing = "play"
     var ink: KitInk = .flat { didSet { if ink != oldValue { paintGlyph() } } }
 
@@ -775,36 +775,7 @@ final class MiniToggle: KitButton {
     }
 
     private func paintGlyph() {
-        glyph.contentTintColor = KitPill.ink(.primary)
-    }
-}
-
-final class MiniGlyph: NSImageView {
-    static let style = KitSymbol.Style(size: 11, weight: .bold)
-
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        imageScaling = .scaleNone
-        imageAlignment = .alignCenter
-        setAccessibilityElement(false)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError() }
-
-    override var allowsVibrancy: Bool { false }
-
-    private(set) var replaced = 0
-    private(set) var played: ReplaceSymbolEffect?
-
-    func show(_ name: String, animated: Bool) {
-        guard let next = KitGlyph.image(name, Self.style) else { return }
-        if animated, kitReplaces {
-            replaced += 1
-            played = kitReplace(with: next)
-        } else {
-            image = next
-        }
+        glyph.tint = KitPill.ink(.primary)
     }
 }
 

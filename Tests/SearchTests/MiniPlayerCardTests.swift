@@ -135,11 +135,11 @@ struct MiniPlayerCardTests {
         view.layoutSubtreeIfNeeded()
 
         let toggle = try #require(view.kitSubviews(of: MiniToggle.self).first)
-        let glyph = try #require(toggle.kitSubviews(of: MiniGlyph.self).first)
+        let glyph = try #require(toggle.kitSubviews(of: PlayGlyph.self).first)
 
         #expect(toggle.window === window)
         #expect(toggle.showing == "pause")
-        #expect(glyph.image === KitGlyph.image("pause.fill", MiniGlyph.style))
+        #expect(glyph.image === KitGlyph.image("pause.fill", PlayGlyph.sidebar))
         #expect(glyph.replaced == 0)
         #expect(glyph.played == nil)
     }

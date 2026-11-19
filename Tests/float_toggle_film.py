@@ -16,7 +16,13 @@ The skip key's wiggle, another of the system's symbol effects, is filmed first
 in the same window. Where the window gives no frames, or the wiggle does not
 draw either, this screen cannot show a symbol effect (a locked screen is one):
 the probe proves by state what it can, says "cannot tell on this screen" and
-exits with 3. OUT (default .context/float-toggle) gets the frames, a strip of
+exits with 3. The drawn middle of the mark, its box and its weight, is measured in every
+frame and written as "middles". "travel" finds each change as the first new
+frame after a still stretch and gives the largest step of the middle from one
+frame to the next, when it came and how big the mark was then, and how far a
+whole mark stands from where it comes to rest. `--again JSON` measures a saved
+film the same way. OUT (default
+.context/float-toggle) gets the frames, a strip of
 the key around each change and float-toggle.json.
 
 Exit 0 passed, 1 failed, 3 cannot tell on this screen.
@@ -30,7 +36,8 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = Path(sys.argv[1] if len(sys.argv) > 1 else ROOT / ".context" / "float-toggle")
+ARGS = sys.argv[1:]
+OUT = Path(ARGS[0] if ARGS else ROOT / ".context" / "float-toggle")
 sys.path.insert(0, str(ROOT / "Tests"))
 import glass_keys as gk  # noqa: E402
 import split_view as sv  # noqa: E402
@@ -48,6 +55,60 @@ def ink(pixels, side, floor):
     if not rows or not columns:
         return 0
     return max(rows[-1] - rows[0] + 1, columns[-1] - columns[0] + 1)
+
+
+def spot_of(pixels, side, floor, scale):
+    rows = [y for y in range(side) if any(p > floor for p in pixels[y * side:(y + 1) * side])]
+    columns = [x for x in range(side) if any(pixels[y * side + x] > floor for y in range(side))]
+    if not rows or not columns:
+        return None
+    centre = side / 2
+    weight = across = down = 0.0
+    for y in range(side):
+        for x in range(side):
+            lift = pixels[y * side + x] - floor
+            if lift > 0:
+                weight += lift
+                across += lift * (x + 0.5)
+                down += lift * (y + 0.5)
+    box = ((columns[0] + columns[-1] + 1) / 2 - centre, (rows[0] + rows[-1] + 1) / 2 - centre)
+    return [round(box[0] / scale, 2), round(box[1] / scale, 2), round((across / weight - centre) / scale, 2), round((down / weight - centre) / scale, 2)]
+
+
+def starts(trace):
+    return [trace[i][0] for i in range(1, len(trace))
+            if trace[i][0] - trace[i - 1][0] >= 0.3 and trace[i][1:] != trace[i - 1][1:]]
+
+
+def travel(trace, start, until):
+    rows = [row for row in trace if row[2]]
+    before = [row for row in rows if row[0] < start]
+    during = [row for row in rows if start <= row[0] < until]
+    if not before or not during:
+        return {"error": "no frames around the change"}
+    rest = before[-1]
+    end = during[-1]
+    full = max(row[1] for row in [rest] + during)
+    least = min(during, key=lambda row: row[1])
+    chain = [rest] + during
+    steps = [(row[0] - prior[0], abs(row[2][2] - prior[2][2]), abs(row[2][0] - prior[2][0]), row) for prior, row in zip(chain, chain[1:])]
+    weight = max(steps, key=lambda step: step[1])
+    box = max(steps, key=lambda step: step[2])
+    whole = [row for row in during if row[0] > least[0] and row[1] >= full * 0.9]
+    far = max([max(abs(row[2][2] - end[2][2]), abs(row[2][3] - end[2][3])) for row in whole] or [0])
+    return {"restBefore": rest[2], "restAfter": end[2], "smallestAfter": round(least[0] - start, 3), "smallest": least[1],
+            "weightStep": round(weight[1], 2), "weightStepAfter": round(weight[3][0] - start, 3), "weightStepSize": weight[3][1],
+            "boxStep": round(box[2], 2), "boxStepAfter": round(box[3][0] - start, 3),
+            "wholeFrames": len(whole), "farthestFromRest": round(far, 2),
+            "weightAcross": [round(row[2][2], 2) for row in during]}
+
+
+def measure(trace):
+    found = starts(trace)
+    if len(found) < 2:
+        return {"error": f"found {len(found)} changes in the film, not two", "starts": found}
+    ends = found[1:] + [float("inf")]
+    return {"starts": found[:2], **{word: travel(trace, start, until) for word, start, until in zip(("toPlay", "toPause"), found, ends)}}
 
 
 def floor_of(pixels):
@@ -132,6 +193,10 @@ def main():
             sizes = [(moment, ink(pixels, side, floor)) for moment, pixels, _ in frames]
             report["sizes"] = [[round(moment, 3), size] for moment, size in sizes]
             report["changes"] = {word: judge(sizes, marks[word]) for word in ("play", "pause")}
+            trace = [(moment, ink(pixels, side, floor), spot_of(pixels, side, floor, scale)) for moment, pixels, _ in frames]
+            report["middles"] = [[round(moment, 3), size, spot] for moment, size, spot in trace]
+            report["marks"] = marks
+            report["travel"] = measure(trace)
             shown = all(found["small"] >= 2 for found in report["changes"].values())
             for word in ("play", "pause"):
                 start = next((index for index, row in enumerate(shot) if row[0] >= marks[word] - 0.05), 0)
@@ -139,6 +204,8 @@ def main():
             print(f"  wiggle: moved {moved:.4f} against {noise:.4f} at rest, in {len(wiggle)} frames")
             for word, found in report["changes"].items():
                 print(f"  to {word}: {found}")
+            for word, found in report["travel"].items():
+                print(f"  travel {word}: {found}")
             if shown:
                 t.ok("to play: a smaller mark between the two", True)
                 t.ok("to pause: a smaller mark between the two", True)
@@ -161,5 +228,14 @@ def main():
     return 0
 
 
+def again(path):
+    saved = json.loads(Path(path).read_text())
+    trace = [(moment, size, spot) for moment, size, spot in saved["middles"]]
+    print(json.dumps(measure(trace), indent=2))
+    return 0
+
+
 if __name__ == "__main__":
+    if len(ARGS) == 2 and ARGS[0] == "--again":
+        sys.exit(again(ARGS[1]))
     sys.exit(main())

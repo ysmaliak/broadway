@@ -20,11 +20,11 @@ struct PlayPauseFramesTests {
         transport?.needsLayout = true
         transport?.layoutSubtreeIfNeeded()
         try? await Task.sleep(for: .milliseconds(800))
-        guard let symbol = transport?.toggle.symbol else {
+        guard let glyph = transport?.toggle.glyph else {
             Issue.record("no play key in the gallery")
             return [:]
         }
-        return await BenchGlassFrames.record(symbol, seconds: 0.8, into: Self.folder(name)) { gallery.chrome.playing = playing }
+        return await BenchGlassFrames.record(glyph, seconds: 0.8, into: Self.folder(name)) { gallery.chrome.playing = playing }
     }
 
     func smaller(_ row: [String: Any]) -> (rest: Int, frames: Int, sides: [Int]) {
@@ -62,7 +62,7 @@ struct PlayPauseFramesTests {
         toggle.show(playing: true)
         toggle.layoutSubtreeIfNeeded()
         try? await Task.sleep(for: .milliseconds(800))
-        guard let glyph = toggle.kitSubviews(of: MiniGlyph.self).first else { Issue.record("no glyph"); return }
+        let glyph = toggle.glyph
 
         let row = await BenchGlassFrames.record(glyph, seconds: 0.8, into: Self.folder("sidebar-to-play")) { toggle.show(playing: false) }
         let found = smaller(row)

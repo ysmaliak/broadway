@@ -65,7 +65,7 @@ enum BenchInk {
     }
 
     private static func inked(_ view: NSView) -> Bool {
-        if view is KitLabel || view is KitSymbol || view is SiteWrapLabel || view is LinkWordsView { return true }
+        if view is KitLabel || view is KitSymbol || view is PlayGlyph || view is SiteWrapLabel || view is LinkWordsView { return true }
         if view is NSTextField || view is NSTextView { return true }
         if let button = view as? NSButton { return !button.isBordered || button.subviews.isEmpty }
         if let picture = view as? NSImageView { return picture.image?.isTemplate == true }
@@ -128,6 +128,10 @@ enum BenchInk {
             guard symbol.image != nil else { return [] }
             return [Mark(kind: kind, text: symbol.name, box: placed(symbol.bounds, of: symbol), size: 0,
                          muted: quiet(symbol.contentTintColor) || symbol.opacity < 0.8)]
+        }
+        if let glyph = view as? PlayGlyph {
+            guard glyph.image != nil else { return [] }
+            return [Mark(kind: kind, text: glyph.name, box: placed(glyph.drawn, of: glyph), size: 0, muted: quiet(glyph.contentTintColor))]
         }
         if let label = view as? SiteWrapLabel {
             guard !label.text.isEmpty else { return [] }

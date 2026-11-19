@@ -19,11 +19,6 @@ final class KitGlassFace: NSGlassEffectView {
         set { holder.nudge = newValue }
     }
 
-    var held: CGPoint? {
-        get { holder.held }
-        set { holder.held = newValue }
-    }
-
     var plate: NSColor? {
         get { holder.plate }
         set { holder.plate = newValue }
@@ -42,7 +37,6 @@ final class KitGlassFace: NSGlassEffectView {
 
 final class KitCenteringView: NSView {
     var nudge = CGVector.zero { didSet { if nudge != oldValue { needsLayout = true } } }
-    var held: CGPoint? { didSet { if held != oldValue { needsLayout = true } } }
     var plate: NSColor? { didSet { if plate != oldValue { paint() } } }
 
     override var isFlipped: Bool { true }
@@ -73,12 +67,8 @@ final class KitCenteringView: NSView {
             let size = view.intrinsicContentSize
             let width = size.width < 0 ? bounds.width : size.width
             let height = size.height < 0 ? bounds.height : size.height
-            if let held {
-                view.frame = NSRect(x: held.x - width / 2, y: held.y - height / 2, width: width, height: height)
-            } else {
-                view.frame = kitPlace(NSRect(x: (bounds.width - width) / 2 + nudge.dx, y: (bounds.height - height) / 2 + nudge.dy,
-                                             width: width, height: height))
-            }
+            view.frame = kitPlace(NSRect(x: (bounds.width - width) / 2 + nudge.dx, y: (bounds.height - height) / 2 + nudge.dy,
+                                         width: width, height: height))
         }
     }
 }
