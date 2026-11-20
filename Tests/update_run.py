@@ -906,8 +906,6 @@ def case_image(ctx):
     serve(ctx["feed"], ctx["files"])
     try:
         launch(there)
-        said = updates()
-        ok("it knows it runs from a disk image", said.get("moveOffer") == "diskImage", said.get("moveOffer"))
         w = window(saying="Move Broadway to your Applications folder", within=20)
         ok("it says so at launch", w is not None, updates().get("windows"))
         if w:
@@ -915,6 +913,8 @@ def case_image(ctx):
             shot(w, "6-run-from-disk-image")
             press("Not Now")
         time.sleep(1)
+        said = updates()
+        ok("it knows it runs from a disk image", said.get("moveOffer") == "diskImage", said.get("moveOffer"))
         ok("Settings says to move it", "Move Broadway to Applications" in updates().get("line", ""), updates().get("line"))
         time.sleep(8)
         ok("left alone it downloads nothing", ctx["path"] not in requests(), requests())
