@@ -120,6 +120,23 @@ final class SelectedPointerTests {
         #expect(frame.midY > list.frame.minY && frame.midY < list.frame.maxY)
     }
 
+    @Test func aSelectedTabInAnOpenFolderGetsTheCapsuleAndTheClickBringsItBack() async throws {
+        let (browser, page) = try await scene(selecting: 0, folder: true)
+        let id = try #require(browser.activeID)
+        #expect(browser.group(of: try #require(browser.active)) != nil)
+        let list = try #require(scrollView(in: page))
+        let start = try #require(page.frame(of: id))
+        try await scroll(page, to: start.midY < list.frame.midY ? 100_000 : 0)
+        #expect(page.pointingNow != nil)
+
+        page.showSelected()
+        try await settle(rounds: 8)
+
+        let frame = try #require(page.frame(of: id))
+        #expect(frame.midY > list.frame.minY && frame.midY < list.frame.maxY)
+        #expect(page.pointingNow == nil)
+    }
+
     @Test func theCapsuleLeavesWhenTheSelectedTabIsPinned() async throws {
         let (browser, page) = try await scene(selecting: 0)
         try await scroll(page, to: 100_000)
@@ -144,14 +161,14 @@ final class SelectedPointerTests {
         try await settle()
     }
 
-    private func scene(selecting index: Int) async throws -> (Browser, SidePageView) {
+    private func scene(selecting index: Int, folder: Bool = false) async throws -> (Browser, SidePageView) {
         _ = NSApplication.shared
         let browser = Browser(record: WindowRecord())
         browser.closeAll()
         let prefs = browser.prefs
         let saved = (prefs.usesTabGroups, prefs.splitView, prefs.sideWidth, prefs.sidePosition, prefs.sideHides, prefs.stackedSpaces)
         restore = { (prefs.usesTabGroups, prefs.splitView, prefs.sideWidth, prefs.sidePosition, prefs.sideHides, prefs.stackedSpaces) = saved }
-        prefs.usesTabGroups = false
+        prefs.usesTabGroups = folder
         prefs.splitView = false
         prefs.sideWidth = 258
         prefs.sidePosition = .left
@@ -171,7 +188,13 @@ final class SelectedPointerTests {
         self.window = window
         try await settle()
         let loose = browser.tabs.filter { $0.pin == nil && !$0.isBlank }
-        browser.select(loose[min(index, loose.count - 1)])
+        let chosen = loose[min(index, loose.count - 1)]
+        if folder {
+            let made = browser.addTabGroup(containing: chosen)
+            browser.move(loose[min(index + 1, loose.count - 1)], toGroup: made)
+            try await settle()
+        }
+        browser.select(chosen)
         try await settle()
         let root = try #require(window.contentView)
         let page = try #require(all(SidePageView.self, in: root).first { !$0.isHiddenOrHasHiddenAncestor && $0.window != nil })

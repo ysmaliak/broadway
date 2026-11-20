@@ -978,6 +978,7 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
             if preview != nil { showPreviewRest() }
             placeHeld(moving: animating)
             edges()
+            aimPointer()
             strip.below = bounds.height
             if preview == nil {
                 let active = browser.activeSplit?.left ?? browser.activeID
