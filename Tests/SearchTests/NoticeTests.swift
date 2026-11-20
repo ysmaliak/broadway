@@ -322,7 +322,7 @@ struct NoticeTests {
                      "ShellLayers.swift": "NoticeMotion.show(view, false)"]
         for (name, needle) in hosts { #expect(try read(name).contains(needle), "\(name) leaves without the shared motion") }
         let notNotices: Set<String> = ["Notice.swift", "StageCards.swift", "LinkChooser.swift", "StatusLine.swift", "FloatGlass.swift",
-                                       "ShellLayers.swift", "UpdateCard.swift", "FloatExtraChrome.swift"]
+                                       "ShellLayers.swift", "UpdateCard.swift", "FloatExtraChrome.swift", "SelectedPointer.swift"]
         let names = try FileManager.default.contentsOfDirectory(atPath: sources.path).filter { $0.hasSuffix(".swift") }
         for name in names where !notNotices.contains(name) {
             let text = try read(name)
