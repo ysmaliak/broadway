@@ -50,8 +50,38 @@ enum UpdatePlace: String {
 
 enum UpdateWords {
     static let none = "This build doesn't update itself"
-    static let ready = "An update is ready"
-    static let restart = "Restart to Update"
+    static let install = "Install Update"
+    static let check = "Check for Updates…"
+    static let checking = "Checking for updates"
+    static let installing = "Installing"
+    static let failed = "Couldn't update"
+    static let upToDate = "Broadway is up to date"
+    static let checkFailed = "Couldn't check for updates"
+
+    static func available(_ version: String) -> String { "Broadway \(version) is available" }
+
+    static func newest(_ version: String) -> String { "Version \(version) is the newest" }
+
+    static func percent(_ progress: Double) -> String { "\(Int((min(1, max(0, progress)) * 100).rounded(.down)))%" }
+
+    static func downloading(_ progress: Double?) -> String { progress.map { "Downloading \(percent($0))" } ?? "Downloading" }
+
+    static func reason(_ error: Error) -> String {
+        let text = (error as NSError).localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sentences = text.components(separatedBy: ". ").count
+        guard sentences == 1, text.hasSuffix("."), !text.hasSuffix("..") else { return text }
+        return String(text.dropLast())
+    }
+
+    @MainActor static func status(_ flow: UpdateFlow) -> String? {
+        switch flow.phase {
+        case .checking: return checking
+        case .downloading where flow.pressed: return downloading(flow.progress)
+        case .installing where flow.pressed: return installing
+        case .failed: return flow.trouble.map { "\(failed) · \($0)" } ?? failed
+        default: return flow.found.map { available($0.version) }
+        }
+    }
 
     static func checked(_ last: Date?, now: Date = Date(), calendar: Calendar = .current) -> String {
         guard let last else { return "Not checked yet" }
@@ -74,18 +104,89 @@ enum UpdateWords {
         return "Last checked \(day.string(from: last))"
     }
 
-    static func line(version: String, runs: Bool, stuck: UpdatePlace? = nil, waiting: String?, last: Date?, now: Date = Date(),
+    static func line(version: String, runs: Bool, stuck: UpdatePlace? = nil, status: String? = nil, last: Date?, now: Date = Date(),
                      calendar: Calendar = .current) -> String {
         guard runs else { return "\(version) · \(none)" }
         if stuck != nil { return "\(version) · Move Broadway to Applications to get updates" }
-        if waiting != nil { return "\(version) · \(ready)" }
+        if let status { return "\(version) · \(status)" }
         return "\(version) · \(checked(last, now: now, calendar: calendar))"
+    }
+}
+
+struct UpdateFeedItem: Equatable {
+    var version = ""
+    var build = ""
+    var minimum: String?
+    var maximum: String?
+    var channel: String?
+    var informational = false
+}
+
+final class UpdateFeedParser: NSObject, XMLParserDelegate {
+    private(set) var items: [UpdateFeedItem] = []
+    private var current: UpdateFeedItem?
+    private var text = ""
+
+    static func items(_ data: Data) -> [UpdateFeedItem] {
+        let parser = XMLParser(data: data)
+        let reader = UpdateFeedParser()
+        parser.delegate = reader
+        parser.shouldProcessNamespaces = false
+        guard parser.parse() else { return [] }
+        return reader.items
+    }
+
+    func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?, qualifiedName: String?,
+                attributes: [String: String] = [:]) {
+        text = ""
+        if name == "item" { current = UpdateFeedItem() }
+        guard current != nil else { return }
+        if name == "enclosure" {
+            if let build = attributes["sparkle:version"], current?.build.isEmpty == true { current?.build = build }
+            if let short = attributes["sparkle:shortVersionString"], current?.version.isEmpty == true { current?.version = short }
+        }
+        if name == "sparkle:informationalUpdate" { current?.informational = true }
+    }
+
+    func parser(_ parser: XMLParser, foundCharacters string: String) { text += string }
+
+    func parser(_ parser: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName: String?) {
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        text = ""
+        switch name {
+        case "item":
+            if let item = current, !item.build.isEmpty { items.append(item) }
+            current = nil
+        case "sparkle:version": current?.build = value
+        case "sparkle:shortVersionString": current?.version = value
+        case "sparkle:minimumSystemVersion": current?.minimum = value
+        case "sparkle:maximumSystemVersion": current?.maximum = value
+        case "sparkle:channel": current?.channel = value
+        default: break
+        }
+    }
+
+    static func newest(_ items: [UpdateFeedItem], system: String) -> UpdateFound? {
+        let compare = SUStandardVersionComparator.default
+        let fits = items.filter { item in
+            guard item.channel == nil, !item.informational else { return false }
+            if let minimum = item.minimum, compare.compareVersion(minimum, toVersion: system) == .orderedDescending { return false }
+            if let maximum = item.maximum, compare.compareVersion(system, toVersion: maximum) == .orderedDescending { return false }
+            return true
+        }
+        let best = fits.max { compare.compareVersion($0.build, toVersion: $1.build) == .orderedAscending }
+        return best.map { UpdateFound(version: $0.version.isEmpty ? $0.build : $0.version, build: $0.build) }
+    }
+
+    static var system: String {
+        let os = ProcessInfo.processInfo.operatingSystemVersion
+        return "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)"
     }
 }
 
 @MainActor
 @Observable
-final class Updates: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverDelegate {
+final class Updates: NSObject, SPUUpdaterDelegate, UpdateEngine, NSMenuItemValidation {
     nonisolated static let feed = UpdateFeed.live(info: Bundle.main.infoDictionary ?? [:], probed: Store.probed,
                                       unitTests: Store.unitTests, executable: Bundle.main.executablePath)
     static let shared = Updates()
@@ -94,35 +195,56 @@ final class Updates: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverDelegate
 
     nonisolated static let moveOffer: UpdatePlace? = runs ? UpdatePlace.found(Bundle.main.bundleURL) : nil
 
-    @ObservationIgnored private var controller: SPUStandardUpdaterController?
+    nonisolated static let installsKey = "SUAutomaticallyUpdate"
+
+    @ObservationIgnored private var updater: SPUUpdater?
+    @ObservationIgnored private var driver: UpdateDriver?
     @ObservationIgnored private var watches: [NSKeyValueObservation] = []
     @ObservationIgnored private var started = false
-    @ObservationIgnored private var restartWatch: AnyCancellable?
+    @ObservationIgnored private var installWatch: AnyCancellable?
     @ObservationIgnored private(set) var restartsAsked = 0
-    let wait = UpdateWait()
+    @ObservationIgnored private var pretended: Bool?
+    let flow = UpdateFlow()
     private(set) var turn = 0
-    private(set) var trouble: String?
 
-    var waiting: String? { wait.staged.map { "Version \($0.version)" } }
+    var trouble: String? { flow.trouble }
+
+    var waiting: String? { flow.found.map { "Version \($0.version)" } }
 
     private override init() {
         super.init()
+        flow.installsQuietly = { [weak self] in self?.installs ?? false }
+        flow.cardSeen = { Updates.cardSeen }
+        flow.tell = { UpdateAlerts.show($0) }
         guard Updates.feed != nil else { return }
-        controller = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: self, userDriverDelegate: self)
+        let driver = UpdateDriver(flow: flow)
+        self.driver = driver
+        updater = SPUUpdater(hostBundle: .main, applicationBundle: .main, userDriver: driver, delegate: self)
+        flow.engine = self
     }
 
-    private var updater: SPUUpdater? { controller?.updater }
+    static var cardSeen: Bool {
+        Browsers.all.contains { browser in
+            guard !browser.isPrivate, !browser.folded, let window = browser.window else { return false }
+            return window.isVisible && !window.isMiniaturized
+        }
+    }
 
     func start() {
-        guard let controller, !started else { return }
+        guard let updater, !started else { return }
+        do {
+            try updater.start()
+        } catch {
+            flow.failed(UpdateWords.reason(error))
+            return
+        }
         started = true
-        controller.startUpdater()
-        let updater = controller.updater
+        turn += 1
         offerMove()
         watches = [
             updater.observe(\.canCheckForUpdates) { [weak self] _, _ in MainActor.assumeIsolated { self?.turn += 1 } },
+            updater.observe(\.sessionInProgress) { [weak self] _, _ in MainActor.assumeIsolated { self?.turn += 1 } },
             updater.observe(\.automaticallyChecksForUpdates) { [weak self] _, _ in MainActor.assumeIsolated { self?.turn += 1 } },
-            updater.observe(\.automaticallyDownloadsUpdates) { [weak self] _, _ in MainActor.assumeIsolated { self?.turn += 1 } },
         ]
     }
 
@@ -136,53 +258,105 @@ final class Updates: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverDelegate
                 alert.addButton(withTitle: "Quit Broadway")
                 alert.addButton(withTitle: "Not Now")
                 NSApp.activate()
-                if alert.runModal() == .alertFirstButtonReturn { NSApp.terminate(nil) }
+                UpdateWindows.answerWhileModal(true)
+                let answer = alert.runModal()
+                UpdateWindows.answerWhileModal(false)
+                if answer == .alertFirstButtonReturn { NSApp.terminate(nil) }
             }
         }
         RunLoop.main.add(timer, forMode: .common)
     }
 
+    var busy: Bool { updater?.sessionInProgress ?? false }
+
+    var running: String { Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "" }
+
+    var version: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "" }
+
+    func check() {
+        guard let updater else { return }
+        updater.checkForUpdates()
+    }
+
+    func read(_ done: @escaping (UpdateFound?, String?) -> Void) {
+        guard let address = updater?.feedURL ?? Updates.feed?.address else { return done(nil, UpdateWords.none) }
+        var request = URLRequest(url: address, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: 30)
+        request.setValue("application/rss+xml,*/*;q=0.1", forHTTPHeaderField: "Accept")
+        let session = URLSession(configuration: .ephemeral)
+        session.dataTask(with: request) { data, response, error in
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let items = data.map(UpdateFeedParser.items) ?? []
+            let newest = UpdateFeedParser.newest(items, system: UpdateFeedParser.system)
+            let failure: String? = error.map(UpdateWords.reason) ?? (code >= 400 ? HTTPURLResponse.localizedString(forStatusCode: code).capitalized
+                : items.isEmpty ? "The update feed couldn't be read" : nil)
+            DispatchQueue.main.async { done(newest, failure) }
+        }.resume()
+        session.finishTasksAndInvalidate()
+    }
+
     func menuItem() -> NSMenuItem? {
-        guard let controller else { return nil }
-        let item = NSMenuItem(title: "Check for Updates…", action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)), keyEquivalent: "")
-        item.target = controller
-        return item
-    }
-
-    func restartItem() -> NSMenuItem {
-        let item = NSMenuItem(title: UpdateWords.restart, action: #selector(restartFromMenu), keyEquivalent: "")
+        guard updater != nil else { return nil }
+        let item = NSMenuItem(title: UpdateWords.check, action: #selector(checkFromMenu), keyEquivalent: "")
         item.target = self
-        restartWatch = kitObserve(distinct: true, { [weak self] in self?.wait.staged != nil }) { [weak item] on in item?.isHidden = !on }
         return item
     }
 
-    @objc private func restartFromMenu() { restart(over: NSApp.keyWindow ?? Browsers.front?.window) }
+    func installItem() -> NSMenuItem {
+        let item = NSMenuItem(title: UpdateWords.install, action: #selector(installFromMenu), keyEquivalent: "")
+        item.target = self
+        item.isHidden = !flow.offered
+        installWatch = kitObserve(distinct: true, { [weak self] in self?.flow.offered == true }) { [weak item] on in item?.isHidden = !on }
+        return item
+    }
 
-    func restart(over window: NSWindow?) { UpdateRestart.ask(wait, over: window) }
-
-    func pretend(version: String, build: String, quits: Bool = false) {
-        guard Store.testing else { return }
-        wait.stage(StagedUpdate(version: version, build: build)) { [weak self] in
-            self?.restartsAsked += 1
-            guard quits else { return }
-            if !NSRunningApplication.current.terminate() { NSApp.terminate(nil) }
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        switch menuItem.action {
+        case #selector(checkFromMenu): return canCheck
+        case #selector(installFromMenu): return flow.canInstall
+        default: return true
         }
+    }
+
+    @objc private func checkFromMenu() { check(fromMenu: true) }
+
+    @objc private func installFromMenu() { install(over: NSApp.keyWindow ?? Browsers.front?.window) }
+
+    func install(over window: NSWindow?) {
+        guard flow.canInstall else { return }
+        UpdateRestart.ask(over: window) { [weak self] in
+            guard let self else { return }
+            if Store.testing, let quits = pretended {
+                restartsAsked += 1
+                guard quits else { return }
+                if !NSRunningApplication.current.terminate() { NSApp.terminate(nil) }
+                return
+            }
+            flow.press()
+        }
+    }
+
+    func check(fromMenu: Bool = false) {
+        guard canCheck else { return }
+        flow.checkNow()
+    }
+
+    func pretend(version: String, build: String, phase: UpdatePhase = .available, progress: Double? = nil, trouble: String? = nil,
+                 staged: Bool = false, quits: Bool = false) {
+        guard Store.testing else { return }
+        pretended = quits
+        flow.pretend(phase, found: UpdateFound(version: version, build: build), staged: staged, progress: progress, trouble: trouble)
     }
 
     func unpretend() {
         guard Store.testing else { return }
-        wait.clear()
+        pretended = nil
+        flow.reset()
         restartsAsked = 0
     }
 
     var canCheck: Bool {
         _ = turn
-        return started && updater?.canCheckForUpdates == true
-    }
-
-    func check() {
-        guard canCheck else { return }
-        controller?.checkForUpdates(nil)
+        return started && updater != nil && flow.canCheck
     }
 
     var lastChecked: Date? {
@@ -205,62 +379,107 @@ final class Updates: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverDelegate
     var installs: Bool {
         get {
             _ = turn
-            return updater?.automaticallyDownloadsUpdates ?? false
+            guard updater != nil else { return false }
+            if let kept = UserDefaults.standard.object(forKey: Updates.installsKey) as? Bool { return kept }
+            return Bundle.main.object(forInfoDictionaryKey: Updates.installsKey) as? Bool ?? false
         }
         set {
-            guard let updater, updater.automaticallyDownloadsUpdates != newValue else { return }
-            updater.automaticallyDownloadsUpdates = newValue
+            guard updater != nil, installs != newValue else { return }
+            UserDefaults.standard.set(newValue, forKey: Updates.installsKey)
             turn += 1
         }
     }
 
-    var canInstall: Bool {
-        _ = turn
-        return updater?.allowsAutomaticUpdates ?? false
-    }
+    var canInstall: Bool { checks }
 
     var line: String {
-        UpdateWords.line(version: AboutWindow.version, runs: Updates.runs || wait.staged != nil, stuck: Updates.moveOffer, waiting: waiting,
-                         last: lastChecked)
+        UpdateWords.line(version: AboutWindow.version, runs: Updates.runs || flow.found != nil, stuck: Updates.moveOffer,
+                         status: UpdateWords.status(flow), last: lastChecked)
     }
 
     var facts: [String: Any] {
-        var said: [String: Any] = ["runs": Updates.runs, "version": AboutWindow.version, "line": line, "staged": waiting ?? "",
-                                   "card": wait.card, "restartsAsked": restartsAsked]
+        var said: [String: Any] = ["runs": Updates.runs, "version": AboutWindow.version, "line": line, "staged": flow.staged.map { "Version \($0.version)" } ?? "",
+                                   "card": flow.card, "restartsAsked": restartsAsked, "phase": flow.shown.rawValue, "flow": flow.phase.rawValue,
+                                   "found": flow.found.map { ["version": $0.version, "build": $0.build] } ?? NSNull(),
+                                   "progress": flow.progress ?? NSNull(), "pressed": flow.pressed, "quiet": flow.quiet,
+                                   "trouble": flow.trouble ?? "", "waiting": waiting ?? "",
+                                   "told": flow.told.map { "\($0)" }]
         guard let updater else { return said }
         said["feed"] = updater.feedURL?.absoluteString ?? ""
         said["started"] = started
         said["canCheck"] = canCheck
         said["checks"] = updater.automaticallyChecksForUpdates
-        said["installs"] = updater.automaticallyDownloadsUpdates
+        said["installs"] = installs
+        said["sparkleDownloads"] = updater.automaticallyDownloadsUpdates
         said["interval"] = updater.updateCheckInterval
         said["busy"] = updater.sessionInProgress
         said["lastChecked"] = updater.lastUpdateCheckDate.map { ISO8601DateFormatter().string(from: $0) } ?? ""
-        said["waiting"] = waiting ?? ""
-        said["trouble"] = trouble ?? ""
         return said
     }
 
-    func standardUserDriverWillShowModalAlert() { UpdateWindows.answerWhileModal(true) }
-
-    func standardUserDriverDidShowModalAlert() { UpdateWindows.answerWhileModal(false) }
-
     func updaterShouldPromptForPermissionToCheck(forUpdates updater: SPUUpdater) -> Bool { false }
 
-    func updater(_ updater: SPUUpdater, willInstallUpdateOnQuit item: SUAppcastItem, immediateInstallationBlock immediateInstallHandler: @escaping () -> Void) -> Bool {
-        wait.stage(StagedUpdate(version: item.displayVersionString, build: item.versionString), install: immediateInstallHandler)
-        return true
-    }
-
-    func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
-        let failure = error as NSError
-        guard failure.domain == SUSparkleErrorDomain, failure.code != Int(SUError.noUpdateError.rawValue) else { return }
-        trouble = "\(failure.code): \(failure.localizedDescription)"
-    }
-
     func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: Error?) {
-        if error == nil { trouble = nil }
         turn += 1
+        flow.cycleEnded()
+    }
+}
+
+@MainActor
+enum UpdateAlerts {
+    static func show(_ tell: UpdateTell) {
+        switch tell {
+        case .upToDate(let version):
+            inform(UpdateWords.upToDate, detail: UpdateWords.newest(version))
+        case .checkFailed(let reason):
+            inform(UpdateWords.checkFailed, detail: reason)
+        case .available(let found):
+            ask(UpdateWords.available(found.version), confirm: "Install", cancel: "Not Now") {
+                Updates.shared.install(over: NSApp.keyWindow ?? Browsers.front?.window)
+            }
+        }
+    }
+
+    private static var window: NSWindow? {
+        guard let front = Browsers.front?.window, front.isVisible, !front.isMiniaturized, front.attachedSheet == nil else { return nil }
+        return front
+    }
+
+    private static func inform(_ title: String, detail: String) {
+        if Store.testing, Ask.testing != nil {
+            Ask.asked.append(title)
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = detail
+        alert.addButton(withTitle: "OK")
+        present(alert) { _ in }
+    }
+
+    private static func ask(_ title: String, confirm: String, cancel: String, then: @escaping () -> Void) {
+        if Store.testing, let yes = Ask.testing {
+            Ask.asked.append(title)
+            if yes { then() }
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.addButton(withTitle: confirm)
+        alert.addButton(withTitle: cancel)
+        present(alert) { yes in if yes { then() } }
+    }
+
+    private static func present(_ alert: NSAlert, _ done: @escaping (Bool) -> Void) {
+        if let window {
+            alert.beginSheetModal(for: window) { done($0 == .alertFirstButtonReturn) }
+            return
+        }
+        NSApp.activate()
+        UpdateWindows.answerWhileModal(true)
+        let answer = alert.runModal()
+        UpdateWindows.answerWhileModal(false)
+        done(answer == .alertFirstButtonReturn)
     }
 }
 
@@ -268,9 +487,6 @@ final class Updates: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverDelegate
 enum UpdateWindows {
     private static func ours(_ window: NSWindow) -> Bool {
         guard window.isVisible else { return false }
-        let sparkle = Bundle(for: SPUUpdater.self)
-        if let holder = window.windowController, Bundle(for: type(of: holder)) == sparkle { return true }
-        if Bundle(for: type(of: window)) == sparkle { return true }
         return window.className.contains("Alert") || window is NSPanel && window.styleMask.contains(.titled) && window.level == .modalPanel
     }
 

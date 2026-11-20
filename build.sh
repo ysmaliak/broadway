@@ -218,7 +218,8 @@ if [ "$RELEASE" = 1 ]; then
   <key>SUEnableAutomaticChecks</key><true/>
   <key>SUAutomaticallyUpdate</key><true/>
   <key>SUScheduledCheckInterval</key><integer>14400</integer>
-  <key>SUVerifyUpdateBeforeExtraction</key><true/>"
+  <key>SUVerifyUpdateBeforeExtraction</key><true/>
+  <key>SUAllowsAutomaticUpdates</key><false/>"
 fi
 
 cat > "$APP/Contents/Info.plist" <<PLIST
