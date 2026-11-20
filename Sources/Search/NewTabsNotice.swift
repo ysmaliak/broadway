@@ -39,8 +39,13 @@ extension Browser {
         }
     }
 
+    func openedForAgent(_ tab: Tab, link: AgentLink?) {
+        guard link != nil else { return }
+        quietOpens.insert(tab.id)
+    }
+
     func noticeOpenedBehind(_ tab: Tab) {
-        guard sideHidden, !tab.agent, !tab.bench, activeID != tab.id, tabs.contains(where: { $0.id == tab.id }),
+        guard quietOpens.remove(tab.id) == nil, sideHidden, !tab.agent, !tab.bench, activeID != tab.id, tabs.contains(where: { $0.id == tab.id }),
               split(for: tab) == nil else { return }
         newTabs = (newTabsShown ?? NewTabsNotice()).adding(tab.id)
         let view = newTabsHush?.view

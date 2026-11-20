@@ -2198,6 +2198,7 @@ final class Browser: NSObject {
     var newTabs: NewTabsNotice?
     @ObservationIgnored var newTabsHush: NoticeClock?
     @ObservationIgnored var newTabsWatch: AnyCancellable?
+    @ObservationIgnored var quietOpens: Set<Tab.ID> = []
     /// Downloads while they happen (see Fetching.swift).
     let fetches = Shared.fetches
     @ObservationIgnored lazy var mini = MiniPlayer(self)
