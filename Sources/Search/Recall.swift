@@ -131,8 +131,11 @@ final class RecallTable: NSView, NSTableViewDataSource, NSTableViewDelegate, NSM
     }
 
     let scroll = NSScrollView()
-    let table = NSTableView()
+    let table = RecallList()
     private(set) var lines: [(id: String, line: Line)] = []
+    var picks: ((NSView & RecallRow) -> Bool)? {
+        didSet { table.selectionHighlightStyle = picks == nil ? .none : .regular }
+    }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -151,6 +154,7 @@ final class RecallTable: NSView, NSTableViewDataSource, NSTableViewDelegate, NSM
         table.delegate = self
         table.target = self
         table.action = #selector(clicked)
+        table.copyRow = { [weak self] in self?.copySelected() ?? false }
         let menu = NSMenu()
         menu.delegate = self
         table.menu = menu
@@ -225,7 +229,16 @@ final class RecallTable: NSView, NSTableViewDataSource, NSTableViewDelegate, NSM
         }
     }
 
-    func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool { false }
+    func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
+        guard let picks, lines.indices.contains(row), case .row(let view) = lines[row].line else { return false }
+        return picks(view)
+    }
+
+    func copySelected() -> Bool {
+        let row = table.selectedRow
+        guard lines.indices.contains(row), case .row(let view) = lines[row].line else { return false }
+        return view.copyFile()
+    }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         switch lines[row].line {
@@ -247,6 +260,10 @@ final class RecallTable: NSView, NSTableViewDataSource, NSTableViewDelegate, NSM
         menu.removeAllItems()
         let row = table.clickedRow
         guard lines.indices.contains(row), case .row(let view) = lines[row].line else { return }
+        if let items = view.fileMenuItems() {
+            for item in items { menu.addItem(item) }
+            return
+        }
         for item in view.menuItems() { menu.addItem(KitMenu.item(item)) }
     }
 }
@@ -259,6 +276,21 @@ protocol RecallRow: AnyObject {
     var resized: (() -> Void)? { get set }
     func open()
     func menuItems() -> [KitMenuItem]
+    func fileMenuItems() -> [NSMenuItem]?
+    func copyFile() -> Bool
+}
+
+extension RecallRow {
+    func fileMenuItems() -> [NSMenuItem]? { nil }
+    func copyFile() -> Bool { false }
+}
+
+final class RecallList: NSTableView {
+    var copyRow: (() -> Bool)?
+
+    @objc func copy(_ sender: Any?) {
+        guard copyRow?() == true else { return NSSound.beep() }
+    }
 }
 
 @MainActor
@@ -640,8 +672,18 @@ final class KeptLineView: KitHoverView, RecallRow {
     func open() { if keep.stillThere { opening() } }
 
     func menuItems() -> [KitMenuItem] {
-        (keep.stillThere ? [.action("Open", run: opening), .action("Show in Finder", run: revealing)] : []) + [.action("Remove", run: forget)]
+        (keep.stillThere ? [.action("Open", run: opening), .action("Show in Finder", run: revealing)] : []) + [.action("Remove from List", run: forget)]
     }
+
+    func fileMenuItems() -> [NSMenuItem]? {
+        DownloadMenu.items(for: keep.url, there: keep.stillThere, open: opening, reveal: revealing, forget: forget, from: self, id: "downloads.page")
+    }
+
+    func copyFile() -> Bool {
+        keep.stillThere && DownloadMenu.copy(keep.url)
+    }
+
+    var there: Bool { keep.stillThere }
 
     override func hoverChanged() {
         reveal.isHidden = !hovering || !keep.stillThere
@@ -839,6 +881,8 @@ final class DownloadsPage: RecallPage {
 
     var footWords: String { said.text }
 
+    var benchTable: RecallList? { list.table }
+
     private func sayWhere(kept: [Keep]) {
         guard let browser else { return }
         said.text = !kept.isEmpty ? "Clearing the list leaves the files where they are"
@@ -877,6 +921,7 @@ final class DownloadsPage: RecallPage {
             }
         }
         list.set(lines)
+        list.picks = { ($0 as? KeptLineView)?.there == true }
         list.isHidden = lines.isEmpty
         empty?.removeFromSuperview()
         empty = nil
