@@ -270,6 +270,9 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
     private var fits = true
     private var listViewport: CGFloat = 0
     private var listContent: CGFloat = 0
+    fileprivate let pointer = SelectedPointerView()
+    fileprivate var pointing: SelectedPointerView.Edge?
+    fileprivate var glide: ScrollGlide?
 
     init(browser: Browser, preview: SidePreview? = nil) {
         self.browser = browser
@@ -304,6 +307,8 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
         bottomLine.isHidden = true
         addSubview(topLine)
         addSubview(bottomLine)
+        addSubview(pointer)
+        pointer.onPress = { [weak self] in self?.showSelected() }
         listDocument.addSubview(newTabTop)
         folderLine.isHidden = true
         for plate in [dropOutline, dropLine, joinOutline, folderLine] {
@@ -440,6 +445,7 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
         browser.columnMemory.note(.list, value: listScroll.contentView.bounds.minY, in: browser.spaceID)
         placeHeld()
         edges()
+        aimPointer()
         settleHover()
         noteBench()
     }
@@ -996,6 +1002,7 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
         placeHeld(moving: animating)
         edges()
         restIn(viewport: viewport)
+        aimPointer()
 
         let active = browser.activeSplit?.left ?? browser.activeID
         if active != lastActive {
@@ -1758,6 +1765,7 @@ extension SidePageView {
         relightCards()
         animateNext = true
         needsLayout = true
+        aimPointer()
     }
 
     private func finishCarry() {
@@ -1779,6 +1787,7 @@ extension SidePageView {
         needsLayout = true
         layoutSubtreeIfNeeded()
         recheckEdges()
+        aimPointer()
     }
 
     private func move(_ tab: Tab, _ block: SideBlock, to index: Int) {
@@ -3038,5 +3047,65 @@ extension SidePageView {
             out["hand"] = [Double(point.x), Double(content.isFlipped ? point.y : content.bounds.height - point.y)]
         }
         return out
+    }
+}
+
+extension SidePageView {
+    fileprivate var selectedRow: CGRect? {
+        guard preview == nil, !embedded, window != nil else { return nil }
+        guard let id = browser.activeSplit?.left ?? browser.activeID, browser.active?.pin == nil,
+              let laid = laid[id], let parent = laid.parent,
+              parent === listDocument || parent.isDescendant(of: listDocument), !parent.isHiddenOrHasHiddenAncestor else { return nil }
+        return parent === listDocument ? laid.frame : parent.convert(laid.frame, to: listDocument)
+    }
+
+    private var listFloor: CGFloat { listScroll.contentView.bounds.height - heldRoomNow }
+
+    private var listBottom: CGFloat { newTabBelow && heldFloored ? held.frame.minY - Self.gap : listScroll.frame.maxY }
+
+    private var dragging: Bool {
+        carry != nil || pending != nil || morphCarried != nil || crossing != nil || dropOn != nil || looseOn != nil
+    }
+
+    var pointingNow: SelectedPointerView.Edge? { pointing }
+
+    func aimPointer() {
+        showPointer(SelectedPointer.edge(row: selectedRow, offset: listOffset, floor: listFloor,
+                                         held: dragging || glide?.running == true || fits))
+    }
+
+    private func showPointer(_ edge: SelectedPointerView.Edge?) {
+        guard let edge else {
+            if pointing != nil {
+                pointing = nil
+                pointer.arrive(false)
+            }
+            return
+        }
+        if let tab = browser.active { pointer.show(tab) }
+        let size = pointer.intrinsicContentSize
+        let y = edge == .above ? listScroll.frame.minY + SelectedPointerView.inset : listBottom - SelectedPointerView.inset - size.height
+        let frame = kitSnap(NSRect(x: (bounds.width - size.width) / 2, y: y, width: size.width, height: size.height))
+        let fresh = pointing != edge
+        if fresh, pointing != nil { pointer.arrive(false, animated: false) }
+        if pointer.frame != frame { pointer.frame = frame }
+        pointer.edge = edge
+        pointing = edge
+        guard fresh else { return }
+        pointer.arrive(false, animated: false)
+        pointer.arrive(true)
+    }
+
+    func showSelected() {
+        guard let row = selectedRow else { return }
+        let clip = listScroll.contentView
+        guard let goal = SelectedPointer.target(row: row, offset: clip.bounds.minY, floor: listFloor, fade: ColumnEdges.fade) else {
+            return showPointer(nil)
+        }
+        glide?.stop()
+        showPointer(nil)
+        glide = ScrollGlide(listScroll, to: goal, curve: Motion.kitRoll) { [weak self] in
+            DispatchQueue.main.async { self?.aimPointer() }
+        }
     }
 }
