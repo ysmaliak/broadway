@@ -89,7 +89,7 @@ final class UpdateDriver: NSObject, SPUUserDriver {
     }
 
     func showInstallingUpdate(withApplicationTerminated applicationTerminated: Bool, retryTerminatingApplication: @escaping () -> Void) {
-        flow.installing()
+        flow.installing(retry: applicationTerminated ? nil : retryTerminatingApplication)
     }
 
     func showUpdateInstalledAndRelaunched(_ relaunched: Bool, acknowledgement: @escaping () -> Void) {

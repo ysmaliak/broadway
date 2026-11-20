@@ -821,6 +821,38 @@ def case_asks(ctx):
     quit(app)
 
 
+def case_alert(ctx):
+    print("alert: with the sidebar folded, Check for Updates… offers B in an alert, and Install there installs it", flush=True)
+    fresh()
+    app = copy("alert", "0.1", ctx["old"], ctx["public"], None)
+    serve(same(ctx))
+    launch(app)
+    wait("first check", lambda: "/appcast.xml" in requests(), within=120)
+    idle()
+    updates(installs=False)
+    cmd({"do": "ui", "folded": True})
+    time.sleep(0.8)
+    serve(ctx["feed"], ctx["files"], slowly=[ctx["path"]])
+    old_pid = updates().get("pid")
+    updates(check=True)
+    w = window(saying="Broadway 0.2 is available")
+    ok("with no card in view, Check for Updates… offers B in an alert", w is not None, (updates().get("windows"), updates().get("trail")))
+    if not w:
+        quit(app)
+        return
+    print("       ", " | ".join(w["texts"]), "|", ", ".join(w["buttons"]), flush=True)
+    ok("its buttons are Install and Not Now", w["buttons"] == ["Install", "Not Now"], w)
+    shot(w, "7-available-alert")
+    ok("nothing was downloaded before Install", ctx["path"] not in requests(), requests())
+    press("Install")
+    seen = watch(old_pid)
+    parts = progressed(seen)
+    ok("Install in the alert downloads B with progress", any(0 < part < 1 for part in parts), (seen[:20], parts[:20]))
+    note(f"alert: {len(parts)} progress samples")
+    relaunched(ctx, app, old_pid)
+    quit(app)
+
+
 def case_newer(ctx):
     print("newer: A runs, B is staged, C is published, Install installs C with progress, not B", flush=True)
     app, old_pid = staged(ctx, "newer")
@@ -934,7 +966,7 @@ def case_image(ctx):
 
 
 CASES = {"inert": case_inert, "current": case_current, "automatic": case_automatic, "restart": case_restart, "newer": case_newer,
-         "ask": case_ask, "askrestart": case_ask_restart, "hidden": case_hidden, "held": case_held, "asks": case_asks,
+         "ask": case_ask, "askrestart": case_ask_restart, "hidden": case_hidden, "held": case_held, "asks": case_asks, "alert": case_alert,
          "tampered": case_tampered, "image": case_image}
 
 

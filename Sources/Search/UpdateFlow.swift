@@ -54,6 +54,9 @@ final class UpdateFlow {
     @ObservationIgnored weak var engine: UpdateEngine?
     @ObservationIgnored var installsQuietly: () -> Bool = { false }
     @ObservationIgnored var cardSeen: () -> Bool = { true }
+    @ObservationIgnored private var retryQuit: (() -> Void)?
+    @ObservationIgnored private var quitTurn = 0
+    static var quitWait: TimeInterval = 10
     @ObservationIgnored var tell: (UpdateTell) -> Void = { _ in }
 
     private enum Intent {
@@ -115,10 +118,16 @@ final class UpdateFlow {
     func press() {
         mark("press")
         guard !(pressed && phase.busy) else { return }
+        hidden = nil
+        if let retry = retryQuit {
+            pressed = true
+            installing(retry: retry)
+            retry()
+            return
+        }
         pressed = true
         trouble = nil
         progress = nil
-        hidden = nil
         if quiet {
             phase = extracting ? .installing : .downloading
             progress = extracting ? 1 : fraction
@@ -145,6 +154,7 @@ final class UpdateFlow {
     func checkNow() {
         mark("checkNow")
         guard canCheck else { return }
+        hidden = nil
         trouble = nil
         phase = .checking
         guard staged != nil || quiet, let engine else { return start(.check) }
@@ -161,7 +171,7 @@ final class UpdateFlow {
     private func say(_ what: UpdateTell) {
         told.append(what)
         mark("say \(what)")
-        tell(what)
+        DispatchQueue.main.async { [weak self] in self?.tell(what) }
     }
 
     private func mark(_ event: String) {
@@ -349,11 +359,22 @@ final class UpdateFlow {
         reply(.install)
     }
 
-    func installing() {
+    func installing(retry: (() -> Void)? = nil) {
         mark("installing")
         guard pressed else { return }
         phase = .installing
         progress = 1
+        retryQuit = retry
+        guard retry != nil else { return }
+        let turn = quitTurn &+ 1
+        quitTurn = turn
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.quitWait) { [weak self] in
+            guard let self, quitTurn == turn, phase == .installing, retryQuit != nil else { return }
+            mark("quit held")
+            pressed = false
+            phase = .idle
+            progress = nil
+        }
     }
 
     func notFound() {
@@ -443,5 +464,6 @@ final class UpdateFlow {
         reading = false
         newest = nil
         told = []
+        retryQuit = nil
     }
 }

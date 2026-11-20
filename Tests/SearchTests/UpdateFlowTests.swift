@@ -288,6 +288,64 @@ struct UpdateFlowTests {
         #expect(flow.staged == b)
     }
 
+    @Test func checkForUpdatesAfterTheCrossShowsTheCardAgain() {
+        let (flow, _) = made()
+        flow.found(b, stage: .notDownloaded, informational: false) { _ in }
+        flow.cycleEnded()
+        flow.hide()
+        let hidden = flow.card
+
+        flow.checkNow()
+        flow.found(b, stage: .notDownloaded, informational: false) { _ in }
+        flow.cycleEnded()
+
+        #expect(!hidden)
+        #expect(flow.card)
+        #expect(flow.shown == .available)
+    }
+
+    @Test func theAvailableAlertComesAfterSparkleHasItsAnswer() async {
+        let (flow, _) = made(seen: false)
+        var order: [String] = []
+        flow.tell = { _ in order.append("tell") }
+
+        flow.checkNow()
+        flow.found(b, stage: .notDownloaded, informational: false) { _ in order.append("reply") }
+        await turn()
+
+        #expect(order == ["reply", "tell"])
+        #expect(flow.told == [.available(b)])
+    }
+
+    @Test func aQuitThatIsHeldOffersInstallAgainWhichAsksToQuitOnceMore() async {
+        let (flow, engine) = made()
+        let wait = UpdateFlow.quitWait
+        UpdateFlow.quitWait = 0.2
+        defer { UpdateFlow.quitWait = wait }
+        var retries = 0
+        flow.found(b, stage: .notDownloaded, informational: false) { _ in }
+        flow.cycleEnded()
+        flow.press()
+        await turn(0.7)
+        flow.found(b, stage: .notDownloaded, informational: false) { _ in }
+        flow.downloadStarted()
+        flow.extractStarted()
+        flow.ready { _ in }
+
+        flow.installing { retries += 1 }
+        let installing = flow.shown
+        await turn(0.5)
+        let held = (flow.shown, flow.canCheck)
+        flow.press()
+
+        #expect(engine.begins == 1)
+        #expect(installing == .installing)
+        #expect(held.0 == .available)
+        #expect(held.1)
+        #expect(retries == 1)
+        #expect(flow.shown == .installing)
+    }
+
     @Test func theCrossHidesTheCardUntilANewerUpdateIsFound() {
         let (flow, _) = made()
         flow.found(b, stage: .notDownloaded, informational: false) { _ in }
