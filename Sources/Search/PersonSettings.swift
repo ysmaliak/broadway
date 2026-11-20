@@ -147,6 +147,7 @@ enum PersonSettings {
         "general.import": row("In Broadway"),
         Preferences.hintsKey: flag(\.hints),
         "history.pageText": held(\.remembersPageText),
+        "history.freezes": row("Help › Copy Last Freeze"),
         IntegrationNow.key: SettingAccess(takes: "true or false", read: { _ in IntegrationNow.on }, write: { _, text in
             guard let on = yes(text) else { return false }
             Store.settings.set(on, forKey: IntegrationNow.key)

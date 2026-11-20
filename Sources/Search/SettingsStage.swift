@@ -76,6 +76,7 @@ enum SettingsStageMap {
         "shield.here": .spot(.page),
         "sites.keep": .spot(.page),
         "history.pageText": .spot(.field),
+        "history.freezes": .rest,
         "clear.history": .spot(.field),
         "clear.cookies": .spot(.page),
         "clear.cache": .spot(.page),

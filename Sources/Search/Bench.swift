@@ -2028,6 +2028,33 @@ final class Bench {
                 }
             }
 
+        case "freezes":
+            guard Store.testing else { answer(["error": "freezes only works on a --test run"]); return }
+            let book = FreezeBook.shared
+            switch request["action"] as? String ?? "list" {
+            case "stall":
+                let seconds = request["seconds"] as? Double ?? 2.5
+                answer(["stalling": seconds])
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { usleep(useconds_t(seconds * 1_000_000)) }
+            case "forget":
+                book.forgetAll()
+                book.settle()
+                answer(["count": 0])
+            case "copy":
+                Support.handed = []
+                let done = Freezes.copyLast { browser.announce($0) }
+                answer(["copied": done, "handed": Support.handed])
+            default:
+                book.settle()
+                let help = NSApp.helpMenu
+                help.map { $0.delegate?.menuNeedsUpdate?($0) }
+                let item = help?.items.first { $0.title == "Copy Last Freeze" }
+                answer(["count": book.all.count, "file": book.file.path, "enabled": item?.isEnabled ?? false,
+                        "freezes": book.all.map { ["seconds": $0.seconds, "ended": $0.ended, "front": $0.front.rawValue, "frames": $0.stack.count,
+                                                    "from": $0.stackFrom ?? ""] as [String: Any] },
+                        "report": book.latest.map { FreezeReport.text($0) } ?? ""])
+            }
+
         case "menus":
             // Every menu of the menu bar, by title, after SwiftUI has filled
             // it — and whether the AI add-on counts as on. Reads only.
