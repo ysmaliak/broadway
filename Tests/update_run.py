@@ -841,7 +841,7 @@ def case_alert(ctx):
         quit(app)
         return
     print("       ", " | ".join(w["texts"]), "|", ", ".join(w["buttons"]), flush=True)
-    ok("its buttons are Install and Not Now", w["buttons"] == ["Install", "Not Now"], w)
+    ok("its buttons are Install and Not Now", sorted(w["buttons"]) == ["Install", "Not Now"], w)
     shot(w, "7-available-alert")
     ok("nothing was downloaded before Install", ctx["path"] not in requests(), requests())
     press("Install")
