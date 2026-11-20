@@ -2195,6 +2195,10 @@ final class Browser: NSObject {
     private(set) var announcedUndo: (@MainActor () -> Void)?
     var linkNotice: LinkNotice?
     @ObservationIgnored var linkNoticeHush: NoticeClock?
+    var newTabs: NewTabsNotice?
+    @ObservationIgnored var newTabsHush: NoticeClock?
+    @ObservationIgnored var newTabsWatch: AnyCancellable?
+    @ObservationIgnored var quietOpens: Set<Tab.ID> = []
     /// Downloads while they happen (see Fetching.swift).
     let fetches = Shared.fetches
     @ObservationIgnored lazy var mini = MiniPlayer(self)
@@ -5427,6 +5431,8 @@ extension Browser {
             activeID = tab.id
             editing = false
             typed = ""
+        } else {
+            openedBehind(tab)
         }
         return tab
     }
@@ -7782,6 +7788,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
                     noteReturn(tab, front: false, from: source)
                 }
             }
+            if !foreground { openedBehind(tab) }
             return tab
         }
         if case .yes(let routed) = routeClicked(url, foreground: foreground, from: source) { return routed }

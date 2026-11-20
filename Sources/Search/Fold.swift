@@ -42,6 +42,7 @@ final class ColumnPeek {
     }
     @ObservationIgnored var moving = false
     @ObservationIgnored var docking = false
+    @ObservationIgnored var sentAway = false
     @ObservationIgnored private(set) var movedOut = false
 }
 
@@ -262,18 +263,21 @@ final class Fold: NSView {
             peek(over)
         } else if inWindow, distance < Self.edge,
                   !(window.styleMask.contains(.fullScreen) && size.height - point.y < Self.fullScreenCorner) {
-            guard NSWindow.windowNumber(at: screen, belowWindowWithWindowNumber: 0) == window.windowNumber
+            guard !browser.columnPeek.sentAway,
+                  NSWindow.windowNumber(at: screen, belowWindowWithWindowNumber: 0) == window.windowNumber
             else { return pass() }
             if arriving == nil { arrive() }
         } else if overshot {
+            guard !browser.columnPeek.sentAway else { return pass() }
             arrive(resting: true)
         } else {
+            browser.columnPeek.sentAway = false
             pass()
         }
     }
 
     private func arrive(resting: Bool = false) {
-        guard resting || browser.prefs.sideHides else { return peek(true) }
+        guard resting || browser.prefs.sideHides || browser.fullScreen else { return peek(true) }
         pass()
         let coming = DispatchWorkItem { [weak self] in
             self?.arriving = nil

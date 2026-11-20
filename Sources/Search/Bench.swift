@@ -363,6 +363,8 @@ final class Bench {
             BenchSurfaces.run(verb, request, answer)
         case _ where BenchNotices.verbs.contains(verb):
             BenchNotices.run(verb, request, answer)
+        case _ where BenchFullScreenSide.verbs.contains(verb):
+            BenchFullScreenSide.run(verb, request, answer)
 
         case _ where BenchPages.verbs.contains(verb):
             BenchPages.run(request, browser: browser, answer)

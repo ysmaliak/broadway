@@ -25,6 +25,7 @@ extension ContentView {
                 if !event.modifierFlags.contains(.command) { browser.landSummon() }
                 return event
             }
+            if event.keyCode == 53, browser.escapesSide(event) { return nil }
             if event.keyCode == 53, let page = ContentView.pageFillingScreen(event) {
                 if browser.tabSwitcher.active { browser.tabSwitcher.cancel() }
                 guard browser.prefs.escapeTwice else { return event }

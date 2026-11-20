@@ -155,6 +155,7 @@ enum PersonStuff {
             let node = try bookmark(call, try call.need("id"))
             guard let url = node.url.flatMap(URL.init(string:)) else { throw PersonRefusal("refused", "That is a folder") }
             let tab = call.browser.open(try PersonTabs.webAddress(url.absoluteString), foreground: false, atEnd: true)
+            call.browser.openedForAgent(tab, link: call.link)
             return ["id": short(tab.id)]
         },
         PersonVerb("bookmarks", "delete", .erase, first: { _ = try bookmark($0, try $0.need("id")) }) { call in

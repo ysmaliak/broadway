@@ -309,6 +309,7 @@ final class ContentView: NSView {
     }
 
     private func immersing() {
+        FullScreenSide.shared.follow(browser, tab: fullscreenTab)
         holdTicket += 1
         pageHold = nil
         needsLayout = true

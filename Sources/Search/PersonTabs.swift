@@ -205,6 +205,7 @@ enum PersonTabs {
             let tab: Tab
             if let url {
                 tab = browser.open(url, foreground: call.flag("front"), atEnd: true)
+                browser.openedForAgent(tab, link: call.link)
             } else {
                 browser.newTab()
                 guard let made = browser.active else { throw PersonRefusal("failed", "No tab was made") }
