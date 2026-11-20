@@ -16,7 +16,10 @@ final class FullScreenSide {
     private(set) var panel: FullScreenSidePanel?
     private var sentAway = false
     private var watch: AnyCancellable?
+    private var fullScreenWatch: NSKeyValueObservation?
     private var turn = 0
+    private weak var moving: NSWindow?
+    private var movedBefore = false
     private(set) var out = false
     var standIn: NSWindow?
 
@@ -39,12 +42,33 @@ final class FullScreenSide {
             MainActor.assumeIsolated { self?.moved() }
             return event
         }
+        fullScreenWatch = tab.built?.observe(\.fullscreenState, options: [.initial, .new]) { [weak self] page, _ in
+            MainActor.assumeIsolated {
+                guard let self, page.fullscreenState == .inFullscreen, let window = page.window, window !== self.browser?.window else { return }
+                self.hear(window)
+            }
+        }
+    }
+
+    private func hear(_ window: NSWindow) {
+        guard moving !== window else { return }
+        unhear()
+        moving = window
+        movedBefore = window.acceptsMouseMovedEvents
+        window.acceptsMouseMovedEvents = true
+    }
+
+    private func unhear() {
+        moving?.acceptsMouseMovedEvents = movedBefore
+        moving = nil
     }
 
     func stop() {
         if let local { NSEvent.removeMonitor(local) }
         local = nil
+        unhear()
         watch = nil
+        fullScreenWatch = nil
         arriving?.cancel()
         arriving = nil
         leaving?.cancel()
@@ -86,6 +110,7 @@ final class FullScreenSide {
             if out { hide() }
             return
         }
+        if host !== standIn { hear(host) }
         let right = browser.prefs.sidePosition == .right
         if out {
             let reach = browser.prefs.columnWidth + 2 * Metrics.floatGap

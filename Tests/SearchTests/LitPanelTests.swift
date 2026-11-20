@@ -28,6 +28,7 @@ struct LitPanelTests {
             ("file choice", FileChoice.ChoicePanel(contentRect: Self.frame, styleMask: Self.style, backing: .buffered, defer: true)),
             ("full screen reminder", ReminderPanel()),
             ("recording pill", PillPanel(indicator: RecordingIndicator())),
+            ("full screen sidebar", FullScreenSidePanel(browser: Browser(record: WindowRecord()))),
         ]
     }
 
