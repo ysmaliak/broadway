@@ -843,6 +843,7 @@ extension SettingsPageView {
         }
         section("What Broadway keeps") {
             settingRow("history.pageText")
+            _ = row("history.freezes")
         }
         section("Danger zone") {
             for clearing in Browser.Clearing.allCases { settingRow(clearing.rawValue) }

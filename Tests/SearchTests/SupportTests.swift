@@ -181,7 +181,7 @@ struct SupportTests {
 
         item.fire(nil)
 
-        #expect(menu.items.map(\.title) == ["Show Welcome Again", "Contact Support", "", "Broadway on GitHub"])
+        #expect(menu.items.map(\.title) == ["Show Welcome Again", "Contact Support", "", "Broadway on GitHub", "Copy Last Freeze"])
         #expect(Support.handed.count == 1)
         let handed = try #require(Support.handed.first)
         #expect(handed == "open \(Support.here.absoluteString)" || handed == "copy support@broadwaybrowser.com")
@@ -190,7 +190,7 @@ struct SupportTests {
     @Test func helpOpensTheSourceButNeverFromATestWorld() throws {
         _ = NSApplication.shared
         let menu = MenuBar.helpMenu()
-        let item = try #require(menu.items.last as? MenuCommand)
+        let item = try #require(menu.items.first { $0.title == "Broadway on GitHub" } as? MenuCommand)
         Support.handed = []
 
         Support.showSource(in: Browser(record: WindowRecord()))

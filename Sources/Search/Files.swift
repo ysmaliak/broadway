@@ -349,6 +349,13 @@ final class FileRowView: KitHoverView {
 
     override func mouseDown(with event: NSEvent) {}
 
+    override func menu(for event: NSEvent) -> NSMenu? {
+        guard let item, item.kind == .downloaded else { return nil }
+        let file = URL(fileURLWithPath: item.path)
+        return DownloadMenu.menu(for: file, there: there, open: { NSWorkspace.shared.open(file) }, reveal: { [weak self] in self?.reveal() },
+                                 forget: { [weak self] in self?.forget?() }, from: self, id: "files.row")
+    }
+
     override func accessibilityPerformPress() -> Bool {
         guard let item, there else { return false }
         NSWorkspace.shared.open(URL(fileURLWithPath: item.path))

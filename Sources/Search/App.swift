@@ -354,6 +354,12 @@ enum MenuBar {
         menu.addItem(command("Contact Support") { Support.write { current.announce($0) } })
         menu.addItem(.separator())
         menu.addItem(act("Broadway on GitHub") { Support.showSource(in: $0) })
+        let freeze = command("Copy Last Freeze", enabled: FreezeBook.shared.latest != nil) {
+            Freezes.copyLast { current.announce($0) }
+        }
+        menu.addItem(freeze)
+        FreezeMenuWatch.shared.item = freeze as? MenuCommand
+        menu.delegate = FreezeMenuWatch.shared
         return menu
     }
 

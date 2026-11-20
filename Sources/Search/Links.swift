@@ -140,6 +140,7 @@ final class Links: NSObject, NSApplicationDelegate {
         AgentSetup.shared.launched(agentsOn: Shared.prefs.agentsOn)
         AppIconShown.apply(Shared.prefs.appIcon)
         MainActor.assumeIsolated { HookClock.start() }
+        if !Store.unitTests { MainActor.assumeIsolated { Freezes.start() } }
         let plain = notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool ?? true
         guard !plain else { return }
         DispatchQueue.main.async {

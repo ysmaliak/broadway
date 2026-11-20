@@ -279,6 +279,7 @@ final class RecentDownloadsView: NSView, NSTableViewDataSource, NSTableViewDeleg
             }
         }
         list.menuFor = { [weak self] row in self?.menu(for: row) }
+        list.copyRow = { [weak self] row in self?.copyFile(row) ?? false }
         list.leave = { [weak self] down in self?.step(from: true, down: down) ?? false }
         foot.leave = { [weak self] down in self?.step(from: false, down: down) ?? false }
         list.setAccessibilityLabel("Recent Downloads")
@@ -539,9 +540,27 @@ final class RecentDownloadsView: NSView, NSTableViewDataSource, NSTableViewDeleg
         }
     }
 
+    static func menuNames(for line: DownloadLine) -> [String] {
+        switch line {
+        case .kept(let keep): DownloadMenu.entries(there: keep.stillThere, forgets: true).filter { $0 != .separator }.map(\.rawValue)
+        case .entry, .none: menuVerbs(for: line).map(\.rawValue)
+        }
+    }
+
+    private func copyFile(_ row: Int) -> Bool {
+        guard lines.indices.contains(row), case .kept(let keep) = lines[row], keep.stillThere else { return false }
+        return DownloadMenu.copy(keep.url)
+    }
+
     private func menu(for row: Int) -> NSMenu? {
         guard lines.indices.contains(row) else { return nil }
         let line = lines[row]
+        if case .kept(let keep) = line {
+            let cell = list.view(atColumn: 0, row: row, makeIfNecessary: false) ?? list
+            return DownloadMenu.menu(for: keep.url, there: keep.stillThere, open: { [weak self] in self?.run(.open, on: line) },
+                                     reveal: { [weak self] in self?.run(.reveal, on: line) }, forget: { [weak self] in self?.run(.forget, on: line) },
+                                     from: cell)
+        }
         let verbs = Self.menuVerbs(for: line)
         guard !verbs.isEmpty else { return nil }
         var items: [KitMenuItem] = []
@@ -558,7 +577,7 @@ final class RecentDownloadsView: NSView, NSTableViewDataSource, NSTableViewDeleg
             let rect = list.convert(list.rect(ofRow: row), to: self)
             var out: [String: Any] = ["id": line.id, "height": Double(Self.height(for: line)), "selected": list.selectedRow == row,
                                       "rect": [Double(rect.minX), Double(rect.minY), Double(rect.width), Double(rect.height)],
-                                      "clickable": clickable(row, in: list), "menu": Self.menuVerbs(for: line).map(\.rawValue)]
+                                      "clickable": clickable(row, in: list), "menu": Self.menuNames(for: line)]
             if let cell = cell as? DownloadCell { out.merge(cell.bench) { _, new in new } }
             if let cell = cell as? DownloadsWordCell { out.merge(cell.bench) { _, new in new } }
             return out
@@ -642,6 +661,7 @@ final class DownloadsTable: NSTableView {
     var hoverable: ((Int) -> Bool)?
     var leave: ((Bool) -> Bool)?
     var menuFor: ((Int) -> NSMenu?)?
+    var copyRow: ((Int) -> Bool)?
     private var area: NSTrackingArea?
 
     init() {
@@ -690,6 +710,10 @@ final class DownloadsTable: NSTableView {
         let row = self.row(at: convert(event.locationInWindow, from: nil))
         guard row >= 0 else { return nil }
         return menuFor?(row)
+    }
+
+    @objc func copy(_ sender: Any?) {
+        guard selectedRow >= 0, copyRow?(selectedRow) == true else { return NSSound.beep() }
     }
 
     private var pickable: [Int] {

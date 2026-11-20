@@ -153,7 +153,7 @@ def case_rows():
     kept = named(found, "Installer.dmg")
     t.ok("kept: its icon, where it came from, Show in Finder; a click opens it",
          kept and kept["icon"] and kept["detail"] == "downloads.example.com" and kept["keys"] == ["reveal"] and kept["clickable"]
-         and kept["menu"] == ["open", "reveal", "forget"], kept)
+         and kept["menu"] == ["open", "openWith", "reveal", "copy", "share", "forget"], kept)
     gone = named(found, "Gone already.pdf")
     t.ok("kept but missing: no click, its button off, only Remove from List in its menu",
          gone and not gone["clickable"] and not gone["enabled"] and gone["menu"] == ["forget"], gone)
