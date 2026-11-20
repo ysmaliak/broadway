@@ -41,12 +41,17 @@ struct UpdateCardTests {
                                             seekable: false, muted: false, skip: 15))
     }
 
-    private func waitFor(_ check: () -> Bool, within seconds: Double = 3) {
+    private func waitFor(_ check: () -> Bool, within seconds: Double = 3) async {
+        let end = Date().addingTimeInterval(seconds)
+        while !check(), Date() < end { try? await Task.sleep(nanoseconds: 20_000_000) }
+    }
+
+    private func spin(_ check: () -> Bool, within seconds: Double = 3) {
         let end = Date().addingTimeInterval(seconds)
         while !check(), Date() < end { RunLoop.main.run(until: Date().addingTimeInterval(0.02)) }
     }
 
-    @Test func theCardShowsOnlyWhileAnUpdateWaits() throws {
+    @Test func theCardShowsOnlyWhileAnUpdateIsAvailable() throws {
         let browser = Browser(record: WindowRecord())
         defer { browser.closeAll() }
         let (view, window) = column(browser)
@@ -62,17 +67,20 @@ struct UpdateCardTests {
         #expect(before == nil)
         #expect(view.footHeight == bare + UpdateCardView.foot)
         #expect(after.accessibilityRole() == .group)
-        #expect(after.accessibilityLabel() == "Update Ready")
-        #expect(after.benchState["button"] as? String == "Restart to Update")
+        #expect(after.accessibilityLabel() == "Update available, version 0.1")
+        #expect(after.toolTip == "Version 0.1")
+        #expect(after.benchState["title"] as? String == "Update Available")
+        #expect(after.benchState["buttonTitle"] as? String == "Install")
+        #expect(after.benchState["button"] as? String == "Install Update")
         #expect(after.benchState["hide"] as? String == "Hide")
         updates.unpretend()
         settle(view)
-        waitFor { card(in: view) == nil }
+        spin { card(in: view) == nil }
         #expect(card(in: view) == nil)
         #expect(view.footHeight == bare)
     }
 
-    @Test func theCardHasNoIconAndItsTitleStartsAsFarInAsRestartEnds() throws {
+    @Test func theCardHasNoIconAndItsTitleStartsAsFarInAsInstallEnds() throws {
         updates.pretend(version: "0.1", build: "200")
         defer { updates.unpretend() }
         let browser = Browser(record: WindowRecord())
@@ -88,7 +96,7 @@ struct UpdateCardTests {
             let title = try #require(shown.compactMap { $0 as? KitLabel }.first)
 
             #expect(state["titleStart"] as? CGFloat == UpdateCardView.pad)
-            #expect(state["restartEnd"] as? CGFloat == UpdateCardView.pad)
+            #expect(state["trailingEnd"] as? CGFloat == UpdateCardView.pad)
             #expect(UpdateCardView.pad == SideLook.rowLead)
             #expect(state["titleCut"] as? Bool == false, "\(state)")
             #expect(shown.count == 3)
@@ -98,20 +106,98 @@ struct UpdateCardTests {
         }
     }
 
-    @Test func theCrossHidesItUntilANewerUpdateIsStaged() {
-        let wait = UpdateWait()
-        wait.stage(StagedUpdate(version: "0.1", build: "200")) {}
+    @Test func everyStateHasItsWordsAtTheNarrowestAndWidestSidebar() throws {
+        defer { updates.unpretend() }
+        let browser = Browser(record: WindowRecord())
+        defer { browser.closeAll() }
+        let states: [(UpdatePhase, Double?, String, String)] = [
+            (.available, nil, "Update Available", "button"),
+            (.checking, nil, "Checking for Updates", "spinner"),
+            (.downloading, 0.42, "Downloading", "percent"),
+            (.downloading, nil, "Downloading", "spinner"),
+            (.installing, nil, "Installing", "spinner"),
+            (.failed, nil, "Couldn't Update", "button"),
+        ]
 
-        wait.hide()
-        let hidden = wait.card
-        wait.stage(StagedUpdate(version: "0.1", build: "200")) {}
-        let same = wait.card
-        wait.stage(StagedUpdate(version: "0.1", build: "201")) {}
+        for width in [Metrics.sideMin, Metrics.sideMax] {
+            let (view, window) = column(browser, width: width)
+            defer { window.close() }
+            for (phase, progress, title, trailing) in states {
+                updates.pretend(version: "0.7", build: "700", phase: phase, progress: progress, trouble: phase == .failed ? "The disk is full" : nil)
+                settle(view)
+                let update = try #require(card(in: view), "\(phase) \(width)")
+                let state = update.benchState
+                let called = "\(phase) \(progress ?? -1) at \(width)"
+                let needs = try #require(state["titleNeeds"] as? CGFloat)
+                let room = try #require(state["textRoom"] as? CGFloat)
+                let box = try #require(state["card"] as? [CGFloat])
+                let line = try #require(state["lineBox"] as? [CGFloat])
+
+                #expect(state["title"] as? String == title, "\(called)")
+                #expect(state["trailing"] as? String == trailing, "\(called)")
+                #expect(state["titleCut"] as? Bool == (needs > room + 0.5), "\(called)")
+                #expect(state["trailingEnd"] as? CGFloat == UpdateCardView.pad, "\(called)")
+                #expect(state["titleStart"] as? CGFloat == UpdateCardView.pad, "\(called)")
+                if width == Metrics.sideMax { #expect(state["titleCut"] as? Bool == false, "\(called)") }
+                switch (phase, progress) {
+                case (.downloading, .some(let part)):
+                    #expect(state["percent"] as? String == "42%", "\(called)")
+                    #expect(state["percentCut"] as? Bool == false, "\(called)")
+                    #expect(state["lineShown"] as? Bool == true, "\(called)")
+                    #expect(abs(line[2] - (box[2] * part).rounded()) <= 1, "\(called) \(line)")
+                    #expect(line[3] == UpdateCardView.lineHeight && line[1] == UpdateCardView.height - UpdateCardView.lineHeight, "\(called) \(line)")
+                    #expect(state["label"] as? String == "Downloading, 42%", "\(called)")
+                case (.downloading, nil):
+                    #expect(state["line"] as? Int == -1, "\(called)")
+                    #expect(state["spinner"] as? Bool == true, "\(called)")
+                case (.installing, _):
+                    #expect(state["lineShown"] as? Bool == true && abs(line[2] - box[2]) <= 1, "\(called) \(line)")
+                case (.failed, _):
+                    #expect(state["buttonTitle"] as? String == "Try Again", "\(called)")
+                    #expect(state["tip"] as? String == "The disk is full", "\(called)")
+                case (.checking, _):
+                    #expect(state["spinner"] as? Bool == true, "\(called)")
+                    #expect(state["lineShown"] as? Bool == false, "\(called)")
+                default:
+                    #expect(state["buttonTitle"] as? String == "Install", "\(called)")
+                    #expect(state["lineShown"] as? Bool == false, "\(called)")
+                }
+            }
+        }
+    }
+
+    @Test func theProgressLineIsTheAccentColour() throws {
+        updates.pretend(version: "0.7", build: "700", phase: .downloading, progress: 0.5)
+        defer { updates.unpretend() }
+        let browser = Browser(record: WindowRecord())
+        defer { browser.closeAll() }
+        let (view, window) = column(browser)
+        defer { window.close() }
+        let update = try #require(card(in: view))
+        var accent = NSColor.controlAccentColor
+        update.effectiveAppearance.performAsCurrentDrawingAppearance { accent = NSColor.controlAccentColor.usingColorSpace(.sRGB) ?? accent }
+
+        let colour = try #require(update.benchState["lineColour"] as? [CGFloat])
+
+        #expect(colour.count == 4)
+        #expect(abs(colour[0] - accent.redComponent) < 0.02 && abs(colour[1] - accent.greenComponent) < 0.02
+            && abs(colour[2] - accent.blueComponent) < 0.02, "\(colour)")
+    }
+
+    @Test func theCrossHidesItUntilANewerUpdateIsFound() {
+        updates.pretend(version: "0.1", build: "200")
+        defer { updates.unpretend() }
+        let flow = updates.flow
+
+        flow.hide()
+        let hidden = flow.card
+        updates.pretend(version: "0.1", build: "200")
+        let same = flow.card
+        updates.pretend(version: "0.1", build: "201")
 
         #expect(!hidden)
         #expect(!same)
-        #expect(wait.card)
-        #expect(wait.arrivals == 2)
+        #expect(flow.card)
     }
 
     @Test func aPrivateWindowAndAFoldedColumnHaveNoCard() {
@@ -160,7 +246,7 @@ struct UpdateCardTests {
         #expect(update.benchState["titleCut"] as? Bool == false, "\(update.benchState)")
     }
 
-    @Test func theRestartAsksFirstOnlyWhenSomethingWouldBeLost() {
+    @Test func installAsksFirstOnlyWhenSomethingWouldBeLost() {
         let cases: [(RestartLoss, String?)] = [
             (RestartLoss(), nil),
             (RestartLoss(privateWindows: 1), "Restarting now closes your private window"),
@@ -182,7 +268,7 @@ struct UpdateCardTests {
             UpdateRestart.gather = { done in done(loss) }
             Ask.asked = []
             let before = updates.restartsAsked
-            updates.restart(over: nil)
+            updates.install(over: nil)
             results.append((!Ask.asked.isEmpty, updates.restartsAsked > before))
         }
 
@@ -195,7 +281,7 @@ struct UpdateCardTests {
         Ask.testing = true
         UpdateRestart.gather = { done in done(RestartLoss(downloads: 1)) }
         let before = updates.restartsAsked
-        updates.restart(over: nil)
+        updates.install(over: nil)
         #expect(Ask.asked.last == RestartLoss.title)
         #expect(updates.restartsAsked == before + 1)
     }
@@ -213,15 +299,25 @@ struct UpdateCardTests {
         RestartLoss.gather(browsers: [plain], fetches: fetches) { calm = $0 }
         var found: RestartLoss?
         RestartLoss.gather(browsers: [plain, quiet], fetches: fetches) { found = $0 }
-        waitFor { calm != nil && found != nil }
+        spin { calm != nil && found != nil }
 
         #expect(calm?.nothing == true)
         #expect(found?.privateWindows == 1)
         #expect(RestartLoss.counted([FetchEntry(name: "a.zip", request: nil, webView: nil)]) == 1)
     }
 
-    @Test func theMenuItemAndTheSettingsButtonDoTheSameRestart() throws {
-        let item = updates.restartItem()
+    private func versionRow(_ browser: Browser, query: String = "") throws -> (SettingsRowView, KitBroadwayButton) {
+        let shell = SettingsShell()
+        if query.isEmpty { shell.go(to: .general) } else { shell.query = query }
+        let view = SettingsPageView(browser: browser, shell: shell)
+        view.rebuild()
+        let row = try #require(view.kitSubviews(of: SettingsRowView.self).first { $0.rowID == "updates.version" })
+        let button = try #require(row.kitSubviews(of: KitBroadwayButton.self).first)
+        return (row, button)
+    }
+
+    @Test func theMenuItemAndTheSettingsButtonDoTheSameInstall() async throws {
+        let item = updates.installItem()
         let browser = Browser(record: WindowRecord())
         defer { browser.closeAll() }
         UpdateRestart.gather = { done in done(RestartLoss()) }
@@ -230,32 +326,76 @@ struct UpdateCardTests {
         let hiddenBefore = item.isHidden
         updates.pretend(version: "0.1", build: "200")
         defer { updates.unpretend() }
-        waitFor { !item.isHidden }
+        await waitFor { !item.isHidden }
+        let shownWhenOffered = !item.isHidden
         _ = (item.target as? NSObject)?.perform(item.action, with: item)
         let fromMenu = updates.restartsAsked
         var pressed: [String] = []
         for query in ["", "version"] {
-            let shell = SettingsShell()
-            if query.isEmpty { shell.go(to: .general) } else { shell.query = query }
-            let view = SettingsPageView(browser: browser, shell: shell)
-            view.rebuild()
-            let row = try #require(view.kitSubviews(of: SettingsRowView.self).first { $0.rowID == "updates.version" })
-            let button = try #require(row.kitSubviews(of: KitBroadwayButton.self).first)
+            let (row, button) = try versionRow(browser, query: query)
             pressed.append(button.title)
             #expect(button.isEnabled)
             button.action?()
             let said = row.kitSubviews(of: NSTextField.self).map(\.stringValue)
-            #expect(said.contains { $0.hasSuffix(" · " + UpdateWords.ready) })
+            #expect(said.contains { $0.hasSuffix(" · Broadway 0.1 is available") }, "\(said)")
         }
 
         #expect(hiddenBefore)
-        #expect(item.title == "Restart to Update")
+        #expect(shownWhenOffered)
+        #expect(item.title == "Install Update")
         #expect(fromMenu == 1)
-        #expect(pressed == ["Restart to Update", "Restart to Update"])
+        #expect(pressed == ["Install", "Install"])
         #expect(updates.restartsAsked == 3)
         updates.unpretend()
-        waitFor { item.isHidden }
+        await waitFor { item.isHidden }
         #expect(item.isHidden)
+    }
+
+    @Test func theMenuItemAndTheSettingsRowFollowEachState() async throws {
+        let item = updates.installItem()
+        let browser = Browser(record: WindowRecord())
+        defer { browser.closeAll() }
+        defer { updates.unpretend() }
+        let states: [(UpdatePhase, Double?, String, Bool)] = [
+            (.available, nil, "Broadway 0.7 is available", true),
+            (.checking, nil, "Checking for updates", false),
+            (.downloading, 0.42, "Downloading 42%", false),
+            (.downloading, nil, "Downloading", false),
+            (.installing, nil, "Installing", false),
+            (.failed, nil, "Couldn't update · The disk is full", true),
+        ]
+
+        for (phase, progress, line, enabled) in states {
+            updates.pretend(version: "0.7", build: "700", phase: phase, progress: progress, trouble: phase == .failed ? "The disk is full" : nil)
+            await waitFor { !item.isHidden }
+            let (row, button) = try versionRow(browser)
+            let said = row.kitSubviews(of: NSTextField.self).map(\.stringValue)
+            let menuOn = updates.validateMenuItem(item)
+
+            #expect(!item.isHidden, "\(phase)")
+            #expect(menuOn == enabled, "\(phase)")
+            #expect(button.title == "Install", "\(phase)")
+            #expect(button.isEnabled == enabled, "\(phase)")
+            #expect(said.contains { $0.hasSuffix(" · " + line) }, "\(phase) \(said)")
+            #expect(updates.line.hasSuffix(" · " + line), "\(phase) \(updates.line)")
+        }
+    }
+
+    @Test func notNowLeavesTheUpdateAvailable() {
+        updates.pretend(version: "0.1", build: "200")
+        defer { updates.unpretend() }
+        let was = UpdateRestart.gather
+        defer { UpdateRestart.gather = was }
+        UpdateRestart.gather = { done in done(RestartLoss(privateWindows: 1)) }
+        Ask.testing = false
+        defer { Ask.testing = nil }
+
+        updates.install(over: nil)
+
+        #expect(Ask.asked.last == RestartLoss.title)
+        #expect(updates.restartsAsked == 0)
+        #expect(updates.flow.shown == .available)
+        #expect(!updates.flow.pressed)
     }
 
     private func keyInside(_ update: UpdateCardView, _ window: NSWindow, _ called: String) throws {
@@ -305,7 +445,7 @@ struct UpdateCardTests {
         let update = try #require(card(in: view))
         let buttons = update.kitSubviews(of: KitButton.self)
         let hide = try #require(buttons.first { $0.accessibilityLabel() == "Hide" })
-        let restart = try #require(buttons.first { $0.accessibilityLabel() == "Restart to Update" })
+        let install = try #require(buttons.first { $0.accessibilityLabel() == "Install Update" })
         let box = try #require(update.benchState["card"] as? [CGFloat])
         let closeBox = try #require(update.benchState["close"] as? [CGFloat])
         let cross = NSPoint(x: closeBox[0] + closeBox[2] / 2, y: closeBox[1] + closeBox[3] - 3)
@@ -327,7 +467,7 @@ struct UpdateCardTests {
         let landed = hit.map { $0 === hide || $0.isDescendant(of: hide) } ?? false
         if landed { hide.action?() }
         settle(view)
-        waitFor { card(in: view) == nil }
+        spin { card(in: view) == nil }
 
         #expect(closeBox[2] == UpdateCardView.closeSize)
         #expect(abs(closeBox[0] - (box[0] - UpdateCardView.closeAside(card: box[2]))) < 0.5)
@@ -337,8 +477,8 @@ struct UpdateCardTests {
         #expect(landed)
         #expect(passed.map { !$0.isDescendant(of: update) } ?? true)
         #expect(rim === hide)
-        #expect(hide.acceptsFirstResponder && restart.acceptsFirstResponder)
-        #expect(!updates.wait.card)
+        #expect(hide.acceptsFirstResponder && install.acceptsFirstResponder)
+        #expect(!updates.flow.card)
         #expect(card(in: view) == nil)
     }
 }

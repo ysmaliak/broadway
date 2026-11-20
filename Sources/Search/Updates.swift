@@ -68,9 +68,9 @@ enum UpdateWords {
 
     static func reason(_ error: Error) -> String {
         let text = (error as NSError).localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
-        let sentences = text.components(separatedBy: ". ").count
-        guard sentences == 1, text.hasSuffix("."), !text.hasSuffix("..") else { return text }
-        return String(text.dropLast())
+        let first = text.components(separatedBy: ". ").first ?? text
+        guard first.hasSuffix("."), !first.hasSuffix("..") else { return first }
+        return String(first.dropLast())
     }
 
     @MainActor static func status(_ flow: UpdateFlow) -> String? {
@@ -201,7 +201,6 @@ final class Updates: NSObject, SPUUpdaterDelegate, UpdateEngine, NSMenuItemValid
     @ObservationIgnored private var driver: UpdateDriver?
     @ObservationIgnored private var watches: [NSKeyValueObservation] = []
     @ObservationIgnored private var started = false
-    @ObservationIgnored private var installWatch: AnyCancellable?
     @ObservationIgnored private(set) var restartsAsked = 0
     @ObservationIgnored private var pretended: Bool?
     let flow = UpdateFlow()
@@ -273,7 +272,7 @@ final class Updates: NSObject, SPUUpdaterDelegate, UpdateEngine, NSMenuItemValid
 
     var version: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "" }
 
-    func check() {
+    func begin() {
         guard let updater else { return }
         updater.checkForUpdates()
     }
@@ -302,10 +301,10 @@ final class Updates: NSObject, SPUUpdaterDelegate, UpdateEngine, NSMenuItemValid
     }
 
     func installItem() -> NSMenuItem {
-        let item = NSMenuItem(title: UpdateWords.install, action: #selector(installFromMenu), keyEquivalent: "")
+        let item = UpdateMenuItem(title: UpdateWords.install, action: #selector(installFromMenu), keyEquivalent: "")
         item.target = self
         item.isHidden = !flow.offered
-        installWatch = kitObserve(distinct: true, { [weak self] in self?.flow.offered == true }) { [weak item] on in item?.isHidden = !on }
+        item.watch = kitObserve(distinct: true, { [weak self] in self?.flow.offered == true }) { [weak item] on in item?.isHidden = !on }
         return item
     }
 
@@ -317,7 +316,7 @@ final class Updates: NSObject, SPUUpdaterDelegate, UpdateEngine, NSMenuItemValid
         }
     }
 
-    @objc private func checkFromMenu() { check(fromMenu: true) }
+    @objc private func checkFromMenu() { check() }
 
     @objc private func installFromMenu() { install(over: NSApp.keyWindow ?? Browsers.front?.window) }
 
@@ -335,7 +334,7 @@ final class Updates: NSObject, SPUUpdaterDelegate, UpdateEngine, NSMenuItemValid
         }
     }
 
-    func check(fromMenu: Bool = false) {
+    func check() {
         guard canCheck else { return }
         flow.checkNow()
     }
@@ -403,7 +402,7 @@ final class Updates: NSObject, SPUUpdaterDelegate, UpdateEngine, NSMenuItemValid
                                    "found": flow.found.map { ["version": $0.version, "build": $0.build] } ?? NSNull(),
                                    "progress": flow.progress ?? NSNull(), "pressed": flow.pressed, "quiet": flow.quiet,
                                    "trouble": flow.trouble ?? "", "waiting": waiting ?? "",
-                                   "told": flow.told.map { "\($0)" }]
+                                   "told": flow.told.map { "\($0)" }, "trail": flow.trail]
         guard let updater else { return said }
         said["feed"] = updater.feedURL?.absoluteString ?? ""
         said["started"] = started
@@ -413,6 +412,7 @@ final class Updates: NSObject, SPUUpdaterDelegate, UpdateEngine, NSMenuItemValid
         said["sparkleDownloads"] = updater.automaticallyDownloadsUpdates
         said["interval"] = updater.updateCheckInterval
         said["busy"] = updater.sessionInProgress
+        said["sparkleCanCheck"] = updater.canCheckForUpdates
         said["lastChecked"] = updater.lastUpdateCheckDate.map { ISO8601DateFormatter().string(from: $0) } ?? ""
         return said
     }
@@ -423,6 +423,10 @@ final class Updates: NSObject, SPUUpdaterDelegate, UpdateEngine, NSMenuItemValid
         turn += 1
         flow.cycleEnded()
     }
+}
+
+final class UpdateMenuItem: NSMenuItem {
+    var watch: AnyCancellable?
 }
 
 @MainActor

@@ -31,7 +31,8 @@ enum UpdateTell: Equatable {
 protocol UpdateEngine: AnyObject {
     var busy: Bool { get }
     var running: String { get }
-    func check()
+    var version: String { get }
+    func begin()
     func read(_ done: @escaping (UpdateFound?, String?) -> Void)
 }
 
@@ -48,6 +49,7 @@ final class UpdateFlow {
     private(set) var quiet = false
     private(set) var arrivals = 0
     private(set) var told: [UpdateTell] = []
+    @ObservationIgnored private(set) var trail: [String] = []
 
     @ObservationIgnored weak var engine: UpdateEngine?
     @ObservationIgnored var installsQuietly: () -> Bool = { false }
@@ -111,6 +113,7 @@ final class UpdateFlow {
     }
 
     func press() {
+        mark("press")
         guard !(pressed && phase.busy) else { return }
         pressed = true
         trouble = nil
@@ -140,6 +143,7 @@ final class UpdateFlow {
     }
 
     func checkNow() {
+        mark("checkNow")
         guard canCheck else { return }
         trouble = nil
         phase = .checking
@@ -149,17 +153,24 @@ final class UpdateFlow {
             if phase == .checking, !pressed { phase = .idle }
             if let failure { return say(.checkFailed(failure)) }
             if let newest, Self.newer(newest.build, than: engine.running) { note(newest) }
-            guard let shown = found else { return say(.upToDate(engine.running)) }
+            guard let shown = found else { return say(.upToDate(engine.version)) }
             if !cardSeen() { say(.available(shown)) }
         }
     }
 
     private func say(_ what: UpdateTell) {
         told.append(what)
+        mark("say \(what)")
         tell(what)
     }
 
+    private func mark(_ event: String) {
+        trail.append(event)
+        if trail.count > 60 { trail.removeFirst(trail.count - 60) }
+    }
+
     private func start(_ wanted: Intent) {
+        mark("start \(wanted) busy \(engine?.busy == true)")
         intent = wanted
         guard let engine else {
             if wanted == .install {
@@ -172,10 +183,29 @@ final class UpdateFlow {
         }
         guard !engine.busy else {
             afterCycle = { [weak self] in self?.start(wanted) }
+            retry(wanted)
             return
         }
         afterCycle = nil
-        engine.check()
+        waits = 0
+        engine.begin()
+    }
+
+    @ObservationIgnored private var waits = 0
+
+    static let waitLimit = 60
+
+    private func retry(_ wanted: Intent) {
+        guard waits < Self.waitLimit else { return }
+        waits += 1
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self, afterCycle != nil, intent == wanted, engine?.busy == false else {
+                if let self, afterCycle != nil, intent == wanted { retry(wanted) }
+                return
+            }
+            mark("retry \(wanted)")
+            start(wanted)
+        }
     }
 
     private func readNewest() {
@@ -207,10 +237,12 @@ final class UpdateFlow {
     }
 
     func checkStarted() {
+        mark("checkStarted")
         if intent != .none, phase == .idle { phase = .checking }
     }
 
     func found(_ update: UpdateFound, stage: UpdateStage, informational: Bool, reply: @escaping (UpdateChoice) -> Void) {
+        mark("found \(update.build) \(stage) pressed \(pressed) intent \(intent) dropped \(dropped?.build ?? "")")
         guard !informational else { return reply(.dismiss) }
         if let dropped, dropped.build == update.build, stage == .installing {
             drops += 1
@@ -261,6 +293,7 @@ final class UpdateFlow {
     }
 
     func downloadStarted() {
+        mark("downloadStarted")
         expected = 0
         received = 0
         extracting = false
@@ -279,6 +312,7 @@ final class UpdateFlow {
     }
 
     func extractStarted() {
+        mark("extractStarted")
         extracting = true
         if pressed {
             phase = .installing
@@ -287,6 +321,7 @@ final class UpdateFlow {
     }
 
     func ready(_ reply: @escaping (UpdateChoice) -> Void) {
+        mark("ready pressed \(pressed) reading \(reading)")
         let update = item ?? found
         quiet = false
         extracting = false
@@ -315,12 +350,14 @@ final class UpdateFlow {
     }
 
     func installing() {
+        mark("installing")
         guard pressed else { return }
         phase = .installing
         progress = 1
     }
 
     func notFound() {
+        mark("notFound intent \(intent)")
         let wanted = intent
         intent = .none
         dropped = nil
@@ -335,10 +372,11 @@ final class UpdateFlow {
         found = nil
         guard wanted == .check else { return }
         phase = .idle
-        say(.upToDate(engine?.running ?? ""))
+        say(.upToDate(engine?.version ?? ""))
     }
 
     func failed(_ reason: String) {
+        mark("failed \(reason)")
         let wanted = intent
         dropped = nil
         if pressed || wanted == .install {
@@ -355,6 +393,7 @@ final class UpdateFlow {
     }
 
     func cycleEnded() {
+        mark("cycleEnded queued \(afterCycle != nil)")
         quiet = false
         if let next = afterCycle {
             afterCycle = nil

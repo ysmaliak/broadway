@@ -475,7 +475,7 @@ def case_current(ctx):
         updates(check=True)
         ok("Sparkle's own automatic downloads stay off, Broadway downloads quietly itself", said.get("sparkleDownloads") is False, said)
         w = window(saying="up to date")
-        ok("Check for Updates… says it is up to date", w is not None, updates().get("windows"))
+        ok("Check for Updates… says it is up to date", w is not None, (updates().get("windows"), updates().get("trail")))
         if w:
             print("       ", " | ".join(w["texts"]), flush=True)
             ok("in Broadway's own alert, with the version", "Broadway is up to date" in w["texts"]
@@ -801,15 +801,17 @@ def case_asks(ctx):
     ok("with no window of Sparkle's own", not offered.get("windows"), offered.get("windows"))
     time.sleep(2)
     ok("it has not downloaded anything unasked", ctx["path"] not in requests(), requests())
+    serve(ctx["feed"], ctx["files"], slowly=[ctx["path"]])
     try:
         updates(install=True)
     except OSError:
         pass
     seen = watch(old_pid)
     parts = progressed(seen)
-    phases = [phase for phase, _ in seen]
-    ok("Install checks first, then downloads", "checking" in phases and "downloading" in phases
-       and phases.index("checking") < phases.index("downloading"), phases[:30])
+    asked_now = requests()
+    ok("Install asks the feed live first, then downloads", "/appcast.xml" in asked_now and ctx["path"] in asked_now
+       and asked_now.index("/appcast.xml") < asked_now.index(ctx["path"]), asked_now)
+    ok("the card shows Downloading while it does", "downloading" in [phase for phase, _ in seen], seen[:20])
     ok("a download progress above 0 and below 1 was seen", any(0 < part < 1 for part in parts), parts[:40])
     ok("the progress only went forward", parts == sorted(parts), parts[:40])
     note(f"manual: {len(parts)} progress samples, {len(set(parts))} distinct")
@@ -831,6 +833,11 @@ def case_newer(ctx):
     seen = watch(old_pid)
     asked_now = requests()
     parts = progressed(seen)
+    try:
+        last = cmd({"do": "updates"}, timeout=3)
+        note(f"newer: {last.get('flow')} busy {last.get('busy')} trail {last.get('trail')}")
+    except (OSError, ValueError):
+        pass
     ok("Install read the feed live", "/appcast.xml" in asked_now, asked_now)
     ok("it downloaded C and not B again", ctx["c_path"] in asked_now and ctx["path"] not in asked_now, asked_now)
     ok("a download progress above 0 and below 1 was seen", any(0 < part < 1 for part in parts), parts[:40])

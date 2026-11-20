@@ -293,6 +293,7 @@ final class UpdateCardView: KitHoverView {
         titleLabel.frame = kitSnap(NSRect(x: start, y: (Self.height - titleHeight) / 2, width: room, height: titleHeight))
         titleLabel.ink = ink
         rail.frame = card.bounds
+        rail.isHidden = look.line == .none
         drawLine(look.line)
         toolTip = look.tip
         setAccessibilityLabel(look.label)
