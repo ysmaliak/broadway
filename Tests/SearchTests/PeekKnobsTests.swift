@@ -38,6 +38,23 @@ final class PeekKnobsTests {
         }
     }
 
+    @Test func theKnobsStayFourPointsInsideTheWindowAtEveryWidth() {
+        for width in [160, 200, 240, 277, 278, 400, 900] as [CGFloat] {
+            let bounds = NSRect(x: 0, y: 0, width: width, height: 500)
+            for split in [false, true] {
+                let (page, knobs) = PeekKnobsView.places(in: bounds, split: split)
+                let wide = width * 0.82
+
+                #expect(knobs.maxX <= width - PeekKnobsView.edge + 0.001, "\(width) \(knobs)")
+                #expect(knobs.minY >= PeekKnobsView.edge, "\(width) \(knobs)")
+                #expect(abs(knobs.minX - (page.maxX + 10)) < 0.001, "\(width) \(page) \(knobs)")
+                if width >= 278 {
+                    #expect(abs(knobs.maxX - ((width - wide) / 2 + PeekKnobsView.lean + wide)) < 0.001, "\(width) \(knobs)")
+                }
+            }
+        }
+    }
+
     @Test func withoutSplitViewThereAreTwoKnobs() {
         let knobs = PeekKnobsView(split: false, close: {}, open: {}, beside: {})
 

@@ -704,6 +704,10 @@ final class Bench {
             }
             if request["unstage"] as? Bool == true { Updates.shared.unpretend() }
             if request["hide"] as? Bool == true { Updates.shared.wait.hide() }
+            if let on = request["hover"] as? Bool {
+                browser.window?.contentView?.layoutSubtreeIfNeeded()
+                browser.window?.contentView?.kitSubviews(of: UpdateCardView.self).first { !$0.isHiddenOrHasHiddenAncestor }?.benchHover(on)
+            }
             if request["restart"] as? Bool == true { Updates.shared.restart(over: browser.window) }
             if request["behind"] as? Bool == true { NSApp.hide(nil) }
             var said = Updates.shared.facts
@@ -975,6 +979,11 @@ final class Bench {
             out["peekFrom"] = browser.peekFrom?.uuidString ?? ""
             // The size the peek's page is drawn at (see Tab.applyRememberedZoom).
             out["peekZoom"] = Double(browser.peekTab?.built?.pageZoom ?? 0)
+            if let content = browser.window?.contentView,
+               let knobs = content.kitSubviews(of: PeekKnobsView.self).first(where: { !$0.isHiddenOrHasHiddenAncestor }) {
+                let r = knobs.convert(knobs.bounds, to: nil)
+                out["peekKnobs"] = [r.minX, content.bounds.height - r.maxY, r.width, r.height, content.bounds.width]
+            }
             out["fetching"] = ["showing": browser.fetches.showing, "fraction": browser.fetches.fraction ?? -1, "done": browser.fetches.done]
             // Where the peek's page sits in the window, from its top-left corner, in points.
             if let web = browser.peekTab?.built, let window = web.window {

@@ -291,12 +291,8 @@ private final class PeekPanelView: NSView {
 
     override func layout() {
         super.layout()
-        let width = bounds.width * 0.82
-        let height = bounds.height * 0.86
-        let x = (bounds.width - width) / 2 + 21
-        let y = (bounds.height - height) / 2
-        let knobSize = PeekKnobsView.size(split: split)
-        let page = kitSnap(NSRect(x: x, y: y, width: max(0, width - 10 - knobSize.width), height: height))
+        let (whole, knobFrame) = PeekKnobsView.places(in: bounds, split: split)
+        let page = kitSnap(whole)
         shade.frame = page
         clip.frame = page
         edge.frame = page
@@ -304,7 +300,7 @@ private final class PeekPanelView: NSView {
         stage.frame = inside
         overlays?.frame = inside
         skeleton?.frame = inside
-        knobs.frame = kitSnap(NSRect(x: x + width - knobSize.width, y: y, width: knobSize.width, height: knobSize.height))
+        knobs.frame = kitSnap(knobFrame)
     }
 }
 
@@ -341,6 +337,19 @@ final class PeekKnobsView: NSView {
     private let close: KitButton
     private let open: KitButton
     private let beside: KitButton
+
+    static let edge: CGFloat = 4
+    static let lean: CGFloat = 21
+
+    static func places(in bounds: NSRect, split: Bool) -> (page: NSRect, knobs: NSRect) {
+        let size = size(split: split)
+        let width = max(0, min(bounds.width * 0.82, bounds.width - 2 * (edge + lean)))
+        let height = bounds.height * 0.86
+        let x = (bounds.width - width) / 2 + lean
+        let y = (bounds.height - height) / 2
+        return (NSRect(x: x, y: y, width: max(0, width - 10 - size.width), height: height),
+                NSRect(x: x + width - size.width, y: y, width: size.width, height: size.height))
+    }
 
     static func size(split: Bool) -> NSSize {
         let count: CGFloat = split ? 3 : 2

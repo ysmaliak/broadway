@@ -92,7 +92,7 @@ struct UpdateCardTests {
             #expect(UpdateCardView.pad == SideLook.rowLead)
             #expect(state["titleCut"] as? Bool == false, "\(state)")
             #expect(shown.count == 3)
-            #expect(shown.filter { $0.frame.minX >= 0 && $0.frame.minX < title.frame.minX }.isEmpty)
+            #expect(shown.filter { $0.accessibilityLabel() != "Hide" && $0.frame.minX >= 0 && $0.frame.minX < title.frame.minX }.isEmpty)
             #expect(update.kitSubviews(of: KitSymbol.self).map(\.name) == ["xmark"])
             #expect(UpdateCardView.textRoom(card: inner.frame.width) == title.frame.width)
         }
@@ -258,6 +258,43 @@ struct UpdateCardTests {
         #expect(item.isHidden)
     }
 
+    private func keyInside(_ update: UpdateCardView, _ window: NSWindow, _ called: String) throws {
+        let size = try #require(window.contentView?.bounds.size)
+        let reach = (UpdateCardView.closeReach - UpdateCardView.closeSize) / 2
+        update.benchHover(true)
+        defer { update.benchHover(false) }
+        let state = update.benchState
+        let plain = try #require(state["close"] as? [CGFloat])
+        let drawn = try #require(state["closeDrawn"] as? [CGFloat])
+        #expect(state["closeShown"] as? Bool == true, "\(called)")
+        #expect(drawn[2] > plain[2], "\(called) \(drawn) \(plain)")
+        for (box, kind) in [(plain, "plain"), (drawn, "grown")] {
+            #expect(box[0] >= UpdateCardView.closeEdge, "\(called) \(kind) \(box)")
+            #expect(box[1] >= UpdateCardView.closeEdge, "\(called) \(kind) \(box)")
+            #expect(box[0] + box[2] <= size.width - UpdateCardView.closeEdge, "\(called) \(kind) \(box)")
+            #expect(box[1] + box[3] <= size.height - UpdateCardView.closeEdge, "\(called) \(kind) \(box)")
+            #expect(box[0] >= 26 || box[1] >= 26, "\(called) \(kind) \(box)")
+        }
+        #expect(plain[0] - reach >= 0, "\(called) \(plain)")
+    }
+
+    @Test func theCloseKeyStaysFourPointsInsideTheWindowAtEveryWidth() throws {
+        updates.pretend(version: "0.1", build: "200")
+        defer { updates.unpretend() }
+        for width in [Metrics.sideMin, 258, Metrics.sideMax] {
+            let browser = Browser(record: WindowRecord())
+            defer { browser.closeAll() }
+            let (view, window) = column(browser, width: width)
+            defer { window.close() }
+            let update = try #require(card(in: view))
+            let box = try #require(update.benchState["card"] as? [CGFloat])
+            let plain = try #require(update.benchState["close"] as? [CGFloat])
+            #expect(abs(plain[1] + plain[3] - (box[1] + box[3] + UpdateCardView.closeOut)) < 0.5)
+            #expect(box[0] == Metrics.sideInset)
+            try keyInside(update, window, "column \(width)")
+        }
+    }
+
     @Test func theCrossShowsOnHoverHangsOutsideTheCornerAndHidesTheCard() throws {
         updates.pretend(version: "0.1", build: "200")
         defer { updates.unpretend() }
@@ -293,7 +330,7 @@ struct UpdateCardTests {
         waitFor { card(in: view) == nil }
 
         #expect(closeBox[2] == UpdateCardView.closeSize)
-        #expect(abs(closeBox[0] - (box[0] - UpdateCardView.closeOut)) < 0.5)
+        #expect(abs(closeBox[0] - (box[0] - UpdateCardView.closeAside(card: box[2]))) < 0.5)
         #expect(abs(closeBox[1] + closeBox[3] - (box[1] + box[3] + UpdateCardView.closeOut)) < 0.5)
         #expect(before !== hide)
         #expect(shown == true)

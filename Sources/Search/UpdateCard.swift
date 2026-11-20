@@ -5,6 +5,8 @@ final class UpdateCardView: KitHoverView {
     static let height: CGFloat = 44
     static let closeSize: CGFloat = 18
     static let closeOut: CGFloat = closeSize / 3
+    static let closeEdge: CGFloat = 4
+    static let hoverScale: CGFloat = 1.01
     static let closeReach: CGFloat = 24
     static let foot: CGFloat = height + 8
     static let room: CGFloat = closeOut + foot
@@ -78,6 +80,11 @@ final class UpdateCardView: KitHoverView {
         ceil(KitLabel(button, font: KitBroadwayButton.font(kind: .primary, small: true)).intrinsicContentSize.width) + 18
     }
 
+    static func closeAside(card width: CGFloat) -> CGFloat {
+        let room = (Metrics.sideInset - closeEdge - (hoverScale - 1) * width / 2) / hoverScale
+        return (min(closeOut, room) * 2).rounded(.down) / 2
+    }
+
     static func textRoom(card width: CGFloat) -> CGFloat {
         width - pad - buttonWidth() - gap - pad
     }
@@ -114,8 +121,11 @@ final class UpdateCardView: KitHoverView {
         layoutSubtreeIfNeeded()
         let inWindow = window.map { _ in card.convert(card.bounds, to: nil) } ?? .zero
         let closeBox = card.convert(close.frame, to: nil)
+        let scaled = card.layer.map { CATransform3DGetAffineTransform($0.transform) } ?? .identity
+        let drawn = card.convert(close.frame.applying(scaled), to: nil)
         return ["card": [inWindow.minX, inWindow.minY, inWindow.width, inWindow.height],
                 "close": [closeBox.minX, closeBox.minY, closeBox.width, closeBox.height], "closeShown": closeOut,
+                "closeDrawn": [drawn.minX, drawn.minY, drawn.width, drawn.height],
                 "restart": restart.frame.width, "label": accessibilityLabel() ?? "", "button": restart.accessibilityLabel() ?? "",
                 "hide": close.accessibilityLabel() ?? "", "titleCut": titleLabel.intrinsicContentSize.width > titleLabel.frame.width + 0.5,
                 "titleNeeds": titleLabel.intrinsicContentSize.width, "textRoom": titleLabel.frame.width,
@@ -136,7 +146,7 @@ final class UpdateCardView: KitHoverView {
         let titleHeight = ceil(12 * 1.3)
         titleLabel.frame = kitSnap(NSRect(x: start, y: (Self.height - titleHeight) / 2, width: room, height: titleHeight))
         titleLabel.ink = ink
-        close.frame = NSRect(x: -Self.closeOut, y: -Self.closeOut, width: Self.closeSize, height: Self.closeSize)
+        close.frame = NSRect(x: -Self.closeAside(card: box.width), y: -Self.closeOut, width: Self.closeSize, height: Self.closeSize)
         tintClose(dark: dark)
         arrive()
     }
@@ -211,7 +221,7 @@ final class UpdateCardView: KitHoverView {
     override func hoverChanged() {
         showClose()
         guard let layer = card.layer else { return }
-        let scale: CGFloat = hovering ? 1.01 : 1
+        let scale: CGFloat = hovering ? Self.hoverScale : 1
         let size = card.bounds.size
         let transform = CATransform3DConcat(CATransform3DConcat(CATransform3DMakeTranslation(-size.width / 2, -size.height / 2, 0),
                                                                 CATransform3DMakeScale(scale, scale, 1)),
@@ -221,6 +231,12 @@ final class UpdateCardView: KitHoverView {
 }
 
 extension UpdateCardView {
+    func benchHover(_ on: Bool) {
+        guard let window else { return }
+        KitHoverView.pointerStandIn = on ? (window, convert(NSPoint(x: card.frame.midX, y: card.frame.midY), to: nil)) : nil
+        settleHover()
+    }
+
     static func bench(_ browser: Browser) -> [String: Any] {
         guard let content = browser.window?.contentView else { return ["window": false] }
         func find<View: NSView>(_ view: NSView, _ kind: View.Type) -> View? {
