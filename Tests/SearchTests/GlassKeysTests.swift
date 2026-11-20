@@ -183,7 +183,7 @@ struct GlassKeysTests {
         #expect(twice == 1)
         #expect(symbol?.replaced == 2)
         #expect(symbol?.name == "pause.fill")
-        #expect(symbol?.morphed == true)
+        #expect(symbol?.swapped == true)
         #expect(transport.toggle.accessibilityLabel() == "Pause")
     }
 
@@ -201,7 +201,7 @@ struct GlassKeysTests {
         glyph.show("play.fill", animated: true)
 
         #expect(glyph.replaced == 0)
-        #expect(!glyph.morphed)
+        #expect(!glyph.swapped)
         #expect(glyph.name == "play.fill")
         #expect(glyph.image === KitGlyph.image("play.fill", PlayGlyph.float))
         #expect(glyph.frame == NSRect(x: 0, y: 0, width: 48, height: 48))
@@ -224,7 +224,7 @@ struct GlassKeysTests {
         toggle.show(playing: false)
 
         #expect(glyph?.replaced == 2)
-        #expect(glyph?.morphed == true)
+        #expect(glyph?.swapped == true)
         #expect(glyph?.image === KitGlyph.image("play.fill", PlayGlyph.sidebar))
         #expect(toggle.showing == "play")
     }
@@ -248,7 +248,7 @@ struct GlassKeysTests {
 
         #expect(first == 0)
         #expect(glyph?.replaced == 0)
-        #expect(glyph?.morphed == false)
+        #expect(glyph?.swapped == false)
         #expect(glyph?.image === KitGlyph.image("play.fill", PlayGlyph.sidebar))
         #expect(toggle.showing == "play")
     }

@@ -30,17 +30,16 @@ struct PlayPauseFramesTests {
     func smaller(_ row: [String: Any]) -> (rest: Int, frames: Int, sides: [Int]) {
         let sides = row["sides"] as? [Int] ?? []
         let rest = min(sides.first ?? 0, sides.last ?? 0)
-        return (rest, sides.filter { Double($0) < Double(rest) * 0.9 }.count, sides)
+        return (rest, sides.filter { Double($0) <= Double(rest) * 0.6 }.count, sides)
     }
 
     @Test(arguments: [true, false])
-    func theFloatsPlayKeyMorphsBetweenItsTwoGlyphsWithoutShrinking(playing: Bool) async {
+    func theFloatsPlayKeyDrawsASmallerMarkBetweenItsTwoGlyphs(playing: Bool) async {
         let row = await floatFrames(reduced: false, to: playing, name: "float-to-\(playing ? "pause" : "play")")
         let found = smaller(row)
 
         #expect(row["ends"] as? Double ?? 0 > 0.004)
-        #expect(row["between"] as? Int ?? 0 >= 3)
-        #expect(found.rest > 0 && found.frames == 0, "the mark shrinks between its two glyphs: \(found.sides)")
+        #expect(found.rest > 0 && found.frames >= 2, "the mark is never smaller between its two glyphs: \(found.sides)")
     }
 
     @Test func withReducedMotionTheFloatsPlayKeySwapsWithNothingBetween() async {
@@ -52,7 +51,7 @@ struct PlayPauseFramesTests {
         #expect(found.rest > 0 && found.frames == 0, "\(found.sides)")
     }
 
-    @Test func theSidebarPlayKeyMorphsBetweenItsTwoGlyphsWithoutShrinking() async {
+    @Test func theSidebarPlayKeyDrawsASmallerMarkBetweenItsTwoGlyphs() async {
         Store.settings.set(false, forKey: "motion.testReduced")
         defer { Store.settings.removeObject(forKey: "motion.testReduced") }
         let gallery = GlassKeyGallery(dark: false)
@@ -69,7 +68,6 @@ struct PlayPauseFramesTests {
         let found = smaller(row)
 
         #expect(row["ends"] as? Double ?? 0 > 0.004)
-        #expect(row["between"] as? Int ?? 0 >= 3)
-        #expect(found.rest > 0 && found.frames == 0, "the mark shrinks between its two glyphs: \(found.sides)")
+        #expect(found.rest > 0 && found.frames >= 2, "the mark is never smaller between its two glyphs: \(found.sides)")
     }
 }

@@ -182,14 +182,14 @@ struct FloatPlayKeyTests {
         #expect(glyph.name == name)
         #expect(glyph.image === image(name))
         #expect(glyph.replaced == 0)
-        #expect(!glyph.morphed)
+        #expect(!glyph.swapped)
         #expect(transport.toggle.nudge == .zero)
         #expect(glyph.frame == disc)
         #expect(centred(glyph, name))
         #expect(glyph.layer.map(BenchGlassFrames.animations) == 0)
     }
 
-    @Test func aChangeOfStateMorphsTheMarkOnceInsideAKeyThatStaysStill() throws {
+    @Test func aChangeOfStateSwapsTheMarkOnceInsideAKeyThatStaysStill() throws {
         let restore = FloatKeyBench.still()
         defer { restore() }
         let (transport, chrome) = FloatKeyBench.transport(playing: true)
@@ -204,8 +204,8 @@ struct FloatPlayKeyTests {
         #expect(glyph.name == "play.fill")
         #expect(glyph.image === image("play.fill"))
         #expect(glyph.replaced == 1)
-        #expect(glyph.morphed)
-        #expect(glyph.morph?.animation(forKey: PlayMorph.key) != nil)
+        #expect(glyph.swapped)
+        #expect(glyph.arriving?.animation(forKey: PlaySwap.arrive) != nil)
         #expect(glyph.layer?.animation(forKey: KitSwap.leave) == nil)
         #expect(glyph.layer?.animation(forKey: KitSwap.crossKey) == nil)
         #expect(transport.toggle.frame == key)
@@ -312,7 +312,7 @@ struct FloatPlayKeyTests {
         #expect(glyph.name == "play.fill")
         #expect(glyph.image === image("play.fill"))
         #expect(glyph.replaced == 0)
-        #expect(!glyph.morphed)
+        #expect(!glyph.swapped)
         #expect(glyph.frame == disc)
     }
 
@@ -349,11 +349,11 @@ struct FloatPlayKeyTests {
         #expect(glyph.name == "play.fill")
         #expect(glyph.image === image("play.fill"))
         #expect(glyph.replaced == 0)
-        #expect(!glyph.morphed)
+        #expect(!glyph.swapped)
         #expect(glyph.frame == disc)
     }
 
-    @Test func theFloatingKeyAndTheSidebarKeyAreTheSameGlyphWithTheSameMorph() throws {
+    @Test func theFloatingKeyAndTheSidebarKeyAreTheSameGlyphWithTheSameSwap() throws {
         let restore = FloatKeyBench.still()
         defer { restore() }
         let (transport, chrome) = FloatKeyBench.transport(playing: true)
@@ -372,7 +372,7 @@ struct FloatPlayKeyTests {
         #expect(transport.toggle.face === float)
         #expect(type(of: float) == type(of: sidebar.glyph))
         #expect(sidebar.glyph.superview != nil && sidebar.glyph.frame == sidebar.bounds)
-        #expect(float.morphed && sidebar.glyph.morphed)
+        #expect(float.swapped && sidebar.glyph.swapped)
         #expect(float.replaced == 1 && sidebar.glyph.replaced == 1)
         #expect(float.imageScaling == sidebar.glyph.imageScaling && float.imageAlignment == sidebar.glyph.imageAlignment)
         #expect(float.style == KitSymbol.Style(size: 21, weight: .semibold))

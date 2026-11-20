@@ -1,5 +1,15 @@
 import AppKit
 
+enum PlaySwap {
+    static let leave = "play.swap.leave"
+    static let arrive = "play.swap.arrive"
+    static let small: CGFloat = 0.35
+    static let out: CFTimeInterval = 0.16
+    static let delay: CFTimeInterval = 0.1
+    static let fadeIn: CFTimeInterval = 0.1
+    static let spring = KitSpring(response: 0.34, damping: 0.6)
+}
+
 final class PlayGlyph: NSImageView {
     static let sidebar = KitSymbol.Style(size: 11, weight: .bold)
     static let float = KitSymbol.Style(size: 21, weight: .semibold)
@@ -8,10 +18,9 @@ final class PlayGlyph: NSImageView {
     var tint: NSColor? { didSet { if tint != oldValue { paint() } } }
     private(set) var name = ""
     private(set) var replaced = 0
-    private(set) var morphed = false
-    private(set) var morph: CAShapeLayer?
-    private var leaving: CAShapeLayer?
-    private var flight: (from: PlayShape, to: PlayShape, start: CFTimeInterval)?
+    private(set) var swapped = false
+    private(set) var arriving: CALayer?
+    private(set) var leaving: CALayer?
     private var turn = 0
 
     init(style: KitSymbol.Style, tint: NSColor? = nil) {
@@ -21,6 +30,7 @@ final class PlayGlyph: NSImageView {
         imageScaling = .scaleNone
         imageAlignment = .alignCenter
         contentTintColor = tint
+        wantsLayer = true
         setAccessibilityElement(false)
     }
 
@@ -39,34 +49,22 @@ final class PlayGlyph: NSImageView {
         guard let next = KitGlyph.image(name, style) else { return }
         let was = self.name
         self.name = name
-        guard animated, kitReplaces, let to = placed(name), let from = midway ?? placed(was) else {
+        guard animated, kitReplaces, let host = layer, !bounds.isEmpty, let incoming = picture(name),
+              let outgoing = arriving.map(still) ?? picture(was) else {
             land()
-            morphed = false
+            swapped = false
             image = next
             return
         }
         replaced += 1
-        morphed = true
+        swapped = true
         image = next
-        fly(from, to)
+        swap(outgoing, incoming, in: host)
     }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window == nil {
-            land()
-            leave()
-        }
-    }
-
-    override func layout() {
-        super.layout()
-        guard window != nil, !bounds.isEmpty else { return }
-        DispatchQueue.main.async { [weak self] in
-            guard let self, self.window != nil, self.flight == nil else { return }
-            _ = self.placed("play.fill")
-            _ = self.placed("pause.fill")
-        }
+        if window == nil { land() }
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -74,104 +72,108 @@ final class PlayGlyph: NSImageView {
         paint()
     }
 
-    private func placed(_ name: String) -> PlayShape? {
-        PlayMorph.shape(name, style, in: bounds.size, scale: window?.backingScaleFactor ?? 2)
+    private func picture(_ name: String) -> CALayer? {
+        guard let image = KitGlyph.image(name, style) else { return nil }
+        let scale = window?.backingScaleFactor ?? 2
+        let wide = Int((image.size.width * scale).rounded()), high = Int((image.size.height * scale).rounded())
+        guard wide > 0, high > 0, let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(data: nil, width: wide, height: high, bitsPerComponent: 8, bytesPerRow: wide * 4, space: space,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        context.scaleBy(x: scale, y: scale)
+        let whole = NSRect(origin: .zero, size: image.size)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            image.draw(in: whole)
+            (tint ?? .labelColor).set()
+            whole.fill(using: .sourceAtop)
+        }
+        NSGraphicsContext.restoreGraphicsState()
+        guard let made = context.makeImage() else { return nil }
+        let origin = CGPoint(x: ((bounds.width - image.size.width) / 2).rounded(), y: ((bounds.height - image.size.height) / 2).rounded())
+        let piece = CALayer()
+        piece.contents = made
+        piece.contentsScale = scale
+        piece.bounds = whole
+        piece.position = CGPoint(x: origin.x + whole.width / 2, y: origin.y + whole.height / 2)
+        return piece
     }
 
-    private var midway: PlayShape? {
-        guard let flight else { return nil }
-        return PlayMorph.at(flight.from, flight.to, CACurrentMediaTime() - flight.start)
+    private func still(_ piece: CALayer) -> CALayer {
+        let now = piece.presentation()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        piece.transform = now?.transform ?? piece.transform
+        piece.opacity = now?.opacity ?? piece.opacity
+        piece.removeAllAnimations()
+        CATransaction.commit()
+        arriving = nil
+        return piece
     }
 
-    private func fly(_ from: PlayShape, _ to: PlayShape) {
-        guard let host = layer else { return land() }
-        let shape = morph ?? CAShapeLayer()
+    private func swap(_ outgoing: CALayer, _ incoming: CALayer, in host: CALayer) {
         turn += 1
         let turn = turn
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        leave()
-        if morph == nil {
-            host.addSublayer(shape)
-            morph = shape
-        }
-        shape.frame = host.bounds
-        shape.contentsScale = window?.backingScaleFactor ?? 2
-        shape.lineJoin = .round
-        shape.lineCap = .round
-        paint()
-        let height = shape.contentsAreFlipped() ? shape.bounds.height : nil
-        func drawn(_ shape: PlayShape) -> CGPath { (height.map { shape.flipped(in: $0) } ?? shape).path }
-        let steps = Int((PlayMorph.duration * PlayMorph.rate).rounded())
-        let shapes = (0...steps).map { $0 == steps ? to : PlayMorph.at(from, to, Double($0) / PlayMorph.rate) }
-        let times = (0...steps).map { NSNumber(value: Double($0) / Double(steps)) }
-        let paths = CAKeyframeAnimation(keyPath: "path")
-        paths.values = shapes.map(drawn)
-        paths.keyTimes = times
-        let widths = CAKeyframeAnimation(keyPath: "lineWidth")
-        widths.values = shapes.map { $0.round * 2 }
-        widths.keyTimes = times
-        let both = CAAnimationGroup()
-        both.animations = [paths, widths]
-        both.duration = PlayMorph.duration
-        shape.path = drawn(to)
-        shape.lineWidth = to.round * 2
         CATransaction.setCompletionBlock { [weak self] in
             guard let self, self.turn == turn else { return }
-            self.land(fading: true)
+            self.land()
         }
-        shape.add(both, forKey: PlayMorph.key)
+        leaving?.removeFromSuperlayer()
+        if outgoing.superlayer == nil { host.addSublayer(outgoing) }
+        host.addSublayer(incoming)
+        leaving = outgoing
+        arriving = incoming
+        paint()
+
+        let shrunk = CATransform3DMakeScale(PlaySwap.small, PlaySwap.small, 1)
+        let leaveScale = CABasicAnimation(keyPath: "transform")
+        leaveScale.fromValue = outgoing.transform
+        leaveScale.toValue = shrunk
+        leaveScale.timingFunction = CAMediaTimingFunction(controlPoints: 0.4, 0, 0.7, 1)
+        let leaveFade = CABasicAnimation(keyPath: "opacity")
+        leaveFade.fromValue = outgoing.opacity
+        leaveFade.toValue = 0
+        leaveFade.timingFunction = CAMediaTimingFunction(controlPoints: 0.7, 0, 1, 1)
+        let leave = CAAnimationGroup()
+        leave.animations = [leaveScale, leaveFade]
+        leave.duration = PlaySwap.out
+        outgoing.transform = shrunk
+        outgoing.opacity = 0
+        outgoing.add(leave, forKey: PlaySwap.leave)
+
+        let start = host.convertTime(CACurrentMediaTime(), from: nil) + PlaySwap.delay
+        let grow = PlaySwap.spring.animation("transform", from: NSValue(caTransform3D: shrunk), to: NSValue(caTransform3D: CATransform3DIdentity))
+        grow.beginTime = start
+        grow.fillMode = .backwards
+        let show = CABasicAnimation(keyPath: "opacity")
+        show.fromValue = 0
+        show.toValue = 1
+        show.duration = PlaySwap.fadeIn
+        show.beginTime = start
+        show.fillMode = .backwards
+        show.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        incoming.add(grow, forKey: PlaySwap.arrive)
+        incoming.add(show, forKey: PlaySwap.arrive + ".fade")
         CATransaction.commit()
-        flight = (from, to, CACurrentMediaTime())
     }
 
-    private func land(fading: Bool = false) {
-        flight = nil
-        guard let morph else { return }
-        self.morph = nil
+    private func land() {
+        guard arriving != nil || leaving != nil else { return }
+        let pieces = [arriving, leaving].compactMap { $0 }
+        arriving = nil
+        leaving = nil
         turn += 1
         paint()
         displayIfNeeded()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        guard fading else {
-            morph.removeFromSuperlayer()
-            return CATransaction.commit()
-        }
-        leave()
-        leaving = morph
-        let fade = CABasicAnimation(keyPath: "opacity")
-        fade.fromValue = 1
-        fade.toValue = 0
-        fade.duration = PlayMorph.fade
-        fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        morph.opacity = 0
-        CATransaction.setCompletionBlock { [weak self, weak morph] in
-            guard let self, let morph, self.leaving === morph else { return }
-            self.leave()
-        }
-        morph.add(fade, forKey: PlayMorph.fadeKey)
-        CATransaction.commit()
-    }
-
-    private func leave() {
-        guard let leaving else { return }
-        self.leaving = nil
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        leaving.removeFromSuperlayer()
+        pieces.forEach { $0.removeFromSuperlayer() }
         CATransaction.commit()
     }
 
     private func paint() {
-        guard let morph else {
-            contentTintColor = tint
-            return
-        }
-        contentTintColor = .clear
-        var ink: CGColor?
-        effectiveAppearance.performAsCurrentDrawingAppearance { ink = (tint ?? .labelColor).cgColor }
-        morph.fillColor = ink
-        morph.strokeColor = ink
+        contentTintColor = arriving == nil && leaving == nil ? tint : .clear
     }
 }

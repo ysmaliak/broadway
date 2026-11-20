@@ -45,7 +45,7 @@ import split_view as sv  # noqa: E402
 sv.use("float-toggle")
 
 CANNOT_TELL = 3
-SMALL = 0.9
+SMALL = 0.6
 CORE = 28
 
 
@@ -171,12 +171,12 @@ def main():
         time.sleep(0.4)
         after = gk.glass("state")
         report["state"] = {"before": before, "after": after}
-        t.ok("to play: the key morphs its mark", report["toPlay"]["mark"] == "play" and report["toPlay"].get("morph") is True,
+        t.ok("to play: the key swaps its mark", report["toPlay"]["mark"] == "play" and report["toPlay"].get("swap") is True,
              report["toPlay"])
         t.ok("to play: the old mark keeps its place while it leaves", report["toPlay"]["nudge"] == before["nudge"], (before, report["toPlay"]))
-        t.ok("to pause: the key morphs back", report["toPause"]["mark"] == "pause" and report["toPause"].get("morph") is True,
+        t.ok("to pause: the key swaps back", report["toPause"]["mark"] == "pause" and report["toPause"].get("swap") is True,
              report["toPause"])
-        t.ok("pause to play and back is two morphs", after["swaps"] - before["swaps"] == 2, (before, after))
+        t.ok("pause to play and back is two swaps", after["swaps"] - before["swaps"] == 2, (before, after))
         t.ok("the key ends on pause, on its own centre", after["mark"] == "pause" and after.get("rests") is True and after["nudge"] == before["nudge"], after)
         if shot is None:
             unseen = f"the window gave no frames ({said.strip()})"
@@ -207,9 +207,9 @@ def main():
                 print(f"  travel {word}: {found}")
             if drawn:
                 for word, found in report["changes"].items():
-                    t.ok(f"to {word}: the mark never shrinks between the two", found["frames"] > 0 and found["small"] == 0, found)
+                    t.ok(f"to {word}: a smaller mark between the two", found["small"] >= 2, found)
             else:
-                unseen = "the window is filmed, and neither the wiggle nor the morph draws in it"
+                unseen = "the window is filmed, and neither the wiggle nor the swap draws in it"
         gk.glass("close")
     finally:
         report["cannotTell"] = unseen

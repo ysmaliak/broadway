@@ -141,7 +141,7 @@ struct MiniPlayerCardTests {
         #expect(toggle.showing == "pause")
         #expect(glyph.image === KitGlyph.image("pause.fill", PlayGlyph.sidebar))
         #expect(glyph.replaced == 0)
-        #expect(!glyph.morphed)
+        #expect(!glyph.swapped)
     }
 
     private func card(_ shown: MiniPlayer.Item, width: CGFloat = 258) -> MiniPlayerView {
