@@ -228,6 +228,39 @@ struct FilterListsTests {
         #expect(ShieldLists.due(checked: now.addingTimeInterval(-8 * 24 * 3600), now: now))
     }
 
+    @Test @MainActor func theCookieNoticeListIsFetchedFromItsPublisherWithTheOthers() throws {
+        let source = try #require(FilterLists.sources.first { $0.id == "easylist-cookie" })
+
+        #expect(source.name == "EasyList Cookie List")
+        #expect(source.address == "https://secure.fanboy.co.nz/fanboy-cookiemonster.txt")
+        #expect(!source.strict)
+        #expect(ShieldLists.shared.sources.contains(source))
+    }
+
+    @Test @MainActor func aListNeverFetchedIsDueRightAway() {
+        let now = Date()
+
+        #expect(ShieldLists.due(checked: now.addingTimeInterval(-3600), missing: true, now: now))
+        #expect(!ShieldLists.due(checked: now.addingTimeInterval(-3600), missing: false, now: now))
+    }
+
+    @Test @MainActor func cookieNoticeRulesBecomeHidingAndBlockingRules() throws {
+        let out = convert("""
+        ###onetrust-consent-sdk
+        cnn.com,apnews.com##.onetrust-pc-dark-filter
+        /js/onetrust/*
+        """)
+
+        let generic = try #require(out.genericHides.first)
+        let site = try #require(out.siteHides.first)
+        let block = try #require(out.blocks.first)
+
+        #expect(generic.action == .hide("#onetrust-consent-sdk"))
+        #expect(site.action == .hide(".onetrust-pc-dark-filter"))
+        #expect(site.only == ["*apnews.com", "*cnn.com"])
+        #expect(try matches(block.filter, "https://www.example.com/js/onetrust/otSDKStub.js"))
+    }
+
     @Test @MainActor func onlyTextThatLooksLikeAListIsKept() {
         #expect(!ShieldLists.usable(Data("<!doctype html><html>captive portal</html>".utf8)))
         #expect(!ShieldLists.usable(Data("{\"error\": \"rate limited\"}".utf8)))

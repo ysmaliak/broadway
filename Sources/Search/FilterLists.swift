@@ -54,6 +54,7 @@ enum FilterLists {
         Source(id: "ublock-privacy", name: "uBlock privacy", address: "https://ublockorigin.github.io/uAssets/filters/privacy.txt"),
         Source(id: "ublock-badware", name: "uBlock badware", address: "https://ublockorigin.github.io/uAssets/filters/badware.txt", strict: true),
         Source(id: "lowe", name: "Peter Lowe's list", address: "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblockplus&showintro=0&mimetype=plaintext"),
+        Source(id: "easylist-cookie", name: "EasyList Cookie List", address: "https://secure.fanboy.co.nz/fanboy-cookiemonster.txt"),
     ]
 
     static let version = 1

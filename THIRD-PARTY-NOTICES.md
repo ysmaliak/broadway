@@ -252,7 +252,7 @@ Broadway names services a person can connect, such as Claude and ChatGPT, only i
 ## Used but not bundled
 
 - **dmgbuild 1.6.7** (MIT License), installed into `.build/` by `./build.sh release dmg` to lay out the disk image window. It is not committed and not part of the app.
-- **Filter lists** that the ad blocker downloads when it runs (`Sources/Search/FilterLists.swift`): EasyList and EasyPrivacy (GPL 3.0 or CC BY-SA 3.0), uBlock filters, uBlock privacy and uBlock badware (GPL 3.0), and Peter Lowe's list (its own terms at https://pgl.yoyo.org/adservers/). None of them is in this repo or in the app.
+- **Filter lists** that the ad blocker downloads when it runs (`Sources/Search/FilterLists.swift`): EasyList and EasyPrivacy (GPL 3.0 or CC BY-SA 3.0), uBlock filters, uBlock privacy and uBlock badware (GPL 3.0), Peter Lowe's list (its own terms at https://pgl.yoyo.org/adservers/), and the EasyList Cookie List (CC BY 3.0). None of them is in this repo or in the app.
 
 ## Test material
 
