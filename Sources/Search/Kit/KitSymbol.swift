@@ -11,7 +11,6 @@ enum KitSwap {
     static let crossKey = "swap.cross"
     static let small: CGFloat = 0.6
     static let spring = KitSpring(response: 0.26, damping: 0.62)
-    static let downUp: ReplaceSymbolEffect = .replace.downUp.byLayer
 }
 
 final class KitSymbol: NSImageView {

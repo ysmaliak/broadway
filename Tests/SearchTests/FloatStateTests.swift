@@ -309,7 +309,7 @@ struct FloatOpticsTests {
         #expect(pause.frame == NSRect(x: 0, y: 0, width: FloatLayout.play, height: FloatLayout.play))
     }
 
-    @Test func theToggleSwapsWithTheSystemsReplaceAndNoMotionOfBroadwaysOwn() {
+    @Test func theToggleMorphsItsMarkAndNoMotionOfTheKeyItself() {
         Store.settings.set(false, forKey: "motion.testReduced")
         defer { Store.settings.removeObject(forKey: "motion.testReduced") }
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100), styleMask: [.borderless], backing: .buffered, defer: true)
@@ -324,7 +324,7 @@ struct FloatOpticsTests {
 
         #expect(view.toggle.glyph?.name == "play.fill")
         #expect(view.toggle.glyph?.replaced == 1)
-        #expect(view.toggle.glyph?.played == KitSwap.downUp)
+        #expect(view.toggle.glyph?.morphed == true)
         #expect(layer?.animation(forKey: KitSwap.leave) == nil)
         #expect(layer?.animation(forKey: KitSwap.arrive) == nil)
         #expect(layer?.animation(forKey: KitSwap.crossKey) == nil)

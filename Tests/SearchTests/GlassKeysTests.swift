@@ -183,7 +183,7 @@ struct GlassKeysTests {
         #expect(twice == 1)
         #expect(symbol?.replaced == 2)
         #expect(symbol?.name == "pause.fill")
-        #expect(symbol?.played == ReplaceSymbolEffect.replace.downUp.byLayer)
+        #expect(symbol?.morphed == true)
         #expect(transport.toggle.accessibilityLabel() == "Pause")
     }
 
@@ -201,7 +201,7 @@ struct GlassKeysTests {
         glyph.show("play.fill", animated: true)
 
         #expect(glyph.replaced == 0)
-        #expect(glyph.played == nil)
+        #expect(!glyph.morphed)
         #expect(glyph.name == "play.fill")
         #expect(glyph.image === KitGlyph.image("play.fill", PlayGlyph.float))
         #expect(glyph.frame == NSRect(x: 0, y: 0, width: 48, height: 48))
@@ -216,6 +216,7 @@ struct GlassKeysTests {
         window.isReleasedWhenClosed = false
         window.contentView?.addSubview(toggle)
         defer { window.contentView = nil }
+        toggle.layoutSubtreeIfNeeded()
         let glyph = toggle.kitSubviews(of: PlayGlyph.self).first
 
         toggle.show(playing: true)
@@ -223,7 +224,7 @@ struct GlassKeysTests {
         toggle.show(playing: false)
 
         #expect(glyph?.replaced == 2)
-        #expect(glyph?.played == ReplaceSymbolEffect.replace.downUp.byLayer)
+        #expect(glyph?.morphed == true)
         #expect(glyph?.image === KitGlyph.image("play.fill", PlayGlyph.sidebar))
         #expect(toggle.showing == "play")
     }
@@ -237,6 +238,7 @@ struct GlassKeysTests {
         window.isReleasedWhenClosed = false
         window.contentView?.addSubview(toggle)
         defer { window.contentView = nil }
+        toggle.layoutSubtreeIfNeeded()
         let glyph = toggle.kitSubviews(of: PlayGlyph.self).first
 
         toggle.show(playing: true, moving: false)
@@ -246,7 +248,7 @@ struct GlassKeysTests {
 
         #expect(first == 0)
         #expect(glyph?.replaced == 0)
-        #expect(glyph?.played == nil)
+        #expect(glyph?.morphed == false)
         #expect(glyph?.image === KitGlyph.image("play.fill", PlayGlyph.sidebar))
         #expect(toggle.showing == "play")
     }
@@ -260,6 +262,7 @@ struct GlassKeysTests {
         window.isReleasedWhenClosed = false
         window.contentView?.addSubview(toggle)
         defer { window.contentView = nil }
+        toggle.layoutSubtreeIfNeeded()
         let glyph = toggle.kitSubviews(of: PlayGlyph.self).first
         let key = toggle.frame
 

@@ -45,7 +45,7 @@ import split_view as sv  # noqa: E402
 sv.use("float-toggle")
 
 CANNOT_TELL = 3
-SMALL = 0.6
+SMALL = 0.9
 CORE = 28
 
 
@@ -171,12 +171,12 @@ def main():
         time.sleep(0.4)
         after = gk.glass("state")
         report["state"] = {"before": before, "after": after}
-        t.ok("to play: the key asks the system for its down-up replace", report["toPlay"]["mark"] == "play" and report["toPlay"].get("downUp") is True,
+        t.ok("to play: the key morphs its mark", report["toPlay"]["mark"] == "play" and report["toPlay"].get("morph") is True,
              report["toPlay"])
         t.ok("to play: the old mark keeps its place while it leaves", report["toPlay"]["nudge"] == before["nudge"], (before, report["toPlay"]))
-        t.ok("to pause: the key asks for the same replace", report["toPause"]["mark"] == "pause" and report["toPause"].get("downUp") is True,
+        t.ok("to pause: the key morphs back", report["toPause"]["mark"] == "pause" and report["toPause"].get("morph") is True,
              report["toPause"])
-        t.ok("pause to play and back is two replaces", after["swaps"] - before["swaps"] == 2, (before, after))
+        t.ok("pause to play and back is two morphs", after["swaps"] - before["swaps"] == 2, (before, after))
         t.ok("the key ends on pause, on its own centre", after["mark"] == "pause" and after.get("rests") is True and after["nudge"] == before["nudge"], after)
         if shot is None:
             unseen = f"the window gave no frames ({said.strip()})"
@@ -197,7 +197,6 @@ def main():
             report["middles"] = [[round(moment, 3), size, spot] for moment, size, spot in trace]
             report["marks"] = marks
             report["travel"] = measure(trace)
-            shown = all(found["small"] >= 2 for found in report["changes"].values())
             for word in ("play", "pause"):
                 start = next((index for index, row in enumerate(shot) if row[0] >= marks[word] - 0.05), 0)
                 gk.sheet(shot[start:start + 32], gk.scaled([middle[0] - 24, middle[1] - 24, 48, 48], scale, pad=4), OUT / f"to-{word}")
@@ -206,14 +205,11 @@ def main():
                 print(f"  to {word}: {found}")
             for word, found in report["travel"].items():
                 print(f"  travel {word}: {found}")
-            if shown:
-                t.ok("to play: a smaller mark between the two", True)
-                t.ok("to pause: a smaller mark between the two", True)
-            elif drawn:
+            if drawn:
                 for word, found in report["changes"].items():
-                    t.ok(f"to {word}: a smaller mark between the two", found["small"] >= 2, found)
+                    t.ok(f"to {word}: the mark never shrinks between the two", found["frames"] > 0 and found["small"] == 0, found)
             else:
-                unseen = "the window is filmed, and neither the wiggle nor the replace draws in it"
+                unseen = "the window is filmed, and neither the wiggle nor the morph draws in it"
         gk.glass("close")
     finally:
         report["cannotTell"] = unseen

@@ -132,7 +132,7 @@ enum BenchInk {
         }
         if let glyph = view as? PlayGlyph {
             guard glyph.image != nil else { return [] }
-            return [Mark(kind: kind, text: glyph.name, box: placed(glyph.drawn, of: glyph), size: 0, muted: quiet(glyph.contentTintColor))]
+            return [Mark(kind: kind, text: glyph.name, box: placed(glyph.drawn, of: glyph), size: 0, muted: quiet(glyph.tint ?? glyph.contentTintColor))]
         }
         if let label = view as? SiteWrapLabel {
             guard !label.text.isEmpty else { return [] }

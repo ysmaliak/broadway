@@ -304,7 +304,7 @@ enum BenchGlassKeys {
             guard let key = transport?.toggle, let glyph = key.glyph else { return ["swaps": -1, "mark": ""] }
             let frame = glyph.frame
             return ["swaps": glyph.replaced, "mark": glyph.name.replacingOccurrences(of: ".fill", with: ""),
-                    "downUp": glyph.played == KitSwap.downUp, "nudge": [Double(key.nudge.dx), Double(key.nudge.dy)],
+                    "morph": glyph.morphed, "nudge": [Double(key.nudge.dx), Double(key.nudge.dy)],
                     "frame": [frame.minX, frame.minY, frame.width, frame.height].map(Double.init),
                     "rests": key.nudge == .zero && frame == glyph.superview?.bounds, "reduced": Motion.reduced]
         }
