@@ -548,6 +548,8 @@ enum MenuBar {
             }
         }
         let pages = browser.keyTabs.filter(\.isWeb).count
+        let paste = act(PasteTitle.go, key: "tabs.pasteAndGo") { $0.pasteAndGo() }
+        paste.title = PasteTitle.shared.title(page: browser.active?.address) { [weak paste] in paste?.title = $0 }
         items += [
             act("Rename Tab", key: "tabs.rename", enabled: active != nil) { browser in
                 if let tab = browser.active { browser.beginTabRename(tab) }
@@ -556,7 +558,7 @@ enum MenuBar {
             act(LinkCopy.title(.address, count: pages), key: "tabs.copyAddress", enabled: pages > 0) { $0.copyAddress() },
             act(LinkCopy.title(.markdown, count: pages), key: "tabs.copyMarkdown", enabled: pages > 0) { $0.copyMarkdownLink() },
             act(LinkCopy.title(.rich, count: pages), key: "tabs.copyRich", enabled: pages > 0) { $0.copyLinks(.rich) },
-            act("Paste and Go", key: "tabs.pasteAndGo") { $0.pasteAndGo() },
+            paste,
             .separator(),
             act("Close Other Tabs", key: "tabs.closeOthers", enabled: browser.tabs.count >= 2) { browser in
                 if let tab = browser.active { browser.closeOthers(but: tab) }

@@ -135,6 +135,11 @@ protocol CopiedBoard: AnyObject {
     var free: Bool { get }
     func looksLikeLink() async -> Bool
     func text() -> String?
+    var holdsText: Bool { get }
+}
+
+extension CopiedBoard {
+    var holdsText: Bool { true }
 }
 
 final class MacClipboard: CopiedBoard {
@@ -154,6 +159,8 @@ final class MacClipboard: CopiedBoard {
     }
 
     func text() -> String? { board.string(forType: .string) }
+
+    var holdsText: Bool { board.types?.contains(.string) ?? false }
 }
 
 @MainActor

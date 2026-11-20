@@ -2754,7 +2754,7 @@ extension Browser {
                 guard let self else { return }
                 Shield.shared.enabled = on
                 Shield.shared.applyEverywhere()
-                announce(on ? "Ads and trackers blocked" : "Blocking is off. Reload to see the difference.")
+                announce(on ? "Ads, trackers and cookie notices blocked" : "Blocking is off. Reload to see the difference.")
             }
             .store(in: &bag)
 

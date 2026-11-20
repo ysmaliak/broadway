@@ -834,7 +834,7 @@ extension SettingsPageView {
             }
             shape { shield.paused.sorted() }
             for site in shield.paused.sorted() {
-                _ = line(site, "Ads and trackers are allowed here", id: "shield.paused." + site, control: button("Block Again") { [weak self] in
+                _ = line(site, "Ads, trackers and cookie notices are allowed here", id: "shield.paused." + site, control: button("Block Again") { [weak self] in
                     shield.pause(site, false)
                     self?.refresh()
                 })

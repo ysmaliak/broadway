@@ -44,8 +44,8 @@ final class ShieldLists {
     private static var stateFile: URL { folder.appendingPathComponent("state.json") }
     private static func textFile(_ id: String) -> URL { folder.appendingPathComponent(id + ".txt") }
 
-    nonisolated static func due(checked: Date?, now: Date = Date()) -> Bool {
-        guard let checked else { return true }
+    nonisolated static func due(checked: Date?, missing: Bool = false, now: Date = Date()) -> Bool {
+        guard let checked, !missing else { return true }
         return now.timeIntervalSince(checked) >= every
     }
 
@@ -104,7 +104,7 @@ final class ShieldLists {
 
     func refresh(force: Bool) async {
         let wanted = Shield.shared.enabled && (Store.settings.object(forKey: "shield.lists") as? Bool ?? true)
-        guard !busy, force || (wanted && Self.due(checked: saved.checked)) else { return }
+        guard !busy, force || (wanted && Self.due(checked: saved.checked, missing: missing)) else { return }
         busy = true
         defer { busy = false }
         var changed = false
@@ -120,6 +120,10 @@ final class ShieldLists {
         if changed || Shield.shared.downloaded.isEmpty { _ = await rebuild() }
         trouble = failed.isEmpty ? nil : "Couldn't fetch \(failed.joined(separator: ", "))"
         write()
+    }
+
+    private var missing: Bool {
+        sources.contains { !FileManager.default.fileExists(atPath: Self.textFile($0.id).path) }
     }
 
     private func fetch(_ source: FilterLists.Source) async throws -> Bool {
