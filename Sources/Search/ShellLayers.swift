@@ -400,6 +400,7 @@ final class ShellLowerLayer: ShellLayer {
     private let stack = BarStack()
     private let book = NoticeBook()
     private let announcement: AnnouncementView
+    private let newTabs: NewTabsNoticeView
     private var capture: CaptureQuestionView?
     private var screen: ScreenQuestionView?
     private var offer: PasswordOfferView?
@@ -419,6 +420,7 @@ final class ShellLowerLayer: ShellLayer {
     init(browser: Browser) {
         self.browser = browser
         announcement = AnnouncementView(browser: browser)
+        newTabs = NewTabsNoticeView(browser: browser)
         super.init(frame: .zero)
         addSubview(stack)
     }
@@ -446,6 +448,10 @@ final class ShellLowerLayer: ShellLayer {
         announcement.sync()
         if !browser.fieldShowing, announcement.shown {
             bars.append(.init(view: announcement.note, kind: browser.announcedKind ?? .note, clock: browser.hush))
+        }
+        newTabs.sync()
+        if !browser.fieldShowing, newTabs.shown != nil {
+            bars.append(.init(view: newTabs.note, kind: .note, clock: browser.newTabsHush))
         }
         if let notice = browser.linkNotice, !browser.fieldShowing {
             if linkBar?.id != notice.id {
@@ -590,6 +596,7 @@ final class ShellUpperLayer: ShellLayer {
     let browser: Browser
     private let stack = BarStack()
     private let announcement: AnnouncementView
+    private let newTabs: NewTabsNoticeView
     private let downloads: DownloadsLayerView
     private let plus: PlusLayerView
     private var catcher: ClickAway?
@@ -598,6 +605,7 @@ final class ShellUpperLayer: ShellLayer {
     init(browser: Browser) {
         self.browser = browser
         announcement = AnnouncementView(browser: browser)
+        newTabs = NewTabsNoticeView(browser: browser)
         downloads = DownloadsLayerView(browser: browser)
         plus = PlusLayerView(browser: browser)
         super.init(frame: .zero)
@@ -622,7 +630,15 @@ final class ShellUpperLayer: ShellLayer {
         super.layout()
         stack.frame = bounds
         announcement.sync()
-        stack.show(browser.fieldShowing && announcement.shown ? [.init(view: announcement.note, kind: browser.announcedKind ?? .note, clock: browser.hush)] : [])
+        newTabs.sync()
+        var bars: [BarStack.Bar] = []
+        if browser.fieldShowing, announcement.shown {
+            bars.append(.init(view: announcement.note, kind: browser.announcedKind ?? .note, clock: browser.hush))
+        }
+        if browser.fieldShowing, newTabs.shown != nil {
+            bars.append(.init(view: newTabs.note, kind: .note, clock: browser.newTabsHush))
+        }
+        stack.show(bars)
         downloads.frame = bounds
         downloads.sync()
         plus.frame = bounds
