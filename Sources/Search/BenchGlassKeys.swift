@@ -103,9 +103,10 @@ final class GlassKeyGallery {
         call.content = callFace
         add("call mic", call, size: NSSize(width: 32, height: 32), glass: { [weak call] in call?.kitSubviews(of: NSGlassEffectView.self).first })
 
-        let wait = UpdateWait()
-        let update = UpdateCardView(wait: wait)
-        update.onRestart = {}
+        let flow = UpdateFlow()
+        flow.pretend(.available, found: UpdateFound(version: "0.7", build: "70"))
+        let update = UpdateCardView(flow: flow)
+        update.onInstall = {}
         add("update card hide", update, size: NSSize(width: 160, height: 46), glass: { [weak update] in
             update?.kitSubviews(of: KitGlassFace.self).first
         }, point: { [weak update] in

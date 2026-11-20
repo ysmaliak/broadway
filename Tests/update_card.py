@@ -142,6 +142,53 @@ def at_foot(state, label):
         t.ok(f"{label}: under the mini player", abs(mini[1] + mini[3] - (view[1] + CLOSE_OUT)) < 0.5, (mini, view))
 
 
+STATES = [
+    ("available", {"phase": "available"}, "Update Available", "button", "Install"),
+    ("checking", {"phase": "checking"}, "Checking for Updates", "spinner", None),
+    ("downloading", {"phase": "downloading", "progress": 0.42}, "Downloading", "percent", "42%"),
+    ("downloading-unknown", {"phase": "downloading"}, "Downloading", "spinner", None),
+    ("installing", {"phase": "installing"}, "Installing", "spinner", None),
+    ("failed", {"phase": "failed", "trouble": "The update is improperly signed and could not be validated"}, "Couldn't Update", "button",
+     "Try Again"),
+]
+
+
+def every_state():
+    for place in ("left", "right"):
+        sv.cmd({"do": "ui", "side": place})
+        for width in (200, 440):
+            sv.cmd({"do": "ui", "sideWidth": width})
+            time.sleep(0.5)
+            for name, request, title, trailing, shown in STATES:
+                updates(stage="0.7", build="950", **request)
+                time.sleep(0.5)
+                state = side()
+                card = state["card"] or {}
+                label = f"{name}, {place}, {width}"
+                t.ok(f"{label}: the card is shown", state["shown"], state)
+                t.ok(f"{label}: the title is {title}", card.get("title") == title, card)
+                t.ok(f"{label}: the right side is a {trailing}", card.get("trailing") == trailing, card)
+                if trailing == "button":
+                    t.ok(f"{label}: the button says {shown}", card.get("buttonTitle") == shown, card)
+                if trailing == "percent":
+                    t.ok(f"{label}: the percent is whole", card.get("percent") == shown and card.get("percentCut") is False, card)
+                t.ok(f"{label}: the title is cut only when it does not fit",
+                     card.get("titleCut") == (card.get("titleNeeds", 0) > card.get("textRoom", 0) + 0.5), card)
+                if width == 440:
+                    t.ok(f"{label}: at the widest the title is whole", card.get("titleCut") is False, card)
+                if name == "downloading":
+                    box, line = card.get("card") or [0, 0, 0, 0], card.get("lineBox") or [0, 0, 0, 0]
+                    t.ok(f"{label}: the progress line is 42% of the card", abs(line[2] - round(box[2] * 0.42)) <= 1, (line, box))
+                if name == "failed":
+                    t.ok(f"{label}: the reason is the tooltip", card.get("tip", "").startswith("The update is improperly signed"), card)
+                if width == 200 or name in ("available", "downloading"):
+                    pictures(f"state-{name}-{place}-{width}")
+    sv.cmd({"do": "ui", "side": "left"})
+    sv.cmd({"do": "ui", "sideWidth": 258})
+    updates(unstage=True)
+    time.sleep(0.4)
+
+
 def restore_facts():
     windows = sv.cmd({"do": "windows"})["windows"]
     split = sv.sp("state")
@@ -169,17 +216,19 @@ def main():
         said = updates()
         t.ok("a test build has no feed and nothing staged", said["runs"] is False and said["staged"] == "", said)
         t.ok("no card while nothing waits", not said["sidebar"]["shown"], said["sidebar"])
-        t.ok("no Restart to Update in the menu", "Restart to Update" not in said["sidebar"]["menu"], said["sidebar"]["menu"])
+        t.ok("no Install Update in the menu", "Install Update" not in said["sidebar"]["menu"], said["sidebar"]["menu"])
 
         film("arrival", lambda: (updates(stage="0.1", build="900"), time.sleep(1.2)))
         said = updates()
         t.ok("staged: the card shows", said["card"] and until(lambda: side()["shown"]), said)
         menu = side()["menu"]
-        t.ok("staged: Restart to Update is right after About", menu[:2] == ["About Broadway", "Restart to Update"], menu)
-        t.ok("staged: the version line says an update is ready", said["line"].endswith(" · An update is ready"), said["line"])
+        t.ok("staged: Install Update is right after About", menu[:2] == ["About Broadway", "Install Update"], menu)
+        t.ok("staged: the version line says Broadway 0.1 is available", said["line"].endswith(" · Broadway 0.1 is available"), said["line"])
         state = side()
         t.ok("names: group, button, hide",
-             state["card"]["label"] == "Update Ready" and state["card"]["button"] == "Restart to Update" and state["card"]["hide"] == "Hide",
+             state["card"]["label"] == "Update available, version 0.1" and state["card"]["button"] == "Install Update"
+             and state["card"]["hide"] == "Hide" and state["card"]["tip"] == "Version 0.1", state["card"])
+        t.ok("words: Update Available and Install", state["card"]["title"] == "Update Available" and state["card"]["buttonTitle"] == "Install",
              state["card"])
         at_foot(state, "left")
         pictures("left")
@@ -198,6 +247,10 @@ def main():
         at_foot(state, "narrowest")
         pictures("narrowest")
         sv.cmd({"do": "ui", "sideWidth": 258})
+
+        every_state()
+        updates(stage="0.1", build="900")
+        time.sleep(0.4)
 
         music = opened(f"{base}/music")
         sv.cmd({"do": "select", "id": music})
@@ -228,7 +281,7 @@ def main():
 
         updates(hide=True)
         t.ok("the x hides the card", until(lambda: not side()["shown"]), side())
-        t.ok("hidden, the menu still has Restart to Update", "Restart to Update" in side()["menu"], side()["menu"])
+        t.ok("hidden, the menu still has Install Update", "Install Update" in side()["menu"], side()["menu"])
         updates(stage="0.1", build="900")
         t.ok("the same build stays hidden", not side()["shown"], side())
         updates(stage="0.1", build="901")
@@ -240,7 +293,7 @@ def main():
         t.ok("a private window is open", any(w["private"] for w in windows), windows)
         sv.cmd({"do": "ui", "confirm": False})
         before = updates()["restartsAsked"]
-        said = updates(restart=True)
+        said = updates(install=True)
         time.sleep(1.5)
         said = updates()
         t.ok("with a private window it asks first, and Not Now keeps Broadway running",
@@ -271,10 +324,10 @@ def main():
         updates(stage="0.1", build="902", quits=True)
         pid = updates()["pid"]
         try:
-            updates(restart=True)
+            updates(install=True)
         except Exception:
             pass
-        t.ok("Restart ends Broadway through its quit path", until(lambda: str(pid) not in sv.running(), within=15))
+        t.ok("Install ends Broadway through its quit path", until(lambda: str(pid) not in sv.running(), within=15))
         sv.launch()
         stage(False)
         sv.cmd({"do": "windows", "action": "front", "n": 1})

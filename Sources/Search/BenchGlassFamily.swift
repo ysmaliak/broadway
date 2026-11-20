@@ -24,7 +24,9 @@ enum BenchGlassFamily {
             let card = AgentCardView(browser: browser, desk: .shared)
             return BenchFloating.sized(card, NSSize(width: 460, height: card.intrinsicContentSize.height))
         case "update-card":
-            let card = UpdateCardView(wait: UpdateWait())
+            let flow = UpdateFlow()
+            flow.pretend(.available, found: UpdateFound(version: "0.7", build: "70"))
+            let card = UpdateCardView(flow: flow)
             return BenchFloating.sized(BenchHovered(card), NSSize(width: 248, height: UpdateCardView.height + UpdateCardView.room + 8))
         case "stuck-card":
             guard let tab = browser.active else { return nil }

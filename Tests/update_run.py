@@ -43,6 +43,7 @@ TEAM = build_env("TEAM")
 
 served = {}
 asked = []
+slow = {}
 lock = threading.Lock()
 
 
@@ -51,6 +52,7 @@ class Feed(BaseHTTPRequestHandler):
         with lock:
             asked.append(self.path)
             body = served.get(self.path)
+            seconds = slow.get(self.path, 0)
         if body is None:
             self.send_response(404)
             self.end_headers()
@@ -60,7 +62,18 @@ class Feed(BaseHTTPRequestHandler):
         self.send_header("Content-Type", kind)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        if not seconds:
+            self.wfile.write(body)
+            return
+        steps = 120
+        size = max(1, len(body) // steps + 1)
+        for at in range(0, len(body), size):
+            try:
+                self.wfile.write(body[at:at + size])
+                self.wfile.flush()
+            except OSError:
+                return
+            time.sleep(seconds / steps)
 
     def log_message(self, *a):
         pass
@@ -226,12 +239,15 @@ def appcast(items):
 """.encode()
 
 
-def serve(feed, files=None):
+def serve(feed, files=None, slowly=None):
     with lock:
         served.clear()
+        slow.clear()
         served["/appcast.xml"] = feed
         for path, body in (files or {}).items():
             served[path] = body
+        for path in slowly or []:
+            slow[path] = 8
         asked.clear()
 
 
@@ -457,10 +473,13 @@ def case_current(ctx):
         ok("finding nothing newer by itself, it shows nothing", not updates().get("windows"), updates().get("windows"))
         serve(same(ctx))
         updates(check=True)
+        ok("Sparkle's own automatic downloads stay off, Broadway downloads quietly itself", said.get("sparkleDownloads") is False, said)
         w = window(saying="up to date")
-        ok("Check for Updates… says it is up to date", w is not None, updates().get("windows"))
+        ok("Check for Updates… says it is up to date", w is not None, (updates().get("windows"), updates().get("trail")))
         if w:
             print("       ", " | ".join(w["texts"]), flush=True)
+            ok("in Broadway's own alert, with the version", "Broadway is up to date" in w["texts"]
+               and "Version 0.1 is the newest" in w["texts"] and w["buttons"] == ["OK"], w)
             shot(w, "1-up-to-date")
             press(w["buttons"][0])
         ok("it asked the feed", "/appcast.xml" in requests(), requests())
@@ -483,9 +502,12 @@ def page(name):
 def staged(ctx, name):
     fresh()
     app = copy(name, "0.1", ctx["old"], ctx["public"], ctx["identity"])
-    serve(ctx["feed"], {**ctx["files"], **PAGES})
+    serve(ctx["feed"], {**ctx["files"], **PAGES}, slowly=[ctx["path"]])
     launch(app)
     old_pid = updates().get("pid")
+    early = wait("found", lambda: (lambda s: s if s.get("phase") == "available" and not s.get("staged") else None)(updates()), within=240)
+    ok("the card shows Update Available as soon as B is found, while B downloads quietly", early is not None
+       and early.get("quiet") is True and (early.get("found") or {}).get("build") == ctx["new"], early)
     ready = wait("ready", lambda: updates().get("staged"), within=240)
     ok("A finds B by itself and stages it", ready == "Version 0.2", updates())
     return app, old_pid
@@ -514,23 +536,24 @@ def installed_on_quit(ctx, app, old_pid):
     return said
 
 
-def relaunched(ctx, app, old_pid):
+def relaunched(ctx, app, old_pid, short="0.2", build=None, name="B"):
+    build = build or ctx["new"]
     relaunching.set()
     gone = wait("A quits", lambda: str(old_pid) not in pids(app), within=40, every=0.3)
     ok("A quits", gone is not None, pids(app))
-    swapped = wait("swap", lambda: info(app)["CFBundleVersion"] == ctx["new"], within=90)
-    ok("the app on disk is B", bool(swapped), info(app)["CFBundleVersion"])
+    swapped = wait("swap", lambda: info(app)["CFBundleVersion"] == build, within=90)
+    ok(f"the app on disk is {name}", bool(swapped), info(app)["CFBundleVersion"])
     again = wait("relaunch", lambda: pids(app), within=40)
-    ok("Sparkle opens B by itself", bool(again), pids(app))
+    ok(f"Sparkle opens {name} by itself", bool(again), pids(app))
     if not again:
         return {}
     wait("socket", lambda: SOCK.exists(), within=30, every=0.2)
-    said = wait("B", lambda: updates().get("pid") not in (None, old_pid) and updates(), within=40) or {}
+    said = wait(name, lambda: updates().get("pid") not in (None, old_pid) and updates(), within=40) or {}
     give_back()
-    ok("the running app is B", "0.2" in said.get("version", "") and ctx["new"] in said.get("version", ""), said.get("version"))
-    ok("B runs from the same place in the same world", said.get("path") == str(app), said.get("path"))
-    ok("B is validly signed", run("codesign", "--verify", "--deep", "--strict", app).returncode == 0)
-    ok("nothing waits in B and there is no card", not said.get("staged") and said.get("card") is False, said)
+    ok(f"the running app is {name}", short in said.get("version", "") and build in said.get("version", ""), said.get("version"))
+    ok(f"{name} runs from the same place in the same world", said.get("path") == str(app), said.get("path"))
+    ok(f"{name} is validly signed", run("codesign", "--verify", "--deep", "--strict", app).returncode == 0)
+    ok(f"nothing waits in {name} and there is no card", not said.get("staged") and said.get("card") is False, said)
     return said
 
 
@@ -554,11 +577,22 @@ def case_automatic(ctx):
     print("automatic: A finds B by itself and installs it on quit", flush=True)
     app, old_pid = staged(ctx, "automatic")
     said = waiting_facts()
-    ok("Settings says an update is ready", said.get("line", "").endswith(" · An update is ready"), said.get("line"))
-    ok("the menu has Restart to Update", "Restart to Update" in said.get("menu", []), said.get("menu"))
-    ok("Check for Updates… is disabled while it waits", "Check for Updates…" in said.get("menuOff", [])
-       and said.get("canCheck") is False, (said.get("menuOff"), said.get("canCheck")))
-    ok("Restart to Update is enabled", "Restart to Update" not in said.get("menuOff", []), said.get("menuOff"))
+    ok("Settings says Broadway 0.2 is available", said.get("line", "").endswith(" · Broadway 0.2 is available"), said.get("line"))
+    ok("the menu has Install Update, enabled", "Install Update" in said.get("menu", []) and "Install Update" not in said.get("menuOff", []),
+       (said.get("menu"), said.get("menuOff")))
+    card = (said.get("sidebar") or {}).get("card") or {}
+    ok("the card says Update Available with Install", card.get("title") == "Update Available" and card.get("buttonTitle") == "Install"
+       and card.get("label") == "Update available, version 0.2" and card.get("tip") == "Version 0.2", card)
+    ok("Check for Updates… stays enabled while B waits", "Check for Updates…" not in said.get("menuOff", [])
+       and said.get("canCheck") is True, (said.get("menuOff"), said.get("canCheck")))
+    serve(ctx["feed"], ctx["files"])
+    updates(check=True)
+    read = wait("feed", lambda: "/appcast.xml" in requests(), within=30)
+    time.sleep(2)
+    said = updates()
+    ok("Check for Updates… while B waits reads the feed live", bool(read), requests())
+    ok("and, with the card in view, asks nothing and keeps B", not said.get("windows") and said.get("staged") == "Version 0.2"
+       and ctx["path"] not in requests(), said)
     installed_on_quit(ctx, app, old_pid)
     checks_again(ctx)
     quit(app)
@@ -587,11 +621,17 @@ def case_restart(ctx):
     ok("A has two windows and its first is on the second space",
        len(before) == 2 and sorted(w["space"] for w in before).count("Later") >= 1, [(w["space"], w["tabs"]) for w in before])
     cmd({"do": "split", "action": "save"})
+    serve(ctx["feed"], {**ctx["files"], **PAGES})
     try:
-        updates(restart=True)
+        updates(install=True)
     except OSError:
         pass
+    seen = watch(old_pid)
+    asked_now = requests()
     said = relaunched(ctx, app, old_pid)
+    ok("Install read the feed live before installing", "/appcast.xml" in asked_now, asked_now)
+    ok("B was still the newest, so it installed at once with no download", ctx["path"] not in asked_now
+       and not any(phase == "downloading" for phase, _ in seen), (asked_now, seen[:20]))
     if not said:
         return
     after = wait("windows", lambda: len(windows()) == 2 and windows(), within=20) or windows()
@@ -624,9 +664,9 @@ def private_restart(ctx, name):
     time.sleep(1)
     ok("a private window is open", any(w["private"] for w in windows()), windows())
     cmd({"do": "split", "action": "save"})
-    updates(restart=True)
+    updates(install=True)
     w = window(saying="Restart to update?", within=15)
-    ok("Restart asks first, in a sheet", w is not None, updates().get("windows"))
+    ok("Install asks first, in a sheet", w is not None, updates().get("windows"))
     if w:
         print("       ", " | ".join(w["texts"]), "|", ", ".join(w["buttons"]), flush=True)
         shot(w, f"8-{name}-asks")
@@ -636,7 +676,7 @@ def private_restart(ctx, name):
 
 
 def case_ask(ctx):
-    print("ask: a private window, Restart asks first, Not Now keeps A", flush=True)
+    print("ask: a private window, Install asks first, Not Now keeps A", flush=True)
     app, old_pid, w = private_restart(ctx, "ask")
     if not w:
         quit(app)
@@ -654,7 +694,7 @@ def case_ask(ctx):
 
 
 def case_ask_restart(ctx):
-    print("ask: a private window, Restart asks first, Restart installs and relaunches", flush=True)
+    print("ask: a private window, Install asks first, Restart installs and relaunches", flush=True)
     app, old_pid, w = private_restart(ctx, "askrestart")
     if not w:
         quit(app)
@@ -678,8 +718,8 @@ def case_hidden(ctx):
     said = updates(hide=True)
     ok("the × hides the card", said.get("card") is False, said)
     ok("B is still staged and the menu still offers it", said.get("staged") == "Version 0.2"
-       and "Restart to Update" in said.get("menu", []), said)
-    ok("Settings still says an update is ready", said.get("line", "").endswith(" · An update is ready"), said.get("line"))
+       and "Install Update" in said.get("menu", []), said)
+    ok("Settings still says Broadway 0.2 is available", said.get("line", "").endswith(" · Broadway 0.2 is available"), said.get("line"))
     installed_on_quit(ctx, app, old_pid)
     quit(app)
 
@@ -696,7 +736,7 @@ def kept_import():
 
 
 def case_held(ctx):
-    print("held: Restart while a file import runs, the first terminate is cancelled", flush=True)
+    print("held: Install while a file import runs, the first terminate is cancelled", flush=True)
     app, old_pid = staged(ctx, "held")
     waiting_facts()
     big = bookmarks_file(800000)
@@ -706,18 +746,37 @@ def case_held(ctx):
     ok("an import is running", running.get("running") is True, running)
     started = time.time()
     try:
-        updates(restart=True)
+        updates(install=True)
     except OSError:
         pass
     said = relaunched(ctx, app, old_pid)
-    note(f"held: B answered {time.time() - started:.0f} s after Restart")
+    note(f"held: B answered {time.time() - started:.0f} s after Install")
     if said:
         ok("the import was cancelled by the quit, so the terminate was held", not kept_import())
     quit(app)
 
 
+def watch(old_pid, within=180):
+    seen = []
+    until = time.time() + within
+    while time.time() < until:
+        try:
+            said = cmd({"do": "updates"}, timeout=3)
+        except (OSError, ValueError):
+            break
+        if said.get("pid") != old_pid:
+            break
+        seen.append((said.get("phase"), said.get("progress")))
+        time.sleep(0.15)
+    return seen
+
+
+def progressed(seen):
+    return [part for phase, part in seen if phase == "downloading" and isinstance(part, (int, float))]
+
+
 def case_asks(ctx):
-    print("asks: automatic install off, and a change of signing identity", flush=True)
+    print("manual: automatic install off, the card offers B, Install downloads it with progress, and a change of signing identity", flush=True)
     fresh()
     app = copy("asks", "0.1", ctx["old"], ctx["public"], None)
     ok("A is signed ad-hoc and B with the team certificate",
@@ -730,44 +789,94 @@ def case_asks(ctx):
     time.sleep(1.5)
     quit(app)
     kept = run("defaults", "read", BUNDLE, "SUAutomaticallyUpdate").stdout.strip()
-    ok("the switch wrote Sparkle's own setting", kept == "0", (kept, said.get("installs")))
+    ok("the switch wrote the same setting as before", kept == "0", (kept, said.get("installs")))
     run("defaults", "write", BUNDLE, "SULastCheckTime", "-date", "2026-11-10 09:00:00 +0000")
-    serve(ctx["feed"], ctx["files"])
+    serve(ctx["feed"], ctx["files"], slowly=[ctx["path"]])
     launch(app)
     old_pid = updates().get("pid")
     found = wait("feed", lambda: "/appcast.xml" in requests(), within=120)
     ok("a day later it asks the feed by itself", bool(found), requests())
-    w = window(saying="new version", within=15)
-    if w is None:
-        note("started behind other apps, Sparkle keeps its question until Broadway is in front")
-        ok("behind other apps it holds the question back", updates().get("busy") is True, updates())
-        updates(check=True)
-        w = window(saying="new version", within=30)
-    ok("a day later it asks by itself, in Sparkle's own window", w is not None, (updates(), requests()))
+    offered = wait("offer", lambda: (lambda s: s if s.get("phase") == "available" else None)(updates()), within=30) or {}
+    ok("the card offers B in the sidebar", (offered.get("found") or {}).get("build") == ctx["new"] and offered.get("card") is True, offered)
+    ok("with no window of Sparkle's own", not offered.get("windows"), offered.get("windows"))
+    time.sleep(2)
     ok("it has not downloaded anything unasked", ctx["path"] not in requests(), requests())
-    ok("and the sidebar has no card", updates().get("card") is False, updates())
+    serve(ctx["feed"], ctx["files"], slowly=[ctx["path"]])
+    try:
+        updates(install=True)
+    except OSError:
+        pass
+    seen = watch(old_pid)
+    parts = progressed(seen)
+    asked_now = requests()
+    ok("Install asks the feed live first, then downloads", "/appcast.xml" in asked_now and ctx["path"] in asked_now
+       and asked_now.index("/appcast.xml") < asked_now.index(ctx["path"]), asked_now)
+    ok("the card shows Downloading while it does", "downloading" in [phase for phase, _ in seen], seen[:20])
+    ok("a download progress above 0 and below 1 was seen", any(0 < part < 1 for part in parts), parts[:40])
+    ok("the progress only went forward", parts == sorted(parts), parts[:40])
+    note(f"manual: {len(parts)} progress samples, {len(set(parts))} distinct")
+    relaunching.set()
+    new = relaunched(ctx, app, old_pid)
+    ok("B is signed by the team certificate", f"TeamIdentifier={TEAM}" in run("codesign", "-dv", app).stderr)
+    quit(app)
+
+
+def case_alert(ctx):
+    print("alert: with the sidebar folded, Check for Updates… offers B in an alert, and Install there installs it", flush=True)
+    fresh()
+    app = copy("alert", "0.1", ctx["old"], ctx["public"], None)
+    serve(same(ctx))
+    launch(app)
+    wait("first check", lambda: "/appcast.xml" in requests(), within=120)
+    idle()
+    updates(installs=False)
+    cmd({"do": "ui", "folded": True})
+    time.sleep(0.8)
+    serve(ctx["feed"], ctx["files"], slowly=[ctx["path"]])
+    old_pid = updates().get("pid")
+    updates(check=True)
+    w = window(saying="Broadway 0.2 is available")
+    ok("with no card in view, Check for Updates… offers B in an alert", w is not None, (updates().get("windows"), updates().get("trail")))
     if not w:
         quit(app)
         return
     print("       ", " | ".join(w["texts"]), "|", ", ".join(w["buttons"]), flush=True)
-    time.sleep(2)
-    shot(w, "2-asks-with-release-notes")
-    ok("the window offers to install, skip or wait", {"Install Update", "Skip This Version", "Remind Me Later"} <= set(w["buttons"]), w["buttons"])
-    press("Install Update")
-    ready = window(saying="Install and Relaunch", within=120)
-    ok("downloaded and verified, it offers Install and Relaunch", ready is not None, updates().get("windows"))
-    if ready:
-        ok("downloaded from Sparkle's window, it still shows no card", updates().get("card") is False, updates())
-        shot(ready, "3-ready-to-install")
-        relaunching.set()
-        press("Install and Relaunch")
-    new = wait("B", lambda: updates().get("pid") not in (None, old_pid) and updates(), within=120) or {}
-    give_back()
-    ok("Sparkle relaunched it as B by itself", "0.2" in new.get("version", "") and ctx["new"] in new.get("version", ""), new.get("version"))
-    ok("B runs from the same place in the same world", new.get("path") == str(app), new.get("path"))
-    ok("the app on disk is B, validly signed", info(app)["CFBundleVersion"] == ctx["new"]
-       and run("codesign", "--verify", "--deep", "--strict", app).returncode == 0)
-    ok("B is signed by the team certificate", f"TeamIdentifier={TEAM}" in run("codesign", "-dv", app).stderr)
+    ok("its buttons are Install and Not Now", sorted(w["buttons"]) == ["Install", "Not Now"], w)
+    shot(w, "7-available-alert")
+    ok("nothing was downloaded before Install", ctx["path"] not in requests(), requests())
+    press("Install")
+    seen = watch(old_pid)
+    parts = progressed(seen)
+    ok("Install in the alert downloads B with progress", any(0 < part < 1 for part in parts), (seen[:20], parts[:20]))
+    note(f"alert: {len(parts)} progress samples")
+    relaunched(ctx, app, old_pid)
+    quit(app)
+
+
+def case_newer(ctx):
+    print("newer: A runs, B is staged, C is published, Install installs C with progress, not B", flush=True)
+    app, old_pid = staged(ctx, "newer")
+    waiting_facts()
+    serve(appcast([ctx["item"], ctx["c_item"]]), {**ctx["files"], **ctx["c_files"]}, slowly=[ctx["c_path"]])
+    try:
+        updates(install=True)
+    except OSError:
+        pass
+    seen = watch(old_pid)
+    asked_now = requests()
+    parts = progressed(seen)
+    try:
+        last = cmd({"do": "updates"}, timeout=3)
+        note(f"newer: {last.get('flow')} busy {last.get('busy')} trail {last.get('trail')}")
+    except (OSError, ValueError):
+        pass
+    ok("Install read the feed live", "/appcast.xml" in asked_now, asked_now)
+    ok("it downloaded C and not B again", ctx["c_path"] in asked_now and ctx["path"] not in asked_now, asked_now)
+    ok("a download progress above 0 and below 1 was seen", any(0 < part < 1 for part in parts), parts[:40])
+    ok("the card went Checking, Downloading, then Installing", [p for p in dict.fromkeys(phase for phase, _ in seen)
+       if p in ("checking", "downloading", "installing")] == ["checking", "downloading", "installing"], seen[:40])
+    note(f"newer: {len(parts)} progress samples")
+    relaunched(ctx, app, old_pid, short="0.3", build=ctx["newest"], name="C")
     quit(app)
 
 
@@ -783,19 +892,20 @@ def refused(ctx, name, feed, files, picture):
     serve(feed, files)
     idle()
     updates(check=True)
-    w = window(saying="new version", within=60)
-    ok("it offers the update", w is not None, updates().get("windows"))
-    if w:
-        press("Install Update")
-    said = window(saying="improperly signed", within=120)
-    ok("the image is refused", said is not None, updates().get("windows"))
-    if said:
-        print("       ", " | ".join(said["texts"]), flush=True)
-        shot(said, picture)
-        press(said["buttons"][0])
+    offered = wait("offer", lambda: (lambda s: s if s.get("phase") == "available" else None)(updates()), within=60)
+    ok("it offers the update on the card", offered is not None and not offered.get("windows"), updates())
+    if offered:
+        updates(install=True)
+    failed = wait("failed", lambda: (lambda s: s if s.get("phase") == "failed" else None)(updates()), within=120) or {}
+    card = (failed.get("sidebar") or {}).get("card") or {}
+    ok("the image is refused and the card says Couldn't Update with Try Again", card.get("title") == "Couldn't Update"
+       and card.get("buttonTitle") == "Try Again", card)
+    ok("the reason is on the card's tooltip and in Settings' line", "improperly signed" in card.get("tip", "")
+       and "Couldn't update · " in failed.get("line", "") and "improperly signed" in failed.get("line", ""), (card.get("tip"), failed.get("line")))
+    print("       ", failed.get("line", ""), flush=True)
     time.sleep(2)
     ok("the app on disk is still A", info(app)["CFBundleVersion"] == ctx["old"], info(app)["CFBundleVersion"])
-    ok("nothing is waiting to install", not updates().get("waiting"), updates().get("waiting"))
+    ok("nothing is waiting to install", not updates().get("staged"), updates().get("staged"))
     quit(app)
     time.sleep(3)
     ok("and still A after quitting", info(app)["CFBundleVersion"] == ctx["old"], info(app)["CFBundleVersion"])
@@ -828,8 +938,6 @@ def case_image(ctx):
     serve(ctx["feed"], ctx["files"])
     try:
         launch(there)
-        said = updates()
-        ok("it knows it runs from a disk image", said.get("moveOffer") == "diskImage", said.get("moveOffer"))
         w = window(saying="Move Broadway to your Applications folder", within=20)
         ok("it says so at launch", w is not None, updates().get("windows"))
         if w:
@@ -837,12 +945,14 @@ def case_image(ctx):
             shot(w, "6-run-from-disk-image")
             press("Not Now")
         time.sleep(1)
+        said = updates()
+        ok("it knows it runs from a disk image", said.get("moveOffer") == "diskImage", said.get("moveOffer"))
         ok("Settings says to move it", "Move Broadway to Applications" in updates().get("line", ""), updates().get("line"))
         time.sleep(8)
         ok("left alone it downloads nothing", ctx["path"] not in requests(), requests())
         updates(check=True)
-        err = window(saying="read-only", within=30) or window(saying="disk image", within=5)
-        ok("Check for Updates… says why it can't", err is not None, updates().get("windows"))
+        err = window(saying="Couldn't check for updates", within=30)
+        ok("Check for Updates… says why it can't, in Broadway's own alert", err is not None, updates().get("windows"))
         if err:
             print("       ", " | ".join(err["texts"]), flush=True)
             shot(err, "7-check-from-disk-image")
@@ -855,8 +965,8 @@ def case_image(ctx):
             time.sleep(2)
 
 
-CASES = {"inert": case_inert, "current": case_current, "automatic": case_automatic, "restart": case_restart, "ask": case_ask,
-         "askrestart": case_ask_restart, "hidden": case_hidden, "held": case_held, "asks": case_asks,
+CASES = {"inert": case_inert, "current": case_current, "automatic": case_automatic, "restart": case_restart, "newer": case_newer,
+         "ask": case_ask, "askrestart": case_ask_restart, "hidden": case_hidden, "held": case_held, "asks": case_asks, "alert": case_alert,
          "tampered": case_tampered, "image": case_image}
 
 
@@ -864,7 +974,7 @@ def main():
     wanted = [a for a in sys.argv[1:] if a in CASES] or list(CASES)
     public = info(PUBLIC)
     settings = sparkle_settings()
-    if len(settings) != 4 or not settings.get("SUAutomaticallyUpdate"):
+    if len(settings) != 5 or not settings.get("SUAutomaticallyUpdate") or settings.get("SUAllowsAutomaticUpdates") is not False:
         sys.exit(f"build.sh's Sparkle settings were not read: {settings}")
     if run("pgrep", "-f", f"{SCRATCH}").stdout.strip():
         sys.exit("a copy from this scratch folder is already running")
@@ -872,7 +982,8 @@ def main():
     secret, ctx["public"] = make_keys()
     ctx["old"] = public["CFBundleVersion"]
     ctx["new"] = str(int(ctx["old"]) + 1)
-    print(f"A is 0.1 ({ctx['old']}), B is 0.2 ({ctx['new']}); feed {BASE}/appcast.xml; world {WORLD}; "
+    ctx["newest"] = str(int(ctx["old"]) + 2)
+    print(f"A is 0.1 ({ctx['old']}), B is 0.2 ({ctx['new']}), C is 0.3 ({ctx['newest']}); feed {BASE}/appcast.xml; world {WORLD}; "
           f"signed by {'the team certificate' if ctx['identity'] else 'nobody (ad-hoc)'}", flush=True)
     try:
         newer = copy("B", "0.2", ctx["new"], ctx["public"], ctx["identity"])
@@ -882,6 +993,13 @@ def main():
                        "length": ctx["dmg"].stat().st_size}
         ctx["feed"] = appcast([ctx["item"]])
         ctx["files"] = {ctx["path"]: ctx["dmg"].read_bytes()}
+        if any(name in wanted for name in ("newer",)):
+            newest = copy("C", "0.3", ctx["newest"], ctx["public"], ctx["identity"])
+            c_dmg = image(newest, f"Broadway-0.3-{ctx['newest']}.dmg")
+            ctx["c_path"] = f"/releases/{c_dmg.name}"
+            ctx["c_item"] = {"short": "0.3", "build": ctx["newest"], "path": ctx["c_path"], "signature": signature(c_dmg, secret),
+                             "length": c_dmg.stat().st_size}
+            ctx["c_files"] = {ctx["c_path"]: c_dmg.read_bytes()}
         threading.Thread(target=watch_front, daemon=True).start()
         for name in wanted:
             current[0] = name

@@ -461,12 +461,13 @@ extension SettingsPageView {
     func updatesVersionRow() {
         let updates = Updates.shared
         let check = button("Check Now") { [weak self] in
-            updates.wait.staged == nil ? updates.check() : updates.restart(over: self?.window)
+            updates.flow.offered ? updates.install(over: self?.window) : updates.check()
         }
         update { [weak check] in
-            let waiting = updates.wait.staged != nil
-            check?.title = waiting ? UpdateWords.restart : "Check Now"
-            check?.isEnabled = waiting || updates.canCheck
+            let flow = updates.flow
+            let offered = flow.offered
+            check?.title = offered ? UpdateCardLook.install : "Check Now"
+            check?.isEnabled = offered ? flow.canInstall && !flow.phase.busy : updates.canCheck
             check?.superview?.needsLayout = true
         }
         row("updates.version", control: check, detail: { updates.line })

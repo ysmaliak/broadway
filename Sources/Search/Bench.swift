@@ -702,15 +702,18 @@ final class Bench {
             if let on = request["installs"] as? Bool { Updates.shared.installs = on }
             if request["check"] as? Bool == true { Updates.shared.check() }
             if let version = request["stage"] as? String {
-                Updates.shared.pretend(version: version, build: request["build"] as? String ?? version, quits: request["quits"] as? Bool == true)
+                Updates.shared.pretend(version: version, build: request["build"] as? String ?? version,
+                                       phase: (request["phase"] as? String).flatMap(UpdatePhase.init(rawValue:)) ?? .available,
+                                       progress: request["progress"] as? Double, trouble: request["trouble"] as? String,
+                                       staged: request["staged"] as? Bool ?? true, quits: request["quits"] as? Bool == true)
             }
             if request["unstage"] as? Bool == true { Updates.shared.unpretend() }
-            if request["hide"] as? Bool == true { Updates.shared.wait.hide() }
+            if request["hide"] as? Bool == true { Updates.shared.flow.hide() }
             if let on = request["hover"] as? Bool {
                 browser.window?.contentView?.layoutSubtreeIfNeeded()
                 browser.window?.contentView?.kitSubviews(of: UpdateCardView.self).first { !$0.isHiddenOrHasHiddenAncestor }?.benchHover(on)
             }
-            if request["restart"] as? Bool == true { Updates.shared.restart(over: browser.window) }
+            if request["restart"] as? Bool == true || request["install"] as? Bool == true { Updates.shared.install(over: browser.window) }
             if request["behind"] as? Bool == true { NSApp.hide(nil) }
             var said = Updates.shared.facts
             said["sidebar"] = UpdateCardView.bench(browser)

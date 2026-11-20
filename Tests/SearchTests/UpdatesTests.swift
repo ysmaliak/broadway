@@ -102,17 +102,17 @@ struct UpdatesTests {
         let older = now.addingTimeInterval(-86400 * 9)
 
         let lines = [nil, today, yesterday, older].map {
-            UpdateWords.line(version: "Version 0.1 (1)", runs: true, waiting: nil, last: $0, now: now, calendar: calendar)
+            UpdateWords.line(version: "Version 0.1 (1)", runs: true, last: $0, now: now, calendar: calendar)
         }
 
         #expect(lines[0] == "Version 0.1 (1) · Not checked yet")
         #expect(lines[1] == "Version 0.1 (1) · Last checked today at 20:30")
         #expect(lines[2] == "Version 0.1 (1) · Last checked yesterday at 21:30")
         #expect(lines[3] == "Version 0.1 (1) · Last checked 4 Nov 2026")
-        #expect(UpdateWords.line(version: "Version 0.1 (1)", runs: false, waiting: nil, last: today) == "Version 0.1 (1) · This build doesn't update itself")
-        #expect(UpdateWords.line(version: "Version 0.1 (1)", runs: true, waiting: "Version 0.2", last: today)
-            == "Version 0.1 (1) · An update is ready")
-        #expect(UpdateWords.line(version: "Version 0.1 (1)", runs: true, stuck: .diskImage, waiting: nil, last: today)
+        #expect(UpdateWords.line(version: "Version 0.1 (1)", runs: false, last: today) == "Version 0.1 (1) · This build doesn't update itself")
+        #expect(UpdateWords.line(version: "Version 0.1 (1)", runs: true, status: UpdateWords.available("0.2"), last: today)
+            == "Version 0.1 (1) · Broadway 0.2 is available")
+        #expect(UpdateWords.line(version: "Version 0.1 (1)", runs: true, stuck: .diskImage, last: today)
             == "Version 0.1 (1) · Move Broadway to Applications to get updates")
     }
 

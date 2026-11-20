@@ -1,6 +1,57 @@
 import AppKit
 import Combine
 
+struct UpdateCardLook: Equatable {
+    enum Trailing: Equatable {
+        case button(String, label: String)
+        case percent(String)
+        case spinner
+    }
+
+    enum Line: Equatable {
+        case none
+        case waiting
+        case part(Double)
+    }
+
+    let title: String
+    let trailing: Trailing
+    let label: String
+    let tip: String?
+    let line: Line
+
+    static let available = "Update Available"
+    static let checking = "Checking for Updates"
+    static let downloading = "Downloading"
+    static let installing = "Installing"
+    static let failed = "Couldn't Update"
+    static let install = "Install"
+    static let again = "Try Again"
+
+    static func of(_ phase: UpdatePhase, found: UpdateFound?, progress: Double?, trouble: String?) -> UpdateCardLook {
+        let tip = found.map { "Version \($0.version)" }
+        switch phase {
+        case .checking:
+            return UpdateCardLook(title: checking, trailing: .spinner, label: UpdateWords.checking, tip: tip, line: .none)
+        case .downloading:
+            let label = progress.map { "Downloading, \(UpdateWords.percent($0))" } ?? downloading
+            return UpdateCardLook(title: downloading, trailing: progress.map { .percent(UpdateWords.percent($0)) } ?? .spinner, label: label, tip: tip,
+                                  line: progress.map { .part($0) } ?? .waiting)
+        case .installing:
+            return UpdateCardLook(title: installing, trailing: .spinner, label: installing, tip: tip, line: .part(1))
+        case .failed:
+            return UpdateCardLook(title: failed, trailing: .button(again, label: again), label: UpdateWords.failed, tip: trouble ?? tip, line: .none)
+        case .idle, .available:
+            let label = found.map { "Update available, version \($0.version)" } ?? "Update available"
+            return UpdateCardLook(title: available, trailing: .button(install, label: UpdateWords.install), label: label, tip: tip, line: .none)
+        }
+    }
+
+    @MainActor static func of(_ flow: UpdateFlow) -> UpdateCardLook {
+        of(flow.shown, found: flow.found, progress: flow.progress, trouble: flow.trouble)
+    }
+}
+
 final class UpdateCardView: KitHoverView {
     static let height: CGFloat = 44
     static let closeSize: CGFloat = 18
@@ -10,22 +61,32 @@ final class UpdateCardView: KitHoverView {
     static let closeReach: CGFloat = 24
     static let foot: CGFloat = height + 8
     static let room: CGFloat = closeOut + foot
-    static let title = "Update Ready"
-    static let button = "Restart"
+    static let lineHeight: CGFloat = 2
+    static let spinnerSize: CGFloat = 16
+    static let percentFont = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
 
-    let wait: UpdateWait
+    let flow: UpdateFlow
     var ink: KitInk = .flat { didSet { if ink != oldValue { needsLayout = true } } }
     var greys: KitGreys = .white { didSet { if greys != oldValue { needsLayout = true } } }
-    var onRestart: () -> Void = {}
+    var onInstall: () -> Void = {}
 
     private let card = KitFlippedView()
     private let glass = KitGlass.floating(radius: SideLook.cardRadius, ground: false)
-    private let titleLabel = KitLabel(UpdateCardView.title, font: UpdateCardView.titleFont, color: KitColor.ink)
-    private lazy var restart = KitBroadwayButton(Self.button, kind: .primary, small: true, label: UpdateWords.restart) { [weak self] in
-        self?.onRestart()
+    private let titleLabel = KitLabel(UpdateCardLook.available, font: UpdateCardView.titleFont, color: KitColor.ink)
+    private var look: UpdateCardLook
+    private lazy var action = KitBroadwayButton(UpdateCardLook.install, kind: .primary, small: true, label: UpdateWords.install) { [weak self] in
+        self?.onInstall()
     }
+    private lazy var actionAgain = KitBroadwayButton(UpdateCardLook.again, kind: .primary, small: true, label: UpdateCardLook.again) { [weak self] in
+        self?.onInstall()
+    }
+    private let percent = KitLabel("0%", font: UpdateCardView.percentFont, color: KitColor.ink)
+    private let spinner = NSProgressIndicator()
+    private let rail = KitFlippedView()
+    private let fill = CALayer()
+    private var spins = false
     private lazy var close: KitButton = {
-        let made = KitButton(.plain(press: 0.9), label: "Hide") { [weak self] in self?.wait.hide() }
+        let made = KitButton(.plain(press: 0.9), label: "Hide") { [weak self] in self?.flow.hide() }
         let face = KitGlassFace(KitSymbol("xmark", style: KitSymbol.Style(size: 7, weight: .bold)))
         face.effectIsInteractive = true
         made.content = face
@@ -36,16 +97,16 @@ final class UpdateCardView: KitHoverView {
     private var closeOut = false
     private var out = false
     private var placed = false
-    private var clock: NoticeClock?
     private var shownArrival: Int
     private var focusWatch: NSKeyValueObservation?
     private var follow: AnyCancellable?
 
     static let titleFont = NSFont.systemFont(ofSize: 12, weight: .semibold)
 
-    init(wait: UpdateWait) {
-        self.wait = wait
-        shownArrival = wait.arrivals
+    init(flow: UpdateFlow) {
+        self.flow = flow
+        shownArrival = flow.arrivals
+        look = UpdateCardLook.of(flow)
         super.init(frame: .zero)
         wantsLayer = true
         clipsToBounds = false
@@ -53,19 +114,40 @@ final class UpdateCardView: KitHoverView {
         card.clipsToBounds = false
         addSubview(card)
         card.addSubview(glass)
+        rail.wantsLayer = true
+        rail.layer?.masksToBounds = true
+        rail.layer?.cornerRadius = SideLook.cardRadius
+        rail.layer?.cornerCurve = .continuous
+        rail.layer?.addSublayer(fill)
+        fill.anchorPoint = .zero
+        rail.setAccessibilityElement(false)
+        card.addSubview(rail)
         titleLabel.setAccessibilityElement(false)
         card.addSubview(titleLabel)
         titleLabel.overflow = .tail
-        card.addSubview(restart)
-        restart.toolTip = UpdateWords.restart
-        restart.reach = KitReach.least
+        percent.setAccessibilityElement(false)
+        percent.alignment = .right
+        card.addSubview(percent)
+        spinner.style = .spinning
+        spinner.controlSize = .small
+        spinner.isDisplayedWhenStopped = false
+        spinner.setAccessibilityElement(false)
+        card.addSubview(spinner)
+        for button in [action, actionAgain] {
+            button.reach = KitReach.least
+            card.addSubview(button)
+        }
         card.addSubview(close)
         close.wantsLayer = true
         close.layer?.opacity = 0
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
-        setAccessibilityLabel(Self.title)
-        follow = kitObserve({ [weak self] in self?.wait.arrivals }) { [weak self] _ in self?.needsLayout = true }
+        setAccessibilityLabel(look.label)
+        follow = kitObserve({ [weak self] () -> [AnyHashable] in
+            guard let self else { return [] }
+            let flow = self.flow
+            return [flow.arrivals, flow.shown.rawValue, flow.found?.build, flow.progress, flow.trouble]
+        }) { [weak self] _ in self?.needsLayout = true }
     }
 
     @available(*, unavailable)
@@ -76,8 +158,20 @@ final class UpdateCardView: KitHoverView {
     static let pad: CGFloat = SideLook.rowLead
     static let gap: CGFloat = 6
 
-    static func buttonWidth() -> CGFloat {
-        ceil(KitLabel(button, font: KitBroadwayButton.font(kind: .primary, small: true)).intrinsicContentSize.width) + 18
+    static func buttonWidth(_ title: String = UpdateCardLook.install) -> CGFloat {
+        ceil(KitLabel(title, font: KitBroadwayButton.font(kind: .primary, small: true)).intrinsicContentSize.width) + 18
+    }
+
+    static func percentWidth() -> CGFloat {
+        ceil(KitLabel("100%", font: percentFont).intrinsicContentSize.width) + 1
+    }
+
+    static func trailingWidth(_ trailing: UpdateCardLook.Trailing) -> CGFloat {
+        switch trailing {
+        case .button(let title, _): return buttonWidth(title)
+        case .percent: return percentWidth()
+        case .spinner: return spinnerSize
+        }
     }
 
     static func closeAside(card width: CGFloat) -> CGFloat {
@@ -85,8 +179,8 @@ final class UpdateCardView: KitHoverView {
         return (min(closeOut, room) * 2).rounded(.down) / 2
     }
 
-    static func textRoom(card width: CGFloat) -> CGFloat {
-        width - pad - buttonWidth() - gap - pad
+    static func textRoom(card width: CGFloat, trailing: UpdateCardLook.Trailing = .button(UpdateCardLook.install, label: UpdateWords.install)) -> CGFloat {
+        width - pad - trailingWidth(trailing) - gap - pad
     }
 
     var focused: Bool {
@@ -126,10 +220,40 @@ final class UpdateCardView: KitHoverView {
         return ["card": [inWindow.minX, inWindow.minY, inWindow.width, inWindow.height],
                 "close": [closeBox.minX, closeBox.minY, closeBox.width, closeBox.height], "closeShown": closeOut,
                 "closeDrawn": [drawn.minX, drawn.minY, drawn.width, drawn.height],
-                "restart": restart.frame.width, "label": accessibilityLabel() ?? "", "button": restart.accessibilityLabel() ?? "",
+                "title": titleLabel.text, "label": accessibilityLabel() ?? "", "tip": toolTip ?? "", "trailing": trailingKind,
+                "button": shownButton?.accessibilityLabel() ?? "", "buttonTitle": shownButton?.title ?? "", "buttonWidth": shownButton?.frame.width ?? 0,
+                "percent": percent.isHidden ? "" : percent.text, "percentCut": !percent.isHidden && percent.intrinsicContentSize.width > percent.frame.width + 0.5,
+                "spinner": !spinner.isHidden, "spinning": spins,
                 "hide": close.accessibilityLabel() ?? "", "titleCut": titleLabel.intrinsicContentSize.width > titleLabel.frame.width + 0.5,
                 "titleNeeds": titleLabel.intrinsicContentSize.width, "textRoom": titleLabel.frame.width,
-                "titleStart": titleLabel.frame.minX, "restartEnd": card.bounds.width - restart.frame.maxX]
+                "titleStart": titleLabel.frame.minX, "trailingEnd": card.bounds.width - trailingFrame.maxX,
+                "line": lineState, "lineBox": [fill.frame.minX, fill.frame.minY, fill.frame.width, fill.frame.height],
+                "lineShown": !fill.isHidden, "lineColour": fill.backgroundColor.flatMap { NSColor(cgColor: $0)?.usingColorSpace(.sRGB) }
+                    .map { [$0.redComponent, $0.greenComponent, $0.blueComponent, $0.alphaComponent] } ?? []]
+    }
+
+    private var shownButton: KitBroadwayButton? { [action, actionAgain].first { !$0.isHidden } }
+
+    private var trailingKind: String {
+        switch look.trailing {
+        case .button: return "button"
+        case .percent: return "percent"
+        case .spinner: return "spinner"
+        }
+    }
+
+    private var trailingFrame: NSRect {
+        if let shownButton { return shownButton.frame }
+        if !percent.isHidden { return percent.frame }
+        return spinner.frame
+    }
+
+    private var lineState: Any {
+        switch look.line {
+        case .none: return NSNull()
+        case .waiting: return -1
+        case .part(let part): return part
+        }
     }
 
     override func layout() {
@@ -139,22 +263,99 @@ final class UpdateCardView: KitHoverView {
         glass.frame = card.bounds
         glass.tintColor = Palette.NS.glassTint
         let dark = kitDark
-        let width = Self.buttonWidth()
-        restart.frame = kitSnap(NSRect(x: box.width - Self.pad - width, y: (Self.height - 22) / 2, width: width, height: 22))
-        let start = Self.pad
-        let room = max(0, restart.frame.minX - Self.gap - start)
+        look = UpdateCardLook.of(flow)
+        let width = Self.trailingWidth(look.trailing)
+        let right = box.width - Self.pad
         let titleHeight = ceil(12 * 1.3)
+        action.isHidden = true
+        actionAgain.isHidden = true
+        percent.isHidden = true
+        var spinning = false
+        switch look.trailing {
+        case .button(let title, let label):
+            let button = title == UpdateCardLook.again ? actionAgain : action
+            button.isHidden = false
+            button.setAccessibilityLabel(label)
+            button.frame = kitSnap(NSRect(x: right - width, y: (Self.height - 22) / 2, width: width, height: 22))
+        case .percent(let text):
+            percent.isHidden = false
+            percent.text = text
+            percent.ink = ink
+            percent.frame = kitSnap(NSRect(x: right - width, y: (Self.height - titleHeight) / 2, width: width, height: titleHeight))
+        case .spinner:
+            spinning = true
+        }
+        spinner.frame = kitSnap(NSRect(x: right - Self.spinnerSize, y: (Self.height - Self.spinnerSize) / 2, width: Self.spinnerSize, height: Self.spinnerSize))
+        spin(spinning)
+        let start = Self.pad
+        let room = max(0, right - width - Self.gap - start)
+        titleLabel.text = look.title
         titleLabel.frame = kitSnap(NSRect(x: start, y: (Self.height - titleHeight) / 2, width: room, height: titleHeight))
         titleLabel.ink = ink
+        rail.frame = card.bounds
+        rail.isHidden = look.line == .none
+        drawLine(look.line)
+        toolTip = look.tip
+        setAccessibilityLabel(look.label)
         close.frame = NSRect(x: -Self.closeAside(card: box.width), y: -Self.closeOut, width: Self.closeSize, height: Self.closeSize)
         tintClose(dark: dark)
         arrive()
     }
 
+    private func spin(_ on: Bool) {
+        spinner.isHidden = !on
+        let moving = on && !Motion.reduced
+        spinner.isDisplayedWhenStopped = on
+        guard moving != spins else { return }
+        spins = moving
+        if moving { spinner.startAnimation(nil) } else { spinner.stopAnimation(nil) }
+    }
+
+    private func drawLine(_ line: UpdateCardLook.Line) {
+        let size = rail.bounds.size
+        var accent = NSColor.controlAccentColor.cgColor
+        effectiveAppearance.performAsCurrentDrawingAppearance { accent = NSColor.controlAccentColor.cgColor }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        fill.backgroundColor = accent
+        fill.isHidden = line == .none
+        CATransaction.commit()
+        let y = size.height - Self.lineHeight
+        switch line {
+        case .none:
+            fill.removeAnimation(forKey: "sweep")
+        case .part(let part):
+            fill.removeAnimation(forKey: "sweep")
+            fill.opacity = 1
+            let target = NSRect(x: 0, y: y, width: (size.width * CGFloat(min(1, max(0, part)))).rounded(), height: Self.lineHeight)
+            fill.position = target.origin
+            fill.kitAnimate("bounds", to: NSValue(rect: NSRect(origin: .zero, size: target.size)), curve: Motion.kitQuick)
+        case .waiting:
+            let span = (size.width * 0.3).rounded()
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            fill.bounds = NSRect(x: 0, y: 0, width: Motion.calm ? size.width : span, height: Self.lineHeight)
+            fill.position = NSPoint(x: 0, y: y)
+            fill.opacity = Motion.calm ? 0.5 : 1
+            CATransaction.commit()
+            guard !Motion.calm else {
+                fill.removeAnimation(forKey: "sweep")
+                return
+            }
+            guard fill.animation(forKey: "sweep") == nil else { return }
+            let sweep = CABasicAnimation(keyPath: "position.x")
+            sweep.fromValue = -span
+            sweep.toValue = size.width
+            sweep.duration = 1.4
+            sweep.repeatCount = .infinity
+            sweep.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            fill.add(sweep, forKey: "sweep")
+        }
+    }
+
     private func arrive() {
-        guard wait.arrivals != shownArrival, !isHiddenOrHasHiddenAncestor, window != nil, card.frame.width > 0 else { return }
-        shownArrival = wait.arrivals
-        time()
+        guard flow.arrivals != shownArrival, !isHiddenOrHasHiddenAncestor, window != nil, card.frame.width > 0 else { return }
+        shownArrival = flow.arrivals
         NoticeMotion.show(card, false, animated: false)
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
@@ -168,13 +369,10 @@ final class UpdateCardView: KitHoverView {
             guard out || isHidden || !placed else { return }
             out = false
             isHidden = false
-            time()
             guard placed, window != nil else { return NoticeMotion.show(card, true, animated: false) }
             NoticeMotion.enter(card)
             return
         }
-        clock?.cancel()
-        clock = nil
         guard !out, !isHidden else { return }
         out = true
         guard placed, window != nil else {
@@ -189,17 +387,6 @@ final class UpdateCardView: KitHoverView {
             }
         }
         RunLoop.main.add(timer, forMode: .common)
-    }
-
-    private func time() {
-        let staged = wait.staged
-        clock?.cancel()
-        let made = NoticeClock(.offer, window: { [weak self] in self?.window }) { [weak self] in
-            guard let self, wait.staged == staged else { return }
-            wait.hide()
-        }
-        made.view = self
-        clock = made
     }
 
     private func tintClose(dark: Bool? = nil) {

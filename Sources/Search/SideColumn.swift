@@ -43,7 +43,7 @@ final class SideColumnView: NSView {
         agents = AgentsAreaView(browser: browser)
         address = SideAddressView(browser: browser)
         mini = MiniPlayerView(mini: browser.mini)
-        update = UpdateCardView(wait: Updates.shared.wait)
+        update = UpdateCardView(flow: Updates.shared.flow)
         helm = HelmView(browser: browser)
         fetch = FetchDoorView(browser: browser, fetches: browser.fetches)
         super.init(frame: .zero)
@@ -74,7 +74,7 @@ final class SideColumnView: NSView {
         pages.column = self
         address.ground = { [weak self] index in self?.ground(for: index) ?? RowGround() }
         spaceFoot.fetch = fetch
-        update.onRestart = { [weak self] in Updates.shared.restart(over: self?.window) }
+        update.onInstall = { [weak self] in Updates.shared.install(over: self?.window) }
         followMini()
         registerForDraggedTypes(SidePageView.dropped)
     }
@@ -100,7 +100,7 @@ final class SideColumnView: NSView {
     private var miniHeight: CGFloat { mini.room }
 
     private var updateHeight: CGFloat {
-        browser.isPrivate || browser.folded || !Updates.shared.wait.card ? 0 : UpdateCardView.foot
+        browser.isPrivate || browser.folded || !Updates.shared.flow.card ? 0 : UpdateCardView.foot
     }
 
     private func followMini() {

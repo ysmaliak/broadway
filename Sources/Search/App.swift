@@ -284,7 +284,7 @@ enum MenuBar {
     private static func appMenu() -> NSMenu {
         let menu = NSMenu(title: "Broadway")
         menu.addItem(command("About Broadway") { AboutWindow.show() })
-        menu.addItem(Updates.shared.restartItem())
+        menu.addItem(Updates.shared.installItem())
         let updates = Updates.shared.menuItem()
         if let updates { menu.addItem(updates) }
         menu.addItem(.separator())

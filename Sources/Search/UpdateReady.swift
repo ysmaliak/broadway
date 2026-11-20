@@ -1,38 +1,4 @@
 import AppKit
-import Observation
-
-struct StagedUpdate: Equatable {
-    let version: String
-    let build: String
-}
-
-@MainActor
-@Observable
-final class UpdateWait {
-    private(set) var staged: StagedUpdate?
-    private(set) var hidden: StagedUpdate?
-    private(set) var arrivals = 0
-    @ObservationIgnored private(set) var install: (() -> Void)?
-
-    var card: Bool { staged != nil && staged != hidden }
-
-    func stage(_ update: StagedUpdate, install: @escaping () -> Void) {
-        self.install = install
-        guard staged != update else { return }
-        staged = update
-        if card { arrivals += 1 }
-    }
-
-    func hide() {
-        hidden = staged
-    }
-
-    func clear() {
-        staged = nil
-        hidden = nil
-        install = nil
-    }
-}
 
 @MainActor
 struct RestartLoss: Equatable {
@@ -94,8 +60,8 @@ enum UpdateRestart {
 
     private static var asking = false
 
-    static func ask(_ wait: UpdateWait, over window: NSWindow?) {
-        guard let install = wait.install, !asking else { return }
+    static func ask(over window: NSWindow?, then install: @escaping () -> Void) {
+        guard !asking else { return }
         asking = true
         gather { loss in
             asking = false
