@@ -281,6 +281,8 @@ final class FullScreenEscape {
     /// listening for keyup would otherwise see half a press, and might close
     /// something of its own on it. One monitor, made the first time it is
     /// needed; it keeps only the key-up of the press it was asked to.
+    func keepUp() { keepKeyUp() }
+
     private func keepKeyUp() {
         keepsKeyUp = true
         guard keyUps == nil else { return }

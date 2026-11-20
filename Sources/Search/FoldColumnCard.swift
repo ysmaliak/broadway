@@ -17,11 +17,11 @@ final class FoldColumnCardView: NSView {
     private let edge = KitPlate(stroke: KitTone(base: Palette.NS.ink, opacity: 0.1), radius: Metrics.floatRadius)
     private var watch: [AnyCancellable] = []
 
-    init(browser: Browser) {
+    init(browser: Browser, peek: ColumnPeek? = nil) {
         self.browser = browser
         column = SideColumnView(browser: browser)
         ground = ShellGroundLayer(browser: browser)
-        peek = browser.columnPeek
+        self.peek = peek ?? browser.columnPeek
         super.init(frame: .zero)
         wantsLayer = true
         clip.wantsLayer = true
@@ -30,11 +30,12 @@ final class FoldColumnCardView: NSView {
         clip.layer?.masksToBounds = true
         column.floating = true
         column.inksItself = true
-        column.facesShown = peek.out
+        column.facesShown = self.peek.out
         for view in [backdrop, ground, column] as [NSView] { clip.addSubview(view) }
         for view in [shade, clip, edge] as [NSView] { addSubview(view) }
+        let watched = self.peek
         watch = [
-            kitObserve(initial: false, { [weak peek] in peek?.out ?? false }) { [weak self] _ in self?.followPeek() },
+            kitObserve(initial: false, { [weak watched] in watched?.out ?? false }) { [weak self] _ in self?.followPeek() },
             kitObserve(initial: false, distinct: true, { [weak browser] in
                 browser.map { [$0.asCards, $0.fullScreen] } ?? []
             }) { [weak self] _ in self?.relaid() },
