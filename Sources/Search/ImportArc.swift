@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 // Arc's sidebar, read: its spaces and what is pinned in each, and the
 // favourites above them. Arc keeps them in one plain JSON file beside its
@@ -32,6 +32,8 @@ struct ArcSidebar: Equatable {
         var profile: String
         /// In Arc's order, folders kept as folders.
         var pinned: [Node]
+        var id: String? = nil
+        var colours: [String] = []
     }
     /// The icons at the top, shared by every space of their profile.
     var favorites: [Item]
@@ -43,11 +45,119 @@ struct ArcSidebar: Equatable {
     var pinnedCount: Int { spaces.reduce(0) { $0 + Arc.count($1.pinned) } }
 }
 
+struct ArcRouting: Equatable {
+    enum Kind: Equatable { case contains, equals }
+
+    struct Rule: Equatable {
+        var kind: Kind
+        var text: String
+        var space: String
+    }
+
+    var rules: [Rule]
+    var leftOut: Int
+}
+
 enum Arc {
     /// Beside Arc's profiles, under Chromium.base: a test run reads a
     /// made-up one from its own folder.
     static var file: URL {
         Chromium.base.appendingPathComponent("Arc/StorableSidebar.json")
+    }
+
+    static var routingFile: URL {
+        Chromium.base.appendingPathComponent("Arc/StorableLinkRouting.json")
+    }
+
+    static func routing() -> ArcRouting? {
+        guard let size = (try? FileManager.default.attributesOfItem(atPath: routingFile.path))?[.size] as? NSNumber,
+              size.intValue <= 8 << 20,
+              let data = try? Data(contentsOf: routingFile)
+        else { return nil }
+        return parse(routing: data)
+    }
+
+    static func parse(routing data: Data) -> ArcRouting? {
+        guard let top = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let list = top["rules"] as? [Any]
+        else { return nil }
+        var rules: [ArcRouting.Rule] = []
+        var leftOut = 0
+        for entry in list where !(entry is String) {
+            guard rules.count + leftOut < 5000 else { break }
+            if let rule = rule(entry) { rules.append(rule) } else { leftOut += 1 }
+        }
+        return ArcRouting(rules: rules, leftOut: leftOut)
+    }
+
+    private static func rule(_ entry: Any) -> ArcRouting.Rule? {
+        guard let rule = entry as? [String: Any],
+              let conditions = rule["sourceComponents"] as? [Any], conditions.count == 1,
+              let type = (conditions[0] as? [String: Any])?["componentType"] as? [String: Any],
+              let match = type["urlMatch"] as? [String: Any],
+              let kind = kind(match["_0"]),
+              let text = named(match["_1"] as? String),
+              let space = destination(rule["destination"])
+        else { return nil }
+        return ArcRouting.Rule(kind: kind, text: text, space: space)
+    }
+
+    private static func kind(_ value: Any?) -> ArcRouting.Kind? {
+        let name: String
+        if let text = value as? String {
+            name = text
+        } else if let box = value as? [String: Any], box.count == 1, let only = box.keys.first {
+            name = only
+        } else {
+            return nil
+        }
+        let plain = String(name.lowercased().filter(\.isLetter))
+        if plain == "contains" || plain == "contain" { return .contains }
+        let equal: Set<String> = ["is", "equals", "equal", "equalto", "isequal", "isequalto", "exact", "exactly", "exactmatch", "same"]
+        return equal.contains(plain) ? .equals : nil
+    }
+
+    private static func destination(_ value: Any?) -> String? {
+        guard let box = value as? [String: Any],
+              let outer = (box["space"] as? [String: Any])?["_0"] as? [String: Any]
+        else { return nil }
+        if let text = outer["space"] as? String { return named(text) }
+        return named((outer["space"] as? [String: Any])?["_0"] as? String)
+    }
+
+    static func match(_ text: String) -> LinkRule.Match? {
+        let bare = LinkRouter.anchored(text)
+        guard !bare.isEmpty else { return nil }
+        let host = bare.hasSuffix("/") ? String(bare.dropLast()) : bare
+        let plainHost = !host.isEmpty && host.contains(".") && !host.contains(where: { "/?#:@ ".contains($0) })
+        if plainHost, let site = LinkRouter.site(typed: host) {
+            return site == host ? .site(host) : .host(host)
+        }
+        return .contains(bare)
+    }
+
+    static func linkRules(_ routing: ArcRouting, spaces: [String: UUID], have: [LinkRule], made: Date = Date())
+        -> (rules: [LinkRule], leftOut: Int) {
+        struct Key: Hashable {
+            var kind: LinkRule.Match.Kind
+            var text: String
+            var target: LinkRule.Target
+        }
+        func key(_ rule: LinkRule) -> Key { Key(kind: rule.match.kind, text: rule.match.text.lowercased(), target: rule.target) }
+        let byID = Dictionary(spaces.map { ($0.key.lowercased(), $0.value) }, uniquingKeysWith: { a, _ in a })
+        var seen = Set(have.map(key))
+        var rules: [LinkRule] = []
+        var leftOut = routing.leftOut
+        for arc in routing.rules {
+            guard let space = byID[arc.space.lowercased()], let match = match(arc.text) else {
+                leftOut += 1
+                continue
+            }
+            let rule = LinkRule(match: match, from: .otherApps, target: .space(space, folder: nil), made: made)
+            guard seen.insert(key(rule)).inserted else { continue }
+            rules.append(rule)
+        }
+        return (rules, leftOut)
     }
 
     /// Arc's sidebar for one profile ("Default", "Profile 1"), or for every
@@ -104,15 +214,25 @@ enum Arc {
         }
 
         var spaces: [ArcSidebar.Space] = []
-        for case let space as [String: Any] in (main["spaces"] as? [Any]) ?? [] {
+        var lastID: String?
+        for entry in (main["spaces"] as? [Any]) ?? [] {
+            if let text = entry as? String {
+                lastID = text
+                continue
+            }
+            let before = lastID
+            lastID = nil
+            guard let space = entry as? [String: Any] else { continue }
             let profile = profileName(space["profile"])
             guard inProfile(profile) else { continue }
             let name = named(space["title"] as? String) ?? "Space"
-            let emoji = ((space["customInfo"] as? [String: Any])?["iconType"] as? [String: Any])?["emoji_v2"] as? String
+            let info = space["customInfo"] as? [String: Any]
+            let emoji = (info?["iconType"] as? [String: Any])?["emoji_v2"] as? String
             let pinned = container("pinned", in: space["newContainerIDs"] as? [Any])
                 ?? container("pinned", in: space["containerIDs"] as? [Any])
             spaces.append(.init(name: name, emoji: emoji, symbol: symbol(emoji: emoji, name: name), profile: profile,
-                                pinned: pinned.map { nodes(under: $0, depth: 0) } ?? []))
+                                pinned: pinned.map { nodes(under: $0, depth: 0) } ?? [],
+                                id: named(space["id"] as? String) ?? named(before), colours: colours(info?["windowTheme"])))
         }
 
         // The favourites: a profile followed by its container's id.
@@ -164,6 +284,61 @@ enum Arc {
     private static func named(_ text: String?) -> String? {
         guard let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else { return nil }
         return String(trimmed.prefix(300))
+    }
+
+    static func colours(_ value: Any?) -> [String] {
+        guard let theme = value as? [String: Any] else { return [] }
+        let rest = theme.filter { !$0.key.lowercased().contains("palette") }
+        let found = stops(in: rest, depth: 0) ?? []
+        if found.count > 1 { return found }
+        if let mid = colour((theme["primaryColorPalette"] as? [String: Any])?["midTone"], depth: 0) { return [mid] }
+        return found
+    }
+
+    private static func stops(in value: Any, depth: Int) -> [String]? {
+        guard depth < 12 else { return nil }
+        if let list = value as? [Any] {
+            let found = list.compactMap { colour($0, depth: 0) }
+            if found.count > 1 { return found }
+            var one: [String]?
+            for item in list {
+                guard let inner = stops(in: item, depth: depth + 1) else { continue }
+                if inner.count > 1 { return inner }
+                one = one ?? inner
+            }
+            return one ?? (found.isEmpty ? nil : found)
+        }
+        guard let box = value as? [String: Any] else { return nil }
+        if box["red"] != nil, let single = colour(box, depth: 0) { return [single] }
+        var one: [String]?
+        for key in box.keys.sorted() {
+            guard let inner = stops(in: box[key] as Any, depth: depth + 1) else { continue }
+            if inner.count > 1 { return inner }
+            one = one ?? inner
+        }
+        return one
+    }
+
+    static func colour(_ value: Any?, depth: Int) -> String? {
+        guard depth < 4, let box = value as? [String: Any] else { return nil }
+        if let red = unit(box["red"]), let green = unit(box["green"]), let blue = unit(box["blue"]) {
+            let space = ((box["colorSpace"] ?? box["colourSpace"]) as? String)?.lowercased() ?? ""
+            let made = space.contains("p3")
+                ? NSColor(displayP3Red: red, green: green, blue: blue, alpha: 1)
+                : NSColor(srgbRed: red, green: green, blue: blue, alpha: 1)
+            return made.code
+        }
+        for key in ["color", "colour", "_0"] {
+            if let inner = colour(box[key], depth: depth + 1) { return inner }
+        }
+        return nil
+    }
+
+    private static func unit(_ value: Any?) -> CGFloat? {
+        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        let double = number.doubleValue
+        guard double.isFinite else { return nil }
+        return CGFloat(min(1, max(0, double)))
     }
 
     static func count(_ nodes: [ArcSidebar.Node]) -> Int {
@@ -249,6 +424,11 @@ extension ImportSource {
     func arcSidebar(profile: String?) -> ArcSidebar? {
         guard case .chromium(let source) = self, source.name == "Arc" else { return nil }
         return Arc.sidebar(profile: profile)
+    }
+
+    func arcRouting() -> ArcRouting? {
+        guard case .chromium(let source) = self, source.name == "Arc" else { return nil }
+        return Arc.routing()
     }
 
     func arcCounts(profile: String?) -> (spaces: Int, pinned: Int)? {

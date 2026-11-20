@@ -3032,8 +3032,9 @@ extension Browser {
     }
 
     @discardableResult
-    func takeArc(_ sidebar: ArcSidebar, from source: ImportSource? = nil, profile: String? = nil)
-        -> (spaces: Int, pins: Int, tabs: Int) {
+    func takeArc(_ sidebar: ArcSidebar, routing: ArcRouting? = nil, links: LinkRules? = nil,
+                 from source: ImportSource? = nil, profile: String? = nil)
+        -> (spaces: Int, pins: Int, tabs: Int, rules: Int, leftOut: Int) {
         var made = 0, pins = 0, added = 0
         // Every address this brings in, for its icon below.
         var brought: [URL] = []
@@ -3047,7 +3048,8 @@ extension Browser {
                 } else {
                     let icon = arc.emoji.flatMap { $0.isEmpty ? nil : TabIcon(emoji: $0) }
                         ?? TabIcon(symbol: Arc.known(emoji: arc.emoji, name: arc.name) ?? Spaces.leastWorn(in: all))
-                    let space = Space(id: UUID(), name: arc.name, colour: 0, icon: icon, sharesSignIns: true)
+                    let look = arc.colours.isEmpty ? nil : SpaceLook(colours: arc.colours, intensity: SpaceLook.bold)
+                    let space = Space(id: UUID(), name: arc.name, colour: 0, icon: icon, look: look, sharesSignIns: true)
                     all.append(space)
                     targets.append((space.id, arc))
                     made += 1
@@ -3088,7 +3090,19 @@ extension Browser {
             added += takeAsleep(pinned, into: target.id)
         }
         adoptIcons(for: brought, from: source, profile: profile)
-        return (made, pins, added)
+        var rules = 0, leftOut = 0
+        if let routing {
+            let links = links ?? LinkRules.shared
+            var ids: [String: UUID] = [:]
+            for target in targets where prefs.usesSpaces {
+                if let id = target.space?.id, ids[id] == nil { ids[id] = target.id }
+            }
+            let found = Arc.linkRules(routing, spaces: ids, have: links.rules)
+            for rule in found.rules { links.add(rule) }
+            rules = found.rules.count
+            leftOut = found.leftOut
+        }
+        return (made, pins, added, rules, leftOut)
     }
 
     /// The icons for what Arc's side of the import brought in, from Arc's own
