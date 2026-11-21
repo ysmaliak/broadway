@@ -99,9 +99,9 @@ enum Answer {
         guard let space = space as? [String: Any], space["first"] as? Bool == true,
               let name = space["name"] as? String, let why = space["why"] as? String else { return nil }
         if why == "as asked" {
-            return space["kept"] as? Bool == true ? "In \(name), as asked. This folder's tabs go there from now on" : "In \(name), as asked"
+            return space["kept"] as? Bool == true ? "In \(name), as asked. This folder's tabs go there from now on." : "In \(name), as asked"
         }
-        return "In \(name), \(why). For another space, and for this folder from then on: broadway open URL --space NAME"
+        return "In \(name), \(why). Run broadway open URL --space NAME to pick another and keep it for this folder."
     }
 
     static func tail(_ data: [String: Any]) -> [String] {

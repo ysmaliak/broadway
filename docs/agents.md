@@ -115,7 +115,7 @@ With spaces on and more than one of them, each session has a space of its own, c
 
 - **Opening.** An agent's `open` opens in the session's space, even with another space on screen. The tab stays behind there, as agent tabs in another space always have. A popup follows its opener. `open URL --space NAME` opens in that space instead, makes it the session's space, and teaches it to the folder.
 - **Moving.** When the person moves an agent's tab to another space, by any path (drag, the menus, `broadway tabs move --space`), the session's space follows, and the folder learns it. A tab of a session that already ended still teaches its folder. A private window never teaches.
-- **Telling.** `open`'s answer carries `space`, with the space's name and why it was chosen. The first open of a session, and the first after its space changes, also says so in words, with how to change it: "In Personal, matching ~/Projects/personal. For another space, and for this folder from then on: broadway open URL --space NAME". Broadway picks a sensible space and makes another easy to choose. It never refuses one.
+- **Telling.** `open`'s answer carries `space`, with the space's name and why it was chosen. The first open of a session, and the first after its space changes, also says so in words, with how to change it: "In Personal, matching ~/Projects/personal. Run broadway open URL --space NAME to pick another and keep it for this folder.". Broadway picks a sensible space and makes another easy to choose. It never refuses one.
 - With one space, or spaces off, nothing here applies and an agent opens in the space on screen.
 
 ## Watching an agent

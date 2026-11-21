@@ -489,9 +489,9 @@ final class BrowserToolbox: AgentToolbox {
 
     let tools: [ToolSpec] = [
         ToolSpec(name: "tabs", description: "List the open tabs. Private windows are not listed."),
-        ToolSpec(name: "open", description: "Open a page in a new agent tab beside the person's. It never comes to the front. With several spaces it opens in your session's space, and the answer says which and why.",
+        ToolSpec(name: "open", description: "Open a page in a new agent tab beside the person's, in your session's space. It never comes to the front.",
                  properties: ["url": ["type": "string"],
-                              "space": ["type": "string", "description": "A space by name, for this tab and your later ones. Broadway keeps it for your folder"]],
+                              "space": ["type": "string", "description": "Another space, kept for your folder"]],
                  required: ["url"]),
         ToolSpec(name: "navigate", description: "Go to an address in a tab. The tab the person is looking at can't be sent elsewhere. The answer is a look at the new page.",
                  properties: with(["tab": tab, "url": ["type": "string"]], aim: false), required: ["tab", "url"]),

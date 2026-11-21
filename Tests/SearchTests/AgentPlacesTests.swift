@@ -194,9 +194,9 @@ final class AgentPlacesTests {
         let asked: [String: Any] = ["name": "Work", "why": AgentPlaces.reason(.asked, onScreen: true), "first": true, "kept": true]
         let later: [String: Any] = ["name": "Work", "why": "the space on screen", "first": false]
 
-        #expect(AgentPlaces.line(named) == "In Personal, matching ~/Projects/personal. For another space, and for this folder from then on: open with space")
-        #expect(AgentPlaces.line(front, how: "x") == "In Work, the space on screen. For another space, and for this folder from then on: x")
-        #expect(AgentPlaces.line(asked) == "In Work, as asked. This folder's tabs go there from now on")
+        #expect(AgentPlaces.line(named) == "In Personal, matching ~/Projects/personal. Open with space NAME to pick another and keep it for this folder.")
+        #expect(AgentPlaces.line(front, how: "Run x") == "In Work, the space on screen. Run x to pick another and keep it for this folder.")
+        #expect(AgentPlaces.line(asked) == "In Work, as asked. This folder's tabs go there from now on.")
         #expect(AgentPlaces.line(later) == nil)
         #expect(AgentPlaces.reason(.learned, onScreen: true) == "where this folder's sessions go")
         #expect(AgentPlaces.reason(.front, onScreen: false) == "the space on screen when you connected")

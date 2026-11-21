@@ -121,13 +121,13 @@ final class AgentPlaces {
         return spaces.filter { $0.name.lowercased().hasPrefix(lower) }
     }
 
-    nonisolated static func line(_ placed: Any?, how: String = "open with space") -> String? {
+    nonisolated static func line(_ placed: Any?, how: String = "Open with space NAME") -> String? {
         guard let placed = placed as? [String: Any], placed["first"] as? Bool == true,
               let name = placed["name"] as? String, let why = placed["why"] as? String else { return nil }
         if why == reason(.asked, onScreen: true) {
-            return placed["kept"] as? Bool == true ? "In \(name), as asked. This folder's tabs go there from now on" : "In \(name), as asked"
+            return placed["kept"] as? Bool == true ? "In \(name), as asked. This folder's tabs go there from now on." : "In \(name), as asked"
         }
-        return "In \(name), \(why). For another space, and for this folder from then on: \(how)"
+        return "In \(name), \(why). \(how) to pick another and keep it for this folder."
     }
 
     nonisolated static func reason(_ why: AgentPlaceWhy, onScreen: Bool) -> String {
