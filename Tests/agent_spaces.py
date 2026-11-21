@@ -52,6 +52,7 @@ CLAUDE = {"BROADWAY_AGENT": "claude-spaces", "BROADWAY_AGENT_NAME": "Claude Code
 MAILER = {"BROADWAY_AGENT": "mailer-spaces", "BROADWAY_AGENT_NAME": "Mail sorter"}
 NEUTRAL = FOLDER / "agents" / "plain"
 PERSONAL = FOLDER / "agents" / "personal" / "site"
+FRESH = FOLDER / "agents" / "fresh"
 
 PAGE = b"""<!doctype html><title>%s</title><body style="margin:0;background:#f4f4f2;font:16px system-ui">
 <h1 style="margin:40px">%s</h1><div style="height:3000px"></div>"""
@@ -242,7 +243,7 @@ def main():
         subprocess.run(["open", "-n", "-g", "-j", "--env", f"SEARCH_PROBE={WORLD}", str(APP)], check=True)
         wait_for(lambda: (FOLDER / "bench.sock").exists(), 30)
         time.sleep(2)
-        for folder in (NEUTRAL, PERSONAL):
+        for folder in (NEUTRAL, PERSONAL, FRESH):
             (folder / ".git").mkdir(parents=True, exist_ok=True)
         bench({"do": "window"})
         agents("stage", dark=False, size=list(SIZE), shown=False)
@@ -359,6 +360,7 @@ def main():
         go(1)
         site = {"BROADWAY_AGENT": "site-spaces", "BROADWAY_AGENT_NAME": "Site builder"}
         first, words = said("open", base + "landing", env=site, cwd=PERSONAL)
+        print("  said:", " | ".join(line for line in words.splitlines() if line.startswith("In ")), flush=True)
         t.ok("place", "Work on screen, an agent in .../personal/... opens its first tab in Personal",
              space_of(first) == "Personal" and spaces()["current"] == "Work", (first, space_of(first), spaces()["current"]))
         t.ok("place", "the answer says where and why, and how to pick another",
@@ -390,8 +392,8 @@ def main():
         t.ok("place", "BROADWAY_SPACE names the session's space", space_of(seventh) == "Personal" and where.get("why") == "from BROADWAY_SPACE",
              (space_of(seventh), where))
         plain = {"BROADWAY_AGENT": "plain-spaces", "BROADWAY_AGENT_NAME": "Plain"}
-        eighth, where = placed(plain, base + "plain")
-        t.ok("place", "a folder that matches nothing opens in the space on screen", space_of(eighth) == "Work" and where.get("why") == "the space on screen",
+        eighth, where = placed(plain, base + "plain", cwd=FRESH)
+        t.ok("place", "a folder that matches nothing and learned nothing opens in the space on screen", space_of(eighth) == "Work" and where.get("why") == "the space on screen",
              (space_of(eighth), where))
         wrong = broadway("open", base + "nowhere", "--space", "Garden", env=plain)
         t.ok("place", "a space that doesn't exist is refused with the names", not wrong.get("ok")
