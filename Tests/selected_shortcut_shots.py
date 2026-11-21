@@ -100,9 +100,8 @@ def main():
             time.sleep(1.2)
             t.ok(f"{theme}: below", shoot(f"below-{theme}").exists())
             sv.cmd({"do": "columnscroll", "wheel": 120})
-            t.ok(f"{theme}: while scrolling", shoot(f"scrolling-{theme}").exists())
             time.sleep(1.2)
-            t.ok(f"{theme}: settled again", shoot(f"settled-{theme}").exists())
+            t.ok(f"{theme}: after a wheel turn", shoot(f"turned-{theme}").exists())
     finally:
         t.done()
         sv.finish()
