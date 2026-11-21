@@ -278,7 +278,8 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
     fileprivate var movedAt: CFTimeInterval = 0
     fileprivate var movedFrom: CGFloat = 0
     fileprivate var quietTimer: Timer?
-    fileprivate var shortcutWatch: AnyCancellable?
+    fileprivate var shortcutWatch: [AnyCancellable] = []
+    fileprivate let covered = NSHashTable<KitHoverView>.weakObjects()
 
     init(browser: Browser, preview: SidePreview? = nil) {
         self.browser = browser
@@ -3090,14 +3091,58 @@ extension SidePageView {
 
     var shortcutNow: SelectedShortcutView.Edge? { shortcutEdge }
 
+    private var spaceRiding: Bool {
+        browser.spaceNext != nil || browser.makingSpace || browser.spaceMotion.step != 0
+    }
+
     private var scrollSettled: Bool {
-        !liveScrolling && CACurrentMediaTime() - movedAt >= SelectedShortcut.quiet && glide?.running != true && !dragging
-            && browser.spaceNext == nil && !browser.makingSpace
+        !liveScrolling && CACurrentMediaTime() - movedAt >= SelectedShortcut.quiet && glide?.running != true && !dragging && !spaceRiding
     }
 
     func aimShortcut() {
         showShortcut(SelectedShortcut.edge(row: selectedRow, offset: listOffset, visible: listVisible, height: rowHeight, gap: Self.gap,
                                            on: prefs.selectedShortcut && !fits, settled: scrollSettled))
+        cover()
+    }
+
+    private var shortcutBand: NSRect? {
+        guard let edge = shortcutEdge else { return nil }
+        let cut = shortcutCut
+        if edge == .above, let top = cut.top {
+            return NSRect(x: 0, y: listScroll.frame.minY, width: bounds.width, height: max(0, top - listScroll.frame.minY))
+        }
+        guard let bottom = cut.bottom else { return nil }
+        return NSRect(x: 0, y: bottom, width: bounds.width, height: max(0, listBottom - bottom))
+    }
+
+    private func cover() {
+        let band = shortcutBand
+        shortcut.claims = band
+        guard band != nil || covered.count > 0 else { return }
+        var hits: [KitHoverView] = []
+        if let band {
+            for view in listDocument.kitSubviews(of: KitHoverView.self) where !view.isHidden {
+                guard let parent = view.superview, parent.convert(view.frame, to: self).intersects(band) else { continue }
+                hits.append(view)
+            }
+        }
+        let wanted = Set(hits.map(ObjectIdentifier.init))
+        for view in covered.allObjects where !wanted.contains(ObjectIdentifier(view)) {
+            covered.remove(view)
+            view.inert = false
+        }
+        for view in hits where !view.inert {
+            view.inert = true
+            covered.add(view)
+        }
+    }
+
+    var coveredNow: [KitHoverView] { covered.allObjects }
+
+    private func rideChanged(_ riding: Bool) {
+        guard !riding else { return aimShortcut() }
+        movedAt = CACurrentMediaTime()
+        waitForQuiet()
     }
 
     fileprivate func noteMoved() {
@@ -3132,9 +3177,18 @@ extension SidePageView {
     }
 
     fileprivate func watchShortcut() {
-        shortcutWatch = kitObserve(initial: false, distinct: true, { [weak browser] in browser?.prefs.selectedShortcut ?? false }) { [weak self] _ in
-            self?.aimShortcut()
-        }
+        shortcutWatch = [
+            kitObserve(initial: false, distinct: true, { [weak browser] in browser?.prefs.selectedShortcut ?? false }) { [weak self] _ in
+                self?.aimShortcut()
+            },
+            kitObserve(initial: false, distinct: true, { [weak self] () -> Bool in
+                guard let self else { return false }
+                browser.spaceNeighbour.watch()
+                return spaceRiding
+            }) { [weak self] riding in
+                self?.rideChanged(riding)
+            },
+        ]
     }
 
     var shortcutCut: (top: CGFloat?, bottom: CGFloat?) {

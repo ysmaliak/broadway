@@ -14,6 +14,7 @@ final class SelectedShortcutView: KitFlippedView {
     let title = RowTitleView()
     let chevron = KitSymbol("chevron.up", style: .init(size: 11, weight: .semibold))
     var onPress: (() -> Void)?
+    var claims: NSRect?
     private(set) var live = false
     private(set) var tabID: Tab.ID?
 
@@ -111,7 +112,8 @@ final class SelectedShortcutView: KitFlippedView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard live, !isHidden, onPress != nil else { return nil }
         let inside = convert(point, from: superview)
-        return NSBezierPath(roundedRect: bounds, xRadius: plate.radius, yRadius: plate.radius).contains(inside) ? self : nil
+        if NSBezierPath(roundedRect: bounds, xRadius: plate.radius, yRadius: plate.radius).contains(inside) { return self }
+        return claims?.contains(point) == true ? self : nil
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }

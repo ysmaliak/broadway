@@ -179,6 +179,51 @@ final class SelectedShortcutTests {
         #expect(page.shortcutNow == .above)
     }
 
+    @Test func aScrollTakesTheShownDockAwayUntilItSettles() async throws {
+        let (_, page) = try await scene(selecting: 0)
+        try await scroll(page, to: 100_000)
+        #expect(page.shortcutNow == .above)
+        let list = try #require(scrollView(in: page))
+
+        try await scroll(page, to: list.contentView.bounds.minY - 60, settles: false)
+
+        #expect(page.shortcutNow == nil)
+        try await settle()
+        #expect(page.shortcutNow == .above)
+    }
+
+    @Test func aSpaceRideTakesItAwayAndItComesBackAfter() async throws {
+        let (browser, page) = try await scene(selecting: 0)
+        try await scroll(page, to: 100_000)
+        #expect(page.shortcutNow == .above)
+
+        browser.makingSpace = true
+        try await settle()
+
+        #expect(page.shortcutNow == nil)
+        browser.makingSpace = false
+        try await settle()
+        #expect(page.shortcutNow == .above)
+    }
+
+    @Test func theRowsUnderTheDockTakeNoHoverAndClicksThereStayWithIt() async throws {
+        let (_, page) = try await scene(selecting: 0)
+        try await scroll(page, to: 100_000)
+        let docked = try #require(shortcut(in: page))
+        #expect(page.shortcutNow == .above)
+
+        let covered = page.coveredNow
+
+        #expect(!covered.isEmpty)
+        #expect(covered.allSatisfy(\.inert))
+        let gap = NSPoint(x: docked.frame.midX, y: docked.frame.maxY + 2)
+        #expect(docked.hitTest(gap) === docked)
+        #expect(page.hitTest(page.convert(gap, to: page.superview)) === docked)
+        try await scroll(page, to: 0)
+        #expect(page.coveredNow.isEmpty)
+        #expect(covered.allSatisfy { !$0.inert })
+    }
+
     @Test func turningTheSettingOffTakesItAway() async throws {
         let (browser, page) = try await scene(selecting: 0)
         try await scroll(page, to: 100_000)
