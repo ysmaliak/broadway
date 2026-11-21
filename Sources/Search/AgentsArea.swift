@@ -239,6 +239,11 @@ extension AgentLinks {
         guard let front = Browsers.front, front.showsSpaces else { return nil }
         return front.spaceID
     }
+
+    static func frontSpaceNames() -> [AgentSpaceName]? {
+        guard let front = Browsers.front, front.showsSpaces else { return nil }
+        return front.spaces.map { AgentSpaceName(id: $0.id, name: $0.name) }
+    }
 }
 
 extension Browser {
@@ -339,6 +344,18 @@ extension Browser {
             menu.addItem(PlusMenu.item("Keep Tabs") { [weak self] in for tab in session.tabs { self?.keepAgentTab(tab) } })
             menu.addItem(PlusMenu.item("Close Tabs") { [weak self] in self?.closeAgentTabs(session) })
         }
+        let elsewhere = showsSpaces && !isPrivate ? spaces.filter { $0.id != spaceID } : []
+        if !elsewhere.isEmpty, link.live || !session.tabs.isEmpty {
+            let made = NSMenuItem(title: "Move to Space", action: nil, keyEquivalent: "")
+            let list = NSMenu(title: "Move to Space")
+            for space in elsewhere {
+                let item = PlusMenu.item(space.name) { [weak self] in self?.moveAgent(session, to: space.id) }
+                item.image = space.menuImage
+                list.addItem(item)
+            }
+            made.submenu = list
+            menu.addItem(made)
+        }
         if link.codex != nil {
             menu.addItem(PlusMenu.item("Show in Codex") { CodexDesktop.shared.reveal(link) })
             menu.addItem(PlusMenu.item("Hide") { CodexDesktop.shared.hide(link) })
@@ -347,6 +364,13 @@ extension Browser {
             menu.addItem(PlusMenu.item("Disconnect") { AgentLinks.shared.end(link.id, .done(nil)) })
         }
         return menu.items.isEmpty ? nil : menu
+    }
+
+    func moveAgent(_ session: AgentSession, to space: UUID) {
+        guard showsSpaces, space != spaceID, spaces.contains(where: { $0.id == space }) else { return }
+        let going = session.tabs.filter { tab in tabs.contains { $0 === tab } }
+        for (index, tab) in going.enumerated() { finishMove(tab, toSpace: space, quietly: index < going.count - 1) }
+        AgentLinks.shared.settle(session.link.id, in: space, because: .moved)
     }
 }
 

@@ -64,11 +64,11 @@ final class MCPServer {
 
     static let descriptions: [String: String] = [
         "open": "Open url or urls in new tabs of yours",
-        "go": "Send your current tab, or tab, to an address. Answers after the load with the page.",
+        "go": "Send your current tab, or tab, to an address. Answers with the loaded page.",
         "tab": "Show your current tab, or switch to id",
         "tabs": "Your tabs, or all tabs",
         "close": "Close your current tab, or tab, or others, or all",
-        "snapshot": "The page's controls and headings with refs. Use in, role or find to keep it short, and since for only what changed.",
+        "snapshot": "The page's controls and headings with refs. in, role or find keep it short, since gives only what changed.",
         "read": "Visible page text, or lines with find",
         "shot": "A picture of the page or of one element. Secret fields and frames are blanked.",
         "find": "Refs by an element's words or role, with nearby text, without a whole snapshot",
@@ -85,7 +85,7 @@ final class MCPServer {
         "download": "Save a file from a link or an address into Broadway's agent folder. Answers with its path.",
         "wait": "Wait for the page to settle, or for text to come or go, an address, a title or a download. Never sleep instead.",
         "dialog": "Answer the page dialog an action reported: accept, with text for a prompt, or dismiss",
-        "batch": "Run steps you already know in one call, each with the same checks as alone. It stops at the first failure and says what landed.",
+        "batch": "Run steps you already know in one call, each checked as alone. It stops at the first failure and says what landed.",
         "handoff": "Hand your tab to the person for a captcha or a code, and wait until they give it back",
         "console": "Recent console messages of the page",
         "network": "Recent network requests of the page",

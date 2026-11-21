@@ -489,8 +489,10 @@ final class BrowserToolbox: AgentToolbox {
 
     let tools: [ToolSpec] = [
         ToolSpec(name: "tabs", description: "List the open tabs. Private windows are not listed."),
-        ToolSpec(name: "open", description: "Open a page in a new agent tab beside the person's. It never comes to the front.",
-                 properties: ["url": ["type": "string"]], required: ["url"]),
+        ToolSpec(name: "open", description: "Open a page in a new agent tab beside the person's. It never comes to the front. With several spaces it opens in your session's space, and the answer says which and why.",
+                 properties: ["url": ["type": "string"],
+                              "space": ["type": "string", "description": "Open in this space instead and make it your session's. Broadway keeps it for your folder."]],
+                 required: ["url"]),
         ToolSpec(name: "navigate", description: "Go to an address in a tab. The tab the person is looking at can't be sent elsewhere. The answer is a look at the new page.",
                  properties: with(["tab": tab, "url": ["type": "string"]], aim: false), required: ["tab", "url"]),
         ToolSpec(name: "close", description: "Close a tab an agent opened", properties: ["tab": tab], required: ["tab"]),
@@ -1002,15 +1004,43 @@ final class BrowserToolbox: AgentToolbox {
         guard let url = (arguments["url"] as? String).flatMap(Address.url(from:)), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
             return .failure("That isn't a web address")
         }
+        var asked = space
+        if asked == nil, let named = (arguments["space"] as? String)?.trimmingCharacters(in: .whitespaces), !named.isEmpty {
+            guard browser.showsSpaces else {
+                return .failure("Spaces are off, so every tab opens in the one window", code: .refused, hint: "Leave out --space")
+            }
+            let names = browser.spaces.map { AgentSpaceName(id: $0.id, name: $0.name) }
+            let found = AgentPlaces.find(named, in: names)
+            guard let only = found.first, found.count == 1 else {
+                let said = found.isEmpty ? "No space is named \(named)" : "\(named) fits \(found.count) spaces"
+                return .failure(said, code: found.isEmpty ? .notFound : .ambiguous, hint: "Spaces: " + names.map(\.name).joined(separator: ", "))
+            }
+            asked = only.id
+        }
         if let refused = await gate(.tab, tab: nil, site: AgentSites.site(of: url), task: task) { return refused }
+        let links = AgentLinks.shared
+        if let asked, let task { links.settle(task, in: asked, because: .asked) }
+        let link = task.flatMap { links.link($0) }
+        let home = link?.space.flatMap { id in browser.spaces.contains { $0.id == id } ? id : nil }
+        let target = browser.showsSpaces ? asked ?? home : nil
         AgentBoard.note(browser)
-        let tab = space.map { browser.benchOpen(url, space: $0) } ?? browser.benchOpen(url)
+        let tab = target.flatMap { $0 == browser.spaceID ? nil : browser.benchOpen(url, space: $0) } ?? browser.benchOpen(url)
         tab.agent = true
         tab.agentTask = task
         tab.arm(hiding: browser.curtain.css(on: browser.curtain.host(of: tab.pageAddress)))
         Bench.shared.house(tab)
         acting(tab, "Opening")
-        return .json(describe(tab, browser))
+        var said = describe(tab, browser)
+        let landed = target ?? browser.spaceID
+        if browser.showsSpaces, browser.spaces.count > 1, let name = browser.spaces.first(where: { $0.id == landed })?.name {
+            let why: AgentPlaceWhy = asked != nil ? .asked : home != nil ? link?.placed ?? .front : .front
+            let first = task.map { links.tell($0) } ?? true
+            var placed: [String: Any] = ["name": name, "why": AgentPlaces.reason(why, onScreen: landed == browser.spaceID),
+                                         "first": first || asked != nil, "change": "broadway open URL --space NAME"]
+            if asked != nil { placed["kept"] = link?.folder != nil }
+            said["space"] = placed
+        }
+        return .json(said)
     }
 
     private func history(_ arguments: [String: Any]) async -> ToolOutcome {

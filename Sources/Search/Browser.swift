@@ -4547,6 +4547,7 @@ extension Browser {
         if tabs.isEmpty { adopt(makeTab()) }
 
         tab.rehome(in: id)
+        if tab.agent, !isPrivate, let task = tab.agentTask { AgentLinks.shared.settle(task, in: id, because: .moved) }
         // Its group stays behind: the space it goes to has groups of its own
         // — unless the whole group is going (Move Group to Space).
         let previousGroup = tab.groupID

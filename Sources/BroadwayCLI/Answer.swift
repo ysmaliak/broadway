@@ -68,6 +68,7 @@ enum Answer {
         let shown = look ? lookLines(data) : []
         if opens(data) {
             found.append(data["did"] as? String == "open" ? "New tab, now your current tab" : "Went there")
+            if data["did"] as? String == "open", let line = placed(data["space"]) { found.append(line) }
             if let count = tabCount(data) { found.append("tabs: \(count)") }
             for id in data["same"] as? [String] ?? [] { found.append("You already have this address in tab \(id). Use it: broadway tab \(id)") }
         } else if settled != "skipped", dialog == nil || dialog?["accepted"] as? Bool == true, opened.isEmpty {
@@ -92,6 +93,15 @@ enum Answer {
         if settled == "capped", !noted(data, "busy", "loading") { found.append(busy(data)) }
         found += shown
         return found
+    }
+
+    static func placed(_ space: Any?) -> String? {
+        guard let space = space as? [String: Any], space["first"] as? Bool == true,
+              let name = space["name"] as? String, let why = space["why"] as? String else { return nil }
+        if why == "as asked" {
+            return space["kept"] as? Bool == true ? "In \(name), as asked. This folder's tabs go there from now on." : "In \(name), as asked"
+        }
+        return "In \(name), \(why). Run broadway open URL --space NAME to pick another and keep it for this folder."
     }
 
     static func tail(_ data: [String: Any]) -> [String] {

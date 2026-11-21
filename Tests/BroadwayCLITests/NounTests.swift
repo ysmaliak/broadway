@@ -88,11 +88,8 @@ struct NounTests {
         #expect(!Person.bare(["spaces"]))
     }
 
-    @Test func openWithASpaceIsTheHiddenVerb() throws {
-        let found = try routed(["open", "--space", "Work", "https://example.com"])
-
-        #expect(found.noun == "tabs")
-        #expect(found.verb == "open")
+    @Test func openWithASpaceIsOpenItself() throws {
+        #expect(try Nouns.route(["open", "--space", "Work", "https://example.com"]) == nil)
         #expect(try Nouns.route(["open", "https://example.com"]) == nil)
     }
 

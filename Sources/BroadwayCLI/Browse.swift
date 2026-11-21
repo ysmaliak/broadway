@@ -187,6 +187,7 @@ enum Render {
         notices(data, context: context)
         if command.tool == "open", let opened = data["opened"] as? [[String: Any]], !opened.isEmpty {
             for row in openedLines(opened) { console.line(console.outTTY ? Plain.safe(row) : row) }
+            if let line = Answer.placed(data["space"]) { console.note(line) }
             return
         }
         if Answer.shaped(data) {

@@ -10,10 +10,11 @@ extension AgentSocket {
         var found: AgentLink?
         let session = (said["session"] as? String).flatMap { $0.isEmpty ? nil : "session:" + $0.lowercased() }
         let process = Self.process(said)
+        let wish = AgentWish(said)
         if said["id"] == nil, let session {
             let guessed = named ?? AgentLinks.displayName(executable: said["executable"] as? String ?? session.components(separatedBy: ":").dropFirst().first ?? "")
             found = links.liveLink(for: .named(session))
-            if found == nil, create { found = links.join(.named(session), name: guessed) }
+            if found == nil, create { found = links.join(.named(session), name: guessed, wish: wish) }
             if found == nil, !create, let process {
                 found = links.liveLink(for: .process(pid: process.pid, started: process.started)) ?? links.live.last { $0.process == process }
             }
@@ -21,23 +22,24 @@ extension AgentSocket {
                 links.watch(found.id, process)
             }
         } else if let connection {
-            found = create ? links.join(.connection(connection), name: named) : links.liveLink(for: .connection(connection))
+            found = create ? links.join(.connection(connection), name: named, wish: wish) : links.liveLink(for: .connection(connection))
             if let found, let process, AgentLinks.watchable(said["executable"] as? String, session: nil) { links.watch(found.id, process) }
         } else if let id = (said["id"] as? String)?.lowercased(), !id.isEmpty {
             found = links.liveLink(for: .named(id)) ?? links.live.first { $0.id.uuidString.lowercased().hasPrefix(id) }
-            if found == nil, create { found = links.join(.named(id), name: named ?? id) }
+            if found == nil, create { found = links.join(.named(id), name: named ?? id, wish: wish) }
         } else if let pid = (said["pid"] as? NSNumber)?.int32Value, pid > 1 {
             let started = (said["started"] as? NSNumber)?.int64Value ?? 0
             let key = AgentLinkKey.process(pid: pid, started: started)
             if let live = links.liveLink(for: key) {
                 found = live
             } else if create {
-                let made = links.join(key, name: named ?? AgentLinks.displayName(executable: said["executable"] as? String ?? ""))
+                let made = links.join(key, name: named ?? AgentLinks.displayName(executable: said["executable"] as? String ?? ""), wish: wish)
                 links.setPerson(made.id, !AgentLinks.agentExecutable(said["executable"] as? String))
                 found = links.link(made.id) ?? made
             }
         }
         guard let found else { return nil }
+        if found.folder == nil, let folder = wish.folder { links.give(found.id, folder: folder) }
         if request["hook"] as? Bool != true { links.heard(found.id) }
         if let named, named != found.name { links.rename(found.id, named) }
         AgentLinks.open(found)

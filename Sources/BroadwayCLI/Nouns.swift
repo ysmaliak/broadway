@@ -337,9 +337,6 @@ enum Nouns {
         if let alias = aliases[first], let noun = noun(alias.noun), let verb = noun.verb(alias.verb) {
             return (noun, verb, Array(words.dropFirst()))
         }
-        if first == "open", words.contains(where: { $0 == "--space" || $0.hasPrefix("--space=") }), let noun = noun("tabs"), let verb = noun.verb("open") {
-            return (noun, verb, Array(words.dropFirst()))
-        }
         guard let noun = noun(first) else { return nil }
         let rest = Array(words.dropFirst())
         if let second = rest.first, let verb = noun.verb(second) {

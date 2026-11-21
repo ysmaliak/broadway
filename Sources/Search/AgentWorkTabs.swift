@@ -361,14 +361,18 @@ extension AgentSocket {
         var made: [Tab] = []
         var lines: [String] = []
         var refused: [[String: Any]] = []
+        var placed: Any?
         for url in urls {
-            let said = await box.call("open", ["url": url], task: task)
+            var one: [String: Any] = ["url": url]
+            if let space = arguments["space"] { one["space"] = space }
+            let said = await box.call("open", one, task: task)
             if said.failed {
                 let text = said.text ?? "That didn't work"
                 refused.append(["url": url, "code": said.code ?? ToolFailure.code(text), "message": text])
                 lines.append("Not opened: \(AgentChange.short(url)). \(text)")
                 break
             }
+            if placed == nil { placed = ToolReply.data(said)["space"] }
             guard let id = ToolReply.data(said)["id"] as? String, let tab = box.find(["tab": id])?.tab else { continue }
             remember(id, link: link)
             made.append(tab)
@@ -391,6 +395,10 @@ extension AgentSocket {
         let count = AgentWorkTabs.tabs(of: link, in: box).count
         var data: [String: Any] = ["opened": rows, "tabs": count, "current": current(link) ?? NSNull(), "website": true]
         if !refused.isEmpty { data["refused"] = refused }
+        if let placed {
+            data["space"] = placed
+            if let line = AgentPlaces.line(placed) { lines.append(line) }
+        }
         data["message"] = (opened + lines).joined(separator: "\n")
         guard !made.isEmpty else {
             return .failure(lines.joined(separator: "\n"), code: refused.first?["code"] as? String ?? "failed", data: data)

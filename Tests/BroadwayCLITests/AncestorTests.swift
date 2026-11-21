@@ -135,4 +135,45 @@ struct AncestorTests {
 
         #expect(!found.isEmpty)
     }
+
+    @Test func theFolderIsTheGitRootAboveTheWorkingDirectory() {
+        let marks: [String: AgentAncestor.GitMark] = [
+            "/Users/sam/Projects/personal/broadway/broadway-mac": .folder,
+            "/Users/sam/Projects/personal/broadway/broadway-mac/.claude/worktrees/agent-space":
+                .file("gitdir: /Users/sam/Projects/personal/broadway/broadway-mac/.git/worktrees/agent-space\n"),
+            "/Users/sam/code/app/vendor/lib": .file("gitdir: ../../.git/modules/lib"),
+        ]
+        let look: (String) -> AgentAncestor.GitMark? = { marks[$0] }
+
+        let inside = AgentAncestor.project(from: "/Users/sam/Projects/personal/broadway/broadway-mac/Sources/Search", look: look)
+        let worktree = AgentAncestor.project(from: "/Users/sam/Projects/personal/broadway/broadway-mac/.claude/worktrees/agent-space/Tests", look: look)
+        let submodule = AgentAncestor.project(from: "/Users/sam/code/app/vendor/lib/src", look: look)
+        let loose = AgentAncestor.project(from: "/Users/sam/Downloads/notes", look: look)
+
+        #expect(inside == "/Users/sam/Projects/personal/broadway/broadway-mac")
+        #expect(worktree == "/Users/sam/Projects/personal/broadway/broadway-mac")
+        #expect(submodule == "/Users/sam/code/app/vendor/lib")
+        #expect(loose == "/Users/sam/Downloads/notes")
+    }
+
+    @Test func theRequestCarriesTheFolderAndAnySpaceAsked() {
+        let look: (String) -> AgentAncestor.GitMark? = { $0 == "/Users/sam/work/app" ? .folder : nil }
+
+        let said = AgentAncestor.place(environment: ["BROADWAY_SPACE": " Work "], cwd: "/Users/sam/work/app/./src/", look: look)
+        let plain = AgentAncestor.place(environment: ["BROADWAY_SPACE": ""], cwd: "/tmp/x", look: { _ in nil })
+
+        #expect(said["cwd"] as? String == "/Users/sam/work/app/src")
+        #expect(said["folder"] as? String == "/Users/sam/work/app")
+        #expect(said["space"] as? String == "Work")
+        #expect(plain["space"] == nil)
+        #expect(plain["folder"] as? String == "/tmp/x")
+    }
+
+    @Test func aNamedSessionStillSaysWhereItWorks() {
+        let said = AgentAncestor.request(environment: ["BROADWAY_AGENT": "abc123", "BROADWAY_SPACE": "Home"], name: nil, agent: nil)
+
+        #expect(said["id"] as? String == "abc123")
+        #expect(said["space"] as? String == "Home")
+        #expect(said["folder"] is String)
+    }
 }
