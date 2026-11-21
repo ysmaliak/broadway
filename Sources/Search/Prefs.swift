@@ -163,6 +163,9 @@ final class Preferences {
     var sideButton: Bool {
         didSet { store.set(sideButton, forKey: "sidebar.button") }
     }
+    var selectedShortcut: Bool {
+        didSet { store.set(selectedShortcut, forKey: "sidebar.selected") }
+    }
     var hints: Bool {
         didSet { store.set(hints, forKey: Preferences.hintsKey) }
     }
@@ -748,6 +751,7 @@ final class Preferences {
         sidePosition = store.string(forKey: "sidebar.position").flatMap(SidebarPosition.init) ?? .left
         sideHides = false
         sideButton = store.object(forKey: "sidebar.button") as? Bool ?? true
+        selectedShortcut = store.object(forKey: "sidebar.selected") as? Bool ?? false
         hints = store.object(forKey: Preferences.hintsKey) as? Bool ?? true
         addressBar = true
         fullAddress = false

@@ -13,7 +13,9 @@ stand-in agents. Two spaces, Work and Home:
 4. lead: Home has two agents, so each has a heading that is the tab it is on in Home, with
    its other Home tabs folded under it. Work has one, so its tab sits under the row with no
    heading. The agent that asks in Home has the asking tab as its heading, still shut.
-5. switch: a switch of space draws the other space's card at once, with no travel or fade.
+5. switch: a switch that doesn't slide (this probe's window is hidden, so a switch never slides)
+   draws the other space's card at once, with no travel or fade. Tests/card_ride.py checks the
+   card riding with its page when spaces slide.
 6. place: with Work on screen, an agent working in a folder under .../personal/... opens its first
    tab in a third space, Personal, and the answer says so. Its tabs follow its session, a move
    teaches the folder, --space teaches it too, and BROADWAY_SPACE names a space for a session.

@@ -268,6 +268,11 @@ extension Browser {
         }.map(\.element)
     }
 
+    func activeID(in space: UUID?) -> UUID? {
+        guard let space, space != spaceID else { return activeID }
+        return parked[space]?.active
+    }
+
     func tablessShown(_ link: AgentLink, in space: UUID, front: Bool) -> Bool {
         guard showsSpaces, let home = link.space, spaces.contains(where: { $0.id == home }) else { return front && space == spaceID }
         return home == space && (front || space != spaceID)
@@ -391,6 +396,7 @@ final class AgentsAreaView: NSView {
     static let reducedLeave: Double = 0.14
 
     let browser: Browser
+    let fixed: UUID?
     var column: CGFloat = 700 { didSet { if column != oldValue { needsLayout = true } } }
     var ground = RowGround() { didSet { if ground != oldValue { reground() } } }
     var facesShown = true { didSet { if facesShown != oldValue { AgentFaces.show(facesShown, in: self) } } }
@@ -427,8 +433,9 @@ final class AgentsAreaView: NSView {
     private var traceStart: CFTimeInterval = 0
     private lazy var reads = KitReads { [weak self] in self?.later() }
 
-    init(browser: Browser) {
+    init(browser: Browser, space: UUID? = nil) {
         self.browser = browser
+        fixed = space
         super.init(frame: .zero)
         wantsLayer = true
         layer?.masksToBounds = true
@@ -443,10 +450,18 @@ final class AgentsAreaView: NSView {
         addSubview(scroll)
         addSubview(row)
         row.press = { [weak browser] in browser?.pressAgents() }
-        setAccessibilityElement(true)
+        setAccessibilityElement(space == nil)
         setAccessibilityRole(.group)
         setAccessibilityLabel("Agents")
         reads.track { refresh() }
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        fixed == nil ? super.hitTest(point) : nil
+    }
+
+    override func accessibilityChildren() -> [Any]? {
+        fixed == nil ? super.accessibilityChildren() : []
     }
 
     @available(*, unavailable)
@@ -454,14 +469,16 @@ final class AgentsAreaView: NSView {
 
     override var isFlipped: Bool { true }
 
-    static func height(of browser: Browser, column: CGFloat) -> CGFloat {
-        let sessions = browser.agentSessions(links: AgentLinks.shared.links, front: browser.agentsInFront)
+    static func height(of browser: Browser, column: CGFloat, space: UUID? = nil) -> CGFloat {
+        let sessions = browser.agentSessions(links: AgentLinks.shared.links, front: browser.agentsInFront, in: space)
         return AgentsLayout.height(browser.agentSections(sessions), folded: AgentsFolds.shared.folded, column: column)
     }
 
     var moving: Bool { motion != nil }
 
-    private var scene: Scene { Scene(space: browser.spaceID, front: browser.agentsInFront) }
+    var shownSpace: UUID? { fixed ?? aimedScene?.space }
+
+    private var scene: Scene { Scene(space: fixed ?? browser.spaceID, front: browser.agentsInFront) }
 
     var cardFrameInColumn: NSRect { convert(glass.frame, to: superview) }
 
@@ -712,7 +729,7 @@ final class AgentsAreaView: NSView {
     private var closedRoom: CGFloat { AgentsLayout.height(sections, folded: true, column: column) }
 
     private func refresh() {
-        let sessions = browser.agentSessions(links: AgentLinks.shared.links, front: browser.agentsInFront)
+        let sessions = browser.agentSessions(links: AgentLinks.shared.links, front: browser.agentsInFront, in: fixed)
         let scene = scene
         if scene != drawnScene {
             drawnScene = scene
@@ -784,7 +801,7 @@ final class AgentsAreaView: NSView {
                     look.open = section.open
                     look.folds = true
                     look.count = AgentsLayout.count(section)
-                    look.selected = lead.map { $0.id == browser.activeID } ?? false
+                    look.selected = lead.map { $0.id == browser.activeID(in: fixed) } ?? false
                     look.roll = "\(lead?.id.uuidString ?? "none")\(state.attention ? " asks" : "")"
                     look.closes = session.closes
                     look.closeLabel = "Close \(session.link.title)'s tabs"
@@ -803,7 +820,7 @@ final class AgentsAreaView: NSView {
                 listed[session.id] = Array(tabs.prefix(count))
                 for tab in tabs.prefix(count) {
                     let view = rows[tab.id] ?? {
-                        let made = AgentRowView(browser: browser, tab: tab)
+                        let made = AgentRowView(browser: browser, tab: tab, space: fixed)
                         rows[tab.id] = made
                         list.addSubview(made)
                         return made
@@ -1413,11 +1430,13 @@ final class AgentRowView: KitHoverView {
     private let dot = KitBox(fill: nil, corners: .capsule)
     let close = CloseSpotView()
     private var start: NSPoint?
+    private let space: UUID?
     private lazy var reads = KitReads { [weak self] in self?.refresh() }
 
-    init(browser: Browser, tab: Tab) {
+    init(browser: Browser, tab: Tab, space: UUID? = nil) {
         self.browser = browser
         self.tab = tab
+        self.space = space
         super.init(frame: .zero)
         wantsLayer = true
         mark.size = SideLook.rowMark
@@ -1444,7 +1463,7 @@ final class AgentRowView: KitHoverView {
     }
 
     private func paint() {
-        let live = browser.activeID == tab.id
+        let live = browser.activeID(in: space) == tab.id
         let ink = ground.ink
         mark.icon = tab.icon
         mark.letter = tab.monogram

@@ -57,7 +57,7 @@ final class SideColumnView: NSView {
         addSubview(helm)
         addSubview(address)
         addSubview(footStrip)
-        addSubview(agents)
+        pages.card = agents
         addSubview(mini)
         addSubview(update)
         addSubview(spaceFoot)
@@ -94,7 +94,11 @@ final class SideColumnView: NSView {
     var columnHeight: CGFloat { max(40, (bounds.height / 40).rounded() * 40) }
 
     var footHeight: CGFloat {
-        SpaceFootView.height + miniHeight + updateHeight + agentsHeight
+        lowFoot + agentsHeight
+    }
+
+    private var lowFoot: CGFloat {
+        SpaceFootView.height + miniHeight + updateHeight
     }
 
     private var miniHeight: CGFloat { mini.room }
@@ -202,13 +206,17 @@ final class SideColumnView: NSView {
         placeStacked(stacked)
 
         agents.column = columnHeight
+        pages.facesShown = facesShown
+        pages.cardColumn = columnHeight
         agents.aim(AgentsAreaView.height(of: browser, column: columnHeight))
         let foot = footHeight
+        let low = lowFoot
         wholeStrip.isHidden = browser.makingSpace
         wholeStrip.kitSetFrame(bounds)
         let helmWidth = width - inset - Metrics.helmLights >= Metrics.helm ? Metrics.helm : Metrics.helmNarrow
         topStrip.kitSetFrame(NSRect(x: 0, y: 0, width: max(0, width - helmWidth), height: strip))
-        footStrip.kitSetFrame(NSRect(x: 0, y: height - foot, width: width, height: browser.makingSpace ? 0 : foot))
+        let stripTop = stacked ? height - foot : height - low
+        footStrip.kitSetFrame(NSRect(x: 0, y: stripTop, width: width, height: browser.makingSpace ? 0 : height - stripTop))
         footStrip.isHidden = browser.makingSpace
 
         helm.greys = onFrame ? .frame : .white
@@ -226,21 +234,22 @@ final class SideColumnView: NSView {
         if address.frame != addressFrame { address.frame = addressFrame }
         y += addressRoom
         let pagesFrame = NSRect(x: 0, y: y, width: width, height: max(0, height - foot - y))
+        agents.column = columnHeight
+        let agentsFrame = NSRect(x: 0, y: height - foot, width: width, height: agentsHeight)
         if let stackedView {
             stackedView.onFrame = onFrame
             stackedView.floating = floating
             stackedView.ground = ground
             if stackedView.frame != pagesFrame { stackedView.frame = pagesFrame }
+            agents.ground = ground
+            if agents.frame != agentsFrame { agents.frame = agentsFrame }
         } else {
-            if ride.frame != pagesFrame { ride.frame = pagesFrame }
+            let rideFrame = NSRect(x: 0, y: y, width: width, height: max(0, height - low - y))
+            if ride.frame != rideFrame { ride.frame = rideFrame }
             pages.lay(width: prefs.columnWidth)
             ride.set(RideLook(here: pages.at))
         }
         let spotsHeight = SpaceFootView.height
-        agents.column = columnHeight
-        agents.ground = ground
-        let agentsFrame = NSRect(x: 0, y: height - foot, width: width, height: agentsHeight)
-        if agents.frame != agentsFrame { agents.frame = agentsFrame }
         mini.isHidden = miniHeight == 0
         mini.ink = ground.ink
         mini.greys = onFrame ? .frame : .white
@@ -254,6 +263,18 @@ final class SideColumnView: NSView {
         update.shown(updateHeight != 0)
         spaceFoot.ground = ground
         spaceFoot.frame = NSRect(x: 0, y: height - spotsHeight, width: width, height: spotsHeight)
+    }
+
+    var benchPages: [String: Any] {
+        var said = pages.benchShape()
+        let layer = ride.content.layer
+        let path = "transform.translation.x"
+        said["ride"] = Double(layer?.presentation()?.value(forKeyPath: path) as? CGFloat ?? layer?.value(forKeyPath: path) as? CGFloat ?? 0)
+        said["moving"] = browser.spaceMotion.moving
+        said["next"] = browser.spaceNext ?? -1
+        said["adopted"] = browser.spacePages.adopted != nil
+        said["here"] = browser.space.name
+        return said
     }
 
     func ground(for index: Int) -> RowGround {
@@ -270,10 +291,13 @@ final class SideColumnView: NSView {
             let made = StackedColumnView(browser: browser)
             addSubview(made, positioned: .above, relativeTo: topStrip)
             stackedView = made
+            pages.card = nil
+            addSubview(agents, positioned: .above, relativeTo: footStrip)
         } else if !stacked, let view = stackedView {
             view.removeFromSuperview()
             stackedView = nil
             addSubview(ride, positioned: .above, relativeTo: topStrip)
+            pages.card = agents
             if Store.testing { livePage.driveProbe() }
         }
     }
@@ -294,6 +318,17 @@ final class SidePagesView: NSView {
     private var lastLive: UUID?
     private var holdBack: CFTimeInterval = 0
     private var sparePages: [SidePageView] = []
+    private var cards: [UUID: (lane: NSView, card: AgentsAreaView)] = [:]
+    var cardColumn: CGFloat = 700 { didSet { if cardColumn != oldValue { needsLayout = true } } }
+    var facesShown = true { didSet { if facesShown != oldValue { for held in cards.values { held.card.facesShown = facesShown } } } }
+    var card: AgentsAreaView? {
+        didSet {
+            guard card !== oldValue else { return }
+            if let oldValue, oldValue.superview === self { oldValue.removeFromSuperview() }
+            if let card { addSubview(card) }
+            needsLayout = true
+        }
+    }
     private static let newSpace = UUID()
 
     init(browser: Browser) {
@@ -365,16 +400,24 @@ final class SidePagesView: NSView {
             let covered = SpaceLane.covered(page.index, real: at, seen: seen, next: next)
             if page.id == Self.newSpace { continue }
             let isLive = page.id == browser.spaceID && browser.spacePages.adopted != page.id
-            let frame = NSRect(x: x, y: 0, width: width, height: height)
             let pageGround = ground(for: page.index)
             if isLive {
                 liveShown = true
+                card?.aim(AgentsAreaView.height(of: browser, column: cardColumn))
+                let room = card?.room ?? 0
                 live.isHidden = covered
                 live.onFrame = column?.onFrame ?? false
                 live.floating = column?.floating ?? false
                 live.ground = pageGround
                 live.appearance = NSAppearance(named: pageGround.dark ? .darkAqua : .aqua)
-                live.setLane(frame, shift: 0)
+                live.setLane(NSRect(x: x, y: 0, width: width, height: max(0, height - room)), shift: 0)
+                if let card {
+                    card.isHidden = covered || room == 0
+                    card.ground = pageGround
+                    card.appearance = live.appearance
+                    let spot = NSRect(x: x, y: height - room, width: width, height: room)
+                    if card.frame != spot { card.frame = spot }
+                }
                 continue
             }
             guard let row = browser.parked[page.id] ?? browser.spacePages.held[page.id] else { continue }
@@ -392,17 +435,26 @@ final class SidePagesView: NSView {
                 addSubview(made, positioned: .below, relativeTo: live)
                 return made
             }()
+            let room = placeCard(for: page.id, x: x, width: width, height: height, ground: pageGround, hidden: covered)
             view.preview = wanted
             view.isHidden = covered
             view.onFrame = column?.onFrame ?? false
             view.floating = column?.floating ?? false
             view.ground = pageGround
             view.appearance = NSAppearance(named: pageGround.dark ? .darkAqua : .aqua)
-            view.setLane(NSRect(x: 0, y: 0, width: width, height: height), shift: x)
+            view.setLane(NSRect(x: 0, y: 0, width: width, height: max(0, height - room)), shift: x)
             kept.insert(page.id)
         }
         live.isHidden = live.isHidden || !liveShown
+        if !liveShown { card?.isHidden = true }
         let warm = browser.spacePages.warm.union([browser.spaceID])
+        for (id, held) in cards where !kept.contains(id) {
+            held.lane.isHidden = true
+            if !warm.contains(id) {
+                cards[id] = nil
+                held.lane.removeFromSuperview()
+            }
+        }
         for (id, view) in previews where !kept.contains(id) {
             if warm.contains(id) {
                 view.isHidden = true
@@ -422,6 +474,54 @@ final class SidePagesView: NSView {
             ColumnEdges.seen["pagesMinX"] = frame.minX
             ColumnEdges.seen["pagesMaxX"] = frame.maxX
         }
+    }
+
+    func benchShape() -> [String: Any] {
+        func name(_ id: UUID) -> String { browser.spaces.first { $0.id == id }?.name ?? "?" }
+        var shown: [[String: Any]] = []
+        for view in subviews where !view.isHidden {
+            if let page = view as? SidePageView {
+                let shift = Double(page.layer?.sublayerTransform.m41 ?? 0)
+                let id = page.preview?.space ?? browser.spaceID
+                shown.append(page.benchShape.merging(["kind": "page", "space": name(id), "x": Double(page.frame.minX) + shift,
+                                                     "w": Double(page.frame.width)]) { $1 })
+            } else if let card = view as? AgentsAreaView ?? view.subviews.first as? AgentsAreaView {
+                let shift = view === card ? 0 : Double(view.layer?.sublayerTransform.m41 ?? 0)
+                let frame = card.convert(card.bounds, to: self)
+                shown.append(["kind": "card", "space": name(card.shownSpace ?? browser.spaceID), "x": Double(frame.minX) + shift,
+                              "y": Double(frame.minY), "h": Double(frame.height), "room": Double(card.room),
+                              "preview": card.fixed != nil, "drawn": !card.visibleRect.isEmpty, "top": card.benchState["top"] ?? [:]])
+            }
+        }
+        return ["shown": shown, "height": Double(bounds.height)]
+    }
+
+    private func placeCard(for space: UUID, x: CGFloat, width: CGFloat, height: CGFloat, ground: RowGround, hidden: Bool) -> CGFloat {
+        let goal = AgentsAreaView.height(of: browser, column: cardColumn, space: space)
+        guard goal > 0 || cards[space]?.card.room ?? 0 > 0 else {
+            cards.removeValue(forKey: space)?.lane.removeFromSuperview()
+            return 0
+        }
+        let held = cards[space] ?? {
+            let lane = NSView()
+            lane.wantsLayer = true
+            let made = AgentsAreaView(browser: browser, space: space)
+            made.facesShown = facesShown
+            lane.addSubview(made)
+            addSubview(lane)
+            cards[space] = (lane, made)
+            return (lane, made)
+        }()
+        let view = held.card
+        view.column = cardColumn
+        view.ground = ground
+        view.appearance = NSAppearance(named: ground.dark ? .darkAqua : .aqua)
+        held.lane.isHidden = hidden
+        view.aim(goal)
+        let room = view.room
+        held.lane.setLane(NSRect(x: 0, y: height - room, width: width, height: room), shift: x)
+        if view.frame != held.lane.bounds { view.frame = held.lane.bounds }
+        return room
     }
 }
 

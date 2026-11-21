@@ -105,7 +105,7 @@ enum AgentChrome {
             content.kitSubviews(of: kind).filter { !$0.isHiddenOrHasHiddenAncestor && $0.window != nil }
         }
         var said: [String: Any] = ["height": Double(content.bounds.height), "width": Double(content.bounds.width)]
-        if let area = shown(AgentsAreaView.self).first {
+        if let area = content.kitSubviews(of: AgentsAreaView.self).first(where: { $0.fixed == nil && $0.window != nil }) {
             var card = area.benchState
             if let column = area.superview { card["box"] = box(column, area.cardFrameInColumn) }
             said["card"] = card

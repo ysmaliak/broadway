@@ -4130,6 +4130,14 @@ final class Bench {
             case "trace":
                 if request["report"] as? Bool == true { answer(SwipeTrace.shared.report()); return }
                 SwipeTrace.shared.start(browser)
+            case "pagetrace":
+                if request["report"] as? Bool == true { answer(PageTrace.shared.report()); return }
+                PageTrace.shared.start(browser, seconds: request["seconds"] as? Double ?? 2)
+            case "pages":
+                guard let content = browser.window?.contentView, let column = content.kitSubviews(of: SideColumnView.self).first else {
+                    answer(["error": "space pages needs the column"]); return
+                }
+                answer(column.benchPages); return
             case "goto":
                 browser.goToSpace(index: (request["index"] as? Int ?? 1) - 1)
             case "foot":

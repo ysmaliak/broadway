@@ -66,7 +66,8 @@ struct SideScene {
         let kept = groupsOn ? FolderTree.ordered(FolderTree.lasting(row.groups ?? [], holding: Set(row.tabs.compactMap(\.groupID)))) : []
         let ids = Set(kept.map(\.id))
         let front = row.splits.first { pair in row.active.map(pair.tabs.contains) ?? false }?.tabs.first ?? row.active
-        let tabs = row.tabs
+        let linked = Set(AgentLinks.shared.links.map(\.id))
+        let tabs = row.tabs.filter { !($0.agent && $0.agentTask.map(linked.contains) == true) }
         let items = FolderTree.listed(tabs.filter { $0.pin == nil && stands($0) },
                                       group: { tab in tab.groupID.flatMap { ids.contains($0) ? $0 : nil } }, in: kept) { .tab($0.id) }
         return SideScene(

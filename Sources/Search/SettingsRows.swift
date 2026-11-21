@@ -36,6 +36,7 @@ extension SettingsPageView {
         case AppIcon.key: appIconRow()
         case "newtab.floating": newTabRow()
         case "sidebar.button": flag(id, \.sideButton)
+        case "sidebar.selected": flag(id, \.selectedShortcut)
         case "notifications.ask": flag(id, \.siteNotifications)
         case "privacy.forget":
             row(id, control: button("Forget Choices…") { [weak self] in
