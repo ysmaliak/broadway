@@ -215,7 +215,7 @@ final class SelectedShortcutTests {
         let covered = page.coveredNow
 
         #expect(!covered.isEmpty)
-        #expect(covered.allSatisfy(\.inert))
+        #expect(covered.allSatisfy { $0.inert })
         let gap = NSPoint(x: docked.frame.midX, y: docked.frame.maxY + 2)
         #expect(docked.hitTest(gap) === docked)
         #expect(page.hitTest(page.convert(gap, to: page.superview)) === docked)
