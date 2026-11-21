@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import QuartzCore
 
 final class ColumnDragStrip: NSView {
@@ -270,9 +271,15 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
     private var fits = true
     private var listViewport: CGFloat = 0
     private var listContent: CGFloat = 0
-    fileprivate let pointer = SelectedPointerView()
-    fileprivate var pointing: SelectedPointerView.Edge?
+    fileprivate let shortcut = SelectedShortcutView()
+    fileprivate var shortcutEdge: SelectedShortcutView.Edge?
     fileprivate var glide: ScrollGlide?
+    fileprivate var liveScrolling = false
+    fileprivate var movedAt: CFTimeInterval = 0
+    fileprivate var movedFrom: CGFloat = 0
+    fileprivate var quietTimer: Timer?
+    fileprivate var shortcutWatch: [AnyCancellable] = []
+    fileprivate let covered = NSHashTable<KitHoverView>.weakObjects()
 
     init(browser: Browser, preview: SidePreview? = nil) {
         self.browser = browser
@@ -307,8 +314,8 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
         bottomLine.isHidden = true
         addSubview(topLine)
         addSubview(bottomLine)
-        addSubview(pointer)
-        pointer.onPress = { [weak self] in self?.showSelected() }
+        addSubview(shortcut)
+        shortcut.onPress = { [weak self] in self?.showSelected() }
         listDocument.addSubview(newTabTop)
         folderLine.isHidden = true
         for plate in [dropOutline, dropLine, joinOutline, folderLine] {
@@ -326,6 +333,11 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
             strip.isHidden = true
             return
         }
+        NotificationCenter.default.addObserver(self, selector: #selector(liveScrollBegan), name: NSScrollView.willStartLiveScrollNotification,
+                                               object: listScroll)
+        NotificationCenter.default.addObserver(self, selector: #selector(liveScrollEnded), name: NSScrollView.didEndLiveScrollNotification,
+                                               object: listScroll)
+        watchShortcut()
         registerForDraggedTypes(Self.dropped)
         if Store.testing && !embedded { driveProbe() }
     }
@@ -445,7 +457,8 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
         browser.columnMemory.note(.list, value: listScroll.contentView.bounds.minY, in: browser.spaceID)
         placeHeld()
         edges()
-        aimPointer()
+        noteMoved()
+        aimShortcut()
         settleHover()
         noteBench()
     }
@@ -978,7 +991,7 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
             if preview != nil { showPreviewRest() }
             placeHeld(moving: animating)
             edges()
-            aimPointer()
+            aimShortcut()
             strip.below = bounds.height
             if preview == nil {
                 let active = browser.activeSplit?.left ?? browser.activeID
@@ -1003,7 +1016,7 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
         placeHeld(moving: animating)
         edges()
         restIn(viewport: viewport)
-        aimPointer()
+        aimShortcut()
 
         let active = browser.activeSplit?.left ?? browser.activeID
         if active != lastActive {
@@ -1096,7 +1109,7 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
         clipList()
     }
 
-    private func clipList(moving: Bool = false) {
+    private func clipList(moving: Bool = false, docking: Bool = false) {
         if listClip.frame != bounds { listClip.frame = bounds }
         let list = listScroll.frame
         let offset = listScroll.contentView.bounds.minY
@@ -1109,14 +1122,16 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
         crossed = crossing
         let cutTop = cuts.top || crossing.top
         let cutBottom = cuts.bottom || crossing.bottom
-        let top = list.minY - (resting && !cutTop ? SelectedLook.room : 0) + (cutTop ? hair : 0)
-        let bottom = (floored ? held.frame.minY - Self.gap : list.maxY) + (ended && !cutBottom ? SelectedLook.room : 0) - (cutBottom ? hair : 0)
+        let docked = shortcutCut
+        let top = docked.top.map { $0 + hair } ?? list.minY - (resting && !cutTop ? SelectedLook.room : 0) + (cutTop ? hair : 0)
+        let bottom = docked.bottom.map { $0 - hair }
+            ?? (floored ? held.frame.minY - Self.gap : list.maxY) + (ended && !cutBottom ? SelectedLook.room : 0) - (cutBottom ? hair : 0)
         let shown = listMask.presentation() ?? listMask
         let from = (shown.position, shown.bounds)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         listMask.frame = CGRect(x: -4000, y: top, width: bounds.width + 8000, height: max(0, bottom - top))
-        if moving, from.1 != listMask.bounds || from.0 != listMask.position {
+        if moving || docking, from.1 != listMask.bounds || from.0 != listMask.position {
             for (key, was, now) in [("position", NSValue(point: from.0), NSValue(point: listMask.position)),
                                     ("bounds", NSValue(rect: from.1), NSValue(rect: listMask.bounds))] {
                 guard let animation = settle.animation(key, from: was, to: now,
@@ -1193,9 +1208,10 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
         bottomLine.kitEdge(bottomEdge)
         topLine.ink = ground.ink
         bottomLine.ink = ground.ink
-        topLine.kitSetFrame(NSRect(x: 0, y: listScroll.frame.minY, width: bounds.width, height: hair))
+        let docked = shortcutCut
+        topLine.kitSetFrame(NSRect(x: 0, y: docked.top ?? listScroll.frame.minY, width: bounds.width, height: hair))
         let floored = newTabBelow && (heldFloored || !crossing.bottom || cuts.bottom)
-        let lineY = floored ? held.frame.minY - Self.gap - hair : listScroll.frame.maxY - hair
+        let lineY = docked.bottom.map { $0 - hair } ?? (floored ? held.frame.minY - Self.gap - hair : listScroll.frame.maxY - hair)
         bottomLine.kitSetFrame(NSRect(x: 0, y: lineY, width: bounds.width, height: hair))
         reportEdges(top: top, bottom: bottomEdge)
     }
@@ -1766,7 +1782,7 @@ extension SidePageView {
         relightCards()
         animateNext = true
         needsLayout = true
-        aimPointer()
+        aimShortcut()
     }
 
     private func finishCarry() {
@@ -1788,7 +1804,7 @@ extension SidePageView {
         needsLayout = true
         layoutSubtreeIfNeeded()
         recheckEdges()
-        aimPointer()
+        aimShortcut()
     }
 
     private func move(_ tab: Tab, _ block: SideBlock, to index: Int) {
@@ -3060,7 +3076,7 @@ extension SidePageView {
         return parent === listDocument ? laid.frame : parent.convert(laid.frame, to: listDocument)
     }
 
-    private var listFloor: CGFloat { listScroll.contentView.bounds.height - heldRoomNow }
+    private var listVisible: CGFloat { listBottom - listScroll.frame.minY }
 
     private var listBottom: CGFloat { newTabBelow && heldFloored ? held.frame.minY - Self.gap : listScroll.frame.maxY }
 
@@ -3068,45 +3084,155 @@ extension SidePageView {
         carry != nil || pending != nil || morphCarried != nil || crossing != nil || dropOn != nil || looseOn != nil
     }
 
-    var pointingNow: SelectedPointerView.Edge? { pointing }
-
-    func aimPointer() {
-        showPointer(SelectedPointer.edge(row: selectedRow, offset: listOffset, floor: listFloor,
-                                         held: dragging || glide?.running == true || fits))
+    private var selectedTab: Tab? {
+        guard let id = browser.activeSplit?.left ?? browser.activeID else { return nil }
+        return browser.tabs.first { $0.id == id }
     }
 
-    private func showPointer(_ edge: SelectedPointerView.Edge?) {
-        guard let edge else {
-            if pointing != nil {
-                pointing = nil
-                pointer.arrive(false)
+    var shortcutNow: SelectedShortcutView.Edge? { shortcutEdge }
+
+    private var spaceRiding: Bool {
+        browser.spaceNext != nil || browser.makingSpace || browser.spaceMotion.step != 0
+    }
+
+    private var scrollSettled: Bool {
+        !liveScrolling && CACurrentMediaTime() - movedAt >= SelectedShortcut.quiet && glide?.running != true && !dragging && !spaceRiding
+    }
+
+    func aimShortcut() {
+        showShortcut(SelectedShortcut.edge(row: selectedRow, offset: listOffset, visible: listVisible, height: rowHeight, gap: Self.gap,
+                                           on: prefs.selectedShortcut && !fits, settled: scrollSettled))
+        cover()
+    }
+
+    private var shortcutBand: NSRect? {
+        guard let edge = shortcutEdge else { return nil }
+        let cut = shortcutCut
+        if edge == .above, let top = cut.top {
+            return NSRect(x: 0, y: listScroll.frame.minY, width: bounds.width, height: max(0, top - listScroll.frame.minY))
+        }
+        guard let bottom = cut.bottom else { return nil }
+        return NSRect(x: 0, y: bottom, width: bounds.width, height: max(0, listBottom - bottom))
+    }
+
+    private func cover() {
+        let band = shortcutBand
+        shortcut.claims = band
+        guard band != nil || covered.count > 0 else { return }
+        var hits: [KitHoverView] = []
+        if let band {
+            for view in listDocument.kitSubviews(of: KitHoverView.self) where !view.isHidden {
+                guard let parent = view.superview, parent.convert(view.frame, to: self).intersects(band) else { continue }
+                hits.append(view)
+            }
+        }
+        let wanted = Set(hits.map(ObjectIdentifier.init))
+        for view in covered.allObjects where !wanted.contains(ObjectIdentifier(view)) {
+            covered.remove(view)
+            view.inert = false
+        }
+        for view in hits where !view.inert {
+            view.inert = true
+            covered.add(view)
+        }
+    }
+
+    var coveredNow: [KitHoverView] { covered.allObjects }
+
+    private func rideChanged(_ riding: Bool) {
+        guard !riding else { return aimShortcut() }
+        movedAt = CACurrentMediaTime()
+        waitForQuiet()
+    }
+
+    fileprivate func noteMoved() {
+        let offset = listOffset
+        guard abs(offset - movedFrom) > 0.5 else { return }
+        movedFrom = offset
+        movedAt = CACurrentMediaTime()
+        waitForQuiet()
+    }
+
+    private func waitForQuiet() {
+        quietTimer?.invalidate()
+        let made = Timer(timeInterval: SelectedShortcut.quiet + 0.02, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.quietTimer = nil
+                self?.aimShortcut()
+            }
+        }
+        RunLoop.main.add(made, forMode: .common)
+        quietTimer = made
+    }
+
+    @objc fileprivate func liveScrollBegan() {
+        liveScrolling = true
+        aimShortcut()
+    }
+
+    @objc fileprivate func liveScrollEnded() {
+        liveScrolling = false
+        movedAt = CACurrentMediaTime()
+        waitForQuiet()
+    }
+
+    fileprivate func watchShortcut() {
+        shortcutWatch = [
+            kitObserve(initial: false, distinct: true, { [weak browser] in browser?.prefs.selectedShortcut ?? false }) { [weak self] _ in
+                self?.aimShortcut()
+            },
+            kitObserve(initial: false, distinct: true, { [weak self] () -> Bool in
+                guard let self else { return false }
+                browser.spaceNeighbour.watch()
+                return spaceRiding
+            }) { [weak self] riding in
+                self?.rideChanged(riding)
+            },
+        ]
+    }
+
+    var shortcutCut: (top: CGFloat?, bottom: CGFloat?) {
+        guard let edge = shortcutEdge else { return (nil, nil) }
+        return edge == .above ? (shortcut.frame.maxY + Self.gap, nil) : (nil, shortcut.frame.minY - Self.gap)
+    }
+
+    private func showShortcut(_ edge: SelectedShortcutView.Edge?) {
+        guard let edge, let tab = selectedTab, let row = selectedRow else {
+            if shortcutEdge != nil {
+                shortcutEdge = nil
+                shortcut.arrive(false)
+                clipList(docking: true)
+                edges()
             }
             return
         }
-        if let tab = browser.active { pointer.show(tab) }
-        let size = pointer.intrinsicContentSize
-        let y = edge == .above ? listScroll.frame.minY + SelectedPointerView.inset : listBottom - SelectedPointerView.inset - size.height
-        let frame = kitSnap(NSRect(x: (bounds.width - size.width) / 2, y: y, width: size.width, height: size.height))
-        let fresh = pointing != edge
-        if fresh, pointing != nil { pointer.arrive(false, animated: false) }
-        if pointer.frame != frame { pointer.frame = frame }
-        pointer.edge = edge
-        pointing = edge
+        let id = tab.id
+        shortcut.show(tab, ground: ground, titleSize: prefs.sideTitle, icons: prefs.glyph == .icons,
+                      radius: rows[id]?.state.radius ?? Metrics.sideRadius)
+        let across = listDocument.convert(row, to: self)
+        let band = SelectedShortcut.band(edge, offset: 0, visible: listVisible, height: rowHeight, gap: Self.gap)
+        let frame = kitSnap(NSRect(x: across.minX, y: listScroll.frame.minY + band.minY, width: across.width, height: rowHeight))
+        let fresh = shortcutEdge != edge
+        if shortcut.frame != frame { shortcut.frame = frame }
+        shortcut.edge = edge
+        shortcutEdge = edge
         guard fresh else { return }
-        pointer.arrive(false, animated: false)
-        pointer.arrive(true)
+        shortcut.arrive(true)
+        clipList(docking: true)
+        edges()
     }
 
     func showSelected() {
         guard let row = selectedRow else { return }
         let clip = listScroll.contentView
-        guard let goal = SelectedPointer.target(row: row, offset: clip.bounds.minY, floor: listFloor, fade: ColumnEdges.fade) else {
-            return showPointer(nil)
+        guard let goal = SelectedShortcut.target(row: row, offset: clip.bounds.minY, visible: listVisible, fade: ColumnEdges.fade) else {
+            return showShortcut(nil)
         }
         glide?.stop()
-        showPointer(nil)
+        showShortcut(nil)
         glide = ScrollGlide(listScroll, to: goal, curve: Motion.kitRoll) { [weak self] in
-            DispatchQueue.main.async { self?.aimPointer() }
+            DispatchQueue.main.async { self?.aimShortcut() }
         }
     }
 }
+

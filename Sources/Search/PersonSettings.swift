@@ -249,6 +249,7 @@ enum PersonSettings {
         "shield": flag(\.shielded, .turningOff),
         "shortcuts": row("In Broadway", instead: "broadway shortcuts"),
         "sidebar.button": flag(\.sideButton),
+        "sidebar.selected": flag(\.selectedShortcut),
         "sites.keep": flag(\.keepsSignIns, .turningOff),
         "space.look": row("In each space's menu"),
         "spaces.stacked": flag(\.stackedSpaces),
