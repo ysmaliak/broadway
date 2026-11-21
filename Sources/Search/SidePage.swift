@@ -90,6 +90,24 @@ final class SideClipView: NSClipView {
 
 final class SideScrollView: NSScrollView {
     var scrolls = true
+    private var hushedUntil: CFTimeInterval = 0
+
+    func hush(for seconds: CFTimeInterval = 1.2) {
+        hushedUntil = max(hushedUntil, CACurrentMediaTime() + seconds)
+        verticalScroller?.alphaValue = 0
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds + 0.05) { [weak self] in self?.speak() }
+    }
+
+    private func speak(now: Bool = false) {
+        guard now || CACurrentMediaTime() >= hushedUntil else { return }
+        hushedUntil = 0
+        verticalScroller?.alphaValue = 1
+    }
+
+    override func flashScrollers() {
+        guard CACurrentMediaTime() >= hushedUntil else { return }
+        super.flashScrollers()
+    }
 
     var nested = false {
         didSet {
@@ -124,6 +142,7 @@ final class SideScrollView: NSScrollView {
     required init?(coder: NSCoder) { fatalError() }
 
     override func scrollWheel(with event: NSEvent) {
+        if hushedUntil > 0 { speak(now: true) }
         guard scrolls, !nested, abs(event.scrollingDeltaY) >= abs(event.scrollingDeltaX) || event.phase != [] else {
             nextResponder?.scrollWheel(with: event)
             return
@@ -429,6 +448,7 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
         let target = NSRect(origin: NSPoint(x: clip.bounds.minX, y: preview.rest.list), size: clip.bounds.size)
         let origin = clip.constrainBoundsRect(target).origin
         guard abs(origin.y - clip.bounds.minY) > 0.5 else { return }
+        listScroll.hush()
         clip.scroll(to: origin)
         listScroll.reflectScrolledClipView(clip)
     }
@@ -440,6 +460,16 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
 
     private var rested = false
 
+    private func arrive(at list: CGFloat) {
+        let clip = listScroll.contentView
+        let target = NSRect(origin: NSPoint(x: clip.bounds.minX, y: list), size: clip.bounds.size)
+        let origin = clip.constrainBoundsRect(target).origin
+        guard abs(origin.y - clip.bounds.minY) > 0.5 else { return }
+        listScroll.hush()
+        clip.scroll(to: origin)
+        listScroll.reflectScrolledClipView(clip)
+    }
+
     private func restIn(viewport: CGFloat) {
         guard !rested, window != nil, viewport > 0 else { return }
         rested = true
@@ -447,7 +477,10 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
               let rest = browser.columnMemory.saved[browser.spaceID], rest.list > 0.5 else { return }
         let clip = listScroll.contentView
         let target = NSRect(origin: NSPoint(x: clip.bounds.minX, y: rest.list), size: clip.bounds.size)
-        clip.scroll(to: clip.constrainBoundsRect(target).origin)
+        let origin = clip.constrainBoundsRect(target).origin
+        guard abs(origin.y - clip.bounds.minY) > 0.5 else { return }
+        listScroll.hush()
+        clip.scroll(to: origin)
         listScroll.reflectScrolledClipView(clip)
     }
 
@@ -459,7 +492,7 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
         edges()
         noteMoved()
         aimShortcut()
-        settleHover()
+        settleHover(headings: true)
         noteBench()
     }
 
@@ -639,16 +672,20 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
         arrange()
     }
 
-    private func settleHover() {
+    private func settleHover(headings scrolled: Bool = false) {
         guard preview == nil, carry == nil, !isHidden else { return }
         for view in rows.values { view.settleHover() }
         for view in pins.values { view.settleHover() }
+        guard scrolled else { return }
+        for view in headings.values { view.settleHover() }
+        for view in tasks.values { view.settleHover() }
     }
 
     private var waitingToShow = false
 
     override func viewDidUnhide() {
         super.viewDidUnhide()
+        listScroll.hush()
         guard waitingToShow else { return }
         waitingToShow = false
         needsLayout = true
@@ -664,6 +701,7 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
             && browser.spaceID == lastSpace && preview == nil
         animateNext = false
         lastWidth = width
+        let sameSpace = browser.spaceID == lastSpace
         lastSpace = browser.spaceID
         let shut = Set(browser.tabGroups.filter(\.collapsed).map(\.id)).union(browser.taskFolders.filter(\.folded).map(\.id))
         settle = animating && lastShut != nil && shut != lastShut ? Motion.kitCover : Motion.kitSettle
@@ -998,7 +1036,7 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
                 if active != lastActive {
                     let had = lastActive != nil
                     lastActive = active
-                    if had, let active { DispatchQueue.main.async { [weak self] in self?.reveal(active) } }
+                    if had, sameSpace, let active { DispatchQueue.main.async { [weak self] in self?.reveal(active) } }
                 }
             }
             return
@@ -1009,6 +1047,7 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
             listReader.destination = browser.columnMemory.generation.map { ($0, rest.list) }
         }
         listReader.connect()
+        if !sameSpace, !browser.columnMemory.restoring { arrive(at: rest.list) }
         rowsBottom = listTop + rowsEnd
         held.isHidden = !newTabBelow
         heldGround.isHidden = !newTabBelow
@@ -1022,7 +1061,7 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
         if active != lastActive {
             let had = lastActive != nil
             lastActive = active
-            if had, let active, !now, !browser.columnMemory.restoring {
+            if had, sameSpace, let active, !now, !browser.columnMemory.restoring {
                 DispatchQueue.main.async { [weak self] in self?.reveal(active) }
             }
         }
@@ -2399,6 +2438,19 @@ extension SidePageView {
             }
         }
         listScroll.reflectScrolledClipView(clip)
+    }
+
+    var benchShape: [String: Any] {
+        let list = listScroll.frame
+        var shown: [String: [Double]] = [:]
+        for (id, row) in rows where !row.isHidden && row.alphaValue > 0.01 {
+            guard let parent = row.superview else { continue }
+            let frame = parent.convert(row.frame, to: self)
+            guard frame.maxY > list.minY + 0.5, frame.minY < list.maxY - 0.5 else { continue }
+            shown[String(id.uuidString.prefix(8)).lowercased()] = [Double(frame.minY), Double(frame.height)]
+        }
+        return ["offset": Double(listOffset), "height": Double(bounds.height), "list": Double(list.height), "rows": shown,
+                "preview": preview != nil]
     }
 
     func probe(_ id: UUID, _ point: CGPoint?, ended: Bool) -> Bool {

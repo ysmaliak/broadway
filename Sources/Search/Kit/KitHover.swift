@@ -11,6 +11,7 @@ class KitHoverView: NSView {
     }
     private var area: NSTrackingArea?
     var inert = false { didSet { if inert != oldValue { updateTrackingAreas() } } }
+    var followsPointer = false
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -35,16 +36,27 @@ class KitHoverView: NSView {
 
     func settleHover() {
         guard let window, !inert else { return }
-        let inside = bounds.contains(convert(Self.pointer(in: window), from: nil)) && !isHiddenOrHasHiddenAncestor
+        let inside = pointerInside(window)
         if inside != hovering { hovering = inside }
+    }
+
+    private func pointerInside(_ window: NSWindow) -> Bool {
+        bounds.contains(convert(Self.pointer(in: window), from: nil)) && !isHiddenOrHasHiddenAncestor
     }
 
     func endHover() {
         hovering = false
     }
 
-    override func mouseEntered(with event: NSEvent) { hovering = !inert }
-    override func mouseExited(with event: NSEvent) { hovering = false }
+    override func mouseEntered(with event: NSEvent) {
+        guard followsPointer, let window else { return hovering = !inert }
+        hovering = !inert && pointerInside(window)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        guard followsPointer, let window else { return hovering = false }
+        hovering = !inert && pointerInside(window)
+    }
 
     override func viewDidHide() {
         super.viewDidHide()

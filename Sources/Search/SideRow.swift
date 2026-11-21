@@ -504,6 +504,7 @@ final class TabRowView: KitHoverView {
 
     override init(frame: NSRect) {
         super.init(frame: frame)
+        followsPointer = true
         wantsLayer = true
         clipsToBounds = false
         layer?.masksToBounds = false

@@ -623,6 +623,7 @@ final class GroupHeadingView: KitHoverView {
 
     override init(frame: NSRect) {
         super.init(frame: frame)
+        followsPointer = true
         wantsLayer = true
         addSubview(ground)
         addSubview(well)
@@ -860,7 +861,8 @@ final class GroupHeadingView: KitHoverView {
         }
         let closes = self.closes
         if close.isHidden == closes {
-            if Motion.kitQuick.animates { close.layer?.kitTransition(Motion.kitQuick) }
+            close.layer?.removeAnimation(forKey: kCATransition)
+            if closes, Motion.kitQuick.animates { close.layer?.kitTransition(Motion.kitQuick) }
             close.isHidden = !closes
         }
         close.armed = closes
@@ -1093,6 +1095,7 @@ final class TaskFolderHeadingView: KitHoverView {
 
     override init(frame: NSRect) {
         super.init(frame: frame)
+        followsPointer = true
         addSubview(mark)
         addSubview(name)
         addSubview(needs)

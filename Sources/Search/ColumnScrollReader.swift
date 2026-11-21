@@ -62,9 +62,12 @@ final class ColumnScrollReaderView: NSView {
         if let viewport {
             guard viewport.isFinite, abs(clip.bounds.height - viewport) < 1 else { return }
         }
-        clip.scroll(to: clip.constrainBoundsRect(bounds).origin)
-        scroll.reflectScrolledClipView(clip)
+        let origin = clip.constrainBoundsRect(bounds).origin
         landed = destination.0
+        guard abs(origin.y - clip.bounds.minY) > 0.5 else { return }
+        (scroll as? SideScrollView)?.hush()
+        clip.scroll(to: origin)
+        scroll.reflectScrolledClipView(clip)
     }
 
     func connect() {
