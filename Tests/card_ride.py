@@ -267,6 +267,27 @@ def main():
             ok("let go halfway: Work is as it was", not differ(shape(last, "Work"), before), differ(shape(last, "Work"), before))
             homes = [f for f in frames if f["moving"] and card_of(f, "Home")]
             ok("let go halfway: Home never shows a card", not homes, [round(f["t"], 3) for f in homes[:4]])
+
+            sv.cmd({"do": "columnscroll", "wheel": -150, "y": 200})
+            time.sleep(0.8)
+            for label in ("unfold", "fold"):
+                was = shape(pages(), "Work")
+                frames = trace(lambda: sv.cmd({"do": "agents", "action": "press"}), f"card {label}", seconds=1.4)
+                (OUT / f"card-{label}.json").write_text(json.dumps(frames))
+                heights = [(card_of(f, "Work") or {}).get("h", 0) for f in frames]
+                ok(f"card {label}: the list is mid-scroll, away from both ends", was and 60 < was["offset"] < 300, was and was["offset"])
+                ok(f"card {label}: the card's height eases over many frames", len(set(round(h) for h in heights)) >= 6
+                   and max(heights) - min(heights) > 20, (min(heights), max(heights)))
+                moved = []
+                for f in frames:
+                    now_shape = shape(f, "Work")
+                    if now_shape is None:
+                        continue
+                    shifted = {k: (v, now_shape["rows"][k]) for k, v in was["rows"].items()
+                               if k in now_shape["rows"] and abs(now_shape["rows"][k] - v) > 0.5}
+                    if abs(now_shape["offset"] - was["offset"]) > 0.5 or shifted:
+                        moved.append((round(f["t"], 3), now_shape["offset"], dict(list(shifted.items())[:3])))
+                ok(f"card {label}: the list keeps its offset and no row moves while the card changes height", not moved, moved[:3])
     finally:
         sv.finish()
     (OUT / f"result{'-reduced' if reduced else ''}.txt").write_text("\n".join(lines) + f"\n{t.passed} passed, {t.failed} failed\n")
