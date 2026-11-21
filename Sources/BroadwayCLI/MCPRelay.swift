@@ -201,7 +201,7 @@ final class MCPRelay {
                 return ["ok": false, "error": ["code": "failed", "message": "That step couldn't be read", "retry_safe": true]]
             }
             var agent = Context.agent
-            if let session { agent = ["id": session] }
+            if let session { agent = agent.filter { ["cwd", "folder", "space"].contains($0.key) }.merging(["id": session]) { _, new in new } }
             guard let link = place.connect(),
                   link.send(["op": "call", "tool": step["tool"] as? String ?? name, "arguments": step["arguments"] ?? [:], "agent": agent, "cli": Setup.version(binary: binary) ?? "dev"]),
                   let reply = link.object() else {

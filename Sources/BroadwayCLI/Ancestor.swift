@@ -120,7 +120,54 @@ public struct AgentAncestor: Equatable {
             said["started"] = found.started
             said["executable"] = found.name
         }
+        return said.merging(place(environment: environment, cwd: FileManager.default.currentDirectoryPath)) { old, _ in old }
+    }
+
+    public static func place(environment: [String: String], cwd: String, look: (String) -> GitMark? = GitMark.look) -> [String: Any] {
+        var said: [String: Any] = [:]
+        if let space = environment["BROADWAY_SPACE"]?.trimmingCharacters(in: .whitespaces), !space.isEmpty { said["space"] = space }
+        let here = (cwd as NSString).standardizingPath
+        guard here.hasPrefix("/") else { return said }
+        said["cwd"] = here
+        said["folder"] = project(from: here, look: look)
         return said
+    }
+
+    public enum GitMark: Equatable {
+        case folder
+        case file(String)
+
+        public static func look(_ path: String) -> GitMark? {
+            let mark = (path as NSString).appendingPathComponent(".git")
+            var folder: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: mark, isDirectory: &folder) else { return nil }
+            if folder.boolValue { return .folder }
+            let text = (try? String(contentsOfFile: mark, encoding: .utf8)) ?? ""
+            return .file(text)
+        }
+    }
+
+    public static func project(from cwd: String, look: (String) -> GitMark?) -> String {
+        var path = cwd
+        while path != "/", !path.isEmpty {
+            switch look(path) {
+            case .folder:
+                return path
+            case .file(let text):
+                return worktreeHome(text) ?? path
+            case nil:
+                path = (path as NSString).deletingLastPathComponent
+            }
+        }
+        return cwd
+    }
+
+    static func worktreeHome(_ text: String) -> String? {
+        guard let line = text.split(whereSeparator: \.isNewline).first(where: { $0.hasPrefix("gitdir:") }) else { return nil }
+        let gitdir = line.dropFirst("gitdir:".count).trimmingCharacters(in: .whitespaces)
+        guard gitdir.hasPrefix("/"), let range = gitdir.range(of: "/.git/worktrees/") else { return nil }
+        let home = String(gitdir[..<range.lowerBound])
+        return home.isEmpty ? nil : home
     }
 }
 
