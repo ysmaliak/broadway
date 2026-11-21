@@ -368,13 +368,13 @@ def main():
         second, where = placed(site, base + "pricing", cwd=PERSONAL)
         t.ok("place", "its next tab follows the session there, and the words are not said again",
              space_of(second) == "Personal" and where.get("name") == "Personal" and where.get("first") is False
-             and where.get("why", "").startswith("matching ~/"), (space_of(second), where))
+             and where.get("why", "").startswith("matching ~/") and where.get("change") == "broadway open URL --space NAME", (space_of(second), where))
         go(3)
         moved = broadway("tabs", "move", second, "--space", "Work", env=site, cwd=PERSONAL)
         go(1)
         third, where = placed(site, base + "contact", cwd=PERSONAL)
         t.ok("place", "a tab moved to Work takes the session with it",
-             moved.get("ok") and space_of(third) == "Work" and where.get("why") == "where the person moved your tab"
+             moved.get("ok") and space_of(third) == "Work" and where.get("why") == "where your tab was moved"
              and where.get("first") is True, (moved, space_of(third), where))
         again = {"BROADWAY_AGENT": "site-spaces-2", "BROADWAY_AGENT_NAME": "Site builder"}
         fourth, where = placed(again, base + "about", cwd=PERSONAL)
@@ -395,6 +395,9 @@ def main():
         eighth, where = placed(plain, base + "plain", cwd=FRESH)
         t.ok("place", "a folder that matches nothing and learned nothing opens in the space on screen", space_of(eighth) == "Work" and where.get("why") == "the space on screen",
              (space_of(eighth), where))
+        helped = subprocess.run([BROADWAY, "--world", WORLD, "help", "open"], capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                                env=environment(plain), cwd=str(FRESH)).stdout
+        t.ok("place", "broadway help open lists --space", "--space" in helped, helped[-600:])
         wrong = broadway("open", base + "nowhere", "--space", "Garden", env=plain)
         t.ok("place", "a space that doesn't exist is refused with the names", not wrong.get("ok")
              and "Garden" in (wrong.get("error") or {}).get("message", "") and "Personal" in (wrong.get("error") or {}).get("hint", ""), wrong)

@@ -240,6 +240,31 @@ final class AgentSpacesTests {
         #expect(AgentLinks.shared.places.learned("/Users/sam/code/app") == home)
     }
 
+    @Test func theSessionMenuMovesItsTabsToAnotherSpaceAndTeachesTheFolder() {
+        let places = AgentLinks.shared.places
+        AgentLinks.shared.places = AgentPlaces(store: nil)
+        defer { AgentLinks.shared.places = places }
+        let both = link("Both", in: work)
+        AgentLinks.shared.give(both.id, folder: "/Users/sam/code/app")
+        let report = page("Report", in: work, for: both)
+        let deck = page("Deck", in: work, for: both)
+        rows([page("Notes", in: work), report, deck], [page("Music", in: home)])
+        browser.switchSpace(to: work)
+
+        let menu = browser.agentMenu(card[0])
+        let move = menu?.items.first { $0.title == "Move to Space" }
+        let choices = move?.submenu?.items.map(\.title)
+        move?.submenu?.items.first { $0.title == "Home" }.map { item in _ = item.target?.perform(item.action, with: item) }
+        let after = AgentLinks.shared.link(both.id)
+
+        #expect(choices == ["Home"])
+        #expect(!browser.tabs.contains { $0.id == report.id || $0.id == deck.id })
+        #expect(Set(browser.parked[home]?.tabs.filter(\.agent).map(\.id) ?? []) == [report.id, deck.id])
+        #expect(after?.space == home)
+        #expect(after?.placed == .moved)
+        #expect(AgentLinks.shared.places.learned("/Users/sam/code/app") == home)
+    }
+
     @Test func anAgentOpensInItsSessionsSpaceAndAnExplicitSpaceMovesItsHome() async {
         keepSetting(Shared.prefs, \.agentMode, "agents.mode")
         browser.prefs.agentMode = .auto

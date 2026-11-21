@@ -135,7 +135,7 @@ final class AgentPlaces {
         case .asked: return "as asked"
         case .setting: return "from BROADWAY_SPACE"
         case .learned: return "where this folder's sessions go"
-        case .moved: return "where the person moved your tab"
+        case .moved: return "where your tab was moved"
         case .named(let shown): return "matching \(shown)"
         case .front: return onScreen ? "the space on screen" : "the space on screen when you connected"
         }

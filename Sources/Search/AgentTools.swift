@@ -489,9 +489,9 @@ final class BrowserToolbox: AgentToolbox {
 
     let tools: [ToolSpec] = [
         ToolSpec(name: "tabs", description: "List the open tabs. Private windows are not listed."),
-        ToolSpec(name: "open", description: "Open a page in a new agent tab beside the person's, in your session's space. It never comes to the front.",
+        ToolSpec(name: "open", description: "Open a page in a new agent tab beside the person's. It never comes to the front. With several spaces it opens in your session's space, and the answer says which and why.",
                  properties: ["url": ["type": "string"],
-                              "space": ["type": "string", "description": "Another space, kept for your folder"]],
+                              "space": ["type": "string", "description": "Open in this space instead and make it your session's. Broadway keeps it for your folder."]],
                  required: ["url"]),
         ToolSpec(name: "navigate", description: "Go to an address in a tab. The tab the person is looking at can't be sent elsewhere. The answer is a look at the new page.",
                  properties: with(["tab": tab, "url": ["type": "string"]], aim: false), required: ["tab", "url"]),
@@ -1036,7 +1036,7 @@ final class BrowserToolbox: AgentToolbox {
             let why: AgentPlaceWhy = asked != nil ? .asked : home != nil ? link?.placed ?? .front : .front
             let first = task.map { links.tell($0) } ?? true
             var placed: [String: Any] = ["name": name, "why": AgentPlaces.reason(why, onScreen: landed == browser.spaceID),
-                                         "first": first || asked != nil]
+                                         "first": first || asked != nil, "change": "broadway open URL --space NAME"]
             if asked != nil { placed["kept"] = link?.folder != nil }
             said["space"] = placed
         }
