@@ -14,6 +14,7 @@ Each `broadway` run is a new process, often in a new shell, so neither the conne
 - A `node`, `bun` or `deno` process running Claude Code's, Codex's, Gemini CLI's or opencode's script is named for the agent, not the interpreter.
 - The name shown comes from the program: `claude` is Claude Code, `codex` is Codex, `cursor` is Cursor, and so on. Anything else is shown by its own name.
 - `BROADWAY_AGENT_NAME` sets the name. `BROADWAY_AGENT` names a session outright, for a script that wants several sessions from one shell.
+- Every request also carries the agent's folder: its working directory, reduced to the git root above it. A git worktree counts as the repository it belongs to. The command does the reduction, so Broadway never looks into the person's folders itself. `BROADWAY_SPACE` names a space for the session.
 - `broadway mcp` holds its connection open, so the connection is the session. Its name comes from the client's name in MCP's `initialize`.
 
 A person typing `broadway` at their own terminal gets a session named for the terminal app, and a short script gets one named for its program, such as Python. These are the person's own sessions. Every program found this way that isn't Claude Code, Codex, Cursor, opencode or Gemini CLI counts as one. A session of the person's ends only after 20 minutes without a command, never because its process exited, and at the end a tab they have looked at becomes theirs. An agent found by its process ends when that process exits.
@@ -97,11 +98,25 @@ The area is a card at the foot of the sidebar, below the tabs. It appears when t
 - **Closing.** On hover a heading's count gives way to the sidebar's close button, which closes all of that agent's tabs, whether the agent is still at work or has finished and left spared tabs behind. Each tab row in a fold has its own. With one agent the button is on the card's row.
 - **Needs you.** Nothing opens by itself. The card's row says "Claude Code needs you" with the question. With several agents the asking agent's heading turns amber, shows the question and becomes the tab that asks. A press on either goes to that tab.
 - **Height.** The card takes at most 40 percent of the sidebar. Past that its list scrolls, with the agent that needs the person, or the fold just opened, kept in view. Four folded agents fit without scrolling in a sidebar of ordinary height. The tab list ends above the card.
-- **Which space.** A window's card lists only the agent tabs of the space it shows. A session with tabs in two spaces shows in each with the tabs of that space, and its heading there is one of that space's tabs. A session with no tab yet shows in the space that was in front when it connected. While an agent in another space needs the person, that space's icon at the foot of the sidebar carries a small dot in the asking colour.
+- **Which space.** A window's card lists only the agent tabs of the space it shows. A session with tabs in two spaces shows in each with the tabs of that space, and its heading there is one of that space's tabs. A session with no tab yet shows in its own space, below. While an agent in another space needs the person, that space's icon at the foot of the sidebar carries a small dot in the asking colour.
 - **Motion.** The card makes room and closes it on the cover spring, fading in and out as it does. A heading that arrives fades in while it drops into place, and one that leaves fades out. Opening or shutting a fold rides the same spring, with the chevron turning. The heading's second line rolls when the agent moves to another tab or asks, and the face of an agent that starts to need the person hops once. A switch of space draws the other space's card at once. Under Reduce Motion nothing travels: what arrives or leaves only fades, and words change at once.
 - **Menu.** A session's menu has Keep Tabs, Close Tabs, and Disconnect while it is connected. Disconnecting ends the session from Broadway's side and closes its tabs as any end does, and the agent's next command starts a new one.
 
 A session's tabs live only in the area, not in the tab list. A tab of the person's that an agent works in stays where it is, with a small face on its row.
+
+### The session's space
+
+With spaces on and more than one of them, each session has a space of its own, chosen when it connects. The first rule that fits wins:
+
+1. **Asked.** `BROADWAY_SPACE` names a space. One that doesn't exist is passed over.
+2. **Learned.** The space this folder's sessions were last moved to or opened in with `--space`. Broadway keeps the last 200 folders in its settings. A folder whose space was deleted goes on to the next rule.
+3. **Named.** A space whose name is one of the folder path's parts, ignoring case. Only the parts below the home folder count. A name of several words matches a part with spaces, dashes or underscores between them, so Side Projects matches `side-projects`. When two spaces match, neither does.
+4. **In front.** The space on screen when the session connected, as before.
+
+- **Opening.** An agent's `open` opens in the session's space, even with another space on screen. The tab stays behind there, as agent tabs in another space always have. A popup follows its opener. `open URL --space NAME` opens in that space instead, makes it the session's space, and teaches it to the folder.
+- **Moving.** When the person moves an agent's tab to another space, by any path (drag, the menus, `broadway tabs move --space`), the session's space follows, and the folder learns it. A tab of a session that already ended still teaches its folder. A private window never teaches.
+- **Telling.** `open`'s answer carries `space`, with the space's name and why it was chosen. The first open of a session, and the first after its space changes, also says so in words, with how to change it: "In Personal, matching ~/Projects/personal. For another space, and for this folder from then on: broadway open URL --space NAME". Broadway picks a sensible space and makes another easy to choose. It never refuses one.
+- With one space, or spaces off, nothing here applies and an agent opens in the space on screen.
 
 ## Watching an agent
 
@@ -131,9 +146,9 @@ A session's heading shows the strongest state over its tabs: waving, then drivin
 ## Code
 
 - `Sources/BroadwayCLI/Ancestor.swift`: the ancestor walk and the names sent with each request.
-- `Sources/Search/AgentLinks.swift`: sessions, their keys, ends and states. `AgentLinkCommands.swift`: how a request finds its session, and the `agents` verbs.
+- `Sources/Search/AgentLinks.swift`: sessions, their keys, ends and states. `AgentPlaces.swift`: the session's space, its rules and what folders learned. `AgentLinkCommands.swift`: how a request finds its session, and the `agents` verbs.
 - `Sources/Search/AgentGate.swift`: the modes, the acts and the verdict for each.
 - `Sources/Search/AgentRows.swift`: `read --rows`, which gathers every row of a list, table or grid. `AgentChecks.swift`: `audit`, `timings` and `styles`.
 - `Sources/Search/AgentCommands.swift`: the error codes (`ToolCode`) and the reply envelope. `MCPServer.swift`: the MCP server, its tool names, instructions and short list. `AgentHandoff.swift`: `handoff`. `AgentAskOutside.swift`: `ask` for outside agents, its limits and its card words. `Sources/BroadwayCLI/MCPRelay.swift`: `broadway mcp` and its hand-over after an update.
 - `Sources/Search/AgentsArea.swift`, `AgentCharacter.swift`, `AgentPointer.swift`, `AgentDriving.swift`: the area, the face, the pointer and take over. `SideCount.swift`: the count a folded folder and a folded agent share.
-- Tests: `Tests/SearchTests/AgentLinksTests.swift`, `AgentRowsTests.swift`, `AgentChecksTests.swift`, `AgentLeadTabTests.swift` for the area's headings and folds, and the hidden-world probes `Tests/agent_mode.py`, `Tests/agent_checks.py`, `Tests/agent_card.py` and `Tests/agent_spaces.py`. `Tests/agent_field.py` measures model agents on invented sites, the long list tasks (`ledger_sum`, `dispatch_count`, `stockroom_most`) among them.
+- Tests: `Tests/SearchTests/AgentLinksTests.swift`, `AgentPlacesTests.swift`, `AgentRowsTests.swift`, `AgentChecksTests.swift`, `AgentLeadTabTests.swift` for the area's headings and folds, and the hidden-world probes `Tests/agent_mode.py`, `Tests/agent_checks.py`, `Tests/agent_card.py` and `Tests/agent_spaces.py`. `Tests/agent_field.py` measures model agents on invented sites, the long list tasks (`ledger_sum`, `dispatch_count`, `stockroom_most`) among them.

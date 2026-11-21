@@ -48,7 +48,7 @@ Each works on one tab, chosen as below, and is gated on that tab's site.
 
 | Command | What it does |
 | --- | --- |
-| `open URL [URL...] [--space NAME]` | open a new agent tab, which becomes your current tab. Several addresses open together with one shared 20 second wait |
+| `open URL [URL...] [--space NAME]` | open a new agent tab, which becomes your current tab. Several addresses open together with one shared 20 second wait. With several spaces it opens in the session's space, chosen from the agent's folder, and the answer says which and why. `--space NAME` opens in that space, makes it the session's, and Broadway keeps it for the folder. `BROADWAY_SPACE` names one for the session. See [agents.md](agents.md#the-sessions-space) |
 | `go URL` | send your current tab to an address. The tab the person is looking at can't be sent elsewhere |
 | `tab [ID]` | print your current tab, or switch it to one of your tabs |
 | `tabs [--all]` | your session's tabs with the current one marked, then how many the person has. `--all` lists every tab |

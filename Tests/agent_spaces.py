@@ -14,6 +14,11 @@ stand-in agents. Two spaces, Work and Home:
    its other Home tabs folded under it. Work has one, so its tab sits under the row with no
    heading. The agent that asks in Home has the asking tab as its heading, still shut.
 5. switch: a switch of space draws the other space's card at once, with no travel or fade.
+6. place: with Work on screen, an agent working in a folder under .../personal/... opens its first
+   tab in a third space, Personal, and the answer says so. Its tabs follow its session, a move
+   teaches the folder, --space teaches it too, and BROADWAY_SPACE names a space for a session.
+
+Every agent runs in a folder of the probe's own, so the checkout's path never matches a space.
 
 Pictures are of the probe window by its number (screencapture -l), in light and dark. Where
 that has no grant (over ssh on the mini) the app draws the window itself instead (bench
@@ -45,6 +50,8 @@ SIDE = 260
 
 CLAUDE = {"BROADWAY_AGENT": "claude-spaces", "BROADWAY_AGENT_NAME": "Claude Code"}
 MAILER = {"BROADWAY_AGENT": "mailer-spaces", "BROADWAY_AGENT_NAME": "Mail sorter"}
+NEUTRAL = FOLDER / "agents" / "plain"
+PERSONAL = FOLDER / "agents" / "personal" / "site"
 
 PAGE = b"""<!doctype html><title>%s</title><body style="margin:0;background:#f4f4f2;font:16px system-ui">
 <h1 style="margin:40px">%s</h1><div style="height:3000px"></div>"""
@@ -87,13 +94,29 @@ def environment(env):
     return made
 
 
-def broadway(*words, env=None, timeout=60):
+def broadway(*words, env=None, timeout=60, cwd=None):
     result = subprocess.run([BROADWAY, "--world", WORLD, *words, "--json"], capture_output=True, text=True,
-                            stdin=subprocess.DEVNULL, env=environment(env), timeout=timeout)
+                            stdin=subprocess.DEVNULL, env=environment(env), timeout=timeout, cwd=str(cwd or NEUTRAL))
     try:
         return json.loads(result.stdout)
     except ValueError:
         return {"ok": False, "raw": result.stdout + result.stderr}
+
+
+def said(*words, env=None, cwd=None):
+    result = subprocess.run([BROADWAY, "--world", WORLD, *words], capture_output=True, text=True,
+                            stdin=subprocess.DEVNULL, env=environment(env), timeout=60, cwd=str(cwd or NEUTRAL))
+    return result.stdout.strip().split("\n")[0], result.stderr
+
+
+def space_of(tab):
+    rows = broadway("tabs", "list", "--all").get("data", {}).get("tabs", [])
+    return next((row.get("space") for row in rows if short(row.get("id", "")) == short(tab)), None)
+
+
+def placed(env, url, *more, cwd=None):
+    data = broadway("open", url, *more, env=env, cwd=cwd).get("data", {})
+    return data.get("id", ""), data.get("space") or {}
 
 
 def bench(request, timeout=30):
@@ -219,6 +242,8 @@ def main():
         subprocess.run(["open", "-n", "-g", "-j", "--env", f"SEARCH_PROBE={WORLD}", str(APP)], check=True)
         wait_for(lambda: (FOLDER / "bench.sock").exists(), 30)
         time.sleep(2)
+        for folder in (NEUTRAL, PERSONAL):
+            (folder / ".git").mkdir(parents=True, exist_ok=True)
         bench({"do": "window"})
         agents("stage", dark=False, size=list(SIZE), shown=False)
         pid = (held() or [None])[0]
@@ -233,7 +258,7 @@ def main():
         go(1)
         report = broadway("open", base + "report", env=CLAUDE)["data"]["id"]
         go(2)
-        mail = broadway("open", base + "mail", env=CLAUDE)["data"]["id"]
+        mail = broadway("open", base + "mail", "--space", "Home", env=CLAUDE)["data"]["id"]
         inbox = broadway("open", base + "inbox", env=MAILER)["data"]["id"]
         for tab, env in ((report, CLAUDE), (mail, CLAUDE), (inbox, MAILER)):
             broadway("wait", "--tab", tab, env=env)
@@ -292,7 +317,7 @@ def main():
 
         agents("mode", mode="ask")
         asking = subprocess.Popen([BROADWAY, "--world", WORLD, "scroll", "600", "--tab", mail, "--json"], stdout=subprocess.PIPE,
-                                  stderr=subprocess.PIPE, text=True, stdin=subprocess.DEVNULL, env=environment(CLAUDE))
+                                  stderr=subprocess.PIPE, text=True, stdin=subprocess.DEVNULL, env=environment(CLAUDE), cwd=str(NEUTRAL))
         lit = wait_for(lambda: ids["Home"] in agents("state").get("askingSpaces", []), 15)
         t.ok("mark", "an ask on a Home tab while Work is shown marks Home", bool(lit), agents("state").get("askingSpaces"))
         t.ok("mark", "the foot's Home icon carries the dot and Work's does not", marks() == {"Work": False, "Home": True}, marks())
@@ -308,7 +333,7 @@ def main():
 
         asking = subprocess.Popen([BROADWAY, "--world", WORLD, "ask", "Which account?", "--choice", "Work", "--choice", "Personal",
                                    "--tab", mail, "--json"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                                  stdin=subprocess.DEVNULL, env=environment(CLAUDE))
+                                  stdin=subprocess.DEVNULL, env=environment(CLAUDE), cwd=str(NEUTRAL))
         lit = wait_for(lambda: ids["Home"] in agents("state").get("askingSpaces", []), 15)
         if not lit and asking.poll() is not None:
             print("  the second ask ended:", asking.communicate()[0][:400], flush=True)
@@ -328,6 +353,49 @@ def main():
         asking.communicate(timeout=30)
         asking = None
         agents("mode", mode="auto")
+
+        spaces("new", name="Personal")
+        time.sleep(0.8)
+        go(1)
+        site = {"BROADWAY_AGENT": "site-spaces", "BROADWAY_AGENT_NAME": "Site builder"}
+        first, words = said("open", base + "landing", env=site, cwd=PERSONAL)
+        t.ok("place", "Work on screen, an agent in .../personal/... opens its first tab in Personal",
+             space_of(first) == "Personal" and spaces()["current"] == "Work", (first, space_of(first), spaces()["current"]))
+        t.ok("place", "the answer says where and why, and how to pick another",
+             "In Personal, matching ~/" in words and "/personal." in words and "broadway open URL --space NAME" in words, words)
+        second, where = placed(site, base + "pricing", cwd=PERSONAL)
+        t.ok("place", "its next tab follows the session there, and the words are not said again",
+             space_of(second) == "Personal" and where.get("name") == "Personal" and where.get("first") is False
+             and where.get("why", "").startswith("matching ~/"), (space_of(second), where))
+        go(3)
+        moved = broadway("tabs", "move", second, "--space", "Work", env=site, cwd=PERSONAL)
+        go(1)
+        third, where = placed(site, base + "contact", cwd=PERSONAL)
+        t.ok("place", "a tab moved to Work takes the session with it",
+             moved.get("ok") and space_of(third) == "Work" and where.get("why") == "where the person moved your tab"
+             and where.get("first") is True, (moved, space_of(third), where))
+        again = {"BROADWAY_AGENT": "site-spaces-2", "BROADWAY_AGENT_NAME": "Site builder"}
+        fourth, where = placed(again, base + "about", cwd=PERSONAL)
+        t.ok("place", "the folder learned it: the next session there opens in Work",
+             space_of(fourth) == "Work" and where.get("why") == "where this folder's sessions go", (space_of(fourth), where))
+        fifth, where = placed(again, base + "blog", "--space", "Home", cwd=PERSONAL)
+        t.ok("place", "--space opens in that space and says the folder keeps it",
+             space_of(fifth) == "Home" and where.get("why") == "as asked" and where.get("kept") is True, (space_of(fifth), where))
+        later = {"BROADWAY_AGENT": "site-spaces-3", "BROADWAY_AGENT_NAME": "Site builder"}
+        sixth, where = placed(later, base + "faq", cwd=PERSONAL)
+        t.ok("place", "and the session after that opens in Home", space_of(sixth) == "Home" and where.get("why") == "where this folder's sessions go",
+             (space_of(sixth), where))
+        told = dict(later, BROADWAY_SPACE="personal", BROADWAY_AGENT="site-spaces-4")
+        seventh, where = placed(told, base + "terms")
+        t.ok("place", "BROADWAY_SPACE names the session's space", space_of(seventh) == "Personal" and where.get("why") == "from BROADWAY_SPACE",
+             (space_of(seventh), where))
+        plain = {"BROADWAY_AGENT": "plain-spaces", "BROADWAY_AGENT_NAME": "Plain"}
+        eighth, where = placed(plain, base + "plain")
+        t.ok("place", "a folder that matches nothing opens in the space on screen", space_of(eighth) == "Work" and where.get("why") == "the space on screen",
+             (space_of(eighth), where))
+        wrong = broadway("open", base + "nowhere", "--space", "Garden", env=plain)
+        t.ok("place", "a space that doesn't exist is refused with the names", not wrong.get("ok")
+             and "Garden" in (wrong.get("error") or {}).get("message", "") and "Personal" in (wrong.get("error") or {}).get("hint", ""), wrong)
     finally:
         if asking:
             asking.kill()
