@@ -50,6 +50,7 @@ struct SettingsLookTests {
         ("look", .appearance),
         ("newtab.floating", .appearance),
         ("sidebar.button", .appearance),
+        ("sidebar.selected", .appearance),
         ("pages.dusk", .appearance),
         ("tabs.layout", .appearance),
         ("spaces.stacked", .tabs),

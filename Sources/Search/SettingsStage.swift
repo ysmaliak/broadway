@@ -40,6 +40,7 @@ enum SettingsStageMap {
         "homepage": .spot(.page),
         "app.icon": .nowhere,
         "sidebar.button": .spot(.top),
+        "sidebar.selected": .spot(.tabs),
 
         "notifications.ask": .spot(.page),
         "privacy.forget": .spot(.page),

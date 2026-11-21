@@ -586,6 +586,7 @@ extension SettingsPageView {
         }
         section("Sidebar") {
             settingRow("sidebar.button")
+            settingRow("sidebar.selected")
         }
     }
 

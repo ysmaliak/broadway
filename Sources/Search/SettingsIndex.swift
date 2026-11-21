@@ -157,6 +157,9 @@ enum SettingsIndex {
         .init(id: "sidebar.button", group: "sidebar", icon: "sidebar.left",
               title: "Sidebar button", detail: "A button at the top of the sidebar that hides and shows it",
               keys: ["sidebar.button"], words: ["sidebar button", "hide sidebar", "toggle sidebar", "collapse"]),
+        .init(id: "sidebar.selected", group: "sidebar", icon: "arrow.up.to.line",
+              title: "Selected tab shortcut", detail: "When the selected tab scrolls out of view, show it at the edge of the list",
+              keys: ["sidebar.selected"], words: ["selected tab", "show selected tab", "scroll to tab", "jump to tab", "current tab"]),
         .init(id: "search.engine", group: "search", icon: "magnifyingglass",
               title: "Search with", detail: "Where words that aren't an address go",
               keys: ["search.engine", "search.custom"], words: ["google", "duckduckgo", "engine", "kagi", "bing"]),
@@ -543,6 +546,7 @@ extension SettingsIndex {
             "calendars": prefs.usesCalendars,
             "newtab.floating": prefs.floatingNewTab,
             "sidebar.button": prefs.sideButton,
+            "sidebar.selected": prefs.selectedShortcut,
             Preferences.hintsKey: prefs.hints,
             "video.quality": prefs.videoQuality.raw,
             "video.speed": prefs.remembersSpeed,
@@ -572,6 +576,9 @@ extension SettingsIndex {
         case "sidebar.button":
             guard let on = value as? Bool else { return false }
             prefs.sideButton = on
+        case "sidebar.selected":
+            guard let on = value as? Bool else { return false }
+            prefs.selectedShortcut = on
         case Preferences.hintsKey:
             guard let on = value as? Bool else { return false }
             prefs.hints = on
