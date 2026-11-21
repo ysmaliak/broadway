@@ -220,6 +220,61 @@ final class AgentSpacesTests {
         #expect(atHome["Both"]?.sorted() == ["Mail", "Report"])
     }
 
+    @Test func aTabMovedToAnotherSpaceTakesItsSessionAndTeachesItsFolder() {
+        let places = AgentLinks.shared.places
+        AgentLinks.shared.places = AgentPlaces(store: nil)
+        defer { AgentLinks.shared.places = places }
+        let both = link("Both", in: work)
+        AgentLinks.shared.give(both.id, folder: "/Users/sam/code/app")
+        let report = page("Report", in: work, for: both)
+        let notes = page("Notes", in: work)
+        rows([notes, report], [page("Music", in: home)])
+        browser.switchSpace(to: work)
+
+        let moved = browser.finishMove(report, toSpace: home, quietly: true)
+        let after = AgentLinks.shared.link(both.id)
+
+        #expect(moved)
+        #expect(after?.space == home)
+        #expect(after?.placed == .moved)
+        #expect(AgentLinks.shared.places.learned("/Users/sam/code/app") == home)
+    }
+
+    @Test func anAgentOpensInItsSessionsSpaceAndAnExplicitSpaceMovesItsHome() async {
+        keepSetting(Shared.prefs, \.agentMode, "agents.mode")
+        browser.prefs.agentMode = .auto
+        let places = AgentLinks.shared.places
+        AgentLinks.shared.places = AgentPlaces(store: nil)
+        defer { AgentLinks.shared.places = places }
+        let box = BrowserToolbox()
+        box.browser = browser
+        let both = link("Both", in: home)
+        AgentLinks.shared.give(both.id, folder: "/Users/sam/code/app")
+        rows([page("Notes", in: work)], [page("Music", in: home)])
+        browser.switchSpace(to: work)
+
+        let first = ToolReply.data(await box.call("open", ["url": "https://example.com/one"], task: both.id))
+        let second = ToolReply.data(await box.call("open", ["url": "https://example.com/two"], task: both.id))
+        let asked = ToolReply.data(await box.call("open", ["url": "https://example.com/three", "space": "work"], task: both.id))
+        let wrong = await box.call("open", ["url": "https://example.com/four", "space": "Garden"], task: both.id)
+        let parked = browser.parked[home]?.tabs.filter(\.agent).map { AgentWorkTabs.short($0.id) } ?? []
+        let shown = browser.tabs.filter(\.agent).map { AgentWorkTabs.short($0.id) }
+        let placed = first["space"] as? [String: Any]
+
+        #expect(parked.sorted() == [first["id"] as? String, second["id"] as? String].compactMap { $0 }.sorted())
+        #expect(shown == [asked["id"] as? String].compactMap { $0 })
+        #expect(placed?["name"] as? String == "Home")
+        #expect(placed?["why"] as? String == "the space on screen when you connected")
+        #expect(placed?["first"] as? Bool == true)
+        #expect((second["space"] as? [String: Any])?["first"] as? Bool == false)
+        #expect((asked["space"] as? [String: Any])?["name"] as? String == "Work")
+        #expect((asked["space"] as? [String: Any])?["kept"] as? Bool == true)
+        #expect(AgentLinks.shared.link(both.id)?.space == work)
+        #expect(AgentLinks.shared.places.learned("/Users/sam/code/app") == work)
+        #expect(wrong.failed)
+        #expect(wrong.text?.contains("No space is named Garden") == true)
+    }
+
     @Test func anAgentAskingInAnotherSpaceMarksThatSpaceUntilAnswered() {
         let both = link("Both", in: work)
         let mail = page("Mail", in: home, for: both)

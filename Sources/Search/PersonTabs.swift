@@ -220,7 +220,7 @@ enum PersonTabs {
             try spacesOn(call)
             let space = try space(call, named)
             let url = try call.need("url")
-            var made = await call.box.openTab(["url": url], task: call.link?.id, space: space.id == call.browser.spaceID ? nil : space.id)
+            var made = await call.box.openTab(["url": url], task: call.link?.id, space: space.id)
             if made.failed {
                 let text = made.text ?? "That didn't work"
                 throw PersonRefusal(ToolFailure.code(text), text)

@@ -412,6 +412,7 @@ struct AgentChange {
         if let expectLine { found.append((expectLine, true)) }
         if opens {
             found.append((did == "open" ? "New tab, now your current tab" : "Went there", false))
+            if did == "open", let line = AgentPlaces.line(kept["space"]) { found.append((line, false)) }
             for id in same { found.append(("You already have this address in tab \(id). Use it: broadway tab \(id)", false)) }
             if let look { found += look.text().map { ($0, true) } }
         } else if settled != .skipped, dialog == nil, tabs.opened.isEmpty {

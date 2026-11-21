@@ -239,6 +239,11 @@ extension AgentLinks {
         guard let front = Browsers.front, front.showsSpaces else { return nil }
         return front.spaceID
     }
+
+    static func frontSpaceNames() -> [AgentSpaceName]? {
+        guard let front = Browsers.front, front.showsSpaces else { return nil }
+        return front.spaces.map { AgentSpaceName(id: $0.id, name: $0.name) }
+    }
 }
 
 extension Browser {

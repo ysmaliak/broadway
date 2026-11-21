@@ -57,6 +57,9 @@ struct AgentLink: Identifiable, Equatable {
     var person = false
     var number = 1
     var space: UUID?
+    var folder: String?
+    var placed: AgentPlaceWhy = .front
+    var told = false
 
     var live: Bool { ended == nil }
 
@@ -97,6 +100,8 @@ final class AgentLinks {
     @ObservationIgnored var rejoining: ((UUID, [UUID]) -> Void)?
     @ObservationIgnored var asking: (UUID) -> Bool = { _ in false }
     @ObservationIgnored var here: () -> UUID? = { AgentLinks.frontSpace() }
+    @ObservationIgnored var spaceNames: () -> [AgentSpaceName]? = { AgentLinks.frontSpaceNames() }
+    @ObservationIgnored var places: AgentPlaces = .shared
 
     var live: [AgentLink] { links.filter(\.live) }
 
@@ -109,10 +114,11 @@ final class AgentLinks {
     }
 
     @discardableResult
-    func join(_ key: AgentLinkKey, name: String?, at now: Date = Date()) -> AgentLink {
+    func join(_ key: AgentLinkKey, name: String?, at now: Date = Date(), wish: AgentWish = AgentWish()) -> AgentLink {
         if let found = liveLink(for: key) {
             heardAt[found.id] = now
             if let named = Self.clean(name), named != found.name { give(found.id, name: named) }
+            if found.folder == nil, let folder = wish.folder { update(found.id) { $0.folder = folder } }
             return link(found.id) ?? found
         }
         let id = UUID()
@@ -120,7 +126,10 @@ final class AgentLinks {
         let before = links.filter { $0.key == key && !$0.live }
             .sorted { ($0.endedAt ?? $0.connected) < ($1.endedAt ?? $1.connected) }.map(\.id)
         made.number = number(for: made.name, besides: id)
-        made.space = here()
+        made.folder = wish.folder
+        let place = AgentPlaces.choose(wish, spaces: spaceNames(), learned: places.learned(wish.folder), front: here())
+        made.space = place.space
+        made.placed = place.why
         heardAt[id] = now
         links.append(made)
         if !before.isEmpty { rejoining?(id, before) }
@@ -174,6 +183,28 @@ final class AgentLinks {
 
     func patience(_ id: UUID) -> Double {
         waits[id] ?? Self.defaultPatience
+    }
+
+    func settle(_ id: UUID, in space: UUID, because why: AgentPlaceWhy, at now: Date = Date()) {
+        guard let found = link(id) else { return }
+        if why == .asked || why == .moved { places.learn(found.folder, space, at: now) }
+        guard found.live, found.space != space || found.placed != why else { return }
+        update(id) { link in
+            link.space = space
+            link.placed = why
+            link.told = false
+        }
+    }
+
+    func give(_ id: UUID, folder: String) {
+        guard let found = link(id), found.folder == nil else { return }
+        update(id) { $0.folder = folder }
+    }
+
+    func tell(_ id: UUID) -> Bool {
+        guard let found = link(id), !found.told else { return false }
+        update(id) { $0.told = true }
+        return true
     }
 
     func setPerson(_ id: UUID, _ on: Bool) {
