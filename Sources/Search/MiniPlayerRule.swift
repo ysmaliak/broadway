@@ -23,6 +23,7 @@ struct MiniReport: Equatable {
     var picture = false
     var sound = false
     var undecided = false
+    var unseen = false
     var reading: Reading?
     var refused: Double = 0
     var media: [Media] = []
@@ -51,7 +52,14 @@ struct MiniReport: Equatable {
         var loop = false
         var loose = false
         var chosen = false
+        var picture = false
+
+        var pictured: Bool { kind == "video" && picture && !muted && (chosen || !paused) }
+        var heard: Bool { chosen && !muted && !(kind == "video" && picture) }
     }
+
+    var video: Bool { unseen || media.contains(where: \.pictured) }
+    var audio: Bool { !video && (sound || media.contains(where: \.heard)) }
 
     struct Reported: Equatable {
         var duration: Double = 0
@@ -87,6 +95,7 @@ struct MiniReport: Equatable {
         made.picture = flag(body["picture"])
         made.sound = flag(body["sound"])
         made.undecided = flag(body["undecided"])
+        made.unseen = flag(body["unseen"])
         if let found = body["reading"] as? [String: Any] {
             made.reading = Reading(playing: flag(found["playing"]), time: max(0, number(found["time"])),
                                    duration: max(0, number(found["duration"])), rate: rate(found["rate"]), live: flag(found["live"]),
@@ -98,7 +107,7 @@ struct MiniReport: Equatable {
         made.media = (body["media"] as? [[String: Any]] ?? []).prefix(8).map { found in
             Media(kind: text(found["kind"]) == "video" ? "video" : "audio", duration: number(found["duration"]), time: max(0, number(found["time"])),
                   paused: flag(found["paused"]), muted: flag(found["muted"]), loop: flag(found["loop"]), loose: flag(found["loose"]),
-                  chosen: flag(found["chosen"]))
+                  chosen: flag(found["chosen"]), picture: flag(found["picture"]))
         }
         if let found = body["reported"] as? [String: Any] {
             made.reported = Reported(duration: max(0, number(found["duration"])), time: max(0, number(found["time"])), rate: rate(found["rate"]))
@@ -137,6 +146,7 @@ struct MiniFacts: Equatable {
     var picture: Bool { reports.contains(where: \.picture) }
     var sound: Bool { reports.contains(where: \.sound) }
     var undecided: Bool { reports.contains(where: \.undecided) }
+    var video: Bool { reports.contains(where: \.video) && !reports.contains(where: \.audio) }
     var playing: Bool { noisy || reports.contains { $0.reading?.playing == true } }
 }
 
@@ -149,6 +159,11 @@ enum MiniRule {
     static let lasting: TimeInterval = 3
 
     static func role(_ facts: MiniFacts, was: MiniRole) -> MiniRole {
+        let role = sounding(facts, was: was)
+        return role == .mini && facts.video ? .none : role
+    }
+
+    private static func sounding(_ facts: MiniFacts, was: MiniRole) -> MiniRole {
         if facts.picture { return .float }
         if facts.held { return .mini }
         if facts.sound { return facts.earned || was == .mini ? .mini : was }

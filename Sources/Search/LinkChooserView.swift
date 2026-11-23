@@ -1,27 +1,13 @@
 import AppKit
 
 enum LinkChooserLook {
-    static let width = OmniboxView.widest
     static let tight: CGFloat = 420
-    static let narrowest: CGFloat = 320
     static let head = OmniboxView.inputHeight
     static let heading = OmniboxView.headerHeight
     static let row = OmniboxView.rowHeight
     static let bar = OmniboxView.barRoom
-    static let most = 9
     static let room: CGFloat = 40
-
-    static func height(rows: Int) -> CGFloat {
-        head + heading + CGFloat(min(max(rows, 1), most)) * row + bar
-    }
-
-    static func frame(in size: NSSize, rows: Int) -> NSRect {
-        let width = min(Self.width, max(narrowest, size.width - 40))
-        let top = (size.height * OmniboxView.topShare).rounded()
-        let least = head + heading + row + bar
-        let height = min(height(rows: rows), max(least, size.height - top - 20))
-        return NSRect(x: ((size.width - width) / 2).rounded(), y: top, width: width, height: height)
-    }
+    static let size = NSSize(width: OmniboxView.widest, height: OmniboxView.restingHeight)
 
     static func words(for url: URL) -> (site: String, rest: String) {
         guard let host = url.host(), !host.isEmpty else { return (url.absoluteString, "") }
@@ -82,7 +68,7 @@ final class LinkChooserView: NSView {
         mark = FieldMark(icon: Favicons.shared.cached(for: url), letter: words.site.first.map { String($0).uppercased() } ?? "•", size: 20)
         remember = LinkChooserAlways(site.map { "Always for \($0)" } ?? "")
         (hereKey, openKey) = Self.keys()
-        super.init(frame: NSRect(origin: .zero, size: NSSize(width: LinkChooserLook.width, height: LinkChooserLook.height(rows: choices.count))))
+        super.init(frame: NSRect(origin: .zero, size: LinkChooserLook.size))
         wantsLayer = true
         layer?.allowsGroupOpacity = true
         glass.wantsLayer = true
@@ -102,7 +88,7 @@ final class LinkChooserView: NSView {
         scroll.hasHorizontalScroller = false
         scroll.automaticallyAdjustsContentInsets = false
         scroll.horizontalScrollElasticity = .none
-        scroll.verticalScrollElasticity = choices.count > LinkChooserLook.most ? .allowed : .none
+        scroll.verticalScrollElasticity = .none
         scroll.contentView.drawsBackground = false
         scroll.documentView = page
         scroll.contentView.postsBoundsChangedNotifications = true
@@ -162,7 +148,7 @@ final class LinkChooserView: NSView {
     }
 
     override var intrinsicContentSize: NSSize {
-        NSSize(width: LinkChooserLook.width, height: LinkChooserLook.height(rows: rows.count))
+        LinkChooserLook.size
     }
 
     override var fittingSize: NSSize { intrinsicContentSize }
@@ -211,6 +197,7 @@ final class LinkChooserView: NSView {
         }
         let along = NSRect(x: 0, y: 0, width: width, height: CGFloat(rows.count) * LinkChooserLook.row)
         if page.frame != along { page.frame = along }
+        scroll.verticalScrollElasticity = along.height > list.height ? .allowed : .none
         slab.frame = page.bounds
         let shown = lit.flatMap { rows.indices.contains($0) ? $0 : nil }
         slab.show(shown.map { rows[$0].frame }, at: shown, faint: faint)

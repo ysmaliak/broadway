@@ -129,6 +129,49 @@ def front():
     return next((urlparse(x["url"]).path.strip("/") for x in state["tabs"] if x["id"] == state["activeID"]), "")
 
 
+SIZES = (("normal", 1200, 800), ("narrow", 640, 800), ("short", 1200, 420))
+
+
+def field_frame(**where):
+    if where:
+        sv.cmd({"do": "field", "text": "a", **where})
+        until(lambda: route(**where)["chooserFrames"].get("field"), 5)
+        time.sleep(0.6)
+        return route(**where)["chooserFrames"]
+    sv.cmd({"do": "press", "code": 37, "chars": "l", "mods": ["cmd"]})
+    until(lambda: route(**where)["chooserFrames"].get("field"), 5)
+    time.sleep(0.6)
+    frames = route(**where)["chooserFrames"]
+    sv.cmd({"do": "press", "code": 53, "chars": "\u001b"})
+    until(lambda: not route(**where)["chooserFrames"].get("field"), 3)
+    time.sleep(0.3)
+    return frames
+
+
+def frames_match(rows, pick, **where):
+    for name, width, height in SIZES:
+        sv.cmd({"do": "resize", "width": width, "height": height, "steps": 1, **where})
+        time.sleep(0.5)
+        pick()
+        time.sleep(0.3)
+        field = field_frame(**where).get("field")
+        ask(f"frame-{rows}-{name}", **where)
+        said = route(**where)
+        frames = said["chooserFrames"]
+        chooser = frames.get("chooser")
+        t.ok(f"{rows} rows in a {name} window: the chooser's frame is the field's",
+             len(said["chooser"]) == rows and bool(field) and bool(chooser)
+             and all(abs(a - b) <= 1 for a, b in zip(field, chooser)), [said["chooser"], frames["content"], field, chooser])
+        if name == "narrow":
+            t.ok(f"{rows} rows: the narrow window takes width off the field", bool(field) and field[2] < 640, [frames["content"], field])
+        if name == "short":
+            t.ok(f"{rows} rows: the short window takes height off the field", bool(field) and field[3] < 462, [frames["content"], field])
+        ui(linkChooserDrop=True)
+        gone()
+    sv.cmd({"do": "resize", "width": 1200, "height": 800, "steps": 1, **where})
+    time.sleep(0.5)
+
+
 def checks():
     sv.setup(sidebar=True)
     sv.launch()
@@ -220,8 +263,8 @@ def checks():
         field = route()["chooserFrames"].get("field")
         sv.cmd({"do": "press", "code": 53, "chars": "\u001b"})
         time.sleep(0.5)
-        t.ok("the field's top, left edge and width are the chooser's", bool(field)
-             and all(abs(field[i] - box[i]) <= 1 for i in range(3)), [field, box])
+        t.ok("the field's frame is the chooser's", bool(field)
+             and all(abs(field[i] - box[i]) <= 1 for i in range(4)), [field, box])
         sv.sp("select", id=page)
         time.sleep(0.3)
 
@@ -263,6 +306,10 @@ def checks():
 
         for index in range(3, 13):
             space(action="new", name=f"S{index:02d}")
+            if index in (7, 10):
+                space(action="go", index=1)
+                time.sleep(0.8)
+                frames_match(index + 2, lambda: sv.sp("select", id=page))
         space(action="go", index=1)
         time.sleep(0.8)
         sv.sp("select", id=page)
@@ -295,6 +342,7 @@ def checks():
         t.ok("with no spaces the first row is lit", said["chooserLit"] == 0)
         ui(linkChooserDrop=True)
         gone()
+        frames_match(2, lambda: sv.sp("select", id=page))
         ui(spaces=True)
         time.sleep(0.4)
 
@@ -307,6 +355,7 @@ def checks():
         t.ok("a private window offers New Window alone", said["chooser"] == ["New Window"], said["chooser"])
         ui(linkChooserDrop=True)
         gone()
+        frames_match(1, lambda: sv.cmd({"do": "select", "id": shy, "window": number}), window=number)
     finally:
         sv.finish()
 

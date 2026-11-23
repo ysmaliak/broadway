@@ -431,7 +431,7 @@ extension MiniPlayer {
         out["frames"] = tab.soundFrames.count
         out["frame"] = tab.soundFrame == nil ? "main" : "inner"
         for (index, media) in report.media.enumerated() {
-            out["media\(index + 1)"] = [media.kind, seconds(media.duration), "at \(clock(media.time))", media.paused ? "paused" : "playing",
+            out["media\(index + 1)"] = [media.kind, media.picture ? "picture" : "", seconds(media.duration), "at \(clock(media.time))", media.paused ? "paused" : "playing",
                                         media.muted ? "muted" : "sound", media.loop ? "loops" : "once", media.loose ? "outside the page" : "",
                                         media.chosen ? "chosen" : ""].filter { !$0.isEmpty }.joined(separator: ", ")
         }

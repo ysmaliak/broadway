@@ -5,12 +5,19 @@ enum MiniScripts {
     static let ask = "broadwaysoundask"
     static let key = "broadway.sound"
 
-    static let picture = """
+    static let has = """
     function (v) {
       if (!(v instanceof HTMLVideoElement)) return false;
-      var stream = v.srcObject && v.srcObject.getVideoTracks ? v.srcObject.getVideoTracks().length : 0;
+      var stream = 0;
+      try { stream = v.srcObject && v.srcObject.getVideoTracks ? v.srcObject.getVideoTracks().length : 0; } catch (e) {}
       var tracks = v.videoTracks ? v.videoTracks.length : 0;
-      if (!(v.videoWidth && v.videoHeight) && !stream && !tracks) return false;
+      return !!(v.videoWidth && v.videoHeight) || stream > 0 || tracks > 0;
+    }
+    """
+
+    static let picture = """
+    function (v) {
+      if (!(\(has))(v)) return false;
       var b = v.getBoundingClientRect();
       if (b.width < 32 || b.height < 18) return false;
       var s = getComputedStyle(v);
@@ -25,6 +32,7 @@ enum MiniScripts {
       var proto = MediaSession.prototype;
       if (proto[key]) return;
       var least = \(Int(MiniRule.soundLeast));
+      var has = \(has);
       var kept = {}, position = null, main = null, prior = null, why = '', loose = [], wanted = null, wantedAt = 0, refused = 0;
       function now() { return performance.now(); }
       function tell() { try { document.dispatchEvent(new CustomEvent('\(changed)', { detail: state() })); } catch (e) {} }
@@ -145,7 +153,7 @@ enum MiniScripts {
         return all().slice(0, 8).map(function (e) {
           return { kind: e instanceof HTMLVideoElement ? 'video' : 'audio', duration: e.duration === Infinity ? -1 : round(e.duration),
                    time: round(e.currentTime), paused: e.paused, muted: e.muted || e.volume === 0, loop: e.loop,
-                   loose: loose.indexOf(e) >= 0, chosen: e === el };
+                   loose: loose.indexOf(e) >= 0, chosen: e === el, picture: has(e) };
         });
       }
       function state() {
@@ -204,7 +212,7 @@ enum MiniScripts {
           if (window.__broadwaySound) return;
           var relay = window.webkit && webkit.messageHandlers && webkit.messageHandlers.\(MediaKeys.name);
           if (!relay) return;
-          var picture = \(picture);
+          var picture = \(picture), has = \(has);
           var id = Math.random().toString(36).slice(2), page = null, timer = 0, sent = '', heard = false, reading = false;
           function audible(e) { return !e.muted && e.volume > 0; }
           function art(list) {
@@ -226,7 +234,7 @@ enum MiniScripts {
             reading = false;
             var told = null;
             try { told = page ? JSON.parse(page) : null; } catch (e) {}
-            var r = { kind: 'sound', id: id, picture: false, sound: false, undecided: false };
+            var r = { kind: 'sound', id: id, picture: false, sound: false, undecided: false, unseen: false };
             var all = document.querySelectorAll('audio, video');
             for (var i = 0; i < all.length; i++) {
               var e = all[i];
@@ -234,6 +242,7 @@ enum MiniScripts {
               if (e instanceof HTMLVideoElement) {
                 if (e.readyState < 1) r.undecided = true;
                 else if (picture(e)) r.picture = true;
+                else if (has(e)) r.unseen = true;
                 else r.sound = true;
               } else r.sound = true;
             }
@@ -253,7 +262,7 @@ enum MiniScripts {
           function post() {
             timer = 0;
             var r = read();
-            if (!heard && !r.reading && !r.session && !r.picture && !r.sound) return;
+            if (!heard && !r.reading && !r.session && !r.picture && !r.sound && !r.unseen) return;
             heard = true;
             var text = JSON.stringify(r);
             if (text === sent) return;
