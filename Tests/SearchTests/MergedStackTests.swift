@@ -206,7 +206,7 @@ final class MergedStackTests {
         #expect(third[61] == "Merged" && third[64] == "Approved")
     }
 
-    @Test func onlyTheRowInFrontPlaysTheJoinAndEveryTurnedRowGetsTheWord() throws {
+    @Test func theRowInFrontPlaysTheWashTheRowsBelowFollowItAndEveryTurnedRowGetsTheWord() throws {
         let made = prs([pull(61, position: 1, label: nil)] + rail.dropFirst())
         let window = NSWindow(contentRect: NSRect(x: -20_000, y: -20_000, width: 258, height: 700), styleMask: .borderless,
                               backing: .buffered, defer: false)
@@ -229,7 +229,8 @@ final class MergedStackTests {
 
         let shown = try rows.map { try #require($0) }
         #expect(shown.map(\.plays) == [0, 0, 1, 0])
-        #expect(shown.map(\.mergedForm) == [.quiet, .quiet, .full, nil])
+        #expect(shown.map(\.mergedForm) == [.follow, .follow, .full, nil])
+        #expect(shown.map(\.mergedLayers) == [2, 2, 2, 0])
         #expect(shown.map(\.arrivals) == [1, 1, 1, 0])
         #expect(browser.tabs(in: made.id).allSatisfy { !$0.arrives })
     }

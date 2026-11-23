@@ -87,15 +87,80 @@ final class MergedTurnTests {
         settle(column)
     }
 
-    private func sign(_ row: TabRowView) -> [CAShapeLayer] {
-        row.kitSubviews(of: MergedCanvas.self).flatMap { $0.layer?.sublayers ?? [] }.compactMap { $0 as? CAShapeLayer }
+    private func canvas(_ row: TabRowView) -> MergedCanvas? {
+        row.kitSubviews(of: MergedCanvas.self).first
+    }
+
+    private func fill(_ row: TabRowView) -> CALayer? {
+        canvas(row)?.layer?.sublayers?.first { !($0 is CAGradientLayer) }
+    }
+
+    private func crest(_ row: TabRowView) -> CAGradientLayer? {
+        canvas(row)?.layer?.sublayers?.compactMap { $0 as? CAGradientLayer }.first
+    }
+
+    private func pump(_ column: NSView, for seconds: Double) async throws {
+        let end = CACurrentMediaTime() + seconds
+        while CACurrentMediaTime() < end {
+            settle(column)
+            try await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
+    private static var looks: [(String, SpaceLook)] {
+        var looks: [(String, SpaceLook)] = SpaceLook.themes.map { ($0.name, $0.look) }
+        looks += SpaceLook.palette.map { ($0.name, SpaceLook(colour: $0.id)) }
+        looks += ["000000", "000354", "3139FB", "FB3A4D", "39FF14", "FFFFFF", "E8FF1A", "FFD3E0", "F2EEE6", "8A8F98", "D0342C",
+                  "1E7A46", "8250DF"].flatMap { hex in
+            [0.8, 2.0].map { strength -> (String, SpaceLook) in
+                var look = SpaceLook(colour: "custom", custom: hex)
+                look.intensity = strength
+                return ("\(hex) \(strength)", look)
+            }
+        }
+        return looks
+    }
+
+    private struct Ground {
+        let name: String
+        let stops: [Oklch?]
+        let frame: Bool
+        let dark: Bool
+        let lift: Double
+        let ink: Oklch
+    }
+
+    private static var grounds: [Ground] {
+        var out: [Ground] = []
+        for (name, look) in looks {
+            for dark in [false, true] {
+                let ground = look.ground(dark: dark)
+                let ink = ChecksTint.colour(.passing, merged: true, dark: ground.lightInk, stops: ground.stops, frame: true, lift: ground.lift)
+                let average = Paint.Ground(stops: ground.stops, lightInk: ground.lightInk).average
+                out.append(Ground(name: "\(name) \(dark)", stops: ground.stops + [average], frame: true, dark: ground.lightInk,
+                                  lift: ground.lift, ink: ink))
+            }
+        }
+        for dark in [false, true] {
+            let ink = ChecksTint.colour(.passing, merged: true, dark: dark, stops: nil, frame: false, lift: 0)
+            out.append(Ground(name: "plain \(dark)", stops: [nil], frame: false, dark: dark, lift: 0, ink: ink))
+        }
+        return out
+    }
+
+    private static let pills: [ChecksTint.Pill] = [.none, .hover, .picked, .live, .pickedLive]
+
+    private static func distance(_ a: ChecksTint.RGB, _ b: ChecksTint.RGB) -> Double {
+        let x = KitMesh.lab(NSColor(srgbRed: a.r, green: a.g, blue: a.b, alpha: 1))
+        let y = KitMesh.lab(NSColor(srgbRed: b.r, green: b.g, blue: b.b, alpha: 1))
+        return ((x.l - y.l) * (x.l - y.l) + (x.a - y.a) * (x.a - y.a) + (x.b - y.b) * (x.b - y.b)).squareRoot()
     }
 
     private func badge(_ row: TabRowView) -> ChecksMarkView? {
         row.kitSubviews(of: ChecksMarkView.self).first
     }
 
-    @Test func theRowThatTurnsDrawsTheBranchesJoiningInPlaceOfItsIcon() throws {
+    @Test func theRowThatTurnsIsWashedInMergePurpleFromItsLeadingEdge() throws {
         let made = prs([pull(1), pull(2)])
         let (column, window) = shown(made)
         defer {
@@ -108,11 +173,13 @@ final class MergedTurnTests {
 
         #expect(turned.mergedForm == .full)
         #expect(turned.plays == 1)
-        #expect(turned.mergedLayers == 4)
-        #expect(sign(turned).count == 4)
-        #expect(turned.mergedTraces == 2)
-        #expect(turned.mergedMoving > 0)
-        #expect(badge(turned)?.isHidden == true)
+        #expect(turned.mergedLayers == 2)
+        #expect(turned.mergedTraces == 1)
+        #expect(fill(turned)?.animation(forKey: "merged.transform.scale.x") != nil)
+        #expect(fill(turned)?.anchorPoint == CGPoint(x: 0, y: 0.5))
+        #expect(crest(turned)?.animation(forKey: "merged.crest") != nil)
+        #expect(badge(turned)?.isHidden == false)
+        #expect(badge(turned)?.merged == true)
         #expect(turned.arrivals == 1)
         let other = try #require(row(2, in: column))
         #expect(other.mergedForm == nil)
@@ -120,7 +187,7 @@ final class MergedTurnTests {
         #expect(other.plays == 0)
     }
 
-    @Test func theJoinPlaysOnceHoweverOftenTheRowIsDrawnAgain() throws {
+    @Test func theWashPlaysOnceHoweverOftenTheRowIsDrawnAgain() throws {
         let made = prs([pull(1), pull(2)])
         let (column, window) = shown(made)
         defer {
@@ -138,10 +205,10 @@ final class MergedTurnTests {
         #expect(turned.plays == 1)
         #expect(turned.mergedForm == .full)
         #expect(turned.mergedMoving == moving)
-        #expect(sign(turned).count == 4)
+        #expect(turned.mergedTraces == 1)
     }
 
-    @Test func theSignIsDrawnInTheColourOfTheWord() throws {
+    @Test func theWashIsMergePurpleAndTheCheckAndTheWordShareOneInk() throws {
         let made = prs([pull(1), pull(2)])
         let (column, window) = shown(made)
         defer {
@@ -152,39 +219,108 @@ final class MergedTurnTests {
 
         merge(1, column: column)
 
-        let word = try #require(turned.kitSubviews(of: BylineView.self).first?.stateTint).cgColor
-        let drawn = sign(turned)
-        #expect(drawn.count == 4)
-        #expect(drawn.filter { $0.strokeColor == word }.count == 3)
-        #expect(drawn.filter { $0.fillColor == word }.count == 1)
+        let word = try #require(turned.kitSubviews(of: BylineView.self).first?.stateTint?.usingColorSpace(.sRGB))
+        let check = try #require(badge(turned)?.glyphColour?.usingColorSpace(.sRGB))
+        #expect(abs(word.redComponent - check.redComponent) < 0.002 && abs(word.blueComponent - check.blueComponent) < 0.002)
+        let ground = try #require(fill(turned)?.backgroundColor.flatMap(NSColor.init(cgColor:))?.usingColorSpace(.sRGB))
+        #expect(ground.blueComponent > ground.greenComponent)
+        #expect(ground.redComponent > ground.greenComponent)
+        let alpha = Double(ground.alphaComponent)
+        #expect([false, true].contains { abs(alpha - MergedWash.plain(dark: $0)) < 0.001 }, "\(alpha) \(column.kitDark)")
     }
 
-    @Test func theSignKeepsThreeToOneOnEveryGroundARowCanHave() {
-        var looks: [(String, SpaceLook)] = SpaceLook.themes.map { ($0.name, $0.look) }
-        looks += SpaceLook.palette.map { ($0.name, SpaceLook(colour: $0.id)) }
-        looks += ["000000", "000354", "3139FB", "FB3A4D", "39FF14", "FFFFFF", "E8FF1A", "FFD3E0"].flatMap { hex in
-            [0.8, 2.0].map { strength -> (String, SpaceLook) in
-                var look = SpaceLook(colour: "custom", custom: hex)
-                look.intensity = strength
-                return ("\(hex) \(strength)", look)
-            }
-        }
-
+    @Test func theWashKeepsTheCheckAndTheWordAtThreeToOneOnEveryGroundARowCanHave() {
         var failing: [String] = []
-        for (name, look) in looks {
-            for dark in [false, true] {
-                let ground = look.ground(dark: dark)
-                let ink = ChecksTint.colour(.passing, merged: true, dark: ground.lightInk, stops: ground.stops, frame: true, lift: ground.lift)
-                let all = ChecksTint.grounds(ground.stops, frame: true, dark: ground.lightInk, lift: ground.lift)
-                if ChecksTint.worst(ink, on: all) < ChecksTint.minimum { failing.append("\(name) \(dark)") }
+        for ground in Self.grounds {
+            for stop in ground.stops {
+                let side = ChecksTint.ground(stop, pill: .none, frame: ground.frame, dark: ground.dark, lift: ground.lift)
+                for pill in Self.pills {
+                    let under = ChecksTint.ground(stop, pill: pill, frame: ground.frame, dark: ground.dark, lift: ground.lift)
+                    let scene = MergedScene(bounds: .zero, radius: 0, ink: ground.ink, under: under, side: side, pill: pill, dark: ground.dark)
+                    let washed = scene.ground
+                    let glyph = ChecksTint.rgb(scene.glyph)
+                    let worst = min(ChecksTint.contrast(glyph, washed), ChecksTint.contrast(glyph, under))
+                    if worst < ChecksTint.minimum { failing.append("\(ground.name) \(pill) \((worst * 100).rounded() / 100)") }
+                }
             }
-        }
-        for dark in [false, true] {
-            let ink = ChecksTint.colour(.passing, merged: true, dark: dark, stops: nil, frame: false, lift: 0)
-            if ChecksTint.worst(ink, on: ChecksTint.grounds(nil, frame: false, dark: dark, lift: 0)) < ChecksTint.minimum { failing.append("plain \(dark)") }
         }
 
         #expect(failing.isEmpty, "\(failing)")
+    }
+
+    @Test func aSaturatedTintsPickedPlateKeepsTheWashedCheckReadable() {
+        for dark in [false, true] {
+            let stops = [Oklch(hex: "3139FB")]
+            let ink = ChecksTint.colour(.passing, merged: true, dark: dark, stops: stops, frame: true, lift: 0)
+            let under = ChecksTint.ground(stops[0], pill: .picked, frame: true, dark: dark, lift: 0)
+            let side = ChecksTint.ground(stops[0], pill: .none, frame: true, dark: dark, lift: 0)
+            let scene = MergedScene(bounds: .zero, radius: 0, ink: ink, under: under, side: side, pill: .picked, dark: dark)
+
+            #expect(ChecksTint.contrast(ChecksTint.rgb(scene.glyph), scene.ground) >= ChecksTint.minimum)
+        }
+    }
+
+    @Test func theRowInFrontIsWashedAtLeastAsClearlyAsAPlainRow() {
+        var failing: [String] = []
+        for ground in Self.grounds {
+            for stop in ground.stops {
+                let side = ChecksTint.ground(stop, pill: .none, frame: ground.frame, dark: ground.dark, lift: ground.lift)
+                let plain = Self.distance(MergedScene(bounds: .zero, radius: 0, ink: ground.ink, under: side, side: side, pill: .none, dark: ground.dark).ground, side)
+                for pill in [ChecksTint.Pill.picked, .live, .pickedLive] {
+                    let plate = ChecksTint.ground(stop, pill: pill, frame: ground.frame, dark: ground.dark, lift: ground.lift)
+                    let scene = MergedScene(bounds: .zero, radius: 0, ink: ground.ink, under: plate, side: side, pill: pill, dark: ground.dark)
+                    let washed = scene.ground
+                    if scene.strength < MergedWash.lit(dark: ground.dark) { failing.append("\(ground.name) \(pill) below the lit floor") }
+                    let apart = Self.distance(washed, side)
+                    let own = Self.distance(washed, plate)
+                    if min(apart, own) < plain * 0.999 { failing.append("\(ground.name) \(pill) \((apart / plain * 1000).rounded() / 1000) \((own / plain * 1000).rounded() / 1000)") }
+                }
+            }
+        }
+
+        #expect(failing.isEmpty, "\(failing.count) \(failing.prefix(12))")
+        for dark in [false, true] {
+            #expect(MergedWash.lit(dark: dark) > MergedWash.plain(dark: dark))
+        }
+    }
+
+    @Test func theSelectedRowTakesTheStrongerWash() throws {
+        let made = prs([pull(1), pull(2)])
+        let (column, window) = shown(made)
+        defer {
+            window.contentView = nil
+            window.close()
+        }
+        browser.select(try #require(tab(made, 1)))
+        settle(column)
+        let turned = try #require(row(1, in: column))
+
+        merge(1, column: column)
+
+        let ground = try #require(fill(turned)?.backgroundColor.flatMap(NSColor.init(cgColor:)))
+        #expect(turned.mergedForm == .full)
+        let alpha = Double(ground.alphaComponent)
+        #expect(alpha >= MergedWash.lit(dark: false) - 0.001 && alpha <= MergedWash.most + 0.001, "\(alpha) \(column.kitDark)")
+    }
+
+    @Test func aRowDrawnWithLettersInPlaceOfIconsIsWashedToo() throws {
+        keepSetting(Shared.prefs, \.glyph, "glyph")
+        browser.prefs.glyph = .letters
+        let made = prs([pull(1), pull(2)])
+        let (column, window) = shown(made)
+        defer {
+            window.contentView = nil
+            window.close()
+        }
+        let turned = try #require(row(1, in: column))
+
+        merge(1, column: column)
+
+        #expect(badge(turned)?.isHidden != false)
+        #expect(turned.mergedForm == .full)
+        #expect(turned.mergedLayers == 2)
+        #expect(turned.plays == 1)
+        #expect(turned.kitSubviews(of: BylineView.self).first?.stateTint != nil)
     }
 
     @Test func aRowThatIsMergedButNotTurningKeepsThePurpleCheckAndTheWord() throws {
@@ -236,7 +372,7 @@ final class MergedTurnTests {
         #expect(stayed.mergedTraces == 0)
     }
 
-    @Test func theRowKeptOpenIsAnOrdinaryRowAfterTheHold() async throws {
+    @Test func theRowKeptOpenFadesItsWashOutAndIsAnOrdinaryRowAfterTheHold() async throws {
         LiveFolders.shared.mergedHold = 0.05
         let made = prs([pull(1), pull(2)])
         let (column, window) = shown(made)
@@ -249,20 +385,63 @@ final class MergedTurnTests {
         settle(column)
 
         merge(1, column: column)
-        let worn = row(1, in: column)?.mergedForm
+        let fading = try #require(row(1, in: column))
+        let worn = fading.mergedForm
+        let end = CACurrentMediaTime() + 2
+        while CACurrentMediaTime() < end, fading.mergedForm != nil {
+            settle(column)
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let waning = (fading.mergedLayers, fading.mergedTraces, canvas(fading)?.layer?.animation(forKey: "merged.opacity") != nil)
         try await Task.sleep(for: .milliseconds(400))
         settle(column)
 
         let kept = try #require(row(1, in: column))
         #expect(worn == .full)
         #expect(page.liveItem == nil)
+        #expect(waning.0 == 0)
+        #expect(waning.1 == 1)
+        #expect(waning.2)
         #expect(kept.mergedForm == nil)
         #expect(kept.mergedLayers == 0)
         #expect(kept.mergedTraces == 0)
         #expect(kept.mergedMoving == 0)
     }
 
-    @Test func aStackMemberTurnsQuietlyAndIsOrdinaryAgainWhenItComesBackOpen() throws {
+    @Test func underReduceMotionALeavingWashedRowFadesOutInPlace() async throws {
+        Store.settings.set(true, forKey: "motion.testReduced")
+        LiveFolders.shared.mergedHold = 0.05
+        let made = prs([pull(1), pull(2)])
+        let (column, window) = shown(made)
+        defer {
+            window.contentView = nil
+            window.close()
+        }
+        browser.select(try #require(tab(made, 2)))
+        settle(column)
+        let turned = try #require(row(1, in: column))
+
+        merge(1, column: column)
+        let worn = turned.mergedForm
+        let end = CACurrentMediaTime() + 2
+        while CACurrentMediaTime() < end, !turned.isHidden, turned.layer?.animation(forKey: "retire.opacity") == nil {
+            settle(column)
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let fading = (!turned.isHidden, turned.layer?.animation(forKey: "retire.opacity") != nil, turned.alphaValue == 0)
+        try await Task.sleep(for: .milliseconds(400))
+
+        #expect(worn == .still)
+        #expect(fading.0)
+        #expect(fading.1)
+        #expect(fading.2)
+        #expect(turned.pooled)
+        #expect(turned.alphaValue == 1)
+        #expect(turned.mergedTraces == 0)
+        #expect(tab(made, 1) == nil)
+    }
+
+    @Test func aStackMemberFollowsTheWipeAndIsOrdinaryAgainWhenItComesBackOpen() async throws {
         LiveFolders.shared.mergedHold = 5
         let made = prs(rail)
         let (column, window) = shown(made)
@@ -274,16 +453,21 @@ final class MergedTurnTests {
         merge(63, column: column)
         let lead = try #require(row(63, in: column))
         let member = try #require(row(62, in: column))
-        let worn = (lead.mergedForm, member.mergedForm, member.mergedLayers, member.plays)
+        let worn = (lead.mergedForm, member.mergedForm, member.mergedLayers, member.plays,
+                    fill(member)?.animation(forKey: "merged.transform.scale.x") != nil, crest(member)?.animation(forKey: "merged.crest") != nil)
         LiveRefs.known[LiveRefs.slot(key(62), space: browser.spaceID)] = LiveRefs.Known(updated: nil, branch: pull(62, position: 2).branch, read: Date(),
                                                                                          state: .open)
         LiveFolders.shared.apply(.items(LiveStacks.arranged(rail.filter { $0.key != key(63) }), nil), to: made.id)
         settle(column)
+        try await Task.sleep(for: .milliseconds(400))
+        settle(column)
 
         #expect(worn.0 == .full)
-        #expect(worn.1 == .quiet)
-        #expect(worn.2 == 4)
+        #expect(worn.1 == .follow)
+        #expect(worn.2 == 2)
         #expect(worn.3 == 0)
+        #expect(worn.4)
+        #expect(!worn.5)
         #expect(!LiveFolders.shared.turning(key(62)))
         let back = try #require(row(62, in: column))
         #expect(back.mergedForm == nil)
@@ -292,6 +476,55 @@ final class MergedTurnTests {
         #expect(back.mergedMoving == 0)
         #expect(badge(back)?.isHidden == false)
         #expect(try #require(row(63, in: column)).mergedForm == .full)
+    }
+
+    @Test func eachRowOfAStackKeepsItsOwnRoundedWashWithTheListsGap() throws {
+        LiveFolders.shared.mergedHold = 5
+        let made = prs(rail)
+        let (column, window) = shown(made)
+        defer {
+            window.contentView = nil
+            window.close()
+        }
+
+        merge(63, column: column)
+
+        let rows = try [63, 62, 61].map { try #require(row($0, in: column)) }
+        let boxes = try rows.map { row in row.convert(try #require(row.washFrame), to: column) }
+        let sorted = boxes.sorted { $0.minY < $1.minY }
+        #expect(rows.map(\.mergedLayers) == [2, 2, 2])
+        for (row, box) in zip(rows, boxes) {
+            #expect(box == row.convert(row.bounds, to: column))
+            #expect((canvas(row)?.layer?.cornerRadius ?? 0) > 0)
+            #expect(canvas(row)?.layer?.masksToBounds == true)
+        }
+        for (upper, lower) in zip(sorted, sorted.dropFirst()) {
+            #expect(abs(lower.minY - upper.maxY - Metrics.sideGap) < 0.5)
+        }
+    }
+
+    @Test func theStackWashesOneRowAfterAnotherFromTheTop() async throws {
+        LiveFolders.shared.mergedHold = 5
+        LiveFolders.shared.stackStagger = LiveFolders.stagger
+        let made = prs(rail)
+        let (column, window) = shown(made)
+        defer {
+            window.contentView = nil
+            window.close()
+        }
+
+        merge(63, column: column)
+        try await pump(column, for: 0.5)
+
+        let rows = try [63, 62, 61].map { try #require(row($0, in: column)) }
+        let tops = rows.map { $0.convert($0.bounds, to: column).minY }
+        let times = try rows.map { try #require($0.wornAt) }
+        #expect(rows.map(\.mergedForm) == [.full, .follow, .follow])
+        #expect(rows.map(\.plays) == [1, 0, 0])
+        #expect(tops == tops.sorted() || tops == tops.sorted().reversed())
+        let order = zip(tops, times).sorted { column.isFlipped ? $0.0 < $1.0 : $0.0 > $1.0 }.map(\.1)
+        #expect(order == order.sorted())
+        #expect(order.last! > order.first!)
     }
 
     @Test func ofSeveralUnrelatedRowsFoundMergedInOneReadOnlyOnePlays() throws {
@@ -310,13 +543,13 @@ final class MergedTurnTests {
         #expect(forms.filter { $0 == .full }.count == 1)
         #expect(forms.filter { $0 == .quiet }.count == 2)
         #expect(rows.map(\.plays).reduce(0, +) == 1)
-        #expect(rows.prefix(3).allSatisfy { $0.mergedLayers == 4 && badge($0)?.isHidden == true })
+        #expect(rows.prefix(3).allSatisfy { $0.mergedLayers == 2 && badge($0)?.isHidden == false })
         #expect(rows.map(\.arrivals) == [1, 1, 1, 0])
         #expect(rows[3].mergedForm == nil)
         #expect(rows[3].mergedTraces == 0)
     }
 
-    @Test func underReduceMotionTheRowTakesItsStillForm() throws {
+    @Test func underReduceMotionTheRowTakesTheTintedGroundAtOnce() throws {
         Store.settings.set(true, forKey: "motion.testReduced")
         let made = prs([pull(1), pull(2)])
         let (column, window) = shown(made)
@@ -329,8 +562,8 @@ final class MergedTurnTests {
 
         let turned = try #require(row(1, in: column))
         #expect(turned.mergedForm == .still)
-        #expect(turned.mergedLayers == 4)
-        #expect(turned.mergedTraces == 2)
+        #expect(turned.mergedLayers == 2)
+        #expect(turned.mergedTraces == 1)
         #expect(turned.mergedMoving == 0)
         #expect(turned.plays == 0)
         #expect(turned.arrivals == 0)
@@ -349,7 +582,7 @@ final class MergedTurnTests {
 
         let turned = try #require(row(1, in: column))
         #expect(turned.mergedForm == .still)
-        #expect(turned.mergedLayers == 4)
+        #expect(turned.mergedLayers == 2)
         #expect(turned.mergedMoving == 0)
         #expect(turned.plays == 0)
         #expect(tab(made, 1)?.leads == false)

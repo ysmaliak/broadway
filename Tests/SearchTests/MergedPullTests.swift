@@ -135,7 +135,7 @@ final class MergedPullTests {
     }
 
     @Test func theMergedBadgeIsTheDoneCheckInGitHubsPurple() throws {
-        let made = prs([pull(2)])
+        let made = prs([pull(1, checks: nil)])
         let window = NSWindow(contentRect: NSRect(x: -20_000, y: -20_000, width: 258, height: 600), styleMask: .borderless,
                               backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
@@ -148,7 +148,7 @@ final class MergedPullTests {
             window.close()
         }
 
-        LiveFolders.shared.apply(.items([pull(1, label: "Merged", checks: nil), pull(2)], nil), to: made.id)
+        LiveFolders.shared.pageMerged(URL(string: pull(1).key)!, space: browser.spaceID)
         browser.syncLive()
         column.layoutSubtreeIfNeeded()
 
@@ -162,7 +162,7 @@ final class MergedPullTests {
         #expect(ChecksTint.primer(.failing, dark: true, merged: true) == "A371F7")
     }
 
-    @Test func theJoinPlaysOnceInTheRowWhenItTurnsMergedOnScreen() throws {
+    @Test func theWashPlaysOnceInTheRowWhenItTurnsMergedOnScreen() throws {
         let made = prs([pull(1), pull(2)])
         let (column, window) = shown(made)
         defer {
@@ -178,12 +178,13 @@ final class MergedPullTests {
 
         #expect(shownRow.plays == 1)
         #expect(shownRow.mergedForm == .full)
-        #expect(shownRow.mergedLayers == 4)
-        #expect(shownRow.kitSubviews(of: ChecksMarkView.self).first?.isHidden == true)
+        #expect(shownRow.mergedLayers == 2)
+        #expect(shownRow.kitSubviews(of: ChecksMarkView.self).first?.isHidden == false)
+        #expect(shownRow.kitSubviews(of: ChecksMarkView.self).first?.merged == true)
         #expect(try #require(row(2, in: column)).plays == 0)
     }
 
-    @Test func nothingPlaysUnderReduceMotionButTheSignAndTheWordChange() throws {
+    @Test func nothingPlaysUnderReduceMotionButTheGroundTheCheckAndTheWordChange() throws {
         keepSettings("motion.testReduced")
         Store.settings.set(true, forKey: "motion.testReduced")
         let made = prs([pull(1)])
@@ -199,6 +200,7 @@ final class MergedPullTests {
         #expect(shownRow.plays == 0)
         #expect(shownRow.mergedForm == .still)
         #expect(shownRow.mergedMoving == 0)
+        #expect(shownRow.mergedLayers == 2)
         #expect(shownRow.kitSubviews(of: ChecksMarkView.self).first?.merged == true)
         #expect(item(made, 1)?.label == "Merged")
     }
@@ -385,7 +387,7 @@ final class MergedPullTests {
         #expect(item(two, 1) == nil)
     }
 
-    @Test func aRowFoundMergedByAReadPlaysTheJoinToo() throws {
+    @Test func aRowFoundMergedByAReadPlaysTheWashToo() throws {
         let made = prs([pull(1), pull(2)])
         let (column, window) = shown(made)
         defer {
