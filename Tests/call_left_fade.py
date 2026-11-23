@@ -83,6 +83,7 @@ BASE = f"http://127.0.0.1:{pages.server_port}"
 LINK = f"{BASE}/abc-defg-hij"
 PID = None
 NUMBER = None
+SCALE = None
 
 
 def end(action, **more):
@@ -130,7 +131,8 @@ def shoot(name, r):
     said = subprocess.run([str(SHOT), str(PID), str(NUMBER), str(out)], capture_output=True, text=True, stdin=subprocess.DEVNULL).stdout.strip()
     t.ok(f"pictured {name}", out.exists(), said)
     if out.exists() and r:
-        scale = scale_of(out)
+        global SCALE
+        scale = SCALE = SCALE or scale_of(out)
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(out), "-vf", crop(r, scale) + ",scale=iw*2:ih*2:flags=neighbor",
                         str(OUT / f"{name}-row.png")], check=False, stdin=subprocess.DEVNULL)
     return out
@@ -181,8 +183,8 @@ def film(name, act, r, seconds=0.7):
     print("  ", name, p.communicate()[0].strip(), flush=True)
     (folder / "trace.json").write_text(json.dumps(samples))
     frames = sorted(folder.glob("0*.png"))
-    if frames and r:
-        scale = scale_of(frames[0])
+    if frames and r and SCALE:
+        scale = SCALE
         work = folder / "sheet"
         work.mkdir()
         picked = frames[::max(1, len(frames) // 24)]
@@ -248,6 +250,7 @@ def main():
         if not r:
             return 1
         id = r["id"]
+        shoot("no-sign", r)
         arrival = film("sign-arrives", lambda: calendar(2.5), r, seconds=1.0)
         time.sleep(0.6)
         r = row()
