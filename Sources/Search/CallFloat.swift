@@ -885,6 +885,7 @@ final class CallCorners: NSView {
         wantsLayer = true
         addSubview(close)
         addSubview(back)
+        for corner in [close, back] { corner.key.addSubview(CallRing()) }
     }
 
     @available(*, unavailable)
@@ -966,4 +967,43 @@ final class CallCorners: NSView {
         due = work
         DispatchQueue.main.asyncAfter(deadline: .now() + max(0.02, deadline - Self.now), execute: work)
     }
+}
+
+final class CallRing: NSView {
+    static let line = (width: CGFloat(1), white: CGFloat(0.4), alpha: CGFloat(0.5))
+    private let shape = CAShapeLayer()
+
+    init() {
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.addSublayer(shape)
+        shape.fillColor = nil
+        shape.lineWidth = Self.line.width
+        shape.strokeColor = NSColor(white: Self.line.white, alpha: Self.line.alpha).cgColor
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    var path: CGPath? { shape.path }
+
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        autoresizingMask = [.width, .height]
+        if let superview { frame = superview.bounds.insetBy(dx: -Self.line.width, dy: -Self.line.width) }
+    }
+
+    override func layout() {
+        super.layout()
+        shape.frame = bounds
+        let inset = Self.line.width / 2
+        shape.path = CGPath(ellipseIn: bounds.insetBy(dx: inset, dy: inset), transform: nil)
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        needsLayout = true
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
