@@ -404,6 +404,7 @@ final class CallFloat {
     @ObservationIgnored private var quiet = 0
     @ObservationIgnored private var zoom: CGFloat = 1
     @ObservationIgnored private var whole = false
+    @ObservationIgnored private var flips = 0
     @ObservationIgnored private var closeAsked: (id: Tab.ID, at: Date)?
     @ObservationIgnored private var corners: CallCorners?
     @ObservationIgnored private(set) var away = CallAway()
@@ -447,6 +448,7 @@ final class CallFloat {
 
         zoom = web.pageZoom
         whole = false
+        flips = 0
         web.removeFromSuperview()
         web.alphaValue = 1
         web.frame = ground.bounds
@@ -585,7 +587,8 @@ final class CallFloat {
             MainActor.assumeIsolated {
                 guard let self, let web, web === self.tab?.built, entering == self.tilesOnly else { return }
                 let whole = entering && found as? String == "none"
-                guard whole != self.whole else { return }
+                guard whole != self.whole, whole || self.flips < 2 else { return }
+                if whole { self.flips += 1 }
                 self.whole = whole
                 self.tiles()
             }
