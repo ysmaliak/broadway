@@ -1679,7 +1679,7 @@ enum RowTitleFade {
         natural > room - reserve + 0.5
     }
 
-    static let callGap: CGFloat = 4
+    static let callGap: CGFloat = 6
 
     static func call(width: CGFloat, sign: CGFloat, endsLeft: CGFloat?, markFromEnd: CGFloat?) -> (x: CGFloat, fromEnd: CGFloat?) {
         let right = min(endsLeft ?? width - 7, markFromEnd.map { width - $0 - 2 } ?? width)

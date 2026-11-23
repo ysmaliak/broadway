@@ -57,7 +57,7 @@ struct TitleFadeTests {
         let place = RowTitleFade.call(width: 248, sign: 40, endsLeft: nil, markFromEnd: nil)
 
         #expect(place.x == 201)
-        #expect(place.fromEnd == 51)
+        #expect(place.fromEnd == 53)
     }
 
     @Test func aCallSignStandsLeftOfTheTabNumber() {

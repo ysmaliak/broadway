@@ -120,6 +120,7 @@ final class CallLeftSign: NSView {
         self.tab = tab
         self.changed = changed
         super.init(frame: .zero)
+        wantsLayer = true
         addSubview(minutes)
         watch = kitTrack { [weak self] in self?.refresh() }
     }

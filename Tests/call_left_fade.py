@@ -40,7 +40,7 @@ SHOT = TOOLS / "shot"
 CAPTURE = TOOLS / "capture"
 SIDEBAR = 260
 TITLE = "Meet - Bug Sync - iOS + RC hand off"
-GAP = 4
+GAP = 6
 t = sv.T()
 
 
@@ -237,10 +237,10 @@ def main():
     PID = next(iter(sv.holding() & sv.running()))
     try:
         sv.cmd({"do": "resize", "width": 1000, "height": 640, "steps": 1})
+        calendar(12)
         front = sv.cmd({"do": "open", "url": f"{BASE}/home"})["id"]
         call = sv.cmd({"do": "open", "url": LINK})["id"]
         sv.cmd({"do": "wait", "id": call, "seconds": 10})
-        calendar(12)
         sv.sp("select", id=front)
         NUMBER = sv.cmd({"do": "idle", "action": "unhide"})["number"]
         sv.cmd({"do": "idle", "action": "front"})
