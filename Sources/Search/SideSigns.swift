@@ -5,7 +5,9 @@ import Combine
 enum SideSigns {
     static func popupSign(browser: Browser, tab: Tab) -> NSView { PopupSignView(browser: browser, tab: tab) }
     static func translateSign(tab: Tab) -> NSView { TranslateSignView(tab: tab) }
-    static func callTimeLeft(browser: Browser, tab: Tab) -> NSView { CallLeftSign(browser: browser, tab: tab) }
+    static func callTimeLeft(browser: Browser, tab: Tab, changed: @escaping () -> Void) -> NSView {
+        CallLeftSign(browser: browser, tab: tab, changed: changed)
+    }
     static func agentFace(tab: Tab) -> NSView { AgentFaceSign(tab: tab) }
     static func peekBadge(page: Tab, size: CGFloat) -> NSView { PeekBadgeView(page: page, size: size) }
     static func tabAddressField(browser: Browser) -> NSView { TabAddressFieldView(browser: browser) }
@@ -111,11 +113,14 @@ final class CallLeftSign: NSView {
     weak var tab: Tab?
     private let minutes = CallMinutesView()
     private var watch: AnyCancellable?
+    private let changed: () -> Void
 
-    init(browser: Browser, tab: Tab) {
+    init(browser: Browser, tab: Tab, changed: @escaping () -> Void) {
         self.browser = browser
         self.tab = tab
+        self.changed = changed
         super.init(frame: .zero)
+        wantsLayer = true
         addSubview(minutes)
         watch = kitTrack { [weak self] in self?.refresh() }
     }
@@ -137,7 +142,7 @@ final class CallLeftSign: NSView {
         let now = left
         minutes.isHidden = now == nil
         if let now { minutes.minutes = now }
-        superview?.needsLayout = true
+        if superview != nil { changed() }
         needsLayout = true
     }
 

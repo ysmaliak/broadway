@@ -152,9 +152,15 @@ final class RowTitleView: NSView {
 
     var benchDrawn: NSColor? { title.benchDrawn }
 
-    var benchFade: (shown: [Double], model: [Double]) {
+    var benchFade: (shown: [Double], model: [Double], held: Double) {
         let model = (mask.locations ?? []).map(\.doubleValue)
-        return ((mask.presentation()?.locations ?? mask.locations ?? []).map(\.doubleValue), model)
+        let held = (mask.presentation()?.value(forKeyPath: "transform.translation.x") as? NSNumber)?.doubleValue ?? 0
+        return ((mask.presentation()?.locations ?? mask.locations ?? []).map(\.doubleValue), model, held)
+    }
+
+    func hold(against slide: CAPropertyAnimation) {
+        guard let counter = RowTitleFade.counter(slide) else { return }
+        mask.add(counter, forKey: "hold")
     }
 
     private func updateMask() {
@@ -377,6 +383,11 @@ final class BylineView: NSView {
         guard room != reserve else { return }
         sweepWait = sweeps ? wait : nil
         reserve = room
+    }
+
+    func hold(against slide: CAPropertyAnimation) {
+        guard let counter = RowTitleFade.counter(slide) else { return }
+        fade.add(counter, forKey: "hold")
     }
 }
 
@@ -872,6 +883,7 @@ final class TabRowView: KitHoverView {
         var tab: ObjectIdentifier
         var dot: Bool
         var talk: Bool
+        var call: Bool
         var aside: Bool
         var hovering: Bool
         var title: NSRect
@@ -889,7 +901,8 @@ final class TabRowView: KitHoverView {
             leave(unseenDot)
             return
         }
-        let now = RowEnd(tab: ObjectIdentifier(tab), dot: dot, talk: talk != nil, aside: talkAside, hovering: isHovering, title: title.frame)
+        let call = (callLeft?.frame.width ?? 0) > 0
+        let now = RowEnd(tab: ObjectIdentifier(tab), dot: dot, talk: talk != nil, call: call, aside: talkAside, hovering: isHovering, title: title.frame)
         end = now
         let same = before?.tab == now.tab && window != nil && !pooled
         if !same { talk?.layer?.removeAnimation(forKey: Self.sliding) }
@@ -897,6 +910,7 @@ final class TabRowView: KitHoverView {
         var comers: [NSView] = []
         if dot, before?.dot != true { comers.append(unseenDot) }
         if let talk, before?.talk != true { comers.append(talk) }
+        if call, let callLeft, before?.call != true { comers.append(callLeft) }
         if !dot { leave(unseenDot) }
         if same, before?.talk == true, now.talk, before?.aside != now.aside {
             let sweeps = Motion.kitQuick.animates
@@ -904,11 +918,11 @@ final class TabRowView: KitHoverView {
             if sweeps { talkSlide = wait }
             title.keep(room, sweeps: sweeps, after: wait)
             if sweeps { title.sweepFade() } else { title.settleFade() }
-            for view in comers { arrive(view, after: RowSweep.wait, fading: true) }
+            for view in comers { arrive(view, after: view === callLeft ? wait + RowTitleFade.lead : RowSweep.wait, fading: true) }
             return
         }
-        let marked = dot || now.talk
-        let stays = marked && comers.count < (dot ? 1 : 0) + (now.talk ? 1 : 0)
+        let marked = dot || now.talk || call
+        let stays = marked && comers.count < (dot ? 1 : 0) + (now.talk ? 1 : 0) + (call ? 1 : 0)
         let swapped = comers == [unseenDot] && before?.hovering == true && room == title.reserve
         let leads = still && !comers.isEmpty && !stays && room != title.reserve && Motion.kitQuick.animates
             && RowTitleFade.fades(natural: title.natural, room: title.frame.width, reserve: room)
@@ -1135,7 +1149,7 @@ final class TabRowView: KitHoverView {
         ring.alphaValue = hovering ? 0 : 1
 
         if !editing, !hovering, state.nextMeeting, let address = tab.address, MeetingLink.service(of: address) != nil {
-            let left = callLeft ?? SideSigns.callTimeLeft(browser: browser, tab: tab)
+            let left = callLeft ?? SideSigns.callTimeLeft(browser: browser, tab: tab) { [weak self] in self?.needsLayout = true }
             if callLeft == nil { face.addSubview(left, positioned: .below, relativeTo: closeZone); callLeft = left }
             SideSigns.update(left, colour: colour, ground: state.ground)
         } else if let left = callLeft {
@@ -1285,15 +1299,18 @@ final class TabRowView: KitHoverView {
         func turning(_ view: NSView?) -> Bool { view?.layer?.animation(forKey: kCATransition) != nil }
         let fade = title.benchFade
         let x = Double(title.frame.minX), room = Double(title.frame.width)
-        func places(_ locations: [Double]) -> [Double] {
-            locations.count == 4 ? [x + locations[1] * room, x + locations[2] * room] : []
+        func places(_ locations: [Double], by shift: Double = 0) -> [Double] {
+            locations.count == 4 ? [x + shift + locations[1] * room, x + shift + locations[2] * room] : []
         }
+        let slid = (content.layer?.presentation()?.value(forKeyPath: "transform.translation.x") as? NSNumber)?.doubleValue ?? 0
         let place = convert(bounds, to: nil)
         return ["id": Bench.short(tab), "label": tab.label, "interactive": state.interactive, "hover": isHovering,
                 "at": [Double(place.minX), Double(window.frame.height - place.maxY)], "width": Double(bounds.width),
                 "seen": benchSeen,
                 "x": x, "room": room, "natural": Double(title.natural), "titled": !title.isHidden,
-                "shown": places(fade.shown), "model": places(fade.model),
+                "shown": places(fade.shown, by: slid + fade.held), "model": places(fade.model), "slid": slid,
+                "call": callLeft?.layer?.presentation() == nil ? 0 : seen(callLeft), "callX": Double(callLeft?.frame.minX ?? 0), "callWidth": Double(callLeft?.frame.width ?? 0),
+                "callShownX": Double(callLeft.map { ($0.layer?.presentation() ?? $0.layer)?.frame.minX ?? $0.frame.minX } ?? 0),
                 "dot": seen(unseenDot), "dotTurning": turning(unseenDot), "dotX": Double(unseenDot.frame.minX),
                 "talk": seen(talk), "talkX": Double(talk?.frame.minX ?? 0), "talkRight": Double(talk?.frame.maxX ?? 0),
                 "talkShownX": Double(talk.map { ($0.layer?.presentation() ?? $0.layer)?.frame.minX ?? $0.frame.minX } ?? 0),
@@ -1359,6 +1376,14 @@ final class TabRowView: KitHoverView {
         }
         settleSpeaker(for: tab)
         let innerRight = (ends.isEmpty ? width - (status || peeking ? endInset : 0) : innerEnd) - tail
+        var callFromEnd: CGFloat?
+        if let callLeft {
+            let size = callLeft.fittingSize
+            let sign = ceil(size.width)
+            let place = RowTitleFade.call(width: width, sign: sign, endsLeft: ends.isEmpty ? nil : innerEnd, markFromEnd: closeFromEnd)
+            callLeft.kitSetFrame(NSRect(x: place.x, y: (height - size.height) / 2, width: sign, height: size.height))
+            callFromEnd = place.fromEnd
+        }
 
         func put(_ view: NSView, width: CGFloat, height viewHeight: CGFloat? = nil, dy: CGFloat = 0) {
             let h = viewHeight ?? height
@@ -1386,7 +1411,7 @@ final class TabRowView: KitHoverView {
             let top = ((height - stack) / 2)
             title.kitSetFrame(NSRect(x: cursor, y: top, width: titleWidth, height: lineHeight))
             titleToEnd = width - (cursor + titleWidth)
-            settleEnd(for: tab, room: RowTitleFade.reserve(closeFromEnd: closeFromEnd, toEnd: titleToEnd))
+            settleEnd(for: tab, room: RowTitleFade.reserve(closeFromEnd: [closeFromEnd, callFromEnd].compactMap { $0 }.max(), toEnd: titleToEnd))
             if !byline.isHidden {
                 byline.kitSetFrame(NSRect(x: cursor, y: top + lineHeight, width: titleWidth, height: bylineHeight))
                 byline.keep(title.reserve, sweeps: talkSlide != nil, after: talkSlide ?? 0)
@@ -1404,10 +1429,6 @@ final class TabRowView: KitHoverView {
                                    y: ((height - size.height) / 2).rounded(), width: wide, height: size.height))
         }
         talkSlide = nil
-        if let callLeft {
-            let size = callLeft.fittingSize
-            callLeft.kitSetFrame(NSRect(x: width - 7 - size.width, y: (height - size.height) / 2, width: size.width, height: size.height))
-        }
         _ = tab
     }
 
@@ -1447,6 +1468,10 @@ final class TabRowView: KitHoverView {
         if let slide = Motion.kitSettle.animation("transform.translation.x", from: shown ? -SideLook.speakerRoom : SideLook.speakerRoom, to: 0) as? CAPropertyAnimation {
             slide.isAdditive = true
             content.layer?.add(slide, forKey: "speaker")
+            if !shown {
+                title.hold(against: slide)
+                byline.hold(against: slide)
+            }
         }
         if shown {
             speakerSpot.isHidden = false
@@ -1652,6 +1677,22 @@ enum RowTitleFade {
 
     static func fades(natural: CGFloat, room: CGFloat, reserve: CGFloat) -> Bool {
         natural > room - reserve + 0.5
+    }
+
+    static let callGap: CGFloat = 6
+
+    static func call(width: CGFloat, sign: CGFloat, endsLeft: CGFloat?, markFromEnd: CGFloat?) -> (x: CGFloat, fromEnd: CGFloat?) {
+        let right = min(endsLeft ?? width - 7, markFromEnd.map { width - $0 - 2 } ?? width)
+        let x = right - sign
+        return (x, sign > 0 ? width - x + callGap : nil)
+    }
+
+    static func counter(_ slide: CAPropertyAnimation) -> CAAnimation? {
+        guard let counter = slide.copy() as? CABasicAnimation, let from = (counter.fromValue as? NSNumber)?.doubleValue else { return nil }
+        counter.fromValue = -from
+        counter.toValue = 0
+        counter.isAdditive = true
+        return counter
     }
 }
 

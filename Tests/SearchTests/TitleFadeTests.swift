@@ -53,6 +53,39 @@ struct TitleFadeTests {
         #expect(reserve == 0)
     }
 
+    @Test func aCallSignAloneSitsSevenPointsFromTheEnd() {
+        let place = RowTitleFade.call(width: 248, sign: 40, endsLeft: nil, markFromEnd: nil)
+
+        #expect(place.x == 201)
+        #expect(place.fromEnd == 53)
+    }
+
+    @Test func aCallSignStandsLeftOfTheTabNumber() {
+        let place = RowTitleFade.call(width: 248, sign: 40, endsLeft: 200, markFromEnd: nil)
+
+        #expect(place.x == 160)
+    }
+
+    @Test func aCallSignStandsLeftOfTheUnseenDot() {
+        let place = RowTitleFade.call(width: 248, sign: 40, endsLeft: nil, markFromEnd: 30)
+
+        #expect(place.x == 176)
+    }
+
+    @Test func aCallSignWithNoMinutesKeepsNoRoom() {
+        let place = RowTitleFade.call(width: 248, sign: 0, endsLeft: nil, markFromEnd: nil)
+
+        #expect(place.fromEnd == nil)
+    }
+
+    @Test func theTitleFadesOutAGapBeforeTheCallSign() {
+        let place = RowTitleFade.call(width: 248, sign: 40, endsLeft: nil, markFromEnd: nil)
+
+        let reserve = RowTitleFade.reserve(closeFromEnd: place.fromEnd, toEnd: 10)
+
+        #expect(52 + 186 - reserve <= place.x - RowTitleFade.callGap)
+    }
+
     @Test func aFittingTitleFadesOnceTheCloseButtonCoversIt() {
         let reserve = RowTitleFade.reserve(closeFromEnd: 30, toEnd: 6)
 
