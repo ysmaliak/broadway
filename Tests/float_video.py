@@ -103,6 +103,8 @@ def main():
     scripts = (ROOT / "Sources/Search/MiniPlayerScripts.swift").read_text()
     begin = scripts.index('static let picture = """') + len('static let picture = """')
     picture = scripts[begin:scripts.index('"""', begin)].strip()
+    begin = scripts.index('static let has = """') + len('static let has = """')
+    picture = picture.replace("\\(has)", scripts[begin:scripts.index('"""', begin)].strip())
     isolate = isolate.replace("\\(MiniScripts.picture)", picture)
     start = source.index('static let off = """') + len('static let off = """')
     restore = source[start:source.index('"""', start)].strip().replace("\\\\", "\\")

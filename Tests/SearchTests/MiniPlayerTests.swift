@@ -117,6 +117,153 @@ struct MiniPlayerTests {
         #expect(role == .none)
     }
 
+    private func film(paused: Bool = true, muted: Bool = false, chosen: Bool = true, picture: Bool = true) -> MiniReport.Media {
+        MiniReport.Media(kind: "video", duration: 4914, time: 1800, paused: paused, muted: muted, chosen: chosen, picture: picture)
+    }
+
+    private func watched(_ media: [MiniReport.Media], sound: Bool = false, playing: Bool = false) -> MiniReport {
+        var made = report(sound: sound, playing: playing, title: "A Long Drive")
+        made.media = media
+        return made
+    }
+
+    @Test func aPausedVideoWithAPictureLosesTheCardItHeld() {
+        let facts = MiniFacts(noisy: false, reports: [watched([film()])])
+
+        let role = MiniRule.role(facts, was: .mini)
+
+        #expect(role == .none)
+    }
+
+    @Test func aVideoWhoseBoxFailsTheFloatTestNeverTakesTheCard() {
+        let fromMedia = MiniFacts(noisy: true, reports: [watched([film(paused: false)], sound: true, playing: true)])
+        var hidden = MiniReport(unseen: true)
+        hidden.reading = MiniReport.Reading(playing: true, time: 1800, duration: 4914, rate: 1.5)
+        hidden.session.title = "A Long Drive"
+        let fromRelay = MiniFacts(noisy: true, reports: [hidden])
+
+        #expect(MiniRule.role(fromMedia, was: .none) == .none)
+        #expect(MiniRule.role(fromMedia, was: .mini) == .none)
+        #expect(MiniRule.role(fromRelay, was: .none) == .none)
+        #expect(MiniRule.role(fromRelay, was: .float) == .float)
+    }
+
+    @Test func soundWithNothingReportedNeverGivesAVideoTabTheCard() {
+        let facts = MiniFacts(noisy: true, waited: true, reports: [watched([film(paused: false)])])
+
+        let role = MiniRule.role(facts, was: .none)
+
+        #expect(role == .none)
+    }
+
+    @Test func aHeldVideoTabLetsTheCardGo() {
+        let facts = MiniFacts(noisy: false, held: true, reports: [watched([film()])])
+
+        let role = MiniRule.role(facts, was: .mini)
+
+        #expect(role == .none)
+    }
+
+    @Test func aStillUndecidedVideoKeepsNoCardOnceItsPictureIsKnown() {
+        var report = watched([film(paused: false)])
+        report.undecided = true
+        let facts = MiniFacts(noisy: true, reports: [report])
+
+        let role = MiniRule.role(facts, was: .mini)
+
+        #expect(role == .none)
+    }
+
+    @Test func aVideoWithAPictureThatCanFloatStillFloats() {
+        var report = watched([film(paused: false)], playing: true)
+        report.picture = true
+        let facts = MiniFacts(noisy: true, reports: [report])
+
+        let role = MiniRule.role(facts, was: .mini)
+
+        #expect(role == .float)
+    }
+
+    @Test func aVideoElementWithNoPictureStaysTheCards() {
+        let playing = MiniFacts(noisy: true, reports: [watched([film(paused: false, picture: false)], sound: true, playing: true)])
+        let paused = MiniFacts(noisy: false, reports: [watched([film(picture: false)])])
+
+        #expect(MiniRule.role(playing, was: .none) == .mini)
+        #expect(MiniRule.role(paused, was: .mini) == .mini)
+    }
+
+    @Test func aMutedDecorativeVideoBesideTheSoundLeavesItTheCard() {
+        let tone = MiniReport.Media(kind: "audio", duration: 200, time: 10, paused: false, chosen: true)
+        let facts = MiniFacts(noisy: true, reports: [watched([film(paused: false, muted: true, chosen: false), tone], sound: true, playing: true)])
+
+        let role = MiniRule.role(facts, was: .none)
+
+        #expect(role == .mini)
+    }
+
+    @Test func aPausedVideoBesideTheSoundThatIsNotChosenLeavesItTheCard() {
+        let tone = MiniReport.Media(kind: "audio", duration: 200, time: 10, paused: false, chosen: true)
+        let facts = MiniFacts(noisy: true, reports: [watched([film(chosen: false), tone], sound: true, playing: true)])
+
+        let role = MiniRule.role(facts, was: .mini)
+
+        #expect(role == .mini)
+    }
+
+    @Test func aMutedVideoInAnotherFrameLeavesTheSoundTheCard() {
+        let tone = MiniReport.Media(kind: "audio", duration: 200, time: 10, paused: false, chosen: true)
+        let sound = watched([tone], sound: true, playing: true)
+        let advert = watched([film(paused: false, muted: true)], playing: true)
+        let facts = MiniFacts(noisy: true, reports: [sound, advert])
+
+        let role = MiniRule.role(facts, was: .none)
+
+        #expect(role == .mini)
+    }
+
+    @Test func aPausedVideoInAnotherFrameLeavesTheSoundTheCard() {
+        let tone = MiniReport.Media(kind: "audio", duration: 200, time: 10, paused: false, chosen: true)
+        let sound = watched([tone], sound: true, playing: true)
+        let embed = watched([film()])
+        let facts = MiniFacts(noisy: true, reports: [sound, embed])
+
+        let role = MiniRule.role(facts, was: .mini)
+
+        #expect(role == .mini)
+    }
+
+    @Test func aPausedTrackInAnotherFrameKeepsTheCardBesideAPausedVideo() {
+        let tone = MiniReport.Media(kind: "audio", duration: 200, time: 10, paused: true, chosen: true)
+        let track = watched([tone])
+        let embed = watched([film()])
+        let facts = MiniFacts(noisy: false, reports: [track, embed])
+
+        let role = MiniRule.role(facts, was: .mini)
+
+        #expect(role == .mini)
+    }
+
+    @Test func aMutedVideoAloneInAFrameBesideTheVideoTabStillGivesNoCard() {
+        let video = watched([film()])
+        let advert = watched([film(paused: false, muted: true)], playing: true)
+        let facts = MiniFacts(noisy: false, reports: [video, advert])
+
+        let role = MiniRule.role(facts, was: .mini)
+
+        #expect(role == .none)
+    }
+
+    @Test func eachElementSaysWhetherItHasAPicture() {
+        let body: [String: Any] = ["media": [["kind": "video", "duration": 4914, "time": 1800, "paused": true, "chosen": true, "picture": true],
+                                             ["kind": "video", "duration": 200, "picture": false]], "unseen": true]
+
+        let made = MiniReport.parse(body)
+
+        #expect(made.media.map(\.picture) == [true, false])
+        #expect(made.unseen)
+        #expect(made.video)
+    }
+
     @Test func musicGetsTracks() {
         let actions: Set<String> = ["play", "pause", "previoustrack", "nexttrack"]
 
