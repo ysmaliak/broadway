@@ -1309,7 +1309,7 @@ final class TabRowView: KitHoverView {
                 "seen": benchSeen,
                 "x": x, "room": room, "natural": Double(title.natural), "titled": !title.isHidden,
                 "shown": places(fade.shown, by: slid + fade.held), "model": places(fade.model), "slid": slid,
-                "call": seen(callLeft), "callX": Double(callLeft?.frame.minX ?? 0), "callWidth": Double(callLeft?.frame.width ?? 0),
+                "call": callLeft?.layer?.presentation() == nil ? 0 : seen(callLeft), "callX": Double(callLeft?.frame.minX ?? 0), "callWidth": Double(callLeft?.frame.width ?? 0),
                 "callShownX": Double(callLeft.map { ($0.layer?.presentation() ?? $0.layer)?.frame.minX ?? $0.frame.minX } ?? 0),
                 "dot": seen(unseenDot), "dotTurning": turning(unseenDot), "dotX": Double(unseenDot.frame.minX),
                 "talk": seen(talk), "talkX": Double(talk?.frame.minX ?? 0), "talkRight": Double(talk?.frame.maxX ?? 0),
