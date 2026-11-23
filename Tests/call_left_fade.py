@@ -1,20 +1,4 @@
 #!/usr/bin/env python3
-"""The title ends before the call's time-left sign in every state of a call's row.
-
-Build first (./build.sh), then python3 Tests/call_left_fade.py [LABEL].
-Start it where the test copy may picture its own window (a Rex pane, not
-ssh): every picture is of that window by its number (WindowShot.swift,
-WindowCapture.swift), never a region of the display.
-
-A shown test copy in a world of its own. A local page stands in for a Google
-Meet call with a long title, and a fake calendar puts that call two and a
-half minutes from its end, so its row shows "3m left". The row is pictured at
-rest, selected, hovered, playing sound, with the tab numbers of a held
-Command key, and filmed while the pointer comes and goes, while its sound
-stops and while the sign first comes. Per frame, on the row's own readout
-(endtrace), the title's ink and its fade end a gap short of the sign
-wherever the sign shows at any strength.
-"""
 import json
 import math
 import os
