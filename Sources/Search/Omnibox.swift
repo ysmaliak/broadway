@@ -13,6 +13,13 @@ final class OmniboxView: NSView {
     static let radius: CGFloat = 27
     static var holdsWhileLeaving = true
 
+    static func frame(in size: NSSize) -> NSRect {
+        let width = min(widest, max(320, size.width - 40))
+        let top = (size.height * topShare).rounded()
+        let height = min(restingHeight, max(160, size.height - top - 20)).rounded(.down)
+        return NSRect(x: ((size.width - width) / 2).rounded(), y: top, width: width, height: height)
+    }
+
     let browser: Browser
 
     private let glass = KitGlass(radius: OmniboxView.radius)
@@ -86,10 +93,9 @@ final class OmniboxView: NSView {
         list.held = held
         bar.held = held
 
-        let size = bounds.size
-        let width = min(Self.widest, max(320, size.width - 40))
-        let height = min(Self.restingHeight, max(160, size.height * (1 - Self.topShare) - 20))
-        let box = kitSnap(NSRect(x: (size.width - width) / 2, y: size.height * Self.topShare, width: width, height: height))
+        let box = Self.frame(in: bounds.size)
+        let width = box.width
+        let height = box.height
         for view in [glass, panel, edge] as [NSView] where view.frame != box { view.frame = box }
         let look = browser.makingSpace ? browser.draftLook : browser.space.look ?? SpaceLook()
         let wanted = look.pageTint.withAlphaComponent(look.pageTint.alphaComponent * 0.65)

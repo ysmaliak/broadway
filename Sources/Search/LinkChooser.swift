@@ -315,7 +315,7 @@ final class LinkChooserPanel {
 
     func place() {
         guard let parent, let content = parent.contentView else { return }
-        let box = LinkChooserLook.frame(in: content.bounds.size, rows: card.count)
+        let box = OmniboxView.frame(in: content.bounds.size)
         let local = content.isFlipped ? box : NSRect(x: box.minX, y: content.bounds.height - box.maxY, width: box.width, height: box.height)
         let onScreen = parent.convertToScreen(content.convert(local, to: nil))
         window.setFrame(onScreen.insetBy(dx: -LinkChooserLook.room, dy: -LinkChooserLook.room), display: true)

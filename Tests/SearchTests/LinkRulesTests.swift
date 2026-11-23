@@ -289,19 +289,43 @@ final class LinkRulesTests {
         })
     }
 
-    @Test func theChooserSitsWhereTheFieldDoesAndStaysInsideASmallWindow() {
-        let roomy = LinkChooserLook.frame(in: NSSize(width: 1200, height: 800), rows: 4)
-        let many = LinkChooserLook.frame(in: NSSize(width: 1200, height: 800), rows: 30)
-        let small = LinkChooserLook.frame(in: NSSize(width: 420, height: 360), rows: 30)
+    @Test func theChooserTakesTheFieldsFrameWhateverItsRowsAndWindow() throws {
+        let sizes = [NSSize(width: 1200, height: 800), NSSize(width: 560, height: 800), NSSize(width: 1200, height: 420)]
+        for size in sizes {
+            let field = OmniboxView(browser: browser)
+            field.frame = NSRect(origin: .zero, size: size)
+            let host = NSWindow(contentRect: field.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+            host.isReleasedWhenClosed = false
+            host.contentView = field
+            host.layoutIfNeeded()
+            let glass = try #require(field.subviews.compactMap { $0 as? KitGlass }.first)
+            let box = glass.frame
+            host.close()
 
-        #expect(roomy.midX == 600)
-        #expect(roomy.minY == (800 * OmniboxView.topShare).rounded())
-        #expect(roomy.width == LinkChooserLook.width)
-        #expect(roomy.height == LinkChooserLook.height(rows: 4))
-        #expect(many.height == LinkChooserLook.height(rows: LinkChooserLook.most))
-        #expect(small.width == 380)
-        #expect(small.maxY <= 360 - 20)
-        #expect(small.height >= LinkChooserLook.head + LinkChooserLook.heading + LinkChooserLook.row + LinkChooserLook.bar)
+            #expect(box == OmniboxView.frame(in: size))
+            #expect(box.width == min(OmniboxView.widest, size.width - 40))
+            #expect(box.minY == (size.height * OmniboxView.topShare).rounded())
+            #expect(box.maxY <= size.height - 20)
+            #expect(abs(box.midX - size.width / 2) <= 0.5)
+
+            for count in [1, 2, 9, 12] {
+                let rows = (1..<count).map { LinkChooser.Row.space(UUID(), name: "S\($0)") } + [.window]
+                let card = LinkChooserView(rows: rows, url: URL(string: "https://linear.example/a")!, site: "linear.example", marks: [:])
+                let stage = LinkChooserStage(card)
+                stage.frame = NSRect(origin: .zero, size: box.insetBy(dx: -LinkChooserLook.room, dy: -LinkChooserLook.room).size)
+                stage.layoutSubtreeIfNeeded()
+                let first = try #require(card.kitSubviews(of: LinkChooserRow.self).first)
+                let here = try #require(card.kitSubviews(of: KitGlassKey.self).first { $0.accessibilityIdentifier() == "link.chooser.here" })
+                let scroll = try #require(card.kitSubviews(of: NSScrollView.self).first)
+                let fits = CGFloat(count) * LinkChooserLook.row <= scroll.frame.height
+
+                #expect(card.frame.size == box.size, "\(count) rows in \(size)")
+                #expect(first.convert(first.bounds, to: card).minY == LinkChooserLook.head + LinkChooserLook.heading)
+                #expect(here.frame.maxY == box.height - 11)
+                #expect(scroll.frame.maxY == box.height - LinkChooserLook.bar)
+                #expect(scroll.verticalScrollElasticity == (fits ? .none : .allowed), "\(count) rows in \(size)")
+            }
+        }
     }
 
     @Test func theChoosersGlassIsTheFieldsPlainGlassTintedByTheSpace() throws {
