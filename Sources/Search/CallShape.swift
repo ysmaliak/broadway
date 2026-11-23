@@ -8,6 +8,7 @@ enum CallShape {
     static let edge: CGFloat = 6
     static let widthKey = "call.width"
     static let shrunk: CGFloat = 0.5
+    static let viewport = NSSize(width: 1280, height: 800)
 
     static var sides: CGFloat { CallFloat.stage.left + CallFloat.stage.right }
     static var ends: CGFloat { CallFloat.stage.top + CallFloat.stage.bottom }
@@ -65,6 +66,10 @@ enum CallShape {
 
     static func zoom(width: CGFloat) -> CGFloat {
         min(1, max(shrunk, shrunk * (width / smallest).squareRoot()))
+    }
+
+    static func zoom(tiles size: NSSize) -> CGFloat {
+        max(0.05, min(size.width / viewport.width, size.height / viewport.height))
     }
 
     static func onEdge(_ point: NSPoint, of bounds: NSRect) -> Bool {

@@ -6,9 +6,11 @@ The fake call pages lay their tiles out by script, in inline pixels, for
 their own stage (a header, a toolbar band and an open side panel take room
 from it), and lay them out again on `resize`, the way Meet does. Their tiles
 don't fill the element that holds them, so pinning that element to the float
-isn't enough on its own. Each case floats, is shot into OUT (default
+isn't enough on its own. Like Meet, a page laid out smaller than 1000 by 700
+shows only its first person. Each case floats, is shot into OUT (default
 .context/call-fit) and, unless --shots-only, is checked: every tile inside
-the room above the call bar, the grid centred in it, the videos still live.
+the room above the call bar, the grid centred in it, the videos still live,
+and everyone the full page shows is there.
 """
 import os
 import subprocess
@@ -58,9 +60,13 @@ aside { width: 240px; flex: none; background: #fff; color: #202124; border-radiu
 </div>
 <script>
 const UP = __UP__;
+const CUT = [1000, 700];
 const stage = document.querySelector('.stage');
 function lay() {
-  const tiles = [...document.querySelectorAll('.grid > *')];
+  const all = [...document.querySelectorAll('.grid > *')];
+  const cut = innerWidth < CUT[0] || innerHeight < CUT[1];
+  all.forEach((tile, i) => { if (cut && i > 0) tile.style.cssText = 'display:none'; });
+  const tiles = all.filter((tile, i) => !cut || i === 0);
   const W = stage.clientWidth, H = stage.clientHeight, gap = 8, n = tiles.length;
   let best = null;
   for (let cols = 1; cols <= n; cols++) {
@@ -141,6 +147,7 @@ CASES = [
     ("video-4", "n=4&kind=video"),
 ]
 ROOM = {"top": 8, "side": 8, "bottom": 58}
+VIEWPORT = (1280, 800)
 FLOAT_WIDTH = 340
 
 
@@ -202,6 +209,13 @@ def check(name, page, query):
     selector = "video" if "kind=video" in query else "[data-participant-id], .others"
     found = json.loads(sv.ev(page, f"boxes({selector!r})"))
     width, height = found.pop()[:2]
+    people = int(parse_qs(query).get("n", ["6"])[0]) + (1 if "others=1" in query else 0)
+    shown = [b for b in found if b[2] - b[0] >= 1 and b[3] - b[1] >= 1]
+    t.ok(f"{name}: everyone the full page shows is in the float", len(shown) == people, (len(shown), people, width, height))
+    wide, tall = VIEWPORT
+    t.ok(f"{name}: the page is laid out as large as a laptop's window", width >= wide - 1 and height >= tall - 1
+         and (abs(width - wide) <= 1 or abs(height - tall) <= 1), (width, height))
+    found = shown
     k = width / (call().get("width") or FLOAT_WIDTH)
     left, top = ROOM["side"] * k, ROOM["top"] * k
     right, bottom = width - ROOM["side"] * k, height - ROOM["bottom"] * k
@@ -262,7 +276,7 @@ def sizes(out, idle, only, shots_only):
         for label, wide in (("smallest", FLOAT_WIDTH), ("middle", round((FLOAT_WIDTH + largest) / 2)), ("largest", largest)):
             call("size", str(wide))
             t.ok(f"{name} at the {label} size: the window is {wide:g} wide and keeps its shape", until(lambda: sized(wide)), call())
-            scale = min(1, 0.5 * (wide / FLOAT_WIDTH) ** 0.5)
+            scale = min(wide / VIEWPORT[0], resting(wide) / VIEWPORT[1])
             t.ok(f"{name} at the {label} size: the page is drawn at {scale:.2f} of its size", until(lambda: abs(call()["zoom"] - scale) < 0.01),
                  call()["zoom"])
             time.sleep(2.5)

@@ -137,6 +137,19 @@ struct CallShapeTests {
         #expect(large > middle)
     }
 
+    @Test func withTilesThePageIsLaidOutAsLargeAsALaptopsWindowWhateverTheWindowsSize() {
+        let sizes = [NSSize(width: 340, height: 214), NSSize(width: 471, height: 274), NSSize(width: 800, height: 386),
+                     NSSize(width: 340, height: 498)]
+
+        let laid = sizes.map { size in NSSize(width: size.width / CallShape.zoom(tiles: size), height: size.height / CallShape.zoom(tiles: size)) }
+
+        for page in laid {
+            #expect(page.width >= 1280 - 0.01 && page.height >= 800 - 0.01)
+            #expect(abs(page.width - 1280) < 0.01 || abs(page.height - 800) < 0.01)
+        }
+        #expect(abs(CallShape.zoom(tiles: NSSize(width: 340, height: 214)) - 340.0 / 1280) < 0.0001)
+    }
+
     @Test func aResizeTellsWhoeverScalesThePage() {
         let sizing = CallSizing(store: store())
         let window = panel(NSRect(x: -20000, y: -20000, width: 340, height: 214))

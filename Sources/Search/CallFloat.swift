@@ -403,6 +403,8 @@ final class CallFloat {
     @ObservationIgnored private var ticking: Timer?
     @ObservationIgnored private var quiet = 0
     @ObservationIgnored private var zoom: CGFloat = 1
+    @ObservationIgnored private var whole = false
+    @ObservationIgnored private var flips = 0
     @ObservationIgnored private var closeAsked: (id: Tab.ID, at: Date)?
     @ObservationIgnored private var corners: CallCorners?
     @ObservationIgnored private(set) var away = CallAway()
@@ -445,11 +447,13 @@ final class CallFloat {
         ground.layer?.backgroundColor = NSColor.black.cgColor
 
         zoom = web.pageZoom
+        whole = false
+        flips = 0
         web.removeFromSuperview()
         web.alphaValue = 1
         web.frame = ground.bounds
         web.autoresizingMask = [.width, .height]
-        web.pageZoom = zoom * CallShape.zoom(width: size.width)
+        web.pageZoom = wanted(size)
         ground.addSubview(web)
 
         let cover = Cover(frame: ground.bounds)
@@ -474,7 +478,7 @@ final class CallFloat {
 
         panel.contentView = ground
         sizing.attach(panel)
-        sizing.resized = { [weak self] width in self?.scale(to: width) }
+        sizing.resized = { [weak self] _ in self?.scale() }
         panel.makeFirstResponder(cover)
         panel.orderFrontRegardless()
 
@@ -504,6 +508,7 @@ final class CallFloat {
         }
         corners?.stop()
         corners = nil
+        whole = false
         panel?.orderOut(nil)
         panel = nil
         ground = nil
@@ -556,18 +561,38 @@ final class CallFloat {
         max(0, radius - stage.top) / max(zoom, 0.01)
     }
 
-    private func scale(to width: CGFloat) {
-        guard let web = tab?.built, web.superview === ground else { return }
-        let wanted = zoom * CallShape.zoom(width: width)
-        guard abs(web.pageZoom - wanted) > 0.001 else { return }
+    private func wanted(_ size: NSSize) -> CGFloat {
+        tilesOnly && !whole ? CallShape.zoom(tiles: size) : zoom * CallShape.zoom(width: size.width)
+    }
+
+    private func rezoom() -> Bool {
+        guard let web = tab?.built, web.superview === ground, let panel else { return false }
+        let wanted = wanted(panel.frame.size)
+        guard abs(web.pageZoom - wanted) > 0.001 else { return false }
         web.pageZoom = wanted
-        tiles()
+        return true
+    }
+
+    private func scale() {
+        if rezoom() { tiles() }
     }
 
     private func tiles() {
         guard let web = tab?.built, web.superview === ground else { return }
+        _ = rezoom()
         let zoom = web.pageZoom
-        web.evaluateInSearch(tilesOnly ? CallTiles.enter(room: Self.room(zoom: zoom), corner: Self.corner(zoom: zoom)) : CallTiles.leave)
+        let entering = tilesOnly
+        let script = entering ? CallTiles.enter(room: Self.room(zoom: zoom), corner: Self.corner(zoom: zoom)) : CallTiles.leave
+        web.evaluateInSearch(script) { [weak self, weak web] found in
+            MainActor.assumeIsolated {
+                guard let self, let web, web === self.tab?.built, entering == self.tilesOnly else { return }
+                let whole = entering && found as? String == "none"
+                guard whole != self.whole, whole || self.flips < 2 else { return }
+                if whole { self.flips += 1 }
+                self.whole = whole
+                self.tiles()
+            }
+        }
         sizing.follow(web, tilesOnly: tilesOnly)
     }
 
@@ -863,6 +888,7 @@ final class CallCorners: NSView {
         wantsLayer = true
         addSubview(close)
         addSubview(back)
+        for corner in [close, back] { corner.key.addSubview(CallRing()) }
     }
 
     @available(*, unavailable)
@@ -944,4 +970,43 @@ final class CallCorners: NSView {
         due = work
         DispatchQueue.main.asyncAfter(deadline: .now() + max(0.02, deadline - Self.now), execute: work)
     }
+}
+
+final class CallRing: NSView {
+    static let line = (width: CGFloat(1), white: CGFloat(0.4), alpha: CGFloat(0.5))
+    private let shape = CAShapeLayer()
+
+    init() {
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.addSublayer(shape)
+        shape.fillColor = nil
+        shape.lineWidth = Self.line.width
+        shape.strokeColor = NSColor(white: Self.line.white, alpha: Self.line.alpha).cgColor
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    var path: CGPath? { shape.path }
+
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        autoresizingMask = [.width, .height]
+        if let superview { frame = superview.bounds.insetBy(dx: -Self.line.width, dy: -Self.line.width) }
+    }
+
+    override func layout() {
+        super.layout()
+        shape.frame = bounds
+        let inset = Self.line.width / 2
+        shape.path = CGPath(ellipseIn: bounds.insetBy(dx: inset, dy: inset), transform: nil)
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        needsLayout = true
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }

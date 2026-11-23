@@ -75,6 +75,7 @@ def main():
         sv.cmd({"do": "select", "id": meet})
         t.ok("the call starts", until(lambda: sv.ev(meet, "window.state") == "started"), sv.ev(meet, "window.state"))
         t.ok("in front, nothing floats", not call()["showing"], call())
+        sv.cmd({"do": "magnify", "id": meet, "zoom": 1.25})
 
         sv.cmd({"do": "select", "id": idle})
         t.ok("leaving the tab floats it", until(lambda: call()["showing"]), call())
@@ -103,7 +104,8 @@ def main():
         t.ok("go to tab lands it", until(lambda: not call()["showing"]), call())
         active = sv.cmd({"do": "tabs"})
         t.ok("the call's tab is in front", any(x["id"] == meet and x.get("active") for x in active["tabs"]), active)
-        t.ok("the zoom is back", call()["zoom"] == 1, call())
+        t.ok("the tab's own zoom is back", until(lambda: abs(call()["zoom"] - 1.25) < 0.001), call())
+        sv.cmd({"do": "magnify", "id": meet, "zoom": 1.0})
         t.ok("the call goes on", sv.ev(meet, "stream.active") is True)
 
         call("close")

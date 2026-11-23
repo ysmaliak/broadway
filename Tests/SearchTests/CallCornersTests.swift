@@ -97,6 +97,20 @@ struct CallCornersTests {
         #expect(corner > 0)
     }
 
+    @Test func theCornerKeysAreRingedAllTheWayRoundSoTheyStayCirclesOverABrightPicture() {
+        let view = corners()
+
+        let rings = [view.close.key, view.back.key].map { $0.subviews.compactMap { $0 as? CallRing } }
+
+        for ring in rings {
+            #expect(ring.count == 1)
+            ring.first?.layoutSubtreeIfNeeded()
+            let box = ring.first?.path?.boundingBox ?? .zero
+            #expect(box.width == box.height && box.width == FloatLayout.circle + CallRing.line.width)
+        }
+        #expect(view.hitTest(NSPoint(x: view.back.frame.midX, y: view.back.frame.midY)) == nil)
+    }
+
     @Test func theCornersAreNamedButtons() {
         let view = corners()
 
