@@ -112,7 +112,7 @@ final class ChecksMarkView: NSView {
     private let glyph = CAShapeLayer()
     private(set) var checks: LiveChecks?
     private(set) var merged = false
-    private var glyphColour: NSColor?
+    private(set) var glyphColour: NSColor?
     private var haloColour: NSColor?
     var tab: Tab.ID? {
         didSet {

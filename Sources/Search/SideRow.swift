@@ -488,11 +488,15 @@ final class TabRowView: KitHoverView {
     private var talkSlide: CFTimeInterval?
     private var closeReadyAt: CFTimeInterval = 0
     static var clock: () -> CFTimeInterval = CACurrentMediaTime
-    private var join: MergedJoin?
-    private var joined: ObjectIdentifier?
+    private var wash: MergedWash?
+    private var washed: ObjectIdentifier?
+    private var waning: MergedWash?
     private(set) var mergedForm: MergedForm?
     private(set) var plays = 0
-    var mergedLayers: Int { join?.layers.count ?? 0 }
+    private(set) var wornAt: CFTimeInterval?
+    var mergedLayers: Int { wash?.layers.count ?? 0 }
+    var washFrame: NSRect? { wash.map { face.convert($0.frame, to: self) } }
+    var washes: Bool { wash != nil || waning != nil }
     var benchLive: Bool? {
         didSet {
             guard let benchLive, state.live != benchLive else { return }
@@ -579,7 +583,7 @@ final class TabRowView: KitHoverView {
 
     func recycle() {
         forget()
-        unjoin()
+        unwash(fading: false)
         StackFoldButton.on(self)?.removeFromSuperview()
         ringTab = nil
         shownTab = nil
@@ -625,6 +629,7 @@ final class TabRowView: KitHoverView {
         }
         benchShown = false
         benchLive = nil
+        waning?.hold()
         tab = nil
         end = nil
         hoverEnded()
@@ -633,16 +638,29 @@ final class TabRowView: KitHoverView {
 
     var arrivals: Int { byline.arrivals }
 
-    private func unjoin() {
-        guard join != nil else { return }
-        join?.end()
-        join = nil
-        joined = nil
+    private func unwash(fading: Bool) {
+        if !fading, let waning {
+            waning.end()
+            self.waning = nil
+        }
+        guard let wash else { return }
+        self.wash = nil
+        washed = nil
         mergedForm = nil
+        wornAt = nil
+        guard fading else {
+            wash.end()
+            return
+        }
+        waning?.end()
+        waning = wash
+        wash.wane { [weak self, weak wash] in
+            if let self, self.waning === wash { self.waning = nil }
+        }
     }
 
     var mergedTraces: Int {
-        kitSubviews(of: MergedCanvas.self).count + (mark.alphaValue == 1 ? 0 : 1)
+        kitSubviews(of: MergedCanvas.self).count
     }
 
     var mergedMoving: Int {
@@ -651,7 +669,7 @@ final class TabRowView: KitHoverView {
             guard seen.insert(ObjectIdentifier(layer)).inserted else { return 0 }
             return (layer.animationKeys() ?? []).filter { $0.hasPrefix(MergedMotion.key + ".") }.count + (layer.sublayers ?? []).map(count).reduce(0, +)
         }
-        return ([layer, mark.layer] + kitSubviews(of: MergedCanvas.self).map(\.layer)).compactMap { $0 }.map(count).reduce(0, +)
+        return ([layer] + kitSubviews(of: MergedCanvas.self).map(\.layer)).compactMap { $0 }.map(count).reduce(0, +)
     }
 
     private func registerBench() {
@@ -972,38 +990,46 @@ final class TabRowView: KitHoverView {
             mark.draft = draft
         }
         let merged = tab.liveItem?.label == PullState.merged
-        let turning = merged && showsMark && (tab.liveItem.map { LiveFolders.shared.turning($0.key) } ?? false)
-        if !turning || joined != ObjectIdentifier(tab) { unjoin() }
-        if turning, join == nil {
-            join = MergedJoin()
-            joined = ObjectIdentifier(tab)
+        let turning = merged && !editing && (tab.liveItem.map { LiveFolders.shared.turning($0.key) } ?? false)
+        if let waning, !waning.fading {
+            waning.end()
+            self.waning = nil
+        }
+        if wash != nil, !turning || washed != ObjectIdentifier(tab) { unwash(fading: washed == ObjectIdentifier(tab) && window != nil) }
+        if turning, wash == nil {
+            wash = MergedWash()
+            washed = ObjectIdentifier(tab)
         }
         var leading = false
         var arrived = false
-        var sign: NSColor?
+        var scene: MergedScene?
         var mergedTint: NSColor?
+        let dark = state.ground.dark
+        let onFrame = state.ground.greys.onFrame
+        let stops = onFrame ? state.ground.stops : nil
+        let lift = state.ground.ink.lift
+        let pill = underMark(hovering: hovering)
+        let average = stops.map { Paint.Ground(stops: $0, lightInk: dark).average }
+        let halo = ChecksTint.ground(average, pill: pill, frame: onFrame, dark: dark, lift: lift)
+        if wash != nil {
+            let ink = ChecksTint.made(.passing, merged: true, dark: dark, stops: stops, frame: onFrame, lift: lift)
+            let side = ChecksTint.ground(average, pill: .none, frame: onFrame, dark: dark, lift: lift)
+            scene = MergedScene(bounds: bounds, radius: state.radius, ink: ink, under: halo, side: side, pill: pill, dark: dark)
+        }
+        if turning, tab.leads, window != nil, !Motion.reduced {
+            tab.leads = false
+            leading = true
+        }
         if showsMark, let item = tab.liveItem, let made = merged ? .passing : item.checks {
             checks.isHidden = false
             checks.tab = Store.testing ? tab.id : nil
-            let dark = state.ground.dark
-            let stops = state.ground.greys.onFrame ? state.ground.stops : nil
-            let tint = ChecksTint.made(made, merged: merged, dark: dark, stops: stops, frame: state.ground.greys.onFrame,
-                                       lift: state.ground.ink.lift)
-            let average = stops.map { Paint.Ground(stops: $0, lightInk: dark).average }
-            let halo = ChecksTint.ground(average, pill: underMark(hovering: hovering), frame: state.ground.greys.onFrame,
-                                         dark: dark, lift: state.ground.ink.lift)
-            checks.show(made, merged: merged, glyph: tint.color, halo: .checks(halo))
-            if merged { mergedTint = tint.color }
-            if tab.leads, merged, LiveFolders.shared.turning(item.key), window != nil, !Motion.reduced {
-                tab.leads = false
-                leading = true
-            }
-            if join != nil {
-                sign = tint.color
-                checks.isHidden = true
-            }
+            let tint = ChecksTint.made(made, merged: merged, dark: dark, stops: stops, frame: onFrame, lift: lift)
+            let glyph = scene?.glyph.color ?? tint.color
+            checks.show(made, merged: merged, glyph: glyph, halo: .checks(scene?.ground ?? halo))
+            if merged { mergedTint = glyph }
         } else {
             checks.isHidden = true
+            if let scene { mergedTint = scene.glyph.color }
         }
 
         let agent = !editing && (tab.agent || tab.agentActing != nil)
@@ -1160,15 +1186,16 @@ final class TabRowView: KitHoverView {
         setAccessibilityIdentifier(nil)
         toolTip = state.hoverCards ? nil : tab.label
         place()
-        if let join, let sign {
+        if let wash, let scene {
             if mergedForm == nil {
                 let form: MergedForm = Motion.reduced || window == nil ? .still
-                    : leading && MergedCrowd.first() ? .full : leading || arrived ? .quiet : .still
+                    : leading && MergedCrowd.first() ? .full : leading ? .quiet : arrived ? .follow : .still
                 mergedForm = form
+                wornAt = CACurrentMediaTime()
                 if form == .full { plays += 1 }
-                join.wear(on: mark, in: content, tint: sign, scale: window?.backingScaleFactor ?? 2, form: form)
+                wash.wear(scene, in: face, below: content, form: form)
             } else {
-                join.fit(tint: sign)
+                wash.fit(scene)
             }
         }
         if Store.testing, state.interactive, let frame = benchFrame() { Bench.rowFrames[tab.id] = frame }

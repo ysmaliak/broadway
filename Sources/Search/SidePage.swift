@@ -732,7 +732,11 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
             let present = Set(made.tabs.map(\.id))
             for (id, view) in rows where !present.contains(id) && id != morphCarried && carry?.tab.id != id {
                 rows[id] = nil
-                view.recycle()
+                if Motion.reduced, sameSpace, view.washes, view.window != nil {
+                    fadeAway(view)
+                } else {
+                    view.recycle()
+                }
             }
         }
         defer { arrangingScene = nil }
@@ -2972,6 +2976,31 @@ extension SidePageView {
         layer.add(move, forKey: "retire.transform")
         CATransaction.commit()
         (view as? NSView & NSAccessibilityElementProtocol)?.setAccessibilityElement(false)
+    }
+
+    private func fadeAway(_ view: TabRowView) {
+        view.forget()
+        guard let layer = view.layer else {
+            view.recycle()
+            return
+        }
+        let from = (layer.presentation() ?? layer).opacity
+        view.alphaValue = 0
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = from
+        fade.toValue = 0
+        fade.duration = MergedWash.fade
+        fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        fade.fillMode = .forwards
+        fade.isRemovedOnCompletion = false
+        layer.add(fade, forKey: "retire.opacity")
+        DispatchQueue.main.asyncAfter(deadline: .now() + MergedWash.fade) { [weak view] in
+            MainActor.assumeIsolated {
+                guard let view, view.alphaValue == 0, !view.pooled else { return }
+                view.layer?.removeAnimation(forKey: "retire.opacity")
+                view.recycle()
+            }
+        }
     }
 }
 
