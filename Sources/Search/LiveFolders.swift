@@ -505,6 +505,7 @@ struct LiveFolder: Codable, Identifiable, Equatable {
     var items: [LiveItem] = []
     var hidden: [String] = []
     var hiddenMissing: [String: Date]? = nil
+    var hiddenAt: [String: Date]? = nil
     var listsOn: [String: Date]? = nil
     var read: Date? = nil
     var noticing: Bool? = nil
@@ -644,6 +645,17 @@ enum LiveMerge {
                 hidden.append(identity)
             }
         }
+        let signed = folder.source.kind == .pullRequests || folder.source.kind == .repository
+        var removed = folder.hiddenAt ?? [:]
+        if signed {
+            for entry in hidden where removed[entry] == nil { removed[entry] = now }
+            let returning = Set(fetched.compactMap { item -> String? in
+                let identity = id(item)
+                guard let activity = item.activity, let since = removed[identity], activity > since else { return nil }
+                return identity
+            })
+            hidden.removeAll { returning.contains($0) }
+        }
         let turnedOn = folder.listsOn ?? [:]
         let refused = Set(hidden)
         var seen = Set<String>()
@@ -677,9 +689,11 @@ enum LiveMerge {
         }
         hidden = Array(hidden.suffix(300))
         missing = missing.filter { hidden.contains($0.key) }
+        removed = removed.filter { hidden.contains($0.key) }
         next.items = Array(items.prefix(folder.source.cap))
         next.hidden = hidden
         next.hiddenMissing = missing.isEmpty ? nil : missing
+        if signed || folder.hiddenAt != nil { next.hiddenAt = removed.isEmpty ? nil : removed }
         next.state = .fine
         next.sso = nil
         next.read = now
@@ -993,6 +1007,11 @@ final class LiveFolders {
             folder.items = LiveMerge.without(identity, in: folder.items)
             if !folder.hides(key) { folder.hidden.append(identity) }
             folder.hiddenMissing?[identity] = nil
+            if folder.source.kind == .pullRequests || folder.source.kind == .repository {
+                var removed = folder.hiddenAt ?? [:]
+                removed[identity] = Date()
+                folder.hiddenAt = removed
+            }
         }
         return made
     }
@@ -1013,6 +1032,8 @@ final class LiveFolders {
             folder.hidden.removeAll { LiveIdentity.of($0) == identity }
             folder.hiddenMissing?[identity] = nil
             if folder.hiddenMissing?.isEmpty == true { folder.hiddenMissing = nil }
+            folder.hiddenAt?[identity] = nil
+            if folder.hiddenAt?.isEmpty == true { folder.hiddenAt = nil }
             guard !folder.items.contains(where: { LiveIdentity.of($0.key) == identity }) else { return }
             var items = folder.items
             items.insert(dismissal.item, at: min(max(dismissal.at, 0), items.count))
@@ -1026,6 +1047,7 @@ final class LiveFolders {
         change(id) { folder in
             folder.hidden = []
             folder.hiddenMissing = nil
+            folder.hiddenAt = nil
         }
         update(id)
     }
@@ -1341,6 +1363,7 @@ final class LiveFolders {
             change(row.folder) { folder in
                 folder.items = LiveMerge.without(identity, in: folder.items)
                 if !folder.hides(identity) { folder.hidden.append(identity) }
+                if folder.hiddenAt != nil, folder.hiddenAt?[identity] == nil { folder.hiddenAt?[identity] = Date() }
             }
         }
     }

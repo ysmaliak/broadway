@@ -237,4 +237,81 @@ final class ReviewAgainTests {
         #expect(LiveSource.from("github:mine") == .myPullRequests)
     }
 
+    private func removed(_ identity: String, at minutes: Double?) -> LiveFolder {
+        var folder = LiveFolder(space: UUID(), name: "PRs", source: .pullRequests)
+        folder.state = .fine
+        folder.noticing = true
+        folder.hidden = [identity]
+        folder.hiddenAt = minutes.map { [identity: at($0)] }
+        return folder
+    }
+
+    @Test func aRemovedRowReturnsWhenSomeoneElseDoesSomethingAfter() {
+        let identity = LiveIdentity.of(pull(1))
+
+        let next = LiveMerge.merged(removed(identity, at: 5), fetched: [row(1, activity: at(6))], now: at(7))
+
+        #expect(numbers(next.items) == [1])
+        #expect(next.items.first?.fresh == true)
+        #expect(next.hidden.isEmpty)
+        #expect(next.hiddenAt == nil)
+    }
+
+    @Test func aRemovedRowStaysAwayOnItsOwnOldActivity() {
+        let identity = LiveIdentity.of(pull(1))
+
+        let next = LiveMerge.merged(removed(identity, at: 5), fetched: [row(1, activity: at(4))], now: at(7))
+
+        #expect(next.items.isEmpty)
+        #expect(next.hidden == [identity])
+    }
+
+    @Test func aBotNeverBringsARemovedRowBack() {
+        let identity = LiveIdentity.of(pull(1))
+        let signs = PullSigns.read([PullSigns.Said(at: at(4), who: "dana"), PullSigns.Said(at: at(8), who: "codecov", bot: true)],
+                                   threads: [], viewer: "octo-sam")
+
+        let next = LiveMerge.merged(removed(identity, at: 5), fetched: [row(1, activity: signs.activity)], now: at(9))
+
+        #expect(signs.activity == at(4))
+        #expect(next.items.isEmpty)
+    }
+
+    @Test func aRowRemovedBeforeThisBuildIsTimedAtTheFirstReadAfterIt() {
+        let identity = LiveIdentity.of(pull(1))
+
+        let first = LiveMerge.merged(removed(identity, at: nil), fetched: [row(1, activity: at(6))], now: at(7))
+        let later = LiveMerge.merged(first, fetched: [row(1, activity: at(8))], now: at(9))
+
+        #expect(first.items.isEmpty)
+        #expect(first.hiddenAt == [identity: at(7)])
+        #expect(numbers(later.items) == [1])
+    }
+
+    @Test func aFeedKeepsItsRemovedRowAway() {
+        let key = "https://example.com/post/1"
+        var folder = LiveFolder(space: UUID(), name: "News", source: LiveSource(kind: .feed, address: "https://example.com/feed.xml"))
+        folder.state = .fine
+        folder.hidden = [LiveIdentity.of(key)]
+
+        let next = LiveMerge.merged(folder, fetched: [LiveItem(key: key, title: "Post", activity: at(9))], now: at(10))
+
+        #expect(next.items.isEmpty)
+        #expect(next.hiddenAt == nil)
+    }
+
+    @Test func removingARowKeepsWhenAndShowHiddenForgetsIt() {
+        let live = LiveFolders.shared
+        let made = live.add(name: "PRs", source: .pullRequests, space: browser.spaceID)
+        live.apply(.items([row(1)], nil), to: made.id)
+
+        live.hide(pull(1), in: made.id)
+        let kept = live.folder(made.id)?.hiddenAt?[LiveIdentity.of(pull(1))]
+        live.showHidden(made.id)
+
+        #expect(kept != nil)
+        #expect(live.folder(made.id)?.hiddenAt == nil)
+        #expect(live.folder(made.id)?.hidden.isEmpty == true)
+    }
+
 }
