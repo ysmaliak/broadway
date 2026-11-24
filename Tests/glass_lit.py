@@ -90,6 +90,7 @@ def shoot(theme, hold, ground=None):
     finally:
         sv.cmd({"do": "meetalert", "action": "shot-end"})
     panel = next((p for p in lights.get("panels", []) if p.get("number") == state.get("window")), {})
+    print(f"        {name}: Broadway hidden {lights.get('hidden')}, the copy's window visible {panel.get('visible')}")
     png = base64.b64decode(took.get("png") or "")
     if not png:
         return name, None, None, took, panel
@@ -115,10 +116,15 @@ def real_card(hold):
     sv.cmd({"do": "meetalert", "action": "off"})
     sv.cmd({"do": "meetalert", "action": "fixture", "lead": "1", "hosts": {"127.0.0.1": "meet"},
             "events": [{"title": "Design sync", "in": 0.5, "link": f"{sv.BASE}/abc-defg-hij"}]})
-    time.sleep(1.0)
-    lights = sv.cmd({"do": "lights"})
-    panel = next((p for p in lights.get("panels", []) if p.get("kind") == "Lifted"), {})
-    return lights, panel, {g["owner"]: g["lit"] for g in panel.get("glass", [])}, [g["lit"] for g in panel.get("glass", [])]
+    end = time.time() + 6
+    while True:
+        lights = sv.cmd({"do": "lights"})
+        panel = next((p for p in lights.get("panels", []) if p.get("kind") == "Lifted"), {})
+        lit = [g["lit"] for g in panel.get("glass", [])]
+        if (len(lit) == 4 and None not in lit) or time.time() > end:
+            break
+        time.sleep(0.3)
+    return lights, panel, {g["owner"]: g["lit"] for g in panel.get("glass", [])}, lit
 
 
 def main():
