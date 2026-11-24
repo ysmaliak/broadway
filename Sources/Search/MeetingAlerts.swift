@@ -151,18 +151,38 @@ enum MeetingAlertRules {
         event.start.timeIntervalSince(now) > 30 ? event.start : now.addingTimeInterval(120)
     }
 
-    static func when(_ event: CalendarEvent, at now: Date) -> String {
-        let span = "\(event.start.formatted(date: .omitted, time: .shortened)) – \(event.end.formatted(date: .omitted, time: .shortened))"
-        let wait = event.start.timeIntervalSince(now)
-        let said: String
-        if wait > 30 {
-            said = "in \(max(1, Int((wait / 60).rounded(.up)))) min"
-        } else if wait > -60 {
-            said = "now"
-        } else {
-            said = "started \(Int((-wait / 60).rounded(.down))) min ago"
+    enum Stage: Equatable {
+        case soon(Int)
+        case now
+        case late(Int)
+
+        var said: String {
+            switch self {
+            case .soon(let minutes): "In \(minutes) min"
+            case .now: "Now"
+            case .late(let minutes): "Started \(minutes) min ago"
+            }
         }
-        return "\(span) · \(said)"
+    }
+
+    static func stage(_ event: CalendarEvent, at now: Date) -> Stage {
+        let wait = event.start.timeIntervalSince(now)
+        if wait > 30 { return .soon(max(1, Int((wait / 60).rounded(.up)))) }
+        if wait > -60 { return .now }
+        return .late(Int((-wait / 60).rounded(.down)))
+    }
+
+    static func span(_ event: CalendarEvent) -> String {
+        "\(event.start.formatted(date: .omitted, time: .shortened)) – \(event.end.formatted(date: .omitted, time: .shortened))"
+    }
+
+    static func when(_ event: CalendarEvent, at now: Date) -> String {
+        "\(stage(event, at: now).said) · \(span(event))"
+    }
+
+    static func snoozeTitle(_ event: CalendarEvent, at now: Date) -> String {
+        let wait = snooze(event, at: now).timeIntervalSince(now)
+        return "Snooze \(max(1, Int((wait / 60).rounded(.up)))) min"
     }
 
     static func changes(_ event: CalendarEvent) -> [Date] {
@@ -386,10 +406,13 @@ final class MeetingAlerts {
     func forgetOpened() { opened = [] }
 
     var panelFrame: NSRect { panel.frame }
+    var panelTakesClicks: Bool { panel.takesClicks }
+    func panelReach(at pointer: NSPoint) { panel.reach(at: pointer) }
+    var panelCards: [NSRect] { panel.cards.compactMap { card in card.window.map { $0.convertToScreen(card.convert(card.bounds, to: nil)) } } }
     var panelShown: Bool { panel.shown }
 
-    func shot(dark: Bool, front: Bool = false, controls: Bool = false, key: Bool = false) -> [String: Any]? {
-        panel.beginShot(dark: dark, front: front, controls: controls, key: key)
+    func shot(dark: Bool, front: Bool = false, controls: Bool = false, key: Bool = false, ground: String? = nil) -> [String: Any]? {
+        panel.beginShot(dark: dark, front: front, controls: controls, key: key, ground: ground)
     }
     var shotState: [String: Any] { panel.shotState }
     func endShot() { panel.endShot() }
@@ -404,7 +427,8 @@ extension Meeting {
 @MainActor
 final class MeetingAlertPanel {
     static let width: CGFloat = 340
-    static let margin: CGFloat = 16
+    static let gap: CGFloat = 16
+    static let bleed: CGFloat = 44
 
     private unowned let alerts: MeetingAlerts
     private var panel: NSPanel?
@@ -413,6 +437,8 @@ final class MeetingAlertPanel {
     private var parked: [(NSWindow, NSRect)] = []
     private var given: NSRunningApplication?
     private var pagesShown = false
+    private var watching: [Any] = []
+    private var pulse: Timer?
 
     init(alerts: MeetingAlerts) {
         self.alerts = alerts
@@ -424,6 +450,7 @@ final class MeetingAlertPanel {
 
     func update(_ due: [Meeting]) {
         guard !due.isEmpty else {
+            unwatch()
             panel?.orderOut(nil)
             panel = nil
             stack = nil
@@ -455,6 +482,8 @@ final class MeetingAlertPanel {
         panel.setFrame(NSRect(origin: spot(for: size), size: size), display: true)
         stack.layoutSubtreeIfNeeded()
         panel.orderFrontRegardless()
+        watch()
+        reach()
     }
 
     private func spot(for size: NSSize) -> NSPoint {
@@ -462,13 +491,48 @@ final class MeetingAlertPanel {
         let pointer = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { $0.frame.contains(pointer) } ?? NSScreen.main
         let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-        return NSPoint(x: visible.maxX - size.width, y: visible.maxY - size.height)
+        let past = Self.bleed - Self.gap
+        return NSPoint(x: visible.maxX - size.width + past, y: visible.maxY - size.height + past)
     }
 
-    func beginShot(dark: Bool, front: Bool = false, controls: Bool = false, key: Bool = false) -> [String: Any]? {
+    var takesClicks: Bool { panel.map { !$0.ignoresMouseEvents } ?? false }
+
+    func reach(at pointer: NSPoint = NSEvent.mouseLocation) {
+        guard let panel, let stack, NSEvent.pressedMouseButtons == 0 else { return }
+        let over = stack.cards.contains { panel.convertToScreen($0.convert($0.bounds, to: nil)).contains(pointer) }
+        if panel.ignoresMouseEvents == over { panel.ignoresMouseEvents = !over }
+    }
+
+    private func watch() {
+        guard watching.isEmpty, !Store.testing else { return }
+        let moves: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged]
+        let far = NSEvent.addGlobalMonitorForEvents(matching: moves) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reach() }
+        }
+        let near = NSEvent.addLocalMonitorForEvents(matching: moves) { [weak self] event in
+            MainActor.assumeIsolated { self?.reach() }
+            return event
+        }
+        watching = [far, near].compactMap { $0 }
+        let beat = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reach() }
+        }
+        beat.tolerance = 0.02
+        RunLoop.main.add(beat, forMode: .common)
+        pulse = beat
+    }
+
+    private func unwatch() {
+        for monitor in watching { NSEvent.removeMonitor(monitor) }
+        watching = []
+        pulse?.invalidate()
+        pulse = nil
+    }
+
+    func beginShot(dark: Bool, front: Bool = false, controls: Bool = false, key: Bool = false, ground: String? = nil) -> [String: Any]? {
         guard Store.testing, !alerts.due.isEmpty else { return nil }
         endShot()
-        let view = MeetingAlertShotView(due: alerts.due, alerts: alerts, dark: dark, drawn: false, controls: controls)
+        let view = MeetingAlertShotView(due: alerts.due, alerts: alerts, dark: dark, drawn: false, controls: controls, ground: ground)
         let style: NSWindow.StyleMask = [.borderless, .nonactivatingPanel]
         let window: NSPanel = key ? Keyed(contentRect: view.frame, styleMask: style, backing: .buffered, defer: false)
             : Lifted(contentRect: view.frame, styleMask: style, backing: .buffered, defer: false)
@@ -479,6 +543,11 @@ final class MeetingAlertPanel {
         window.isReleasedWhenClosed = false
         window.isExcludedFromWindowsMenu = true
         window.ignoresMouseEvents = true
+        if ground == "clear" {
+            window.backgroundColor = .clear
+            window.isOpaque = false
+            window.hasShadow = false
+        }
         window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)) - 1)
         window.collectionBehavior = [.transient, .ignoresCycle, .stationary]
         window.contentView = view
@@ -512,7 +581,9 @@ final class MeetingAlertPanel {
         }
         var spots: [String: [Int]] = [:]
         if let join = view.kitSubviews(of: MeetingJoinButton.self).first { spots["join"] = spot(join) }
-        if let snooze = view.kitSubviews(of: KitGlassKey.self).first(where: { $0.title == "Snooze" }) { spots["snooze"] = spot(snooze) }
+        if let snooze = view.kitSubviews(of: KitGlassKey.self).first(where: { $0.title.hasPrefix("Snooze") }) { spots["snooze"] = spot(snooze) }
+        if let stack = view.kitSubviews(of: MeetingAlertStackView.self).first { spots["stack"] = spot(stack) }
+        for (index, card) in view.kitSubviews(of: MeetingAlertCardView.self).enumerated() { spots["card\(index)"] = spot(card) }
         for (name, swatch) in view.swatches { spots[name] = spot(swatch) }
         return ["window": window.windowNumber, "pid": ProcessInfo.processInfo.processIdentifier,
                 "width": Int(window.frame.width * scale), "height": Int(window.frame.height * scale), "spots": spots]
@@ -632,15 +703,15 @@ final class MeetingAlertStackView: NSView {
     override var intrinsicContentSize: NSSize {
         let heights = cards.map { $0.intrinsicContentSize.height }
         let inner = heights.reduce(0, +) + 10 * CGFloat(max(0, heights.count - 1))
-        return NSSize(width: MeetingAlertPanel.width + MeetingAlertPanel.margin * 2, height: inner + MeetingAlertPanel.margin * 2)
+        return NSSize(width: MeetingAlertPanel.width + MeetingAlertPanel.bleed * 2, height: inner + MeetingAlertPanel.bleed * 2)
     }
 
     override func layout() {
         super.layout()
-        var y = MeetingAlertPanel.margin
+        var y = MeetingAlertPanel.bleed
         for card in cards {
             let height = card.intrinsicContentSize.height
-            card.frame = NSRect(x: MeetingAlertPanel.margin, y: y, width: MeetingAlertPanel.width, height: height)
+            card.frame = NSRect(x: MeetingAlertPanel.bleed, y: y, width: MeetingAlertPanel.width, height: height)
             y += height + 10
         }
     }
@@ -651,17 +722,23 @@ final class MeetingAlertStackView: NSView {
 final class MeetingAlertShotView: NSView {
     private(set) var swatches: [(String, NSView)] = []
 
-    init(due: [Meeting], alerts: MeetingAlerts, dark: Bool, drawn: Bool, controls: Bool = false) {
+    init(due: [Meeting], alerts: MeetingAlerts, dark: Bool, drawn: Bool, controls: Bool = false, ground named: String? = nil) {
         let stack = MeetingAlertStackView(alerts: alerts, drawn: drawn)
         stack.due = due
         let size = stack.intrinsicContentSize
-        let width = MeetingAlertPanel.width + MeetingAlertPanel.margin * 2 + 120
+        let width = size.width + 8 + 120
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: size.height + 8))
         appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         let ground = KitBox(fill: nil)
-        ground.gradient = dark ? [NSColor(srgbRed: 0.10, green: 0.12, blue: 0.20, alpha: 1), NSColor(srgbRed: 0.22, green: 0.16, blue: 0.30, alpha: 1)]
-            : [NSColor(srgbRed: 0.78, green: 0.86, blue: 0.96, alpha: 1), NSColor(srgbRed: 0.95, green: 0.86, blue: 0.82, alpha: 1)]
-        ground.gradientAxis = (CGPoint(x: 0, y: 0), CGPoint(x: 1, y: 1))
+        switch named {
+        case "white": ground.fill = .white
+        case "black": ground.fill = .black
+        case "clear": break
+        default:
+            ground.gradient = dark ? [NSColor(srgbRed: 0.10, green: 0.12, blue: 0.20, alpha: 1), NSColor(srgbRed: 0.22, green: 0.16, blue: 0.30, alpha: 1)]
+                : [NSColor(srgbRed: 0.78, green: 0.86, blue: 0.96, alpha: 1), NSColor(srgbRed: 0.95, green: 0.86, blue: 0.82, alpha: 1)]
+            ground.gradientAxis = (CGPoint(x: 0, y: 0), CGPoint(x: 1, y: 1))
+        }
         ground.frame = bounds
         addSubview(ground)
         stack.frame = NSRect(x: width - 8 - size.width, y: 8, width: size.width, height: size.height)
@@ -692,6 +769,11 @@ final class MeetingAlertShotView: NSView {
 
 @MainActor
 final class MeetingAlertCardView: NSView {
+    static let inset: CGFloat = 14
+    static let keyHeight: CGFloat = 32
+    private static let stageFont = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+    private static let spanFont = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+
     private unowned let alerts: MeetingAlerts
     let drawn: Bool
     var meeting: Meeting { didSet { if meeting != oldValue { rebuild() } } }
@@ -701,7 +783,7 @@ final class MeetingAlertCardView: NSView {
     private let inside = KitBox(fill: nil)
     private let badge = MeetingServiceBadge()
     private let title = NSTextField(wrappingLabelWithString: "")
-    private let when = KitLabel("", font: .monospacedDigitSystemFont(ofSize: 12, weight: .regular), color: KitColor.muted)
+    private let when = KitLabel("", font: MeetingAlertCardView.spanFont, color: KitColor.muted)
     private let place = KitLabel("", font: .systemFont(ofSize: 12), color: KitColor.muted)
     private let dismiss: NSView
     private var faces: MeetingFacesView?
@@ -761,11 +843,24 @@ final class MeetingAlertCardView: NSView {
     private static func key(title: String? = nil, symbol: String? = nil, drawn: Bool, label: String? = nil, action: @escaping () -> Void) -> NSView {
         if drawn { return MeetingDrawnKey(title: title, symbol: symbol, label: label, action: action) }
         if let symbol { return KitGlassKey(symbol: symbol, circle: 24, symbolSize: 10, weight: .semibold, quiet: true, label: label, action: action) }
-        return KitGlassKey(title: title ?? "", kind: .secondary, size: .regular, action: action)
+        return KitGlassKey(title: title ?? "", kind: .secondary, size: .regular, tall: keyHeight, action: action)
     }
 
     private func setAction(_ view: NSView?, _ action: @escaping () -> Void) {
         (view as? KitButton)?.action = action
+    }
+
+    private func name(_ view: NSView, _ title: String) {
+        (view as? KitGlassKey)?.title = title
+        (view as? MeetingDrawnKey)?.title = title
+    }
+
+    static func ink(_ stage: MeetingAlertRules.Stage) -> NSColor {
+        switch stage {
+        case .soon: KitColor.ink
+        case .now: Palette.NS.glassSafe
+        case .late: MeetingInvitedView.ink
+        }
     }
 
     private func rebuild() {
@@ -777,7 +872,6 @@ final class MeetingAlertCardView: NSView {
         setAction(dismiss) { [weak alerts] in alerts?.dismiss(meeting) }
         dismiss.kitAccess(label: "Dismiss", help: "Dismiss")
         setAction(snooze) { [weak alerts] in alerts?.snooze(meeting) }
-        snooze.kitAccess(help: event.start.timeIntervalSince(alerts.clock()) > 30 ? "Again when it starts" : "Again in 2 minutes")
         faces?.removeFromSuperview()
         faces = nil
         invited?.removeFromSuperview()
@@ -817,7 +911,12 @@ final class MeetingAlertCardView: NSView {
         ticker?.invalidate()
         ticker = nil
         let now = alerts.clock()
-        when.text = MeetingAlertRules.when(event, at: now)
+        let stage = MeetingAlertRules.stage(event, at: now)
+        when.runs = [KitLabel.Run(text: stage.said, font: Self.stageFont, color: Self.ink(stage)),
+                     KitLabel.Run(text: " · \(MeetingAlertRules.span(event))", font: Self.spanFont)]
+        name(snooze, MeetingAlertRules.snoozeTitle(event, at: now))
+        snooze.kitAccess(help: event.start.timeIntervalSince(now) > 30 ? "Again when it starts" : "Again in 2 minutes")
+        needsLayout = true
         guard window != nil, let next = MeetingAlertRules.changes(event).first(where: { $0 > now }) else { return }
         let wait = next.timeIntervalSince(now)
         let timer = Timer(fire: Date().addingTimeInterval(wait), interval: 0, repeats: false) { [weak self] _ in
@@ -830,17 +929,17 @@ final class MeetingAlertCardView: NSView {
 
     private var placeText: String? {
         let location = event.location.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !location.isEmpty, !location.contains("://") else {
-            return meeting.service.map { $0.rawValue }
-        }
-        return meeting.service.map { "\($0.rawValue) · \(location)" } ?? location
+        return location.isEmpty || location.contains("://") ? nil : location
     }
 
-    private static let inner = MeetingAlertPanel.width - 28
-    private static let column = inner - 28 - 11 - 11 - 4 - 11 - 24
+    private static let inner = MeetingAlertPanel.width - inset * 2
+    private static let lead: CGFloat = 26
+    private static let text = lead + 10
+    private static let column = inner - text - 8 - 24
 
     private struct Places {
         var height: CGFloat = 0
+        var badge = NSRect.zero
         var title = NSRect.zero
         var when = NSRect.zero
         var place = NSRect.zero
@@ -852,21 +951,26 @@ final class MeetingAlertCardView: NSView {
     private func places() -> Places {
         var out = Places()
         let inner = Self.inner
-        let titleHeight = ceil(title.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: Self.column + 4, height: 1000)).height ?? 17)
+        let wide = inner - Self.text
+        let titleHeight = ceil(title.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: Self.column + 4, height: 1000)).height ?? 18)
         let whenSize = when.intrinsicContentSize
         let placeSize = place.intrinsicContentSize
         var y: CGFloat = 0
-        out.title = NSRect(x: 37, y: y, width: Self.column + 4, height: titleHeight)
+        out.title = NSRect(x: Self.text - 2, y: y, width: Self.column + 4, height: titleHeight)
         y += titleHeight + 3
-        out.when = NSRect(x: 39, y: y, width: min(Self.column, whenSize.width), height: whenSize.height)
+        out.when = NSRect(x: Self.text, y: y, width: min(wide, whenSize.width), height: whenSize.height)
         y += whenSize.height
         if !place.isHidden {
             y += 3
-            out.place = NSRect(x: 39, y: y, width: min(Self.column, placeSize.width), height: placeSize.height)
+            out.place = NSRect(x: Self.text, y: y, width: min(wide, placeSize.width), height: placeSize.height)
             y += placeSize.height
         }
+        let cap = (title.font?.ascender ?? 0) - (title.font?.capHeight ?? 0)
+        let last = place.isHidden ? (when, out.when) : (place, out.place)
+        let base = last.1.minY + (last.1.height - last.0.measure(width: .greatestFiniteMagnitude).height) / 2 + last.0.font.ascender
+        out.badge = NSRect(x: 0, y: cap, width: Self.lead, height: base - cap)
         out.dismiss = NSRect(x: inner - 24, y: -3, width: 24, height: 24)
-        var top = max(28, y, 24)
+        var top = y
         if let faces {
             top += 12
             out.extra = NSRect(x: 0, y: top, width: inner, height: faces.intrinsicContentSize.height)
@@ -880,18 +984,18 @@ final class MeetingAlertCardView: NSView {
         top += 12
         let fixed = [respond, snooze].compactMap { $0 }
         let sizes = fixed.map(\.intrinsicContentSize)
-        let rowHeight = max(join == nil ? 0 : 34, sizes.map(\.height).max() ?? 0)
+        let rowHeight = Self.keyHeight
         var x: CGFloat = 0
-        if let join {
+        if join != nil {
             let width = inner - sizes.map(\.width).reduce(0, +) - 8 * CGFloat(sizes.count)
-            out.keys.append((join, NSRect(x: 0, y: top + (rowHeight - 34) / 2, width: width, height: 34)))
+            if let join { out.keys.append((join, NSRect(x: 0, y: top, width: width, height: rowHeight))) }
             x = width + 8
         }
         for (view, size) in zip(fixed, sizes) {
             out.keys.append((view, NSRect(x: x, y: top + (rowHeight - size.height) / 2, width: size.width, height: size.height)))
             x += size.width + 8
         }
-        out.height = 14 + top + rowHeight + 14
+        out.height = Self.inset + top + rowHeight + Self.inset
         return out
     }
 
@@ -902,9 +1006,9 @@ final class MeetingAlertCardView: NSView {
         let places = places()
         ground.frame = bounds
         inside.frame = ground is KitGlass ? ground.bounds : bounds
-        let origin = CGPoint(x: 14, y: 14)
+        let origin = CGPoint(x: Self.inset, y: Self.inset)
         func moved(_ rect: NSRect) -> NSRect { kitSnap(rect.offsetBy(dx: origin.x, dy: origin.y)) }
-        badge.frame = moved(NSRect(x: 0, y: 0, width: 28, height: ceil(NSLayoutManager().defaultLineHeight(for: title.font ?? .systemFont(ofSize: 15, weight: .semibold)))))
+        badge.frame = moved(places.badge)
         title.frame = moved(places.title)
         when.frame = moved(places.when)
         place.frame = moved(places.place)
@@ -929,6 +1033,16 @@ private final class MeetingDrawnKey: KitButton {
     private let ground = KitBox(fill: Palette.NS.ink.withAlphaComponent(0.08), stroke: Palette.NS.cardEdge, corners: .capsule)
     private let circle: Bool
 
+    var title: String {
+        get { (content as? KitLabel)?.text ?? "" }
+        set {
+            guard let label = content as? KitLabel, label.text != newValue else { return }
+            label.text = newValue
+            setAccessibilityLabel(newValue)
+            invalidateIntrinsicContentSize()
+        }
+    }
+
     init(title: String?, symbol: String?, label: String?, action: @escaping () -> Void) {
         circle = symbol != nil
         super.init(.plain(press: 1), label: label ?? title, action: action)
@@ -939,7 +1053,7 @@ private final class MeetingDrawnKey: KitButton {
             content = KitLabel(title ?? "", font: .systemFont(ofSize: 13))
             padding = 12
         }
-        height = circle ? 24 : 28
+        height = circle ? 24 : MeetingAlertCardView.keyHeight
     }
 
     @available(*, unavailable)
@@ -973,11 +1087,7 @@ final class MeetingJoinButton: KitButton {
         super.init(.plain(press: 0.97), label: "Join")
         addSubview(glass, positioned: .below, relativeTo: nil)
         pressGlass = glass as? NSGlassEffectView
-        let mark = KitSymbol(symbol, style: KitSymbol.Style(size: 13, weight: .semibold), tint: .white)
-        let word = KitLabel("Join", font: .systemFont(ofSize: 13, weight: .semibold), color: .white)
-        let row = NSStackView.kit(.horizontal, spacing: 5, [mark, word])
-        row.frame.size = row.fittingSize
-        content = KitFixedView(row)
+        content = MeetingJoinWords(symbol: symbol)
         paint()
     }
 
@@ -985,7 +1095,8 @@ final class MeetingJoinButton: KitButton {
     required init?(coder: NSCoder) { fatalError() }
 
     static func fill(dark: Bool, raised: Bool = false, lit: Bool = false, pressed: Bool = false) -> NSColor {
-        let base = raised ? NSColor(srgbRed: 0.094, green: 0.431, blue: 0.18, alpha: 1) : NSColor.systemGreen.kitResolved(dark: dark).withAlphaComponent(1)
+        let base = raised ? NSColor(srgbRed: 0.094, green: 0.431, blue: 0.18, alpha: 1)
+            : dark ? NSColor(srgbRed: 0.13, green: 0.6, blue: 0.27, alpha: 1) : NSColor(srgbRed: 0.106, green: 0.553, blue: 0.231, alpha: 1)
         if pressed { return base.blended(withFraction: 0.18, of: .black) ?? base }
         if lit { return base.blended(withFraction: 0.1, of: .white) ?? base }
         return base
@@ -1031,8 +1142,44 @@ final class MeetingJoinButton: KitButton {
 }
 
 @MainActor
+private final class MeetingJoinWords: NSView {
+    private static let gap: CGFloat = 6
+    private let mark: KitSymbol
+    private let word = KitLabel("Join", font: .systemFont(ofSize: 13, weight: .semibold), color: .white)
+
+    init(symbol: String) {
+        mark = KitSymbol(symbol, style: KitSymbol.Style(size: 13, weight: .semibold), tint: .white)
+        super.init(frame: .zero)
+        addSubview(mark)
+        addSubview(word)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var isFlipped: Bool { true }
+
+    private var slot: CGFloat { ceil(mark.image?.size.width ?? 0) }
+
+    override var intrinsicContentSize: NSSize {
+        let text = word.intrinsicContentSize
+        return NSSize(width: slot + Self.gap + text.width, height: max(ceil(mark.image?.size.height ?? 0), text.height))
+    }
+
+    override func layout() {
+        super.layout()
+        let text = word.intrinsicContentSize
+        word.frame = kitSnap(NSRect(x: slot + Self.gap, y: (bounds.height - text.height) / 2, width: text.width, height: text.height))
+        let font = word.font
+        let line = word.measure(width: .greatestFiniteMagnitude).height
+        let cap = word.frame.minY + (word.frame.height - line) / 2 + font.ascender - font.capHeight / 2
+        mark.centreInk(in: NSRect(x: 0, y: cap - bounds.height / 2, width: slot, height: bounds.height))
+    }
+}
+
+@MainActor
 private final class MeetingServiceBadge: NSView {
-    private let mark = KitSymbol("calendar", style: KitSymbol.Style(size: 17, weight: IconLook.weight), tint: KitColor.muted)
+    private let mark = KitSymbol("calendar", style: KitSymbol.Style(size: 20, weight: IconLook.weight), tint: KitColor.muted)
 
     init() {
         super.init(frame: .zero)
@@ -1047,18 +1194,20 @@ private final class MeetingServiceBadge: NSView {
 
     func show(_ meeting: Meeting) {
         mark.name = meeting.symbol
+        toolTip = meeting.service?.rawValue
         needsLayout = true
     }
 
     override func layout() {
         super.layout()
-        mark.centre(in: bounds)
+        mark.centreInk(in: bounds)
     }
 }
 
 @MainActor
 private final class MeetingFacesView: NSView {
-    private var circles: [NSView] = []
+    private static let step: CGFloat = 22
+    private var circles: [MeetingFaceView] = []
     private let names: [String]
     private let summary: KitLabel
     private let invited: MeetingInvitedView?
@@ -1096,15 +1245,17 @@ private final class MeetingFacesView: NSView {
         super.layout()
         let middle = bounds.height / 2
         var x: CGFloat = 0
-        for face in circles {
+        for (index, face) in circles.enumerated() {
             face.frame = NSRect(x: x, y: middle - 13, width: 26, height: 26)
+            let bitten = index + 1 < circles.count
+            face.bite = bitten ? Self.step + 13 : nil
             if let letters = face.subviews.first {
                 let size = letters.intrinsicContentSize
-                letters.frame = face.kitSnap(NSRect(x: 0, y: (26 - size.height) / 2, width: 26, height: size.height))
+                letters.frame = face.kitSnap(NSRect(x: bitten ? -1 : 0, y: (26 - size.height) / 2, width: 26, height: size.height))
             }
-            x += 19
+            x += Self.step
         }
-        x += 7 + 8
+        x += 26 - Self.step + 8
         var right = bounds.width
         if let invited {
             let size = invited.intrinsicContentSize
@@ -1122,13 +1273,13 @@ private final class MeetingFacesView: NSView {
 final class MeetingFaceView: KitBox {
     private let photo = CALayer()
     private(set) var image: NSImage?
+    var bite: CGFloat? { didSet { if bite != oldValue { needsLayout = true } } }
 
     init(person: MeetingPerson) {
         super.init(frame: .zero)
-        fill = NSColor(hue: MeetingAlertRules.hue(person), saturation: 0.5, brightness: 0.72, alpha: 1)
-        stroke = NSColor.white.withAlphaComponent(0.65)
+        let hue = MeetingAlertRules.hue(person)
+        gradient = [NSColor(hue: hue, saturation: 0.44, brightness: 0.8, alpha: 1), NSColor(hue: hue, saturation: 0.6, brightness: 0.6, alpha: 1)]
         corners = .capsule
-        strokeWidth = 1.5
         photo.masksToBounds = true
         photo.contentsGravity = .resizeAspectFill
         photo.isHidden = true
@@ -1170,6 +1321,19 @@ final class MeetingFaceView: KitBox {
         photo.frame = bounds
         photo.cornerRadius = bounds.height / 2
         photo.contentsScale = window?.backingScaleFactor ?? 2
+        if let bite {
+            let mask = (layer?.mask as? CAShapeLayer) ?? CAShapeLayer()
+            let reach = bounds.height / 2 + 1.5
+            let path = CGMutablePath()
+            path.addRect(bounds)
+            path.addEllipse(in: CGRect(x: bite - reach, y: bounds.midY - reach, width: reach * 2, height: reach * 2))
+            mask.fillRule = .evenOdd
+            mask.path = path
+            mask.frame = bounds
+            layer?.mask = mask
+        } else {
+            layer?.mask = nil
+        }
         CATransaction.commit()
     }
 }
