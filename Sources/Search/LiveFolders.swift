@@ -741,6 +741,7 @@ final class LiveFolders {
     @ObservationIgnored private var turned: [String: (token: UUID, folders: Set<UUID>)] = [:]
     @ObservationIgnored private var claims: [String: LiveClaim] = [:]
     @ObservationIgnored private var trail: [String: [String]] = [:]
+    @ObservationIgnored private var trailed: [String: CFTimeInterval] = [:]
     @ObservationIgnored private var departed: [UUID: Set<String>] = [:]
     @ObservationIgnored private var said: [String: (state: PullPageState, until: Date, folders: Set<UUID>)] = [:]
     @ObservationIgnored private var early: Set<UUID> = []
@@ -1244,6 +1245,8 @@ final class LiveFolders {
 
     func leads(_ key: String) -> Bool { turning(key) && !claimedRow(key) }
 
+    func followed(_ key: String) -> CFTimeInterval? { claims[LiveIdentity.of(key)] == nil ? nil : trailed[LiveIdentity.of(key)] }
+
     func explained(_ folder: LiveFolder) -> Set<String> {
         var out = Set(folder.hidden.map(LiveIdentity.of))
         out.formUnion(departed[folder.id] ?? [])
@@ -1304,6 +1307,7 @@ final class LiveFolders {
             guard !rows.isEmpty else { continue }
             let claim = LiveClaim(space: space, since: now, rows: rows)
             claims[lower] = claim
+            trailed[lower] = CACurrentMediaTime()
             asked.formUnion(rows.map(\.folder))
             followers.append(lower)
             step += 1
@@ -1492,6 +1496,7 @@ final class LiveFolders {
 
     private func leave(_ identity: String, turn token: UUID) {
         guard turned[identity]?.token == token, let turn = turned.removeValue(forKey: identity) else { return }
+        trailed[identity] = nil
         let pending = claims[identity].map { !$0.confirmed } ?? false
         if !pending || claims[identity]?.letGo == true { claims[identity] = nil }
         for id in turn.folders where folder(id) != nil {

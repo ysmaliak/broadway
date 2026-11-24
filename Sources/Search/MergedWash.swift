@@ -113,23 +113,43 @@ struct MergedScene {
     var tint: NSColor { ink.color }
     var strength: Double { MergedWash.strength(under: under, side: side, ink: ink, pill: pill, dark: dark) }
     var ground: ChecksTint.RGB { MergedInk.mix(under, ChecksTint.rgb(ink), strength) }
-    var glyph: Oklch { MergedInk.fit(ink, on: [ground, under], dark: dark) }
+    var peak: Double { MergedWash.peak(strength) }
+    var crest: ChecksTint.RGB { MergedInk.mix(under, ChecksTint.rgb(ink), peak) }
+    var glyph: Oklch { MergedInk.fit(ink, on: [ground, under, crest], dark: dark) }
 }
 
 @MainActor
 final class MergedWash {
-    static let sweep: CFTimeInterval = 0.5
+    static let sweep: CFTimeInterval = 1.2
+    static let settle: CFTimeInterval = 0.25
+    static let spare: CFTimeInterval = 0.15
     static let fade: CFTimeInterval = 0.2
+    static let reach: CGFloat = 28
+    static var curve: CAMediaTimingFunction { CAMediaTimingFunction(controlPoints: 0.3, 0, 0.7, 1) }
 
     private let canvas = MergedCanvas()
     private let fill = CALayer()
-    private let crest = CAGradientLayer()
+    private let band = CAGradientLayer()
     private(set) var fading = false
+    private(set) var began: CFTimeInterval?
+    private(set) var lasts: CFTimeInterval = 0
 
-    var layers: [CALayer] { canvas.superview == nil ? [] : [fill, crest] }
+    var layers: [CALayer] { canvas.superview == nil ? [] : [fill, band] }
     var frame: NSRect { canvas.frame }
 
     nonisolated static let most = 0.6
+    nonisolated static let lift = 1.8
+
+    nonisolated static func peak(_ strength: Double) -> Double { max(strength, min(most, strength * lift)) }
+
+    nonisolated static func rise(_ strength: Double) -> Double {
+        let top = peak(strength)
+        return top > strength ? (top - strength) / (1 - strength) : 0
+    }
+
+    nonisolated static func lasts(elapsed: CFTimeInterval, hold: CFTimeInterval) -> CFTimeInterval {
+        max(0, min(sweep, hold - spare - elapsed))
+    }
 
     nonisolated static func plain(dark: Bool) -> Double { dark ? 0.22 : 0.14 }
 
@@ -148,35 +168,51 @@ final class MergedWash {
         return most
     }
 
-    func wear(_ scene: MergedScene, in face: NSView, below content: NSView, form: MergedForm) {
+    func wear(_ scene: MergedScene, in face: NSView, below content: NSView, form: MergedForm, lasts: CFTimeInterval = sweep) {
         face.addSubview(canvas, positioned: .below, relativeTo: content)
         canvas.layer?.masksToBounds = true
         canvas.layer?.cornerCurve = .continuous
         canvas.layer?.actions = MergedMotion.still
-        crest.startPoint = CGPoint(x: 0, y: 0.5)
-        crest.endPoint = CGPoint(x: 1, y: 0.5)
-        crest.opacity = 0
+        band.startPoint = CGPoint(x: 0, y: 0.5)
+        band.endPoint = CGPoint(x: 1, y: 0.5)
+        band.anchorPoint = CGPoint(x: 1, y: 0.5)
+        band.opacity = 0
         fill.anchorPoint = CGPoint(x: 0, y: 0.5)
-        for layer in [fill, crest] {
+        for layer in [fill, band] {
             layer.actions = MergedMotion.still
             canvas.layer?.addSublayer(layer)
         }
         fit(scene)
         switch form {
         case .full, .follow:
-            MergedMotion.play(fill, "transform.scale.x", from: 0, to: 1, lasts: Self.sweep)
-            guard form == .full else { break }
-            let run = CABasicAnimation(keyPath: "position.x")
-            run.fromValue = -crest.bounds.width / 2
-            run.toValue = scene.bounds.width + crest.bounds.width / 2
+            guard lasts > 0 else { break }
+            let width = canvas.bounds.width
+            let now = CACurrentMediaTime()
+            began = now
+            self.lasts = lasts
+            let grow = CABasicAnimation(keyPath: "bounds.size.width")
+            grow.fromValue = 0
+            grow.toValue = width
+            grow.duration = lasts
+            grow.beginTime = fill.convertTime(now, from: nil)
+            grow.fillMode = .backwards
+            grow.timingFunction = Self.curve
+            MergedMotion.add(grow, to: fill, "grow")
+            let ride = CABasicAnimation(keyPath: "position.x")
+            ride.fromValue = 0
+            ride.toValue = width
+            ride.duration = lasts
+            ride.timingFunction = Self.curve
             let show = CAKeyframeAnimation(keyPath: "opacity")
             show.values = [1, 1, 0]
-            show.keyTimes = [0, 0.7, 1]
+            show.keyTimes = [0, NSNumber(value: lasts / (lasts + Self.settle)), 1]
+            show.duration = lasts + Self.settle
             let pass = CAAnimationGroup()
-            pass.animations = [run, show]
-            pass.duration = Self.sweep * 1.25
-            pass.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            MergedMotion.add(pass, to: crest, "crest")
+            pass.animations = [ride, show]
+            pass.duration = lasts + Self.settle
+            pass.beginTime = band.convertTime(now, from: nil)
+            pass.fillMode = .backwards
+            MergedMotion.add(pass, to: band, "band")
         case .quiet:
             if let layer = canvas.layer { MergedMotion.play(layer, "opacity", from: 0, to: 1, lasts: 0.22) }
         case .still:
@@ -194,10 +230,10 @@ final class MergedWash {
         fill.bounds = box
         fill.position = CGPoint(x: 0, y: box.midY)
         fill.backgroundColor = scene.tint.withAlphaComponent(scene.strength).cgColor
-        crest.bounds = CGRect(x: 0, y: 0, width: 96, height: box.height)
-        crest.position = CGPoint(x: -48, y: box.midY)
-        let glow = scene.tint.withAlphaComponent(scene.dark ? 0.30 : 0.22).cgColor
-        crest.colors = [scene.tint.withAlphaComponent(0).cgColor, glow, scene.tint.withAlphaComponent(0).cgColor]
+        band.bounds = CGRect(x: 0, y: 0, width: Self.reach, height: box.height)
+        band.position = CGPoint(x: box.width, y: box.midY)
+        let rise = CGFloat(Self.rise(scene.strength))
+        band.colors = [scene.tint.withAlphaComponent(0).cgColor, scene.tint.withAlphaComponent(rise).cgColor]
         CATransaction.commit()
     }
 
@@ -209,7 +245,7 @@ final class MergedWash {
         }
         fading = true
         let from = (layer.presentation() ?? layer).opacity
-        for part in [fill, crest, layer] { MergedMotion.stop(part) }
+        for part in [fill, band, layer] { MergedMotion.stop(part) }
         canvas.alphaValue = 0
         let fading = CABasicAnimation(keyPath: "opacity")
         fading.fromValue = from
@@ -238,9 +274,9 @@ final class MergedWash {
 
     func end() {
         fading = false
-        for layer in [fill, crest, canvas.layer] { MergedMotion.stop(layer) }
+        for layer in [fill, band, canvas.layer] { MergedMotion.stop(layer) }
         fill.removeFromSuperlayer()
-        crest.removeFromSuperlayer()
+        band.removeFromSuperlayer()
         canvas.removeFromSuperview()
     }
 }

@@ -62,11 +62,13 @@ enum BenchMergedTurn {
         taking = true
         var shots: [(said: [String: Any], picture: NSBitmapImageRep?)] = []
         let dark = column.kitDark
+        var start = CACurrentMediaTime()
         func facts() -> [[String: Any]] {
             watched.map { url in
                 let shown = row(url, in: frame, browser: browser)
                 return ["url": url.absoluteString, "shown": shown != nil, "plays": shown?.plays ?? 0, "arrivals": shown?.arrivals ?? 0,
                         "form": shown?.mergedForm?.rawValue ?? "", "drawn": shown?.mergedLayers ?? 0,
+                        "began": shown?.mergedBegan.map { $0 - start } ?? -1, "lasts": shown?.mergedLasts ?? 0,
                         "merging": LiveFolders.shared.turning(url.absoluteString)]
             }
         }
@@ -74,7 +76,7 @@ enum BenchMergedTurn {
             shots.append((["name": name, "t": (moment * 1000).rounded() / 1000, "rows": facts()], draw(root, rect: rect, scale: scale, window: window, dark: dark)))
         }
         shoot("before", at: -1)
-        let start = CACurrentMediaTime()
+        start = CACurrentMediaTime()
         for url in urls { LiveFolders.shared.pageMerged(url, space: browser.spaceID) }
         if !urls.isEmpty { browser.syncLive() }
         frame.layoutSubtreeIfNeeded()

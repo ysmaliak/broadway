@@ -506,6 +506,8 @@ final class TabRowView: KitHoverView {
     private(set) var plays = 0
     private(set) var wornAt: CFTimeInterval?
     var mergedLayers: Int { wash?.layers.count ?? 0 }
+    var mergedBegan: CFTimeInterval? { wash?.began }
+    var mergedLasts: CFTimeInterval { wash?.lasts ?? 0 }
     var washFrame: NSRect? { wash.map { face.convert($0.frame, to: self) } }
     var washes: Bool { wash != nil || waning != nil }
     var benchLive: Bool? {
@@ -1207,7 +1209,9 @@ final class TabRowView: KitHoverView {
                 mergedForm = form
                 wornAt = CACurrentMediaTime()
                 if form == .full { plays += 1 }
-                wash.wear(scene, in: face, below: content, form: form)
+                let since = form == .follow ? tab.liveKey.flatMap(LiveFolders.shared.followed) : nil
+                let lasts = since.map { MergedWash.lasts(elapsed: CACurrentMediaTime() - $0, hold: LiveFolders.shared.mergedHold) } ?? MergedWash.sweep
+                wash.wear(scene, in: face, below: content, form: form, lasts: lasts)
             } else {
                 wash.fit(scene)
             }
