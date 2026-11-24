@@ -23,14 +23,14 @@ struct CallScreenTests {
     @Test func theFloatSaysWhyAndHowManyItFound() {
         #expect(script.contains("tell(lone, grid);"))
         #expect(script.contains("setAttribute('data-broadway-tiles-screen', reason)"))
-        #expect(script.contains("var people = find(grid).length"))
+        #expect(script.contains("var people = found.length"))
         #expect(script.contains("setAttribute('data-broadway-tiles-found', String(people))"))
         #expect(script.contains("root.removeAttribute('data-broadway-tiles');\n    root.removeAttribute('data-broadway-tiles-found');"))
     }
 
     @Test func onlyControlsSmallerThanAPersonInTheGridAreHidden() {
         #expect(script.contains("grid.querySelectorAll('button, [role=button], [role=menu], [role=tooltip]')"))
-        #expect(script.contains("r.width * r.height < least * 0.5) el.setAttribute('data-broadway-tiles-chrome', '')"))
+        #expect(script.contains("r.width < least.width * 0.5 || r.height < least.height * 0.5"))
         #expect(!script.contains(":not(:has(video, canvas, [data-participant-id]))"))
     }
 

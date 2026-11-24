@@ -394,9 +394,10 @@ def start(name, query, idle):
 
 
 def lift(name, page, idle):
+    left = time.time()
     sv.cmd({"do": "select", "id": idle})
     t.ok(f"{name}: leaving the tab floats it", until(lambda: call()["showing"] and call()["tab"].startswith(page), within=6), call())
-    return time.time()
+    return left
 
 
 def land(name, page, idle):

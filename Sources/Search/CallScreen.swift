@@ -189,15 +189,15 @@ enum CallScreen {
       var people = found.length || (/^(VIDEO|CANVAS)$/.test(grid.tagName) ? 1 : 0);
       if (root.getAttribute('data-broadway-tiles-found') !== String(people)) root.setAttribute('data-broadway-tiles-found', String(people));
       var least = found.reduce(function (a, p) {
-        var r = p.getBoundingClientRect(), s = r.width * r.height;
-        return s > 0 && (!a || s < a) ? s : a;
-      }, 0);
+        var r = p.getBoundingClientRect();
+        return r.width * r.height > 0 && (!a || r.width * r.height < a.width * a.height) ? r : a;
+      }, null);
       if (!least) return;
       [].forEach.call(grid.querySelectorAll('button, [role=button], [role=menu], [role=tooltip]'), function (el) {
         if (el.hasAttribute('data-broadway-tiles-chrome') || el.closest('[data-participant-id]')
           || el.querySelector('video, canvas, [data-participant-id]')) return;
         var r = el.getBoundingClientRect();
-        if (r.width * r.height < least * 0.5) el.setAttribute('data-broadway-tiles-chrome', '');
+        if (r.width < least.width * 0.5 || r.height < least.height * 0.5) el.setAttribute('data-broadway-tiles-chrome', '');
       });
     }
     """
