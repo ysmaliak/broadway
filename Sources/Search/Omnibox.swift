@@ -839,13 +839,12 @@ final class FieldListView: NSView {
 
     private func placeSlab(lit: Int?, faint: Bool) {
         func target(_ index: Int?) -> NSRect? { index.flatMap { frames[$0] }?.insetBy(dx: 0, dy: 1) }
-        slab.faint = faint
         if !built {
             slabLit = lit
             slabAt = lit
             slabShown = lit != nil
             if let rect = target(lit) { slab.frame = rect }
-            slab.alphaValue = slabShown && target(lit) != nil ? (faint ? 0.5 : 1) : 0
+            slab.alphaValue = slabShown && target(lit) != nil ? (faint ? FieldPlate.faint : 1) : 0
             return
         }
         if lit != slabLit {
@@ -864,7 +863,7 @@ final class FieldListView: NSView {
         } else if let rect = target(slabAt), slab.frame != rect, slab.layer?.animation(forKey: "position") == nil {
             slab.frame = rect
         }
-        let wanted: CGFloat = slabShown && target(slabAt) != nil ? (faint ? 0.5 : 1) : 0
+        let wanted: CGFloat = slabShown && target(slabAt) != nil ? (faint ? FieldPlate.faint : 1) : 0
         guard slab.alphaValue != wanted else { return }
         let from = slab.layer?.presentation()?.opacity ?? Swift.Float(slab.alphaValue)
         slab.alphaValue = wanted
@@ -978,31 +977,12 @@ private final class FieldListContent: NSView {
 }
 
 private final class FieldListSlab: NSView {
-    var faint = false { didSet { if faint != oldValue { needsDisplay = true } } }
-
-    private static func pair(_ light: NSColor, _ dark: NSColor) -> NSColor {
-        NSColor(name: nil) { $0.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light }
-    }
-
-    private let fill = KitBox(fill: nil, corners: .radius(12))
-    private let rim = CAGradientLayer()
-    private let rimShape = CAShapeLayer()
-
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
         layerContentsRedrawPolicy = .onSetNeedsDisplay
-        fill.gradient = [Self.pair(NSColor(white: 1, alpha: 0.92), NSColor(white: 1, alpha: 0.19)),
-                         Self.pair(NSColor(white: 1, alpha: 0.7), NSColor(white: 1, alpha: 0.13))]
-        rimShape.fillColor = nil
-        rimShape.strokeColor = NSColor.black.cgColor
-        rimShape.lineWidth = 0.75
-        rim.mask = rimShape
-        rim.zPosition = 1
-        layer?.shadowColor = NSColor.black.cgColor
-        layer?.shadowRadius = 3
-        addSubview(fill)
-        layer?.addSublayer(rim)
+        layer?.cornerRadius = FieldPlate.radius
+        layer?.cornerCurve = .continuous
     }
 
     @available(*, unavailable)
@@ -1011,38 +991,15 @@ private final class FieldListSlab: NSView {
     override var isFlipped: Bool { true }
     override var wantsUpdateLayer: Bool { true }
 
-    override func layout() {
-        super.layout()
-        fill.frame = bounds
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        let radius = min(12, min(bounds.width, bounds.height) / 2)
-        let path = CGPath(roundedRect: bounds, cornerWidth: radius, cornerHeight: radius, transform: nil)
-        layer?.shadowPath = path
-        rim.frame = bounds
-        rimShape.frame = bounds
-        let inner = bounds.insetBy(dx: 0.375, dy: 0.375)
-        let innerRadius = max(0, radius - 0.375)
-        rimShape.path = CGPath(roundedRect: inner, cornerWidth: innerRadius, cornerHeight: innerRadius, transform: nil)
-        CATransaction.commit()
-        needsDisplay = true
-    }
-
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         needsDisplay = true
     }
 
     override func updateLayer() {
-        let dark = kitDark
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        rim.colors = dark ? [NSColor(white: 1, alpha: 0.22).cgColor, NSColor(white: 1, alpha: 0.06).cgColor]
-                          : [NSColor(white: 0, alpha: 0.05).cgColor, NSColor(white: 0, alpha: 0.13).cgColor]
-        rim.startPoint = CGPoint(x: 0.5, y: 0)
-        rim.endPoint = CGPoint(x: 0.5, y: 1)
-        layer?.shadowOpacity = faint ? 0 : dark ? 0.24 : 0.11
-        layer?.shadowOffset = CGSize(width: 0, height: layer?.contentsAreFlipped() == true ? 1 : -1)
+        layer?.backgroundColor = FieldPlate.tone(dark: kitDark).cgColor
         CATransaction.commit()
     }
 }

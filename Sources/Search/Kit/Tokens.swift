@@ -5,6 +5,7 @@ enum Palette {
         static let ground = pair(1.0, 0.22)
         static let fieldPanel = pair(0.985, 0.23)
         static let fieldPick = pair(0.91, 0.30)
+        static let fieldPlate = over(0, 0.07, 1.0, 0.10)
         static let keycap = pair(0.86, 0.36)
         static let glassTint = over(1.0, 0.55, 0.1, 0.6)
         static let glassGround = over(1.0, 0.86, 0.22, 0.92)

@@ -498,27 +498,24 @@ final class FieldBarView: NSView {
     }
 }
 
+enum FieldPlate {
+    static let radius: CGFloat = 10
+    static let faint: CGFloat = 0.5
+
+    static func tone(dark: Bool, faint: Bool = false) -> NSColor {
+        let full = Palette.NS.fieldPlate.kitResolved(dark: dark)
+        return faint ? full.withAlphaComponent(full.alphaComponent * Self.faint) : full
+    }
+}
+
 final class FieldSlabArt: CALayer {
     var dark = false { didSet { if dark != oldValue { paint() } } }
     var faint = false { didSet { if faint != oldValue { paint() } } }
 
-    private let fill = CAGradientLayer()
-    private let edge = CAGradientLayer()
-    private let edgeShape = CAShapeLayer()
-
     override init() {
         super.init()
-        addSublayer(fill)
-        addSublayer(edge)
-        edge.mask = edgeShape
-        edgeShape.fillColor = nil
-        edgeShape.strokeColor = NSColor.black.cgColor
-        edgeShape.lineWidth = 0.75
-        fill.cornerRadius = 12
-        fill.cornerCurve = .continuous
-        shadowOffset = CGSize(width: 0, height: 1)
-        shadowRadius = 3
-        shadowColor = NSColor.black.cgColor
+        cornerRadius = FieldPlate.radius
+        cornerCurve = .continuous
         paint()
     }
 
@@ -532,27 +529,7 @@ final class FieldSlabArt: CALayer {
     private func paint() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        fill.colors = (dark ? [NSColor(white: 1, alpha: 0.19), NSColor(white: 1, alpha: 0.13)]
-                            : [NSColor(white: 1, alpha: 0.92), NSColor(white: 1, alpha: 0.7)]).map(\.cgColor)
-        edge.colors = (dark ? [NSColor(white: 1, alpha: 0.22), NSColor(white: 1, alpha: 0.06)]
-                            : [NSColor(white: 0, alpha: 0.05), NSColor(white: 0, alpha: 0.13)]).map(\.cgColor)
-        shadowOpacity = faint ? 0 : dark ? 0.24 : 0.11
-        opacity = faint ? 0.5 : 1
-        CATransaction.commit()
-    }
-
-    override func layoutSublayers() {
-        super.layoutSublayers()
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        let slab = bounds.insetBy(dx: 0, dy: 1)
-        fill.frame = slab
-        edge.frame = slab
-        let path = CGPath(roundedRect: CGRect(origin: .zero, size: slab.size).insetBy(dx: 0.375, dy: 0.375),
-                          cornerWidth: 11.625, cornerHeight: 11.625, transform: nil)
-        edgeShape.frame = edge.bounds
-        edgeShape.path = path
-        shadowPath = CGPath(roundedRect: slab, cornerWidth: 12, cornerHeight: 12, transform: nil)
+        backgroundColor = FieldPlate.tone(dark: dark, faint: faint).cgColor
         CATransaction.commit()
     }
 }
@@ -591,7 +568,7 @@ final class FieldSlabView: NSView {
         super.layout()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        art.frame = bounds
+        art.frame = bounds.insetBy(dx: 0, dy: 1)
         art.dark = kitDark
         CATransaction.commit()
     }
@@ -623,6 +600,7 @@ final class FieldSlabTrack: NSView {
     }
 
     func show(_ rect: CGRect?, at lit: Int?, faint: Bool) {
+        let rect = rect?.insetBy(dx: 0, dy: 1)
         art.dark = kitDark
         if art.faint != faint {
             art.kitTransition(Motion.kitQuick)
