@@ -17,6 +17,7 @@ struct SettingAccess {
     var write: (@MainActor (Preferences, String) -> Bool)?
     var instead: String?
     var check: (@MainActor (String) -> Bool)?
+    var failure: String?
 }
 
 @MainActor
@@ -123,7 +124,7 @@ enum PersonSettings {
         "autofill.profile": SettingAccess(bar: .always),
         "autofill.remembered": SettingAccess(bar: .always, read: { _ in FormAnswers.shared.siteCount }),
         "bench": row("In the View menu: Developer › Allow Scripts to Drive Broadway"),
-        "bookmarks.bar": row("In the Bookmarks menu: Show Bookmarks Bar"),
+        "bookmarks.bar": flag(\.bookmarksBar),
         "calendars": onOff(.turningOn, read: { $0.usesCalendars && Meetings.shared.hasAccess }) { _, on in
             MeetingAlertPrefs.shared.chosen = on
             if on { Task { _ = await Meetings.shared.turnOn() } } else { Meetings.shared.turnOff() }
@@ -187,7 +188,7 @@ enum PersonSettings {
                              check: { Double($0).map { Preferences.zooms.contains($0 / 100) } == true }) { prefs, text in
             if let percent = Double(text) { prefs.pageZoom = percent / 100 }
         },
-        "pages.dusk": row("In the View menu: Darken Bright Pages"),
+        "pages.dusk": flag(\.darkensPages),
         "video.quality": settable(takes: VideoQuality.takes, read: { $0.videoQuality.raw }, check: { VideoQuality.Choice(raw: $0) != nil }) { prefs, text in
             if let choice = VideoQuality.Choice(raw: text) { prefs.videoQuality = choice }
         },
@@ -215,8 +216,12 @@ enum PersonSettings {
         "passwords.open": SettingAccess(bar: .always, instead: "broadway logins list reads who is kept, never a password"),
         "privacy.forget": row("broadway permissions reset SITE"),
         "privacy.permissions": row("broadway permissions list"),
-        "app.openAtLogin": row("In the Broadway menu: Open at Login"),
-        "quit.confirm": row("In the Broadway menu: Warn Before Quitting"),
+        "app.openAtLogin": SettingAccess(takes: "true or false", read: { _ in OpenAtLogin.on }, write: { _, text in
+            guard let on = yes(text) else { return false }
+            if OpenAtLogin.on != on { try? OpenAtLogin.items.set(on) }
+            return OpenAtLogin.on == on
+        }, check: { yes($0) != nil }, failure: "macOS keeps login items in System Settings › General › Login Items"),
+        "quit.confirm": flag(\.confirmsQuit),
         "routes": row(),
         "search.engine": settable(takes: Engine.allCases.filter { $0 != .custom }.map(\.rawValue).joined(separator: ", "), read: { $0.engine.rawValue },
                                   check: { Engine(rawValue: $0).map { $0 != .custom } == true }) { prefs, text in
@@ -237,7 +242,7 @@ enum PersonSettings {
                                      check: { Int($0).flatMap(TabLife.init) != nil }) { prefs, text in
             if let life = Int(text).flatMap(TabLife.init) { prefs.tabLife = life }
         },
-        "tabs.layout": row("In the View menu: Sidebar on Right"),
+        "tabs.layout": choice(\.tabsLayout),
     ]
 
     static func refusal(_ id: String, value: String) -> PersonRefusal? {
@@ -413,11 +418,12 @@ enum PersonSettings {
         PersonVerb("settings", "set", .arrange, first: { _ = try planned($0) }) { call in
             let prefs = call.browser.prefs
             var done: [[String: Any]] = []
-            for change in try planned(call) {
+            let planned = try planned(call)
+            for change in planned.filter({ $0.access.failure != nil }) + planned.filter({ $0.access.failure == nil }) {
                 let was = value(change.item, prefs, shown: true)
                 guard change.access.write?(prefs, change.value) == true else {
-                    let landed = done.isEmpty ? "Nothing was changed." : "The settings before it were changed."
-                    throw PersonRefusal("failed", "\(change.item.id) couldn't be changed. \(landed)")
+                    let said = done.isEmpty ? "\(change.item.title) couldn't be changed, so nothing was" : "\(change.item.title) couldn't be changed. The settings before it were."
+                    throw PersonRefusal("failed", said, hint: change.access.failure ?? "Look with broadway settings get \(change.item.id) before you try again")
                 }
                 done.append(["id": change.item.id, "was": was, "value": value(change.item, prefs, shown: true)])
             }

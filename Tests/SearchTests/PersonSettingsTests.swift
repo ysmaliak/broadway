@@ -13,6 +13,12 @@ final class PersonSettingsTests {
         keepSetting(Shared.prefs, \.look, "look")
         keepSetting(Shared.prefs, \.pageZoom, "pageZoom")
         keepSetting(Shared.prefs, \.floatingNewTab, "newtab.floating")
+        keepSetting(Shared.prefs, \.sidePosition, "sidebar.position")
+        keepSetting(Shared.prefs, \.darkensPages, "pages.dusk")
+        keepSetting(Shared.prefs, \.bookmarksBar, "bookmarks.bar")
+        keepSetting(Shared.prefs, \.confirmsQuit, "quit.confirm")
+        keepSetting(OpenAtLogin.standIn, \.on)
+        keepSetting(OpenAtLogin.standIn, \.refuses)
         addTeardownBlock { await self.tearDown() }
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
@@ -194,5 +200,71 @@ final class PersonSettingsTests {
         for (id, access) in PersonSettings.table where access.write != nil {
             #expect(access.check != nil, "\(id)")
         }
+    }
+
+    @Test func theMenuChoicesAreFreeToSet() {
+        for (id, value) in [("tabs.layout", "right"), ("pages.dusk", "true"), ("bookmarks.bar", "true"), ("quit.confirm", "true"), ("app.openAtLogin", "true")] {
+            #expect(PersonSettings.refusal(id, value: value) == nil, "\(id)")
+        }
+    }
+
+    @Test func theSidebarSideMovesTheSidebarTheMenuMoves() async throws {
+        Shared.prefs.sidePosition = .left
+
+        _ = try await set(["tabs.layout", "right"])
+
+        #expect(Shared.prefs.sidePosition == .right)
+        #expect(PersonSettings.table["tabs.layout"]?.read(Shared.prefs) as? String == "right")
+        #expect(PersonSettings.table["tabs.layout"]?.check?("middle") == false)
+    }
+
+    @Test func darkenBrightPagesIsTheMenusSwitch() async throws {
+        Shared.prefs.darkensPages = false
+
+        _ = try await set(["pages.dusk", "true"])
+
+        #expect(Shared.prefs.darkensPages)
+    }
+
+    @Test func theBookmarksBarIsTheMenusSwitch() async throws {
+        Shared.prefs.bookmarksBar = false
+
+        _ = try await set(["bookmarks.bar", "true"])
+
+        #expect(Shared.prefs.bookmarksBar)
+    }
+
+    @Test func askBeforeQuittingIsTheMenusSwitch() async throws {
+        Shared.prefs.confirmsQuit = false
+
+        _ = try await set(["quit.confirm", "true"])
+
+        #expect(Shared.prefs.confirmsQuit)
+    }
+
+    @Test func openAtLoginIsTheMenusSwitch() async throws {
+        OpenAtLogin.standIn.on = false
+
+        _ = try await set(["app.openAtLogin", "true"])
+
+        #expect(OpenAtLogin.standIn.on)
+        #expect(PersonSettings.table["app.openAtLogin"]?.read(Shared.prefs) as? Bool == true)
+    }
+
+    @Test func openAtLoginThatMacOSRefusesChangesNothingElse() async throws {
+        OpenAtLogin.standIn.on = false
+        OpenAtLogin.standIn.refuses = true
+        Shared.prefs.look = .light
+
+        do {
+            _ = try await set(["look", "dark", "app.openAtLogin", "true"])
+            Issue.record("a refused login item was taken")
+        } catch let refused as PersonRefusal {
+            #expect(refused.code == "failed")
+            #expect(refused.message == "Open at login couldn't be changed, so nothing was")
+        }
+
+        #expect(Shared.prefs.look == .light)
+        #expect(!OpenAtLogin.standIn.on)
     }
 }
