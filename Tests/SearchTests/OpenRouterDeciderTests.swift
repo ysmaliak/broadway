@@ -190,6 +190,24 @@ final class DecisionsStub: URLProtocol {
         #expect(picks[fresh.id] == .group(group.id))
     }
 
+    @Test func severalNewTabsAskAboutAFoldersTabsOnlyAfterItsOwnAnswer() async throws {
+        let flight = Self.tab("Flights to Lisbon", "skyscanner.net")
+        let group = AIGroupInfo(id: UUID(), name: "Lisbon trip", members: [flight])
+        let hotel = Self.tab("Hotels in Lisbon", "booking.com")
+        let pasta = Self.tab("Pasta recipes", "bbc.co.uk")
+        DecisionsStub.answer("asked-after.test", DecisionsStub.chances(Self.pair([
+            "Hotels in Lisbon|Lisbon trip": 0.8, "Hotels in Lisbon|Flights to Lisbon": 0.9, "Pasta recipes|Lisbon trip": 0.1,
+        ])))
+        let picks = try await Self.decider("asked-after.test").decide(AIGroupAsk(groups: [group], loose: [], fresh: [hotel, pasta]))
+        #expect(picks[hotel.id] == .group(group.id))
+        #expect(picks[pasta.id] == AIGroupPick.none)
+        let asked = DecisionsStub.seen("asked-after.test").map { DecisionsStub.asked($0.body) }
+        #expect(asked.count == 3)
+        #expect(asked.filter { $0.questions.keys.contains("folder1") }.map(\.tab).sorted() == ["Hotels in Lisbon", "Pasta recipes"])
+        #expect(asked.filter { $0.questions.keys.contains("folder1tab1") }.map(\.tab) == ["Hotels in Lisbon"])
+        #expect(asked.allSatisfy { !($0.questions.keys.contains("folder1") && $0.questions.keys.contains("folder1tab1")) })
+    }
+
     @Test func twoNewTabsJoinOnlyWhenBothWaysSayYes() async throws {
         let one = Self.tab("SwiftUI Layout protocol", "developer.apple.com")
         let two = Self.tab("Custom layouts in SwiftUI", "swiftwithmajid.com")
