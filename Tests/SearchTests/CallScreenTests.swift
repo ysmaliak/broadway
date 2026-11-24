@@ -30,7 +30,7 @@ struct CallScreenTests {
 
     @Test func onlyControlsSmallerThanAPersonInTheGridAreHidden() {
         #expect(script.contains("grid.querySelectorAll('button, [role=button], [role=menu], [role=tooltip]')"))
-        #expect(script.contains("r.width < least.width * 0.5 || r.height < least.height * 0.5"))
+        #expect(script.contains("over || r.width < least.width * 0.5 || r.height < least.height * 0.5"))
         #expect(!script.contains(":not(:has(video, canvas, [data-participant-id]))"))
     }
 

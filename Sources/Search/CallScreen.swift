@@ -193,11 +193,15 @@ enum CallScreen {
         return r.width * r.height > 0 && (!a || r.width * r.height < a.width * a.height) ? r : a;
       }, null);
       if (!least) return;
+      var boxes = found.map(function (p) { return p.getBoundingClientRect(); });
       [].forEach.call(grid.querySelectorAll('button, [role=button], [role=menu], [role=tooltip]'), function (el) {
         if (el.hasAttribute('data-broadway-tiles-chrome') || el.closest('[data-participant-id]')
           || el.querySelector('video, canvas, [data-participant-id]')) return;
         var r = el.getBoundingClientRect();
-        if (r.width < least.width * 0.5 || r.height < least.height * 0.5) el.setAttribute('data-broadway-tiles-chrome', '');
+        var over = boxes.some(function (b) {
+          return Math.min(r.right, b.right) - Math.max(r.left, b.left) > 1 && Math.min(r.bottom, b.bottom) - Math.max(r.top, b.top) > 1;
+        });
+        if (over || r.width < least.width * 0.5 || r.height < least.height * 0.5) el.setAttribute('data-broadway-tiles-chrome', '');
       });
     }
     """

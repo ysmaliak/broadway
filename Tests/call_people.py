@@ -230,6 +230,9 @@ window.people = () => JSON.stringify([...document.querySelectorAll('.person')].m
   return [r.left, r.top, r.right, r.bottom, visible(el) && visible(v) ? 1 : 0];
 }).concat([[innerWidth, innerHeight, 0, 0, 0]]));
 window.buttons = () => JSON.stringify([...document.querySelectorAll('button')].filter(visible).map(b => b.getAttribute('aria-label') || b.textContent));
+window.why = () => JSON.stringify([...document.querySelectorAll('.stray')].map(b => { const r = b.getBoundingClientRect();
+  return [Math.round(r.width), Math.round(r.height), b.hasAttribute('data-broadway-tiles-chrome'), getComputedStyle(b).visibility]; })
+  .concat([[...document.querySelectorAll('.person')].map(p => { const r = p.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; })]));
 window.marks = () => { const r = document.documentElement, s = document.querySelector('[data-broadway-tiles-screen]');
   return JSON.stringify({mode: r.getAttribute('data-broadway-tiles'), found: r.getAttribute('data-broadway-tiles-found'),
     screen: s ? s.getAttribute('data-broadway-tiles-screen') : null, which: s ? (s.className || s.tagName) : null,
@@ -367,7 +370,7 @@ def tiled(name, page, people):
     inside = all(b[0] >= left - 1 and b[1] >= top - 1 and b[2] <= right + 1 and b[3] <= bottom + 1 for b in found)
     t.ok(f"{name}: everyone is inside the room above the bar", inside, (left, top, right, bottom, found))
     buttons = json.loads(sv.ev(page, "buttons()"))
-    t.ok(f"{name}: no button of the page shows", buttons == [], buttons)
+    t.ok(f"{name}: no button of the page shows", buttons == [], (buttons, sv.ev(page, "why()")))
 
 
 def clean(name, page):
