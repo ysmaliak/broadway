@@ -667,7 +667,11 @@ final class MergedTurnTests {
         }
 
         merge(64, column: column)
-        try await pump(column, for: 1.15)
+        let end = CACurrentMediaTime() + 1.45
+        while CACurrentMediaTime() < end, row(62, in: column)?.mergedForm == nil {
+            settle(column)
+            try await Task.sleep(for: .milliseconds(10))
+        }
 
         let lead = try #require(row(64, in: column))
         let start = try #require(lead.wornAt)
@@ -684,7 +688,24 @@ final class MergedTurnTests {
         }
     }
 
-    @Test func thePageInFrontThatSaysMergedPlaysTheFullFillThroughARereadMidFill() throws {
+    @Test func aStackMergedThroughALateReadStillGivesItsFollowersTheWholeFill() throws {
+        LiveFolders.shared.mergedHold = LiveFolders.hold
+        let made = prs(rail)
+        let (column, window) = shown(made)
+        defer {
+            window.contentView = nil
+            window.close()
+        }
+
+        LiveFolders.shared.pageMerged(try #require(URL(string: key(63))), space: browser.spaceID, now: Date().addingTimeInterval(-3))
+        settle(column)
+
+        let rows = try [63, 62, 61].map { try #require(row($0, in: column)) }
+        #expect(rows.map(\.mergedForm) == [.full, .follow, .follow])
+        #expect(rows.map(\.mergedLasts) == [MergedWash.sweep, MergedWash.sweep, MergedWash.sweep])
+    }
+
+    @Test func thePageInFrontThatSaysMergedPlaysTheFullFillThroughARereadWhileTurning() throws {
         let made = prs([pull(1), pull(2)])
         let (column, window) = shown(made)
         defer {

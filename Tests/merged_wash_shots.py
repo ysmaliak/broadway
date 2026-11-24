@@ -27,7 +27,6 @@ REST = "1.50"
 FRONTS = ["0.15", "0.40", "0.80", "1.15"]
 FULL = "1.40"
 SLACK = 6
-SWEEP = 1.2
 SIGN = 2
 TINT = {"custom": "3139FB", "intensity": 2.0, "glass": False, "transparency": 0, "grain": 0}
 PALE = {"custom": "FFD3E0", "intensity": 1.0, "glass": False, "transparency": 0, "grain": 0}

@@ -1210,7 +1210,7 @@ final class TabRowView: KitHoverView {
                 wornAt = CACurrentMediaTime()
                 if form == .full { plays += 1 }
                 let since = form == .follow ? tab.liveKey.flatMap(LiveFolders.shared.followed) : nil
-                let lasts = since.map { MergedWash.lasts(elapsed: Date().timeIntervalSince($0), hold: LiveFolders.shared.mergedHold) } ?? MergedWash.sweep
+                let lasts = since.map { MergedWash.lasts(elapsed: CACurrentMediaTime() - $0, hold: LiveFolders.shared.mergedHold) } ?? MergedWash.sweep
                 wash.wear(scene, in: face, below: content, form: form, lasts: lasts)
             } else {
                 wash.fit(scene)
