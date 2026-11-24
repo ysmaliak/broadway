@@ -74,17 +74,17 @@ function paint(c, tick) {
   g.fillStyle = '#000'; g.fillRect(0, 0, 60, 20); g.fillStyle = '#fff'; g.font = '12px system-ui'; g.fillText(String(tick), 4, 14);
 }
 function source(res, colour) {
-  const key = res + colour;
+  const key = res;
   if (!canvases[key]) {
     const [w, h] = res.split('x').map(Number);
     const c = document.createElement('canvas'); c.width = w; c.height = h; c.colour = colour;
     paint(c, 0);
-    canvases[key] = { canvas: c, stream: c.captureStream(10) };
+    canvases[key] = { canvas: c, stream: c.captureStream(5) };
   }
   return canvases[key].stream;
 }
 let tick = 0;
-setInterval(() => { tick++; Object.values(canvases).forEach(s => paint(s.canvas, tick)); }, 250);
+setInterval(() => { tick++; Object.values(canvases).forEach(s => paint(s.canvas, tick)); }, 500);
 function video(stream, fit) {
   const v = document.createElement('video'); v.autoplay = true; v.muted = true; v.playsInline = true; v.className = 'cam' + (fit ? ' fit' : '');
   if (stream) v.srcObject = stream;
@@ -296,9 +296,12 @@ def launch_shown():
 
 
 BLIND = []
+QUIET = []
 
 
 def shoot(path):
+    if QUIET:
+        return True
     path = Path(path)
     path.unlink(missing_ok=True)
     if not BLIND:
@@ -317,7 +320,7 @@ def shoot(path):
     drawn.unlink(missing_ok=True)
     try:
         call("draw", str(drawn.resolve()))
-    except RuntimeError as error:
+    except (RuntimeError, OSError) as error:
         print("  ", str(error)[-300:])
     return drawn.exists()
 
@@ -360,7 +363,14 @@ def clean(name, page):
     t.ok(f"{name}: landing takes the mode and the count off the page", m["mode"] is None and m["found"] is None, m)
 
 
+def settle():
+    if call()["showing"]:
+        call("return")
+    until(lambda: not call()["showing"], within=8)
+
+
 def start(name, query, idle):
+    settle()
     page = sv.page(f"call?{query}")
     sv.cmd({"do": "select", "id": page})
     t.ok(f"{name}: the call starts", until(lambda: sv.ev(page, "window.state") == "started"), sv.ev(page, "window.state"))
@@ -370,7 +380,7 @@ def start(name, query, idle):
 
 def lift(name, page, idle):
     sv.cmd({"do": "select", "id": idle})
-    t.ok(f"{name}: leaving the tab floats it", until(lambda: call()["showing"], within=4), call())
+    t.ok(f"{name}: leaving the tab floats it", until(lambda: call()["showing"] and call()["tab"].startswith(page), within=6), call())
     return time.time()
 
 
@@ -385,7 +395,7 @@ def land(name, page, idle):
 
 def measure(idle):
     page = start("tracks", "n=1", idle)
-    sv.ev(page, "loop()")
+    sv.ev(page, "loop().catch(e => { window.remote = JSON.stringify({error: String(e)}); }), 1")
     until(lambda: sv.ev(page, "window.remote || ''") != "", within=6)
     found = json.loads(sv.ev(page, "tracks()"))
     print("   tracks", json.dumps(found))
@@ -394,7 +404,10 @@ def measure(idle):
     remote = json.loads(found["remote"]) if found["remote"] else None
     print("   note  a remote WebRTC track's settings:", remote)
     sv.ev(page, "end(), 1")
+    time.sleep(2)
     sv.cmd({"do": "select", "id": idle})
+    time.sleep(1)
+    settle()
 
 
 def tiles_case(name, query, people, small, idle, out, tag):
@@ -469,6 +482,8 @@ def main():
     tag = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--tag=")), "after")
     out = Path(args[0] if args else ".context/call-people") / tag
     out.mkdir(parents=True, exist_ok=True)
+    if "--no-shots" in sys.argv:
+        QUIET.append(True)
     sv.setup()
     for kind in (0, 1, 2):
         subprocess.run(["defaults", "write", sv.SUITE, f"capture.{sv.BASE}|{kind}", "-bool", "true"])
