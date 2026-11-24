@@ -136,7 +136,8 @@ def body(case):
                  "lone-wrapped": "<div class='fill turn mirror'><video id=me autoplay muted playsinline></video></div>",
                  "lone-scale": "<video id=me class='scaled mirror' autoplay muted playsinline></video>",
                  "lone-canvas": "<canvas id=me class='fill flip mirror' width=640 height=360></canvas>"}[case]
-        return f"{head}<div class=stage><div class=box>{video}</div></div>{extra}"
+        return (f"{head}<div class=stage><div class=box>{video}<span class=name>Ana (Presentation)</span></div>"
+                f"<div class=strip>{faces(2)}</div></div>{extra}")
     if case == "share":
         wrap = ""
         return (f"{head}<div class=stage><div class=strip><div class=tile data-participant-id='spaces/a/devices/1'><video id=me class='flip mirror' autoplay muted playsinline></video>"
@@ -256,6 +257,9 @@ def case(name, query, mode, idle, out, tag):
     sv.cmd({"do": "select", "id": idle})
     t.ok(f"{name}: leaving the tab floats it", until(lambda: call()["showing"]), call())
     time.sleep(2.5)
+    if mode == "screen":
+        until(lambda: sv.ev(page, "document.querySelectorAll('[data-broadway-tiles-screen]').length") > 0, within=4)
+        time.sleep(1)
     took = "screen" if sv.ev(page, "document.querySelectorAll('[data-broadway-tiles-screen]').length") else \
         "grid" if sv.ev(page, "document.querySelectorAll('[data-broadway-tiles-grid]').length") else "none"
     print(f"   {name}: the float took the {took} path; the mirrored element is marked {sv.ev(page, 'marks(\".mirror\")')}")
