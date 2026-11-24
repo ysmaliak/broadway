@@ -119,6 +119,8 @@ window.go = function () { window.c = new AudioContext(); window.o = c.createOsci
   var p = s.play(); if (p && p.catch) p.catch(function () {}); return String(s.duration); };
 window.leave = function () { var p = document.getElementById('t').play(); if (p && p.catch) p.catch(function () {});
   setTimeout(function () { var s = document.getElementById('s'); s.pause(); s.srcObject = null; s.remove(); o.stop(); }, 300); return 1; };
+window.hangup = function () { var p = document.getElementById('t').play(); if (p && p.catch) p.catch(function () {});
+  setTimeout(function () { document.getElementById('s').pause(); o.stop(); }, 300); return 1; };
 </script>"""
 
 VIDEO = """<!doctype html><title>Video page</title><body style="margin:0;background:#000">
@@ -338,6 +340,19 @@ def short_sounds(base, other):
     t.ok("the stream gone, its leaving chime ends", ended and sv.ev(call, "!!document.getElementById('s')") is False,
          sv.ev(call, "document.getElementById('t').ended"))
     t.ok("and the card does not stay for the chime", not carded(call, "Call page"), (seen, mini()))
+    sv.cmd({"do": "close", "id": call})
+
+    call = opened(base, "call")
+    sv.cmd({"do": "select", "id": call})
+    time.sleep(0.4)
+    sv.ev(call, "go()")
+    sv.cmd({"do": "select", "id": other})
+    t.ok("a call's stream takes the card again", until(lambda: mini()["roles"].get(short(call)) == "mini", 10), mini())
+    sv.ev(call, "hangup()")
+    seen, heard, ended = watch_card(call, "Call page", lambda: sv.ev(call, "document.getElementById('t').ended") is True)
+    t.ok("hung up with its stream left in the page, paused, the chime ends", ended and sv.ev(call, "document.getElementById('s').paused") is True,
+         sv.ev(call, "document.getElementById('t').ended"))
+    t.ok("and the card does not stay for the paused stream", not carded(call, "Call page"), (seen, mini()))
     sv.cmd({"do": "close", "id": call})
 
     half = opened(base, "half")
