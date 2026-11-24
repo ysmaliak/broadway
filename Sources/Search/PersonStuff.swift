@@ -279,11 +279,7 @@ enum PersonStuff {
             return ["id": short(found.id), "hidesDraftReviewRequests": hides,
                     "message": hides ? "Leaves out draft review requests" : "Shows draft review requests"]
         },
-        PersonVerb("live", "add", .arrange, first: { call in
-            guard call.browser.prefs.liveFolders else {
-                throw PersonRefusal("refused", "Live folders are off", hint: "Turn them on with broadway settings set live.on true")
-            }
-        }) { call in
+        PersonVerb("live", "add", .arrange) { call in
             guard let source = LiveSource.from(try call.need("source")) else { throw PersonRefusal("refused", "That isn't an address") }
             let space = try call.string("space").map { try PersonTabs.space(call, $0).id } ?? call.browser.spaceID
             let made = LiveFolders.shared.add(name: try call.need("name"), source: source, space: space)

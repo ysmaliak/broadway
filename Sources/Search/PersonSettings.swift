@@ -16,6 +16,8 @@ struct SettingAccess {
     var read: @MainActor (Preferences) -> Any? = { _ in nil }
     var write: (@MainActor (Preferences, String) -> Bool)?
     var instead: String?
+    var check: (@MainActor (String) -> Bool)?
+    var failure: String?
 }
 
 @MainActor
@@ -24,12 +26,24 @@ enum PersonSettings {
         ["true": true, "on": true, "yes": true, "1": true, "false": false, "off": false, "no": false, "0": false][text.lowercased()]
     }
 
-    private static func flag(_ path: ReferenceWritableKeyPath<Preferences, Bool>, _ bar: SettingAccess.Bar = .free) -> SettingAccess {
-        SettingAccess(bar: bar, takes: "true or false", read: { $0[keyPath: path] }, write: { prefs, text in
-            guard let on = yes(text) else { return false }
-            prefs[keyPath: path] = on
+    private static func settable(_ bar: SettingAccess.Bar = .free, takes: String, read: @escaping @MainActor (Preferences) -> Any?,
+                                 check: @escaping @MainActor (String) -> Bool, apply: @escaping @MainActor (Preferences, String) -> Void) -> SettingAccess {
+        SettingAccess(bar: bar, takes: takes, read: read, write: { prefs, text in
+            guard check(text) else { return false }
+            apply(prefs, text)
             return true
+        }, check: check)
+    }
+
+    private static func onOff(_ bar: SettingAccess.Bar = .free, read: @escaping @MainActor (Preferences) -> Any?,
+                              apply: @escaping @MainActor (Preferences, Bool) -> Void) -> SettingAccess {
+        settable(bar, takes: "true or false", read: read, check: { yes($0) != nil }, apply: { prefs, text in
+            if let on = yes(text) { apply(prefs, on) }
         })
+    }
+
+    private static func flag(_ path: ReferenceWritableKeyPath<Preferences, Bool>, _ bar: SettingAccess.Bar = .free) -> SettingAccess {
+        onOff(bar, read: { $0[keyPath: path] }, apply: { $0[keyPath: path] = $1 })
     }
 
     private static func held(_ path: KeyPath<Preferences, Bool>) -> SettingAccess {
@@ -37,63 +51,61 @@ enum PersonSettings {
     }
 
     private static func choice<Value: CaseIterable & RawRepresentable>(_ path: ReferenceWritableKeyPath<Preferences, Value>) -> SettingAccess where Value.RawValue == String {
-        SettingAccess(takes: Value.allCases.map(\.rawValue).joined(separator: ", "), read: { $0[keyPath: path].rawValue }, write: { prefs, text in
-            guard let value = Value(rawValue: text) else { return false }
-            prefs[keyPath: path] = value
-            return true
-        })
+        settable(takes: Value.allCases.map(\.rawValue).joined(separator: ", "), read: { $0[keyPath: path].rawValue }, check: { Value(rawValue: $0) != nil }) { prefs, text in
+            if let value = Value(rawValue: text) { prefs[keyPath: path] = value }
+        }
     }
 
     private static func stored(_ key: String, fallback: Bool) -> SettingAccess {
         SettingAccess(bar: .always, read: { _ in Store.settings.object(forKey: key) as? Bool ?? fallback })
     }
 
-    private static func row(_ text: String, instead: String? = nil) -> SettingAccess {
-        SettingAccess(bar: .noControl, takes: text, instead: instead)
+    private static func row(_ instead: String? = nil) -> SettingAccess {
+        SettingAccess(bar: .noControl, instead: instead)
     }
 
+    private static let alwaysOn = row("Always on")
+
     private static func always(_ path: KeyPath<Preferences, Bool>) -> SettingAccess {
-        SettingAccess(bar: .noControl, takes: "Always there", read: { $0[keyPath: path] })
+        SettingAccess(bar: .noControl, read: { $0[keyPath: path] }, instead: "Always on")
     }
 
     private static func shared(_ read: @escaping @MainActor () -> Bool, _ write: @escaping @MainActor (Bool) -> Void) -> SettingAccess {
-        SettingAccess(bar: .turningOn, takes: "true or false", read: { _ in read() }, write: { _, text in
-            guard let on = yes(text) else { return false }
-            write(on)
-            return true
-        })
+        onOff(.turningOn, read: { _ in read() }, apply: { write($1) })
     }
 
     private static func number(_ path: ReferenceWritableKeyPath<Preferences, Int>, within range: ClosedRange<Int>) -> SettingAccess {
-        SettingAccess(takes: "a whole number from \(range.lowerBound) to \(range.upperBound)", read: { $0[keyPath: path] }, write: { prefs, text in
-            guard let value = Int(text), range.contains(value) else { return false }
-            prefs[keyPath: path] = value
-            return true
-        })
+        settable(takes: "a whole number from \(range.lowerBound) to \(range.upperBound)", read: { $0[keyPath: path] },
+                 check: { Int($0).map { range.contains($0) } == true }) { prefs, text in
+            if let value = Int(text) { prefs[keyPath: path] = value }
+        }
     }
 
     private static func linked(_ path: WritableKeyPath<LinkSettings, Bool>, _ bar: SettingAccess.Bar = .free) -> SettingAccess {
-        SettingAccess(bar: bar, takes: "true or false", read: { _ in LinkRules.shared.settings[keyPath: path] }, write: { _, text in
-            guard let on = yes(text) else { return false }
-            LinkRules.shared.set { $0[keyPath: path] = on }
-            return true
-        })
+        onOff(bar, read: { _ in LinkRules.shared.settings[keyPath: path] }, apply: { _, on in LinkRules.shared.set { $0[keyPath: path] = on } })
     }
 
-    private static let outside = SettingAccess(takes: "front or ask", read: { _ in
+    private static var linkSpaces: [Space] {
+        (Browsers.linkTargets.isEmpty ? Browsers.all : Browsers.linkTargets).flatMap(\.spaces)
+    }
+
+    private static func linkSpace(_ named: String) -> UUID? {
+        linkSpaces.first { $0.name.caseInsensitiveCompare(named) == .orderedSame }?.id
+    }
+
+    private static let outside = settable(takes: "front, ask or a space's name", read: { _ in
         switch LinkRules.shared.settings.outsideDefault {
         case .front: return "front"
         case .ask: return "ask"
-        case .space(let id): return Browsers.linkTargets.flatMap(\.spaces).first { $0.id == id }?.name ?? "a space that is gone"
+        case .space(let id): return linkSpaces.first { $0.id == id }?.name ?? "a space that is gone"
         }
-    }, write: { _, text in
+    }, check: { ["front", "ask"].contains($0.lowercased()) || linkSpace($0) != nil }) { _, text in
         switch text.lowercased() {
         case "front": LinkRules.shared.set { $0.outsideDefault = .front }
         case "ask": LinkRules.shared.set { $0.outsideDefault = .ask }
-        default: return false
+        default: if let id = linkSpace(text) { LinkRules.shared.set { $0.outsideDefault = .space(id) } }
         }
-        return true
-    })
+    }
 
     static let table: [String: SettingAccess] = [
         "links.open": outside,
@@ -102,66 +114,56 @@ enum PersonSettings {
         "links.unwrap": linked(\.unwrapsLinks, .turningOff),
         "links.openTab": linked(\.goesToOpenTab),
         "links.liveRow": linked(\.goesToLiveRow),
-        "links.suggestions": row("In Broadway"),
-        "links.try": row("In Broadway"),
-        "links.recent": row("In Broadway"),
+        "links.suggestions": row(),
+        "links.try": row(),
+        "links.recent": row(),
         "agents.connected": SettingAccess(bar: .always, instead: "broadway agents list reads them"),
         "agents.mode": SettingAccess(bar: .always, read: { $0.agentMode.rawValue }),
         "agents.sites": SettingAccess(bar: .always, instead: "broadway agents status reads them"),
         "agents.hooks": SettingAccess(bar: .always, instead: "broadway hooks list reads them"),
         "ai.agents": held(\.agentsOn),
-        "ai.command": row("The broadway command", instead: "broadway setup"),
+        "ai.command": row("broadway setup"),
         "ai.groups": shared({ AIGroups.shared.on }, { AIGroups.shared.on = $0 }),
         "groups.meetings": flag(\.meetingFolders),
         "groups.openrouter": SettingAccess(bar: .always, takes: "A key only you can add or remove", read: { _ in OpenRouterKey.shared.present }),
-        "ai.replies": row("From the page", instead: "broadway replies"),
-        "autocorrect": row("In Edit › Spelling and Grammar"),
+        "ai.replies": row("broadway replies list"),
+        "autocorrect": row("In the Edit menu: Spelling and Grammar"),
         "autofill.addresses": SettingAccess(bar: .always),
         "autofill.cards": SettingAccess(bar: .always),
         "autofill.profile": SettingAccess(bar: .always),
         "autofill.remembered": SettingAccess(bar: .always, read: { _ in FormAnswers.shared.siteCount }),
-        "bench": row("In View › Developer"),
-        "bookmarks.bar": row("In the Bookmarks menu"),
-        "calendars": SettingAccess(bar: .turningOn, takes: "true or false", read: { $0.usesCalendars && Meetings.shared.hasAccess },
-                                   write: { _, text in
-            guard let on = yes(text) else { return false }
+        "bench": row("In the View menu: Developer › Allow Scripts to Drive Broadway"),
+        "bookmarks.bar": flag(\.bookmarksBar),
+        "calendars": onOff(.turningOn, read: { $0.usesCalendars && Meetings.shared.hasAccess }) { _, on in
             MeetingAlertPrefs.shared.chosen = on
             if on { Task { _ = await Meetings.shared.turnOn() } } else { Meetings.shared.turnOff() }
-            return true
-        }),
-        "clear.cache": row("In Broadway"),
-        "clear.cookies": row("In Broadway"),
-        "clear.history": row("A button", instead: "broadway history clear"),
+        },
+        "clear.cache": row(),
+        "clear.cookies": row(),
+        "clear.history": row("broadway history clear"),
         "codes.gmail": stored("codes.gmail", fallback: true),
         "downloads.folder": SettingAccess(bar: .always, read: { $0.asksWhereToSave ? "ask each time" : $0.downloads.path }),
-        "field.snippets": row("Your snippets"),
-        "languages": SettingAccess(bar: .free, takes: "a comma list of languages such as en-GB,pl, or mac",
-                                   read: { _ in LanguagePrefs.shared.chosen?.joined(separator: ",") ?? "mac" },
-                                   write: { _, text in
-            guard let parsed = PreferredLanguages.parse(text) else { return false }
-            LanguagePrefs.shared.chosen = parsed
-            return true
-        }),
-        "spaces.languages": row("In the space's menu"),
-        "general.default": row("In Broadway"),
-        "general.import": row("In Broadway"),
+        "field.snippets": row("broadway snippets list"),
+        "languages": settable(takes: "a comma list of languages such as en-GB,pl, or mac",
+                              read: { _ in LanguagePrefs.shared.chosen?.joined(separator: ",") ?? "mac" },
+                              check: { PreferredLanguages.parse($0) != nil }) { _, text in
+            if let parsed = PreferredLanguages.parse(text) { LanguagePrefs.shared.chosen = parsed }
+        },
+        "spaces.languages": row("In each space's menu: Languages"),
+        "general.default": row(),
+        "general.import": row(),
         Preferences.hintsKey: flag(\.hints),
         "history.pageText": held(\.remembersPageText),
-        "history.freezes": row("Help › Copy Last Freeze"),
-        IntegrationNow.key: SettingAccess(takes: "true or false", read: { _ in IntegrationNow.on }, write: { _, text in
-            guard let on = yes(text) else { return false }
-            Store.settings.set(on, forKey: IntegrationNow.key)
-            return true
-        }),
-        "live.folders": row("In Broadway", instead: "broadway live list"),
-        "live.suggestions": row("In Broadway", instead: "broadway live add NAME SOURCE"),
+        "history.freezes": row("In the Help menu: Copy Last Freeze"),
+        IntegrationNow.key: onOff(read: { _ in IntegrationNow.on }) { _, on in Store.settings.set(on, forKey: IntegrationNow.key) },
+        "live.folders": row("broadway live list"),
+        "live.suggestions": row("broadway live add NAME SOURCE"),
         "live.offers": flag(\.suggestsLiveFolders),
-        LiveEvery.key: SettingAccess(takes: LiveEvery.allCases.map { "\($0.rawValue)" }.joined(separator: ", ") + " minutes", read: { $0.liveEvery.rawValue }, write: { prefs, text in
-            guard let every = Int(text).flatMap(LiveEvery.init) else { return false }
-            prefs.liveEvery = every
-            return true
-        }),
-        "live.offers.again": row("In Broadway"),
+        LiveEvery.key: settable(takes: LiveEvery.allCases.map { "\($0.rawValue)" }.joined(separator: ", ") + " minutes", read: { $0.liveEvery.rawValue },
+                                check: { Int($0).flatMap(LiveEvery.init) != nil }) { prefs, text in
+            if let every = Int(text).flatMap(LiveEvery.init) { prefs.liveEvery = every }
+        },
+        "live.offers.again": row(),
         "look": choice(\.look),
         "app.icon": choice(\.appIcon),
         "meetings.calendars": SettingAccess(bar: .always, read: { _ in
@@ -176,89 +178,80 @@ enum PersonSettings {
         "meetings.faces": SettingAccess(bar: .always, read: { _ in ContactFaces.on ? "from Contacts" : "initials" },
                                         instead: "Turn on People's photos in Settings › General › Calendars. Only the person can let Broadway read Contacts."),
         "newtab.floating": flag(\.floatingNewTab),
-        "note.answers": row("Always there"),
-        "note.awake": row("Always there"),
+        "note.answers": alwaysOn,
+        "note.awake": alwaysOn,
         "note.flick": always(\.floatFlicks),
-        "note.floatkeys": row("Always there"),
-        "note.groups": row("Always there"),
-        "note.json": row("Always there"),
+        "note.floatkeys": alwaysOn,
+        "note.groups": alwaysOn,
+        "note.json": alwaysOn,
         "note.links": always(\.showsLinks),
-        "note.panel": row("Always there"),
-        "note.pinback": row("Always there"),
-        "note.sharedpins": row("Always there"),
-        "note.sitesearch": row("Always there"),
-        "note.split": row("Always there"),
-        "note.switcher": row("Always there"),
-        "note.translate": row("Always there"),
+        "note.panel": alwaysOn,
+        "note.pinback": alwaysOn,
+        "note.sharedpins": alwaysOn,
+        "note.sitesearch": alwaysOn,
+        "note.split": alwaysOn,
+        "note.switcher": alwaysOn,
+        "note.translate": alwaysOn,
         "notifications.ask": flag(\.siteNotifications, .turningOn),
-        "pageZoom": SettingAccess(takes: "a percent from 50 to 300", read: { Int(($0.pageZoom * 100).rounded()) }, write: { prefs, text in
-            guard let percent = Double(text), Preferences.zooms.contains(percent / 100) else { return false }
-            prefs.pageZoom = percent / 100
-            return true
-        }),
-        "pages.dusk": row("In the View menu"),
-        "video.quality": SettingAccess(takes: VideoQuality.takes, read: { $0.videoQuality.raw }, write: { prefs, text in
-            guard let choice = VideoQuality.Choice(raw: text) else { return false }
-            prefs.videoQuality = choice
-            return true
-        }),
+        "pageZoom": settable(takes: "a percent from 50 to 300", read: { Int(($0.pageZoom * 100).rounded()) },
+                             check: { Double($0).map { Preferences.zooms.contains($0 / 100) } == true }) { prefs, text in
+            if let percent = Double(text) { prefs.pageZoom = percent / 100 }
+        },
+        "pages.dusk": flag(\.darkensPages),
+        "video.quality": settable(takes: VideoQuality.takes, read: { $0.videoQuality.raw }, check: { VideoQuality.Choice(raw: $0) != nil }) { prefs, text in
+            if let choice = VideoQuality.Choice(raw: text) { prefs.videoQuality = choice }
+        },
         "video.speed": flag(\.remembersSpeed),
         Preferences.miniKey: flag(\.miniPlayer),
-        Preferences.miniSkipKey: SettingAccess(takes: "10, 15 or 30", read: { $0.miniSkip }, write: { prefs, text in
-            guard let seconds = Int(text), MiniRule.skips.contains(seconds) else { return false }
-            prefs.miniSkip = seconds
-            return true
-        }),
-        Preferences.miniSpokenKey: SettingAccess(takes: "seconds or tracks", read: { $0.miniSpoken.rawValue }, write: { prefs, text in
-            guard let spoken = MiniSpoken(rawValue: text) else { return false }
-            prefs.miniSpoken = spoken
-            return true
-        }),
+        Preferences.miniSkipKey: settable(takes: "10, 15 or 30", read: { $0.miniSkip }, check: { Int($0).map { MiniRule.skips.contains($0) } == true }) { prefs, text in
+            if let seconds = Int(text) { prefs.miniSkip = seconds }
+        },
+        Preferences.miniSpokenKey: settable(takes: "seconds or tracks", read: { $0.miniSpoken.rawValue }, check: { MiniSpoken(rawValue: $0) != nil }) { prefs, text in
+            if let spoken = MiniSpoken(rawValue: text) { prefs.miniSpoken = spoken }
+        },
         Preferences.miniSpeedKey: flag(\.miniSpeed),
-        "updates.version": SettingAccess(bar: .noControl, takes: "Broadway › Check for Updates…", read: { _ in Updates.shared.line }),
-        "updates.check": SettingAccess(bar: .turningOff, takes: "true or false", read: { _ in Updates.shared.checks }, write: { _, text in
-            guard Updates.runs, let on = yes(text) else { return false }
-            Updates.shared.checks = on
-            return true
-        }),
-        "updates.install": SettingAccess(bar: .turningOff, takes: "true or false", read: { _ in Updates.shared.installs }, write: { _, text in
-            guard Updates.runs, let on = yes(text) else { return false }
-            Updates.shared.installs = on
-            return true
-        }),
-        "support.email": row("Help › Contact Support"),
+        "updates.version": SettingAccess(bar: .noControl, read: { _ in Updates.shared.line }, instead: "In the Broadway menu: Check for Updates…"),
+        "updates.check": settable(.turningOff, takes: "true or false", read: { _ in Updates.shared.checks }, check: { Updates.runs && yes($0) != nil }) { _, text in
+            if let on = yes(text) { Updates.shared.checks = on }
+        },
+        "updates.install": settable(.turningOff, takes: "true or false", read: { _ in Updates.shared.installs }, check: { Updates.runs && yes($0) != nil }) { _, text in
+            if let on = yes(text) { Updates.shared.installs = on }
+        },
+        "support.email": row("In the Help menu: Contact Support"),
         PullRefresh.key: flag(\.pullsToRefresh),
         "passwords.apple": AppleHelper.available ? held(\.applePasswords) : SettingAccess(bar: .soon, read: { _ in false }),
         "passwords.fill": held(\.fillsAndSavesPasswords),
         "passwords.never": SettingAccess(bar: .always, read: { _ in Vault.never.count }),
         "passwords.open": SettingAccess(bar: .always, instead: "broadway logins list reads who is kept, never a password"),
-        "privacy.forget": row("Site by site", instead: "broadway permissions reset"),
-        "privacy.permissions": row("Site by site", instead: "broadway permissions"),
-        "app.openAtLogin": row("In the Broadway menu"),
-        "quit.confirm": row("In the Broadway menu"),
-        "routes": row("In Broadway"),
-        "search.engine": SettingAccess(takes: Engine.allCases.filter { $0 != .custom }.map(\.rawValue).joined(separator: ", "), read: { $0.engine.rawValue }, write: { prefs, text in
-            guard let engine = Engine(rawValue: text), engine != .custom else { return false }
-            prefs.engine = engine
-            return true
-        }),
-        "search.keywords": row("In Broadway"),
-        "search.quickactions": row("In Broadway"),
-        "search.shortcuts": row("In Broadway"),
+        "privacy.forget": row("broadway permissions reset SITE"),
+        "privacy.permissions": row("broadway permissions list"),
+        "app.openAtLogin": SettingAccess(takes: "true or false", read: { _ in OpenAtLogin.on }, write: { _, text in
+            guard let on = yes(text) else { return false }
+            if OpenAtLogin.on != on { try? OpenAtLogin.items.set(on) }
+            return OpenAtLogin.on == on
+        }, check: { yes($0) != nil }, failure: "macOS keeps login items in System Settings › General › Login Items"),
+        "quit.confirm": flag(\.confirmsQuit),
+        "routes": row("broadway links list"),
+        "search.engine": settable(takes: Engine.allCases.filter { $0 != .custom }.map(\.rawValue).joined(separator: ", "), read: { $0.engine.rawValue },
+                                  check: { Engine(rawValue: $0).map { $0 != .custom } == true }) { prefs, text in
+            if let engine = Engine(rawValue: text) { prefs.engine = engine }
+        },
+        "search.keywords": row("broadway keywords list"),
+        "search.quickactions": row("broadway actions list"),
+        "search.shortcuts": row("broadway keywords list, broadway actions list and broadway snippets list"),
         "search.suggest": flag(\.engineSuggests, .turningOn),
         "shield": flag(\.shielded, .turningOff),
-        "shortcuts": row("In Broadway", instead: "broadway shortcuts"),
+        "shortcuts": row("broadway shortcuts list"),
         "sidebar.button": flag(\.sideButton),
         "sidebar.selected": flag(\.selectedShortcut),
         "sites.keep": flag(\.keepsSignIns, .turningOff),
-        "space.look": row("In each space's menu"),
+        "space.look": row("broadway spaces colour SPACE COLOUR"),
         "spaces.stacked": flag(\.stackedSpaces),
-        "tabs.close.after": SettingAccess(takes: TabLife.allCases.map { "\($0.rawValue)" }.joined(separator: ", ") + " hours", read: { $0.tabLife.rawValue }, write: { prefs, text in
-            guard let life = Int(text).flatMap(TabLife.init) else { return false }
-            prefs.tabLife = life
-            return true
-        }),
-        "tabs.layout": row("In the View menu"),
+        "tabs.close.after": settable(takes: TabLife.allCases.map { "\($0.rawValue)" }.joined(separator: ", ") + " hours", read: { $0.tabLife.rawValue },
+                                     check: { Int($0).flatMap(TabLife.init) != nil }) { prefs, text in
+            if let life = Int(text).flatMap(TabLife.init) { prefs.tabLife = life }
+        },
+        "tabs.layout": choice(\.tabsLayout),
     ]
 
     static func refusal(_ id: String, value: String) -> PersonRefusal? {
@@ -271,8 +264,7 @@ enum PersonSettings {
         case .always:
             return .person("\(item.title) can only be changed by the person", where: place)
         case .noControl:
-            guard let instead = access.instead else { return PersonRefusal("refused", "\(item.title) has nothing to set here") }
-            return PersonRefusal("refused", "\(item.title) has nothing to set here. Use \(instead).")
+            return PersonRefusal("refused", "\(item.title) has nothing to set here", hint: instead(id))
         case .soon:
             return PersonRefusal("refused", "\(item.title) isn't available yet")
         case .turningOff:
@@ -286,13 +278,78 @@ enum PersonSettings {
         return nil
     }
 
+    static func canSet(_ access: SettingAccess) -> Bool {
+        access.write != nil && [.free, .turningOff, .turningOn].contains(access.bar)
+    }
+
+    static func changes(_ access: SettingAccess?) -> String {
+        switch access?.bar {
+        case .free?: "this command"
+        case .always?: "only the person, in Broadway"
+        case .turningOff?: "true here, false only the person"
+        case .turningOn?: "false here, true only the person"
+        case .noControl?: "nothing to set here"
+        case .soon?: "not available yet"
+        case nil: ""
+        }
+    }
+
+    static func instead(_ id: String) -> String? {
+        guard let access = table[id] else { return nil }
+        if let instead = access.instead { return instead }
+        guard access.bar == .noControl, let item = SettingsIndex.item(id) else { return nil }
+        return "In Settings › \(item.page.title): broadway settings open \(id)"
+    }
+
+    static func about(_ id: String) -> [String: Any] {
+        let access = table[id]
+        var found: [String: Any] = ["takes": access.map { canSet($0) ? $0.takes : "" } ?? "", "changes": changes(access)]
+        if let instead = instead(id) { found["instead"] = instead }
+        return found
+    }
+
+    struct Change {
+        var item: SettingsItem
+        var access: SettingAccess
+        var value: String
+    }
+
+    static func planned(_ call: PersonCall) throws -> [Change] {
+        let words = [try call.need("setting"), try call.need("value")] + call.strings("values")
+        let several = words.count > 2
+        func whole(_ refused: PersonRefusal) -> PersonRefusal {
+            guard several else { return refused }
+            var told = refused
+            told.message = "\(refused.message). Nothing was changed."
+            return told
+        }
+        guard words.count.isMultiple(of: 2) else {
+            throw PersonRefusal.usage("\(words.last ?? "") has no value. Nothing was changed.", hint: "Give each setting its value: broadway settings set look dark pageZoom 110")
+        }
+        var seen = Set<String>()
+        return try stride(from: 0, to: words.count, by: 2).map { at in
+            let id = words[at]
+            let text = words[at + 1]
+            guard seen.insert(id).inserted else { throw PersonRefusal.usage("\(id) is named twice. Nothing was changed.") }
+            if let refused = refusal(id, value: text) { throw whole(refused) }
+            guard let item = SettingsIndex.item(id), let access = table[id], access.write != nil else {
+                throw whole(PersonRefusal("refused", "\(id) has nothing to set here", hint: instead(id)))
+            }
+            guard access.check?(text) ?? true else { throw whole(PersonRefusal.usage("\(id) takes \(access.takes), not \(text)")) }
+            return Change(item: item, access: access, value: text)
+        }
+    }
+
     private static func value(_ item: SettingsItem, _ prefs: Preferences, shown: Bool) -> Any {
         guard shown else { return "" }
         return table[item.id]?.read(prefs) ?? ""
     }
 
     private static func rows(_ items: [SettingsItem], _ call: PersonCall) -> [[String: Any]] {
-        items.map { ["id": $0.id, "title": $0.title, "page": $0.page.rawValue, "value": value($0, call.browser.prefs, shown: call.box.open)] }
+        items.map { item in
+            ["id": item.id, "title": item.title, "page": item.page.rawValue, "value": value(item, call.browser.prefs, shown: call.box.open)]
+                .merging(about(item.id)) { mine, _ in mine }
+        }
     }
 
     private static func item(_ call: PersonCall) throws -> SettingsItem {
@@ -351,9 +408,12 @@ enum PersonSettings {
         PersonVerb("settings", "list", .open) { call in
             var items = SettingsIndex.items
             if let page = call.string("page") {
-                guard let wanted = SettingsPage.named(page) else { throw PersonRefusal.missing("settings page", page) }
+                guard let wanted = SettingsPage.named(page) else {
+                    throw PersonRefusal("not_found", "No such settings page: \(page)", hint: "Pages: \(SettingsPage.allCases.map(\.rawValue).joined(separator: ", "))")
+                }
                 items = items.filter { $0.page == wanted }
             }
+            if call.flag("can-set") { items = items.filter { table[$0.id].map(canSet) == true } }
             return ["settings": rows(items, call)]
         },
         PersonVerb("settings", "find", .open) { call in
@@ -361,28 +421,25 @@ enum PersonSettings {
         },
         PersonVerb("settings", "get", .look) { call in
             let found = try item(call)
-            let access = table[found.id]
-            var data: [String: Any] = ["id": found.id, "title": found.title, "detail": found.detail, "page": found.page.rawValue, "value": value(found, call.browser.prefs, shown: true)]
-            switch access?.bar {
-            case .always: data["changes"] = "only the person, in Broadway"
-            case .noControl: data["changes"] = "nothing to set"
-            case .soon: data["changes"] = "not available yet"
-            case .turningOff: data["changes"] = "true here, false only the person"
-            case .turningOn: data["changes"] = "false here, true only the person"
-            default: data["changes"] = access?.takes ?? ""
-            }
-            return data
+            let data: [String: Any] = ["id": found.id, "title": found.title, "detail": found.detail, "page": found.page.rawValue, "value": value(found, call.browser.prefs, shown: true)]
+            return data.merging(about(found.id)) { mine, _ in mine }
         },
-        PersonVerb("settings", "set", .arrange, first: { call in
-            if let refused = refusal(try call.need("setting"), value: try call.need("value")) { throw refused }
-        }) { call in
-            let found = try item(call)
-            let text = try call.need("value")
-            guard let access = table[found.id], let write = access.write else {
-                throw PersonRefusal("refused", "\(found.title) has nothing to set here")
+        PersonVerb("settings", "set", .arrange, first: { _ = try planned($0) }) { call in
+            let prefs = call.browser.prefs
+            var done: [[String: Any]] = []
+            let planned = try planned(call)
+            for change in planned.filter({ $0.access.failure != nil }) + planned.filter({ $0.access.failure == nil }) {
+                let was = value(change.item, prefs, shown: true)
+                guard change.access.write?(prefs, change.value) == true else {
+                    let said = done.isEmpty ? "\(change.item.title) couldn't be changed, so nothing was" : "\(change.item.title) couldn't be changed. The settings before it were."
+                    throw PersonRefusal("failed", said, hint: change.access.failure ?? "Look with broadway settings get \(change.item.id) before you try again")
+                }
+                done.append(["id": change.item.id, "was": was, "value": value(change.item, prefs, shown: true)])
             }
-            guard write(call.browser.prefs, text) else { throw PersonRefusal.usage("\(found.id) takes \(access.takes), not \(text)") }
-            return ["id": found.id, "value": value(found, call.browser.prefs, shown: true), "message": "Changed"]
+            guard done.count > 1 else {
+                return ["id": done.first?["id"] ?? "", "value": done.first?["value"] ?? "", "message": "Changed"]
+            }
+            return ["settings": done, "message": "Changed \(done.count) settings"]
         },
         PersonVerb("settings", "open", .arrange) { call in
             let found = try call.string("setting") == nil ? nil : item(call)

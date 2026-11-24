@@ -33,7 +33,7 @@ public enum Setup {
     static let closing = "# <<< broadway <<<"
     static let mark = "written by broadway setup"
 
-    static let guideVersion = "0.5"
+    static let guideVersion = "0.6"
     static let codexToolTimeout = 900
 
     static let skill = """
@@ -42,7 +42,8 @@ public enum Setup {
     description: >
       Broadway is the person's own web browser on this Mac, signed in to their sites, driven with the broadway
       command. Use it for anything on the web: opening and reading pages, filling forms, clicking through
-      sites, screenshots, their open tabs and browsing history. Run broadway guide first.
+      sites, screenshots, their open tabs and browsing history. Broadway itself is set up through the command
+      too: settings, shortcuts, spaces, live folders. Run broadway guide first.
     managed-by: \(mark)
     broadway-guide: \(guideVersion)
     ---

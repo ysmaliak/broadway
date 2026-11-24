@@ -1165,6 +1165,59 @@ def ai_commands(base):
     check("nothing happened", tab in str(good("list", "tabs", "list")))
 
 
+def setting_up(base):
+    can = good("settings list --can-set", "settings", "list", "--can-set")["settings"]
+    check("--can-set lists only what the command changes", can and all(row["changes"] in ("this command", "true here, false only the person", "false here, true only the person") for row in can) and any(row["id"] == "pageZoom" for row in can), can[:3])
+    no("one wrong pair changes nothing", "usage", "settings", "set", "look", "light", "pageZoom", "7")
+    check("…so the first pair stood still", good("get", "settings", "get", "look")["value"] != "light")
+    no("a pair without its value", "usage", "settings", "set", "look", "light", "pageZoom")
+    many = good("several settings at once", "settings", "set", "look", "light", "pageZoom", "110", "newtab.floating", "true", "bookmarks.bar", "true")
+    check("…each one says what it was", [row["id"] for row in many.get("settings", [])] == ["look", "pageZoom", "newtab.floating", "bookmarks.bar"], many)
+    good("a theme", "settings", "set", "look", "dark")
+    target = "view.reload"
+    good("a shortcut", "shortcuts", "set", target, "cmd+shift+option+r")
+    good("a space", "spaces", "new", "Setup")
+    no("a colour that isn't one", "usage", "spaces", "colour", "Setup", "plaid")
+    good("its colour", "spaces", "colour", "Setup", "sage")
+    no("a rule to another app is the person's", "person_only", "links", "add", "setup.example", "--app", "Safari")
+    no("a rule needs a space", "usage", "links", "add", "setup.example")
+    rule = good("a link rule", "links", "add", "setup.example", "--space", "Setup")["id"]
+    other = good("another rule", "links", "add", "/pull/", "--kind", "contains", "--space", "Setup")["id"]
+    good("links move", "links", "move", other, "1")
+    good("links open goes to a space", "settings", "set", "links.open", "Setup")
+    good("a site shortcut", "keywords", "add", "ex", "https://example.com/search?q=%s")
+    no("pointing it elsewhere is the person's", "person_only", "keywords", "add", "ex", "https://other.example/?q=%s")
+    action = good("a Quick Action", "actions", "add", "zzpr", "example.com/pulls", "--name", "Pulls")["id"]
+    good("actions rename", "actions", "rename", action, "My pulls")
+    good("actions move", "actions", "move", action, "1")
+    good("a snippet", "snippets", "add", "zzsig", "Best, Sam", "--title", "Signature")
+    good("snippets rename", "snippets", "rename", "zzsig", "Sign-off")
+    live = good("a live folder", "live", "add", "Setup News", base + "feed.xml")["id"]
+
+    settings = {row["id"]: row["value"] for row in good("settings list", "settings", "list")["settings"]}
+    check("the theme reads back", settings.get("look") == "dark", settings.get("look"))
+    check("the zoom reads back", settings.get("pageZoom") == 110, settings.get("pageZoom"))
+    check("the two more read back", settings.get("newtab.floating") is True and settings.get("bookmarks.bar") is True, settings)
+    check("links from outside read back", settings.get("links.open") == "Setup", settings.get("links.open"))
+    check("the shortcut reads back", next(row for row in good("list", "shortcuts", "list")["shortcuts"] if row["id"] == target)["key"], target)
+    check("the colour reads back", next(row for row in good("list", "spaces", "list")["spaces"] if row["name"] == "Setup").get("colour") == "sage")
+    rules = good("links list", "links", "list")["rules"]
+    check("the rules read back in order", [row["id"] for row in rules][:2] == [other, rule] and rules[1]["space"] == "Setup", rules)
+    check("the site shortcut reads back", any(row["keyword"] == "ex" for row in good("keywords list", "keywords", "list")["keywords"]))
+    actions = good("actions list", "actions", "list")["actions"]
+    check("the Quick Action reads back first", actions and actions[0]["id"] == action and actions[0]["name"] == "My pulls", actions[:2])
+    check("the snippet reads back", any(row["keyword"] == "zzsig" and row["title"] == "Sign-off" for row in good("snippets list", "snippets", "list")["snippets"]))
+    check("the live folder reads back", any(row["id"] == live for row in good("live list", "live", "list")["folders"]))
+
+    yes("links delete", "links", "delete", other)
+    yes("keywords delete", "keywords", "delete", "ex")
+    yes("actions delete", "actions", "delete", action)
+    yes("snippets delete", "snippets", "delete", "zzsig")
+    check("they are gone", not any(row["id"] == other for row in good("links", "links", "list")["rules"])
+          and not good("keywords", "keywords", "list")["keywords"] and not any(row["keyword"] == "zzsig" for row in good("snippets", "snippets", "list")["snippets"]))
+    good("shortcut back", "shortcuts", "reset", target)
+
+
 def everyday(base):
     sv.cmd({"do": "ui", "lead": "history"})
     pages = [row for row in good("internal tab list", "tabs", "list")["tabs"] if row["url"] == "broadway://history"]
@@ -1286,6 +1339,7 @@ def people(base):
     page_tools(base)
     settings_commands(base)
     ai_commands(base)
+    setting_up(base)
     everyday(base)
     probe = subprocess.run([BENCH, "--world", WORLD, "tabs"], capture_output=True, text=True, timeout=30)
     check("no window came on screen in all of that", probe.returncode == 0, probe.stderr)

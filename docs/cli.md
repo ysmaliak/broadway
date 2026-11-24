@@ -8,6 +8,26 @@ Set it up from Settings › Agents › The broadway command, or run `Broadway.ap
 
 Nothing reads or acts until the person turns on Settings › Agents › Let agents use Broadway. See [agents.md](agents.md) for how agents are told apart, what they may do and what the person sees.
 
+## Setting Broadway up
+
+An agent can set Broadway up for the person with the command alone, or over MCP with the same verbs as tools. There is no settings file to edit, on purpose: a file an agent could write would walk past every bar that keeps a change the person's. `broadway settings list --can-set` lists every setting the command can change, with its value and what it takes, and `broadway settings set` takes several pairs in one call and one question. What only the person may change answers `person_only`, and `broadway settings open ID` takes them to the row.
+
+| Noun | What it sets up |
+| --- | --- |
+| `settings` | the settings, the sidebar side, Darken Bright Pages, the bookmarks bar, Ask before quitting and Open at Login among them |
+| `shortcuts` | keyboard shortcuts |
+| `spaces` | spaces, their order, icons and colours |
+| `folders` | folders of tabs |
+| `bookmarks` | bookmarks and their folders |
+| `live` | Live Folders |
+| `links` | link rules: the space a link opens in |
+| `keywords` | site shortcuts |
+| `actions` | Quick Actions |
+| `snippets` | snippets |
+| `extensions` | extensions, installed after the person's yes |
+| `shields` | the ad and tracker blocker, on again for a site, and its lists |
+| `permissions` | site permissions, forgotten so a site asks again |
+
 ## Options, output and exit codes
 
 These work on every command:
@@ -221,7 +241,8 @@ Inside a sandbox that denies local sockets, such as Codex's, every command fails
 `broadway mcp` serves the browser to MCP clients on stdio. The connection is one agent session, with a current tab exactly like the command's.
 
 - **Tools** have the command's names. Listed at first: `open`, `go`, `tabs`, `close`, `snapshot`, `read`, `shot`, `find`, `click`, `type`, `fill`, `press`, `scroll`, `wait`, `dialog`, `batch`, `run`, `handoff`, and `more_tools`. `more_tools` with a few words adds up to six of the rest (`upload`, `download`, `hover`, `choose`, `drag`, `select`, `console`, `network`, `audit`, `timings`, `styles`, `pdf`, `resize`, `skills`, `skill`, `history`, `ask`) to the connection's list and sends `notifications/tools/list_changed`. A tool that isn't listed yet still answers when called. The 0.3 names `navigate`, `text`, `screenshot`, `locate` and `fill_form` still answer, and are not listed. The first `tools/list` stays under 6 KB.
-- **Spaces, folders, bookmarks, live folders and settings.** Every verb of these five nouns is an MCP tool named `noun_verb`, such as `spaces_list`, `folders_new`, `bookmarks_add`, `live_update` or `settings_get`, added through `more_tools` like the rest and never in the first list. `more_tools` ranks a tool whose name holds the words first, so `bookmarks add` gives `bookmarks_add`. Each takes the command's own arguments, as a schema made from the verb's usage line in `Nouns.swift`, and goes down the same path as `broadway NOUN VERB`: the same class from `PersonCommands.table`, the same question with the command line quoted and the agent's name, the same refusals with the same codes and hints. Its answer is the text the command prints, inside a website-content fence, with the command's JSON `data` in `_meta`. `readOnlyHint` is set only for a look, `destructiveHint: false` only for verbs that add or show (`spaces_new`, `spaces_switch`, `folders_new`, `folders_fold`, `folders_unfold`, `bookmarks_add`, `bookmarks_folder`, `bookmarks_open`, `live_add`, `live_update`, `settings_open`), and `openWorldHint: false` for every one but `bookmarks_open`, `live_add`, `live_update` and `live_resume`. With agents off an MCP client has no tools at all, so `settings_list` and `settings_find`, which a shell may run with agents off, are dark over MCP too. The other nouns are not reachable over MCP, because they were not asked for.- **Annotations.** Each listed tool says what it may do: `readOnlyHint` for the tools that only look, `destructiveHint: false` for `open`, `go`, `scroll`, `hover`, `select`, `resize`, `handoff`, `download` and `ask`, `openWorldHint: false` for the ones that never reach a site. A tool with none claims the worst.
+- **The nouns that set Broadway up.** Every verb of spaces, folders, bookmarks, live, settings, shortcuts, extensions, shields, permissions, links, keywords, actions and snippets is an MCP tool named `noun_verb`, such as `spaces_list`, `bookmarks_add`, `settings_set`, `shortcuts_set` or `links_add`, added through `more_tools` like the rest and never in the first list. `more_tools` ranks a tool whose name holds the words first, so `bookmarks add` gives `bookmarks_add`, and when a name holds them it leaves out tools that hold them only in their description. Each takes the command's own arguments, as a schema made from the verb's usage line in `Nouns.swift`, and goes down the same path as `broadway NOUN VERB`: the same class from `PersonCommands.table`, the same question with the command line quoted and the agent's name, the same refusals with the same codes and hints. `extensions_private`, `shields_off` and `permissions_allow` answer `person_only` with the place, as their commands do. Its answer is the text the command prints, inside a website-content fence, with the command's JSON `data` in `_meta`. `readOnlyHint` is set only for a look, `destructiveHint: false` only for verbs that add or show (`spaces_new`, `spaces_switch`, `folders_new`, `folders_fold`, `folders_unfold`, `bookmarks_add`, `bookmarks_folder`, `bookmarks_open`, `live_add`, `live_update`, `settings_open`, `shields_on`, `shields_update`, `links_add`, `keywords_add`, `actions_add`, `snippets_add`), and `openWorldHint: false` for every one but `bookmarks_open`, `live_add`, `live_update`, `live_resume`, `extensions_install` and `shields_update`. With agents off an MCP client has no tools at all, so `settings_list` and `settings_find`, which a shell may run with agents off, are dark over MCP too. The other nouns are not reachable over MCP, because they were not asked for.
+- **Annotations.** Each listed tool says what it may do: `readOnlyHint` for the tools that only look, `destructiveHint: false` for `open`, `go`, `scroll`, `hover`, `select`, `resize`, `handoff`, `download` and `ask`, `openWorldHint: false` for the ones that never reach a site. A tool with none claims the worst.
 - **Arguments.** An argument a tool doesn't take is refused with `usage` and the list of those it takes, such as `click has no argument "element". It takes …`, required ones first and `tab` last. `tab` and names starting with `_` always pass.
 - **`batch`** takes `steps` as `{"tool", "arguments"}` objects, with the command's tool names, and `tab` for every step that doesn't name one. Each step is its own call through the same checks and the same yes as alone. `lines` is refused, because only the command reads them. The answer has one line per step, and a failure says which steps landed and to send the rest from the step that failed.
 - **`run`** takes `code`, and `timeout`, `output_limit` and `tab` as `broadway run` does. `broadway mcp` runs the script itself, and each function call goes to Broadway as one ordinary command in the connection's own session, so it shares the current tab and passes the same checks and the same yes. The answer is what the script printed and the step count, fenced when a step read a website, and a failure says the step, the code and what landed.- **One call at a time.** Calls start in the order they came, one at a time, except that the next call goes ahead while the one before it waits for the person. `notifications/cancelled` for a call that hasn't started means it is never made. A running call gets no answer, and stops wherever its tool can stop, so a click already sent may still land.
@@ -273,10 +294,11 @@ The **C** column is how the command is gated. The classes are explained under [W
 
 | Command | C | What it does |
 | --- | --- | --- |
-| `spaces list` | R | every space, its tab count and which is on screen |
+| `spaces list` | R | every space, its tab count, its colour and which is on screen |
 | `spaces switch SPACE` (also `space SPACE`, and `space` alone says which) | A | put a space on screen |
 | `spaces new NAME [--fresh] [--icon SYMBOL] [--switch]` | A | a new space, left behind unless `--switch`. `--fresh` gives it separate accounts |
 | `spaces rename SPACE NAME`, `spaces move SPACE POSITION`, `spaces icon SPACE SYMBOL` | A | |
+| `spaces colour SPACE COLOUR` | A | one of the preset colours, by id or name: graphite, gray, paper, coral, peach, sage, sky, lavender or rose. Transparency, grain and glass stay as they are |
 | `spaces delete SPACE` | E | closes its tabs |
 | `tabs list [--space NAME] [--all] [--pinned]` | T | the open tabs. Private windows are never listed |
 | `tabs show TAB` | R | one tab: space, folder, pin, sleep, zoom, sound, split |
@@ -342,12 +364,25 @@ Each works on the tab chosen as above and is gated on its site.
 
 | Command | C | What it does |
 | --- | --- | --- |
-| `settings list [--page PAGE]`, `settings find WORDS` | O | ids and titles, with values only while agents are on |
+| `settings list [--page PAGE] [--can-set]`, `settings find WORDS` | O | each setting's id, title, value, what it takes (`takes`, the fourth column), who may change it (`changes`) and, for a row with nothing to set, the command or place that does its job (`instead`). Values only while agents are on. `--can-set` lists only what the command can change |
 | `settings get SETTING` | R | |
-| `settings set SETTING VALUE` | A | refused for the settings listed below |
+| `settings set SETTING VALUE [SETTING VALUE...]` | A | refused for the settings listed below. The menu choices are settings too: `tabs.layout` (`left` or `right`), `pages.dusk`, `bookmarks.bar`, `quit.confirm` and `app.openAtLogin`. Several pairs are all checked first, so one refused or wrong value changes nothing. In Ask mode the whole line is one question. The answer gives each setting's old and new value |
 | `settings open [SETTING]` | A | Settings in Broadway, at that row |
 | `shortcuts list [QUERY]` | R | |
 | `shortcuts set SHORTCUT KEYS`, `clear`, `reset [SHORTCUT] [--all]` | A | keys like `cmd+shift+k` |
+| `links list` | R | the link rules, first to last: each one's id, what it matches and where it opens |
+| `links add MATCH --space NAME [--kind KIND]` | A | links that fit open in that space. The kind (`site`, `host`, `starts`, `contains`, `pattern`, `regex`) is read from the match unless `--kind` says it. A rule to another app or browser (`--app`) is `person_only` |
+| `links move ID POSITION` | A | the first rule that fits wins |
+| `links delete ID` | E | |
+| `keywords list` | R | site shortcuts: the word, the site and its search address |
+| `keywords add KEYWORD ADDRESS` | A | an http or https address with one `%s`. A word that already goes somewhere is `person_only` |
+| `keywords delete KEYWORD` | E | |
+| `actions list` | R | Quick Actions in their order, built-in and the person's own |
+| `actions add SHORT ADDRESS [--name TEXT]`, `actions rename ACTION NAME`, `actions move ACTION POSITION` | A | a short name that already opens something is `person_only` |
+| `actions delete ACTION` | E | New document and New meeting come back from Settings |
+| `snippets list` | R | each snippet's keyword, title and first line |
+| `snippets add KEYWORD TEXT [--title TEXT]`, `snippets rename KEYWORD TITLE` | A | `{date}`, `{time}`, `{clipboard}` and `{cursor}` fill in when it is used |
+| `snippets delete KEYWORD` | E | |
 | `extensions list`, `show ID` | R | |
 | `extensions enable`, `disable`, `reload` | A | |
 | `extensions install LINK` | A | the person then answers Broadway's own sheet about its permissions |
@@ -417,7 +452,7 @@ A site marked Never Here refuses every command on it. A site marked Always Here 
 | `shield`, `sites.keep`, `links.tracking`, `links.unwrap`, `updates.check`, `updates.install` | turning off. Turning on is fine |
 | `notifications.ask`, `search.suggest`, `calendars`, `ai.groups` | turning on. Turning off is fine |
 
-A row with no control of its own (a button, a list, a note) reads as such and refuses a value, naming the command that does the job where there is one.
+A row with no control of its own (a button, a list, a note) reads as such and refuses a value. Its `instead` names the command that does the job, or the place in Broadway, where `settings open ID` goes.
 
 ### Rules for every command
 
@@ -437,7 +472,8 @@ A row with no control of its own (a button, a list, a note) reads as such and re
 | Clearing cookies and cache | it signs out of everything |
 | Import | its panels pick profiles and need Keychain prompts |
 | Opening a downloaded file | it would run whatever a site sent. The path is in `downloads list` |
-| Space colours and looks | a picker's worth of values nobody types |
+| Custom space looks, colours of the person's own and pictures | a picker's worth of values nobody types. The preset colours have `spaces colour` |
+| Link rules that send links to another app or browser, and site shortcuts or Quick Actions sent somewhere new | what the person types or clicks would go somewhere they never chose |
 
 ## How it is built
 

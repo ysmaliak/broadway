@@ -13,10 +13,35 @@ struct PersonRefusal: Error {
     }
 
     static func usage(_ message: String, hint: String? = nil) -> PersonRefusal { PersonRefusal("usage", message, hint: hint) }
-    static func missing(_ what: String, _ named: String) -> PersonRefusal { PersonRefusal("not_found", "No such \(what): \(named)") }
-    static func ambiguous(_ what: String, _ named: String, _ count: Int) -> PersonRefusal {
-        PersonRefusal("ambiguous", "\(named) matches \(count) of them. Give more of the \(what).")
+    static func missing(_ what: String, _ named: String) -> PersonRefusal {
+        PersonRefusal("not_found", "No such \(what): \(named)", hint: looks[what] ?? "Run broadway help for the list")
     }
+    static func ambiguous(_ what: String, _ named: String, _ count: Int) -> PersonRefusal {
+        PersonRefusal("ambiguous", "\(named) matches \(count) of them", hint: "Give more of the \(what)")
+    }
+
+    static let looks: [String: String] = [
+        "setting": "Look for it with broadway settings find WORDS",
+        "command": "Look for it with broadway shortcuts list WORDS",
+        "space": "broadway spaces list names them",
+        "folder": "broadway folders list names them",
+        "bookmark": "broadway bookmarks list gives their ids",
+        "bookmark folder": "broadway bookmarks list gives their ids",
+        "download": "broadway downloads list gives their ids",
+        "download under way": "broadway downloads list gives their ids",
+        "Live Folder": "broadway live list gives their ids",
+        "skill": "broadway skills list names them",
+        "watch": "broadway replies list gives their ids",
+        "row": "broadway now list gives their ids",
+        "hidden element": "broadway site hidden lists them",
+        "extension": "broadway extensions list gives their ids",
+        "permission": "broadway permissions list names them",
+        "agent session": "broadway agents list gives their ids",
+        "link rule": "broadway links list gives their ids",
+        "site shortcut": "broadway keywords list names them",
+        "Quick Action": "broadway actions list gives their ids",
+        "snippet": "broadway snippets list names them",
+    ]
     static func person(_ message: String, where place: String) -> PersonRefusal {
         PersonRefusal("person_only", message, hint: "The person can do this in Broadway: \(place)")
     }
@@ -111,7 +136,7 @@ struct PersonVerb {
 
 @MainActor
 enum PersonCommands {
-    static let table: [PersonVerb] = PersonTabs.verbs + PersonFolders.verbs + PersonGroups.verbs + PersonStuff.verbs + PersonPages.verbs + PersonSettings.verbs + PersonKnowledge.verbs + PersonAgents.verbs + completionVerbs
+    static let table: [PersonVerb] = PersonTabs.verbs + PersonFolders.verbs + PersonGroups.verbs + PersonStuff.verbs + PersonPages.verbs + PersonSettings.verbs + PersonConfig.verbs + PersonKnowledge.verbs + PersonAgents.verbs + completionVerbs
 
     private static let completionVerbs = [
         PersonVerb("complete", "values", .look) { call in
@@ -321,6 +346,19 @@ enum PersonAsk {
         "spaces delete": "Delete a space?",
         "settings set": "Change a setting?",
         "shortcuts set": "Change a keyboard shortcut?",
+        "links add": "Add a link rule?",
+        "links move": "Move a link rule?",
+        "links delete": "Delete a link rule?",
+        "keywords add": "Add a site shortcut?",
+        "keywords delete": "Delete a site shortcut?",
+        "actions add": "Add a Quick Action?",
+        "actions rename": "Rename a Quick Action?",
+        "actions move": "Move a Quick Action?",
+        "actions delete": "Delete a Quick Action?",
+        "snippets add": "Add a snippet?",
+        "snippets rename": "Rename a snippet?",
+        "snippets delete": "Delete a snippet?",
+        "spaces colour": "Change a space's colour?",
         "shortcuts clear": "Clear a keyboard shortcut?",
         "shortcuts reset": "Reset keyboard shortcuts?",
         "extensions install": "Install an extension?",
@@ -333,6 +371,12 @@ enum PersonAsk {
         "folders delete": "Delete a folder?",
         "folders close": "Close a folder's tabs?",
     ]
+
+    static func title(for call: PersonCall, site: String?) -> String {
+        let more = call.strings("values").count / 2
+        if call.noun == "settings", call.verb == "set", more > 0 { return "Change \(more + 1) settings?" }
+        return title(noun: call.noun, verb: call.verb, site: site)
+    }
 
     static func title(noun: String, verb: String, site: String?) -> String {
         guard let words = titles["\(noun) \(verb)"] else { return generic }
@@ -347,7 +391,7 @@ enum PersonAsk {
                                 hint: "Tell the person, or run it with --wait-person MIN while they are at Broadway")
         }
         if channel.gone { throw PersonRefusal("needs_you", "Nobody answered in Broadway. Nothing was done.") }
-        var question = AgentQuestion(kind: .approval(act), title: asked ?? title(noun: call.noun, verb: call.verb, site: site))
+        var question = AgentQuestion(kind: .approval(act), title: asked ?? title(for: call, site: site))
         question.tab = call.tab?.tab.id
         question.site = site
         question.quote = AgentQuestion.clean(call.line)

@@ -52,12 +52,6 @@ enum PersonTabs {
         return only
     }
 
-    static func spacesOn(_ call: PersonCall) throws {
-        guard call.browser.prefs.usesSpaces else {
-            throw PersonRefusal("refused", "Spaces are off", hint: "Turn them on with broadway settings set spaces true")
-        }
-    }
-
     static func spaceName(_ found: PersonTab) -> String {
         found.browser.spaces.first { $0.id == found.space }?.name ?? ""
     }
@@ -102,11 +96,11 @@ enum PersonTabs {
             let every = everyTab(call)
             return ["on": browser.prefs.usesSpaces, "spaces": browser.spaces.map { space in
                 ["id": PersonCommands.short(space.id), "name": space.name, "tabs": every.filter { $0.space == space.id && $0.browser === browser && !$0.tab.agent }.count,
-                 "current": space.id == browser.spaceID, "accounts": space.accounts.rawValue, "icon": space.shownIcon.saved] as [String: Any]
+                 "current": space.id == browser.spaceID, "accounts": space.accounts.rawValue, "icon": space.shownIcon.saved,
+                 "colour": PersonConfig.colour(of: space)] as [String: Any]
             }]
         },
         PersonVerb("spaces", "switch", .arrange) { call in
-            try spacesOn(call)
             let space = try space(call, try call.need("space"))
             call.browser.switchSpace(to: space.id)
             return ["space": space.name, "message": "Now in \(space.name)"]
@@ -115,13 +109,11 @@ enum PersonTabs {
             guard let named = call.string("space") else {
                 return ["space": call.browser.space.name, "id": PersonCommands.short(call.browser.space.id)]
             }
-            try spacesOn(call)
             let space = try space(call, named)
             call.browser.switchSpace(to: space.id)
             return ["space": space.name, "message": "Now in \(space.name)"]
         },
         PersonVerb("spaces", "new", .arrange) { call in
-            try spacesOn(call)
             let browser = call.browser
             let name = try call.need("name")
             if browser.spaces.contains(where: { $0.name.lowercased() == name.lowercased() }) { throw PersonRefusal("refused", "There's already a space named \(name)") }
@@ -195,10 +187,7 @@ enum PersonTabs {
         },
         PersonVerb("tabs", "new", .arrange) { call in
             let browser = call.browser
-            let space = try call.string("space").map { named -> Space in
-                try spacesOn(call)
-                return try PersonTabs.space(call, named)
-            }
+            let space = try call.string("space").map { try PersonTabs.space(call, $0) }
             let folder = try call.string("folder").map { try PersonFolders.find(call, $0) }
             let url = try call.string("url").map(webAddress)
             if space != nil, space?.id != browser.spaceID, folder != nil { throw PersonRefusal.usage("That folder is in the space on screen. Pick --space or --folder.") }
@@ -217,7 +206,6 @@ enum PersonTabs {
         },
         PersonVerb("tabs", "open", .tool) { call in
             guard let named = call.string("space") else { return try await PersonCommands.tool(call, "open", ["url": try call.need("url")]) }
-            try spacesOn(call)
             let space = try space(call, named)
             let url = try call.need("url")
             var made = await call.box.openTab(["url": url], task: call.link?.id, space: space.id)
@@ -280,7 +268,6 @@ enum PersonTabs {
                 did = true
             }
             if let named = call.string("space") {
-                try spacesOn(call)
                 try await moved(found.tab, in: browser, to: try space(call, named))
                 did = true
             }

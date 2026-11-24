@@ -118,6 +118,38 @@ def reach(client):
     check("only the person may: the same code and hint as the command", mine[0]["isError"] and error.get("code") == "person_only" and error.get("code") == shell.get("code") and error.get("hint") == shell.get("hint"), (error, shell))
 
 
+def setting_up(client):
+    found = client.call("more_tools", query="links add")
+    check("more_tools finds the new nouns", "links_add" in meta(found[0]).get("added", []), found)
+    wrong = client.call("settings_set", setting="look", value="light", values=["pageZoom", "7"])
+    check("one wrong pair changes nothing over MCP", wrong[0]["isError"] and meta(wrong[0], "error").get("code") == "usage", wrong)
+    many = client.call("settings_set", setting="look", value="dark", values=["pageZoom", "110", "newtab.floating", "true", "bookmarks.bar", "true"])
+    check("several settings in one call over MCP", not many[0]["isError"] and len(meta(many[0]).get("settings", [])) == 4, many)
+    check("a shortcut over MCP", not client.call("shortcuts_set", shortcut="view.reload", keys="cmd+shift+option+r")[0]["isError"])
+    check("a space over MCP", not client.call("spaces_new", name="Setup")[0]["isError"])
+    check("its colour over MCP", not client.call("spaces_colour", space="Setup", colour="sage")[0]["isError"])
+    other_app = client.call("links_add", match="setup.example", app="Safari")
+    check("a rule to another app is the person's over MCP", other_app[0]["isError"] and meta(other_app[0], "error").get("code") == "person_only", other_app)
+    check("a link rule over MCP", not client.call("links_add", match="setup.example", space="Setup")[0]["isError"])
+    check("a site shortcut over MCP", not client.call("keywords_add", keyword="ex", address="https://example.com/search?q=%s")[0]["isError"])
+    check("a Quick Action over MCP", not client.call("actions_add", short="zzpr", address="example.com/pulls", name="Pulls")[0]["isError"])
+    check("a snippet over MCP", not client.call("snippets_add", keyword="zzsig", text="Best, Sam", title="Signature")[0]["isError"])
+
+    can = client.data("settings_list", **{"can-set": True}).get("settings", [])
+    check("settings_list with can-set over MCP", can and not any(row["id"] == "ai.agents" for row in can) and any(row["id"] == "pageZoom" for row in can), can[:2])
+    settings = {row["id"]: row["value"] for row in client.data("settings_list").get("settings", [])}
+    check("the settings read back over MCP", settings.get("look") == "dark" and settings.get("pageZoom") == 110
+          and settings.get("newtab.floating") is True and settings.get("bookmarks.bar") is True, {k: settings.get(k) for k in ("look", "pageZoom", "newtab.floating", "bookmarks.bar")})
+    keys = {row["id"]: row["key"] for row in client.data("shortcuts_list").get("shortcuts", [])}
+    check("the shortcut reads back over MCP", bool(keys.get("view.reload")), keys.get("view.reload"))
+    spaces = client.data("spaces_list").get("spaces", [])
+    check("the colour reads back over MCP", any(row["name"] == "Setup" and row.get("colour") == "sage" for row in spaces), spaces)
+    check("the rule reads back over MCP", any(row["match"] == "setup.example" and row["space"] == "Setup" for row in client.data("links_list").get("rules", [])))
+    check("the site shortcut reads back over MCP", any(row["keyword"] == "ex" for row in client.data("keywords_list").get("keywords", [])))
+    check("the Quick Action reads back over MCP", any(row["short"] == "zzpr" for row in client.data("actions_list").get("actions", [])))
+    check("the snippet reads back over MCP", any(row["keyword"] == "zzsig" for row in client.data("snippets_list").get("snippets", [])))
+
+
 def broadway(*words):
     return subprocess.run([BROADWAY, "--world", WORLD, *words], capture_output=True, text=True, timeout=30)
 
@@ -293,6 +325,7 @@ def on(base):
     check("a private tab leaves no history", "secret" not in client.call("history", query="secret")[1])
     bench("close", private)
     reach(client)
+    setting_up(client)
     client.close()
 
     task = broadway("say hello")
