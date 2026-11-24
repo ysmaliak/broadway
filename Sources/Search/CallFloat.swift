@@ -169,6 +169,8 @@ enum CallTiles {
         margin: 0 !important; padding: 0 !important; border: 0 !important; border-radius: \(px(corner)) !important; \
         box-shadow: none !important; background: #000 !important; z-index: 2147483647 !important; visibility: visible !important; }
         html[data-broadway-tiles=screen] video[data-broadway-tiles-screen] { object-fit: contain !important; }
+        html[data-broadway-tiles=screen] [data-broadway-tiles-screen][data-broadway-tiles-flip] { transform: scaleX(-1) !important; \
+        transform-origin: 50% 50% !important; }
         """
     }
 
@@ -179,7 +181,7 @@ enum CallTiles {
         "[" + selectors.map { "\"\($0)\"" }.joined(separator: ",") + "]"
     }
 
-    private static let marks = "['data-broadway-tiles-grid', 'data-broadway-tiles-path', 'data-broadway-tiles-chrome', 'data-broadway-tiles-screen']"
+    private static let marks = "['data-broadway-tiles-grid', 'data-broadway-tiles-path', 'data-broadway-tiles-chrome', 'data-broadway-tiles-screen', 'data-broadway-tiles-flip']"
 
     static func enter(room: NSEdgeInsets, corner: CGFloat = 0) -> String {
         """
@@ -206,6 +208,15 @@ enum CallTiles {
             window.__broadwayCallScreen = null;
           }
           function drop(id) { var el = document.getElementById(id); if (el) el.remove(); }
+          function turned(el) {
+            var flips = false;
+            for (var at = el; at; at = at.parentElement) {
+              var t = getComputedStyle(at).transform;
+              if (!t || t === 'none') continue;
+              try { var m = new DOMMatrixReadOnly(t); if (m.a * m.d - m.b * m.c < 0) flips = !flips; } catch (e) {}
+            }
+            return flips;
+          }
           \(CallScreen.finding)
           function dress(mode) {
             var style = document.getElementById('broadway-call-tiles');
@@ -244,9 +255,11 @@ enum CallTiles {
               var shape = lone.offsetHeight > 0 ? lone.offsetWidth / lone.offsetHeight : 0;
               clear();
               drop('broadway-call-fit');
+              var mirrored = !display(lone) && turned(lone);
               lone.setAttribute('data-broadway-tiles-screen', '');
+              if (mirrored) lone.setAttribute('data-broadway-tiles-flip', '');
               for (var up = lone.parentElement; up; up = up.parentElement) up.setAttribute('data-broadway-tiles-path', '');
-              window.__broadwayCallScreen = { el: lone, stream: lone.srcObject || null, src: lone.currentSrc || '', shape: shape };
+              window.__broadwayCallScreen = { el: lone, stream: lone.srcObject || null, src: lone.currentSrc || '', shape: shape, flip: mirrored };
               setTimeout(function () { window.dispatchEvent(new Event('resize')); }, 0);
             }
             dress('screen');
@@ -254,7 +267,10 @@ enum CallTiles {
             if (!grid.hasAttribute('data-broadway-tiles-grid')) {
               clear();
               drop('broadway-call-fit');
+              var shows = [].slice.call(grid.querySelectorAll('video')).concat(grid.tagName === 'VIDEO' ? [grid] : []);
+              var flipped = !shows.some(display) && turned(grid);
               grid.setAttribute('data-broadway-tiles-grid', '');
+              if (flipped) grid.setAttribute('data-broadway-tiles-flip', '');
               for (var p = grid.parentElement; p; p = p.parentElement) p.setAttribute('data-broadway-tiles-path', '');
               setTimeout(function () { window.dispatchEvent(new Event('resize')); }, 0);
             }
@@ -289,11 +305,12 @@ enum CallTiles {
             if (!grid) return;
             var shown = getComputedStyle(grid).transform;
             var m = shown && shown !== 'none' ? new DOMMatrixReadOnly(shown) : new DOMMatrixReadOnly();
-            var s = m.a || 1, tx = m.e, ty = m.f;
+            var s = m.a || 1, k = Math.abs(s), tx = m.e, ty = m.f;
             var g = grid.getBoundingClientRect();
-            var gx = g.left - tx, gy = g.top - ty;
+            var gx = (s < 0 ? g.right : g.left) - tx, gy = g.top - ty;
             function local(r) {
-              return { l: gx + (r.left - gx - tx) / s, t: gy + (r.top - gy - ty) / s, r: gx + (r.right - gx - tx) / s, b: gy + (r.bottom - gy - ty) / s };
+              var a = gx + (r.left - gx - tx) / s, b = gx + (r.right - gx - tx) / s;
+              return { l: Math.min(a, b), t: gy + (r.top - gy - ty) / k, r: Math.max(a, b), b: gy + (r.bottom - gy - ty) / k };
             }
             function seen(el) {
               if (!el.getClientRects().length || el.hasAttribute('data-broadway-tiles-chrome')) return null;
@@ -304,6 +321,7 @@ enum CallTiles {
               return r;
             }
             var people = find(grid);
+            if (!people.length && /^(VIDEO|CANVAS)$/.test(grid.tagName)) people = [grid];
             var boxes = people.map(seen).filter(Boolean);
             if (!boxes.length) return;
             var areas = boxes.map(function (b) { return (b.r - b.l) * (b.b - b.t); });
@@ -340,10 +358,12 @@ enum CallTiles {
             });
             var uw = u.r - u.l, uh = u.b - u.t;
             var ns = Math.min(W / uw, H / uh, 4);
-            var nx = X + (W - uw * ns) / 2 - gx - ns * (u.l - gx);
+            var flip = grid.hasAttribute('data-broadway-tiles-flip');
+            var nx = X + (W - uw * ns) / 2 - gx + (flip ? ns * (u.r - gx) : -ns * (u.l - gx));
             var ny = Y + (H - uh * ns) / 2 - gy - ns * (u.t - gy);
-            if (Math.abs(ns - s) < 0.001 && Math.abs(nx - tx) < 0.25 && Math.abs(ny - ty) < 0.25) return;
-            write('[data-broadway-tiles-grid] { transform: translate(' + nx.toFixed(2) + 'px, ' + ny.toFixed(2) + 'px) scale(' + ns.toFixed(4) + ') !important; }');
+            if (Math.abs(ns - k) < 0.001 && (s < 0) === flip && Math.abs(nx - tx) < 0.25 && Math.abs(ny - ty) < 0.25) return;
+            write('[data-broadway-tiles-grid] { transform: translate(' + nx.toFixed(2) + 'px, ' + ny.toFixed(2) + 'px) scale('
+              + (flip ? -ns : ns).toFixed(4) + ', ' + ns.toFixed(4) + ') !important; }');
           };
           window.__broadwayCallFitNow();
           if (!window.__broadwayCallFitting) {
