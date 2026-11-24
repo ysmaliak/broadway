@@ -342,7 +342,7 @@ Each works on the tab chosen as above and is gated on its site.
 
 | Command | C | What it does |
 | --- | --- | --- |
-| `settings list [--page PAGE]`, `settings find WORDS` | O | ids and titles, with values only while agents are on |
+| `settings list [--page PAGE] [--can-set]`, `settings find WORDS` | O | each setting's id, title, value, what it takes (`takes`, the fourth column), who may change it (`changes`) and, for a row with nothing to set, the command or place that does its job (`instead`). Values only while agents are on. `--can-set` lists only what the command can change |
 | `settings get SETTING` | R | |
 | `settings set SETTING VALUE` | A | refused for the settings listed below |
 | `settings open [SETTING]` | A | Settings in Broadway, at that row |
@@ -417,7 +417,7 @@ A site marked Never Here refuses every command on it. A site marked Always Here 
 | `shield`, `sites.keep`, `links.tracking`, `links.unwrap`, `updates.check`, `updates.install` | turning off. Turning on is fine |
 | `notifications.ask`, `search.suggest`, `calendars`, `ai.groups` | turning on. Turning off is fine |
 
-A row with no control of its own (a button, a list, a note) reads as such and refuses a value, naming the command that does the job where there is one.
+A row with no control of its own (a button, a list, a note) reads as such and refuses a value. Its `instead` names the command that does the job, or the place in Broadway, where `settings open ID` goes.
 
 ### Rules for every command
 

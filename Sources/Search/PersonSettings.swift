@@ -48,12 +48,14 @@ enum PersonSettings {
         SettingAccess(bar: .always, read: { _ in Store.settings.object(forKey: key) as? Bool ?? fallback })
     }
 
-    private static func row(_ text: String, instead: String? = nil) -> SettingAccess {
-        SettingAccess(bar: .noControl, takes: text, instead: instead)
+    private static func row(_ instead: String? = nil) -> SettingAccess {
+        SettingAccess(bar: .noControl, instead: instead)
     }
 
+    private static let alwaysOn = row("Always on")
+
     private static func always(_ path: KeyPath<Preferences, Bool>) -> SettingAccess {
-        SettingAccess(bar: .noControl, takes: "Always there", read: { $0[keyPath: path] })
+        SettingAccess(bar: .noControl, read: { $0[keyPath: path] }, instead: "Always on")
     }
 
     private static func shared(_ read: @escaping @MainActor () -> Bool, _ write: @escaping @MainActor (Bool) -> Void) -> SettingAccess {
@@ -102,26 +104,26 @@ enum PersonSettings {
         "links.unwrap": linked(\.unwrapsLinks, .turningOff),
         "links.openTab": linked(\.goesToOpenTab),
         "links.liveRow": linked(\.goesToLiveRow),
-        "links.suggestions": row("In Broadway"),
-        "links.try": row("In Broadway"),
-        "links.recent": row("In Broadway"),
+        "links.suggestions": row(),
+        "links.try": row(),
+        "links.recent": row(),
         "agents.connected": SettingAccess(bar: .always, instead: "broadway agents list reads them"),
         "agents.mode": SettingAccess(bar: .always, read: { $0.agentMode.rawValue }),
         "agents.sites": SettingAccess(bar: .always, instead: "broadway agents status reads them"),
         "agents.hooks": SettingAccess(bar: .always, instead: "broadway hooks list reads them"),
         "ai.agents": held(\.agentsOn),
-        "ai.command": row("The broadway command", instead: "broadway setup"),
+        "ai.command": row("broadway setup"),
         "ai.groups": shared({ AIGroups.shared.on }, { AIGroups.shared.on = $0 }),
         "groups.meetings": flag(\.meetingFolders),
         "groups.openrouter": SettingAccess(bar: .always, takes: "A key only you can add or remove", read: { _ in OpenRouterKey.shared.present }),
-        "ai.replies": row("From the page", instead: "broadway replies"),
-        "autocorrect": row("In Edit › Spelling and Grammar"),
+        "ai.replies": row("broadway replies list"),
+        "autocorrect": row("In the Edit menu: Spelling and Grammar"),
         "autofill.addresses": SettingAccess(bar: .always),
         "autofill.cards": SettingAccess(bar: .always),
         "autofill.profile": SettingAccess(bar: .always),
         "autofill.remembered": SettingAccess(bar: .always, read: { _ in FormAnswers.shared.siteCount }),
-        "bench": row("In View › Developer"),
-        "bookmarks.bar": row("In the Bookmarks menu"),
+        "bench": row("In the View menu: Developer › Allow Scripts to Drive Broadway"),
+        "bookmarks.bar": row("In the Bookmarks menu: Show Bookmarks Bar"),
         "calendars": SettingAccess(bar: .turningOn, takes: "true or false", read: { $0.usesCalendars && Meetings.shared.hasAccess },
                                    write: { _, text in
             guard let on = yes(text) else { return false }
@@ -129,12 +131,12 @@ enum PersonSettings {
             if on { Task { _ = await Meetings.shared.turnOn() } } else { Meetings.shared.turnOff() }
             return true
         }),
-        "clear.cache": row("In Broadway"),
-        "clear.cookies": row("In Broadway"),
-        "clear.history": row("A button", instead: "broadway history clear"),
+        "clear.cache": row(),
+        "clear.cookies": row(),
+        "clear.history": row("broadway history clear"),
         "codes.gmail": stored("codes.gmail", fallback: true),
         "downloads.folder": SettingAccess(bar: .always, read: { $0.asksWhereToSave ? "ask each time" : $0.downloads.path }),
-        "field.snippets": row("Your snippets"),
+        "field.snippets": row(),
         "languages": SettingAccess(bar: .free, takes: "a comma list of languages such as en-GB,pl, or mac",
                                    read: { _ in LanguagePrefs.shared.chosen?.joined(separator: ",") ?? "mac" },
                                    write: { _, text in
@@ -142,26 +144,26 @@ enum PersonSettings {
             LanguagePrefs.shared.chosen = parsed
             return true
         }),
-        "spaces.languages": row("In the space's menu"),
-        "general.default": row("In Broadway"),
-        "general.import": row("In Broadway"),
+        "spaces.languages": row("In each space's menu: Languages"),
+        "general.default": row(),
+        "general.import": row(),
         Preferences.hintsKey: flag(\.hints),
         "history.pageText": held(\.remembersPageText),
-        "history.freezes": row("Help › Copy Last Freeze"),
+        "history.freezes": row("In the Help menu: Copy Last Freeze"),
         IntegrationNow.key: SettingAccess(takes: "true or false", read: { _ in IntegrationNow.on }, write: { _, text in
             guard let on = yes(text) else { return false }
             Store.settings.set(on, forKey: IntegrationNow.key)
             return true
         }),
-        "live.folders": row("In Broadway", instead: "broadway live list"),
-        "live.suggestions": row("In Broadway", instead: "broadway live add NAME SOURCE"),
+        "live.folders": row("broadway live list"),
+        "live.suggestions": row("broadway live add NAME SOURCE"),
         "live.offers": flag(\.suggestsLiveFolders),
         LiveEvery.key: SettingAccess(takes: LiveEvery.allCases.map { "\($0.rawValue)" }.joined(separator: ", ") + " minutes", read: { $0.liveEvery.rawValue }, write: { prefs, text in
             guard let every = Int(text).flatMap(LiveEvery.init) else { return false }
             prefs.liveEvery = every
             return true
         }),
-        "live.offers.again": row("In Broadway"),
+        "live.offers.again": row(),
         "look": choice(\.look),
         "app.icon": choice(\.appIcon),
         "meetings.calendars": SettingAccess(bar: .always, read: { _ in
@@ -176,27 +178,27 @@ enum PersonSettings {
         "meetings.faces": SettingAccess(bar: .always, read: { _ in ContactFaces.on ? "from Contacts" : "initials" },
                                         instead: "Turn on People's photos in Settings › General › Calendars. Only the person can let Broadway read Contacts."),
         "newtab.floating": flag(\.floatingNewTab),
-        "note.answers": row("Always there"),
-        "note.awake": row("Always there"),
+        "note.answers": alwaysOn,
+        "note.awake": alwaysOn,
         "note.flick": always(\.floatFlicks),
-        "note.floatkeys": row("Always there"),
-        "note.groups": row("Always there"),
-        "note.json": row("Always there"),
+        "note.floatkeys": alwaysOn,
+        "note.groups": alwaysOn,
+        "note.json": alwaysOn,
         "note.links": always(\.showsLinks),
-        "note.panel": row("Always there"),
-        "note.pinback": row("Always there"),
-        "note.sharedpins": row("Always there"),
-        "note.sitesearch": row("Always there"),
-        "note.split": row("Always there"),
-        "note.switcher": row("Always there"),
-        "note.translate": row("Always there"),
+        "note.panel": alwaysOn,
+        "note.pinback": alwaysOn,
+        "note.sharedpins": alwaysOn,
+        "note.sitesearch": alwaysOn,
+        "note.split": alwaysOn,
+        "note.switcher": alwaysOn,
+        "note.translate": alwaysOn,
         "notifications.ask": flag(\.siteNotifications, .turningOn),
         "pageZoom": SettingAccess(takes: "a percent from 50 to 300", read: { Int(($0.pageZoom * 100).rounded()) }, write: { prefs, text in
             guard let percent = Double(text), Preferences.zooms.contains(percent / 100) else { return false }
             prefs.pageZoom = percent / 100
             return true
         }),
-        "pages.dusk": row("In the View menu"),
+        "pages.dusk": row("In the View menu: Darken Bright Pages"),
         "video.quality": SettingAccess(takes: VideoQuality.takes, read: { $0.videoQuality.raw }, write: { prefs, text in
             guard let choice = VideoQuality.Choice(raw: text) else { return false }
             prefs.videoQuality = choice
@@ -215,7 +217,7 @@ enum PersonSettings {
             return true
         }),
         Preferences.miniSpeedKey: flag(\.miniSpeed),
-        "updates.version": SettingAccess(bar: .noControl, takes: "Broadway › Check for Updates…", read: { _ in Updates.shared.line }),
+        "updates.version": SettingAccess(bar: .noControl, read: { _ in Updates.shared.line }, instead: "In the Broadway menu: Check for Updates…"),
         "updates.check": SettingAccess(bar: .turningOff, takes: "true or false", read: { _ in Updates.shared.checks }, write: { _, text in
             guard Updates.runs, let on = yes(text) else { return false }
             Updates.shared.checks = on
@@ -226,39 +228,39 @@ enum PersonSettings {
             Updates.shared.installs = on
             return true
         }),
-        "support.email": row("Help › Contact Support"),
+        "support.email": row("In the Help menu: Contact Support"),
         PullRefresh.key: flag(\.pullsToRefresh),
         "passwords.apple": AppleHelper.available ? held(\.applePasswords) : SettingAccess(bar: .soon, read: { _ in false }),
         "passwords.fill": held(\.fillsAndSavesPasswords),
         "passwords.never": SettingAccess(bar: .always, read: { _ in Vault.never.count }),
         "passwords.open": SettingAccess(bar: .always, instead: "broadway logins list reads who is kept, never a password"),
-        "privacy.forget": row("Site by site", instead: "broadway permissions reset"),
-        "privacy.permissions": row("Site by site", instead: "broadway permissions"),
-        "app.openAtLogin": row("In the Broadway menu"),
-        "quit.confirm": row("In the Broadway menu"),
-        "routes": row("In Broadway"),
+        "privacy.forget": row("broadway permissions reset SITE"),
+        "privacy.permissions": row("broadway permissions list"),
+        "app.openAtLogin": row("In the Broadway menu: Open at Login"),
+        "quit.confirm": row("In the Broadway menu: Warn Before Quitting"),
+        "routes": row(),
         "search.engine": SettingAccess(takes: Engine.allCases.filter { $0 != .custom }.map(\.rawValue).joined(separator: ", "), read: { $0.engine.rawValue }, write: { prefs, text in
             guard let engine = Engine(rawValue: text), engine != .custom else { return false }
             prefs.engine = engine
             return true
         }),
-        "search.keywords": row("In Broadway"),
-        "search.quickactions": row("In Broadway"),
-        "search.shortcuts": row("In Broadway"),
+        "search.keywords": row(),
+        "search.quickactions": row(),
+        "search.shortcuts": row(),
         "search.suggest": flag(\.engineSuggests, .turningOn),
         "shield": flag(\.shielded, .turningOff),
-        "shortcuts": row("In Broadway", instead: "broadway shortcuts"),
+        "shortcuts": row("broadway shortcuts list"),
         "sidebar.button": flag(\.sideButton),
         "sidebar.selected": flag(\.selectedShortcut),
         "sites.keep": flag(\.keepsSignIns, .turningOff),
-        "space.look": row("In each space's menu"),
+        "space.look": row("In each space's menu: Edit Look…"),
         "spaces.stacked": flag(\.stackedSpaces),
         "tabs.close.after": SettingAccess(takes: TabLife.allCases.map { "\($0.rawValue)" }.joined(separator: ", ") + " hours", read: { $0.tabLife.rawValue }, write: { prefs, text in
             guard let life = Int(text).flatMap(TabLife.init) else { return false }
             prefs.tabLife = life
             return true
         }),
-        "tabs.layout": row("In the View menu"),
+        "tabs.layout": row("In the View menu: Sidebar on Right"),
     ]
 
     static func refusal(_ id: String, value: String) -> PersonRefusal? {
@@ -271,8 +273,7 @@ enum PersonSettings {
         case .always:
             return .person("\(item.title) can only be changed by the person", where: place)
         case .noControl:
-            guard let instead = access.instead else { return PersonRefusal("refused", "\(item.title) has nothing to set here") }
-            return PersonRefusal("refused", "\(item.title) has nothing to set here. Use \(instead).")
+            return PersonRefusal("refused", "\(item.title) has nothing to set here", hint: instead(id))
         case .soon:
             return PersonRefusal("refused", "\(item.title) isn't available yet")
         case .turningOff:
@@ -286,13 +287,46 @@ enum PersonSettings {
         return nil
     }
 
+    static func canSet(_ access: SettingAccess) -> Bool {
+        access.write != nil && [.free, .turningOff, .turningOn].contains(access.bar)
+    }
+
+    static func changes(_ access: SettingAccess?) -> String {
+        switch access?.bar {
+        case .free?: "this command"
+        case .always?: "only the person, in Broadway"
+        case .turningOff?: "true here, false only the person"
+        case .turningOn?: "false here, true only the person"
+        case .noControl?: "nothing to set here"
+        case .soon?: "not available yet"
+        case nil: ""
+        }
+    }
+
+    static func instead(_ id: String) -> String? {
+        guard let access = table[id] else { return nil }
+        if let instead = access.instead { return instead }
+        guard access.bar == .noControl, let item = SettingsIndex.item(id) else { return nil }
+        return "In Settings › \(item.page.title): broadway settings open \(id)"
+    }
+
+    static func about(_ id: String) -> [String: Any] {
+        let access = table[id]
+        var found: [String: Any] = ["takes": access.map { canSet($0) ? $0.takes : "" } ?? "", "changes": changes(access)]
+        if let instead = instead(id) { found["instead"] = instead }
+        return found
+    }
+
     private static func value(_ item: SettingsItem, _ prefs: Preferences, shown: Bool) -> Any {
         guard shown else { return "" }
         return table[item.id]?.read(prefs) ?? ""
     }
 
     private static func rows(_ items: [SettingsItem], _ call: PersonCall) -> [[String: Any]] {
-        items.map { ["id": $0.id, "title": $0.title, "page": $0.page.rawValue, "value": value($0, call.browser.prefs, shown: call.box.open)] }
+        items.map { item in
+            ["id": item.id, "title": item.title, "page": item.page.rawValue, "value": value(item, call.browser.prefs, shown: call.box.open)]
+                .merging(about(item.id)) { mine, _ in mine }
+        }
     }
 
     private static func item(_ call: PersonCall) throws -> SettingsItem {
@@ -356,6 +390,7 @@ enum PersonSettings {
                 }
                 items = items.filter { $0.page == wanted }
             }
+            if call.flag("can-set") { items = items.filter { table[$0.id].map(canSet) == true } }
             return ["settings": rows(items, call)]
         },
         PersonVerb("settings", "find", .open) { call in
@@ -363,17 +398,8 @@ enum PersonSettings {
         },
         PersonVerb("settings", "get", .look) { call in
             let found = try item(call)
-            let access = table[found.id]
-            var data: [String: Any] = ["id": found.id, "title": found.title, "detail": found.detail, "page": found.page.rawValue, "value": value(found, call.browser.prefs, shown: true)]
-            switch access?.bar {
-            case .always: data["changes"] = "only the person, in Broadway"
-            case .noControl: data["changes"] = "nothing to set"
-            case .soon: data["changes"] = "not available yet"
-            case .turningOff: data["changes"] = "true here, false only the person"
-            case .turningOn: data["changes"] = "false here, true only the person"
-            default: data["changes"] = access?.takes ?? ""
-            }
-            return data
+            let data: [String: Any] = ["id": found.id, "title": found.title, "detail": found.detail, "page": found.page.rawValue, "value": value(found, call.browser.prefs, shown: true)]
+            return data.merging(about(found.id)) { mine, _ in mine }
         },
         PersonVerb("settings", "set", .arrange, first: { call in
             if let refused = refusal(try call.need("setting"), value: try call.need("value")) { throw refused }
@@ -381,7 +407,7 @@ enum PersonSettings {
             let found = try item(call)
             let text = try call.need("value")
             guard let access = table[found.id], let write = access.write else {
-                throw PersonRefusal("refused", "\(found.title) has nothing to set here")
+                throw PersonRefusal("refused", "\(found.title) has nothing to set here", hint: instead(found.id))
             }
             guard write(call.browser.prefs, text) else { throw PersonRefusal.usage("\(found.id) takes \(access.takes), not \(text)") }
             return ["id": found.id, "value": value(found, call.browser.prefs, shown: true), "message": "Changed"]

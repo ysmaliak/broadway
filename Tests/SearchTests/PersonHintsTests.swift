@@ -20,7 +20,7 @@ struct PersonHintsTests {
 
     private static var texts: [String] {
         let nouns = Nouns.all.flatMap { noun in [noun.summary] + noun.verbs.flatMap { [$0.summary, $0.about] + $0.examples } }
-        let settings = PersonSettings.table.values.flatMap { [$0.takes] + ($0.instead.map { [$0] } ?? []) }
+        let settings = PersonSettings.table.values.map(\.takes) + PersonSettings.table.keys.compactMap(PersonSettings.instead)
         return nouns + settings + Array(PersonRefusal.looks.values)
     }
 

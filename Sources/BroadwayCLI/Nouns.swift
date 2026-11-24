@@ -246,8 +246,8 @@ enum Nouns {
             Verb("site unhide [selector] [--all] [--tab ID]", "Bring back what was hidden"),
         ]),
         Noun("settings", "Settings", group: "Settings", [
-            Verb("settings list [--page PAGE]", "List settings", about: "With agents off, without their values", columns: ["id", "value", "title"]),
-            Verb("settings find <words...>", "Find a setting", columns: ["id", "value", "title"]),
+            Verb("settings list [--page PAGE] [--can-set]", "List settings, what each takes and who may change it", about: "--can-set lists only what this command can change. With agents off, without their values. Where a setting has nothing to set, instead names the command or the place that does the job.", examples: ["broadway settings list --can-set", "broadway settings list --page appearance --json"], columns: ["id", "value", "title", "takes"]),
+            Verb("settings find <words...>", "Find a setting", columns: ["id", "value", "title", "takes"]),
             Verb("settings get <setting>", "Read a setting"),
             Verb("settings set <setting> <value>", "Change a setting", about: "What weakens safety can only be changed in Broadway: broadway settings open ID goes there. languages takes a comma list in order, or mac.", examples: ["broadway settings set newtab.floating true", "broadway settings set look dark", "broadway settings set languages en-GB,pl"]),
             Verb("settings open [setting]", "Open Settings in Broadway"),
