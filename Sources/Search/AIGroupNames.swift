@@ -63,6 +63,23 @@ enum AIGroupNames {
         })
     }
 
+    static func twins(_ one: String, _ two: String) -> Bool {
+        let first = stems(one), second = stems(two)
+        return !first.isEmpty && first == second
+    }
+
+    static func stems(_ text: String) -> String {
+        fold(text).lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map { word -> String in
+            let plain = String(word)
+            for ending in ["ches", "shes", "sses", "xes", "zes"] where plain.hasSuffix(ending) && plain.count > ending.count + 2 {
+                return String(plain.dropLast(2))
+            }
+            if plain.hasSuffix("ies"), plain.count > 4 { return String(plain.dropLast(3)) + "y" }
+            if plain.hasSuffix("s"), !plain.hasSuffix("ss"), plain.count > 3 { return String(plain.dropLast()) }
+            return plain
+        }.joined()
+    }
+
     static func sameSubject(_ said: String, _ current: String) -> Bool {
         guard let head = AIGroupEvidence.tokens(current).first else { return false }
         return AIGroupEvidence.tokens(said).contains { AIGroupEvidence.same($0, head) }

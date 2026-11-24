@@ -257,8 +257,14 @@ final class FakeGroupEngine: AIGroupDecider, AIGroupNamer, @unchecked Sendable {
     private var named: [AIGroupNameAsk] = []
     private var fitted: [(tab: AIGroupTab, group: AIGroupInfo)] = []
     var delay: Double = 0
+    var pause: (@Sendable () -> Double)?
     var failing = false
     var verdicts: [String: AIGroupFit] = [:]
+
+    private func wait() async throws {
+        let seconds = pause?() ?? delay
+        if seconds > 0 { try await Task.sleep(for: .seconds(seconds)) }
+    }
 
     var asks: [AIGroupAsk] { lock.withLock { decided } }
     var nameAsks: [AIGroupNameAsk] { lock.withLock { named } }
@@ -266,7 +272,7 @@ final class FakeGroupEngine: AIGroupDecider, AIGroupNamer, @unchecked Sendable {
 
     func fits(_ tab: AIGroupTab, in group: AIGroupInfo) async throws -> AIGroupFit {
         lock.withLock { fitted.append((tab, group)) }
-        if delay > 0 { try await Task.sleep(for: .seconds(delay)) }
+        try await wait()
         if failing { throw ProviderError.failed("The fake engine failed") }
         if let said = lock.withLock({ verdicts[tab.title] }) { return said }
         return group.members.contains { Self.topic($0.title) == Self.topic(tab.title) } ? .yes : .no
@@ -280,7 +286,7 @@ final class FakeGroupEngine: AIGroupDecider, AIGroupNamer, @unchecked Sendable {
 
     func decide(_ ask: AIGroupAsk) async throws -> [UUID: AIGroupPick] {
         lock.withLock { decided.append(ask) }
-        if delay > 0 { try await Task.sleep(for: .seconds(delay)) }
+        try await wait()
         if failing { throw ProviderError.failed("The fake engine failed") }
         var out: [UUID: AIGroupPick] = [:]
         for tab in ask.fresh {
@@ -298,7 +304,7 @@ final class FakeGroupEngine: AIGroupDecider, AIGroupNamer, @unchecked Sendable {
 
     func name(_ ask: AIGroupNameAsk) async throws -> AIGroupName {
         lock.withLock { named.append(ask) }
-        if delay > 0 { try await Task.sleep(for: .seconds(delay)) }
+        try await wait()
         if failing { throw ProviderError.failed("The fake engine failed") }
         let topics = ask.tabs.map { Self.topic($0.title) }
         let counted = Dictionary(topics.map { ($0, 1) }, uniquingKeysWith: +)

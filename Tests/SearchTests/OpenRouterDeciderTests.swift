@@ -7,6 +7,7 @@ final class DecisionsStub: URLProtocol {
         var status = 200
         var body = Data()
         var failure: URLError?
+        var delay: Double = 0
     }
 
     private static let lock = NSLock()
@@ -50,6 +51,15 @@ final class DecisionsStub: URLProtocol {
             Self.heard[host, default: []].append((request, body))
             return Self.replies[host].map { $0(request, body) }
         } ?? Reply(failure: URLError(.cannotFindHost))
+        if reply.delay > 0 {
+            nonisolated(unsafe) let loading = self
+            DispatchQueue.global().asyncAfter(deadline: .now() + reply.delay) { loading.deliver(reply) }
+            return
+        }
+        deliver(reply)
+    }
+
+    private func deliver(_ reply: Reply) {
         if let failure = reply.failure {
             client?.urlProtocol(self, didFailWithError: failure)
             return
@@ -171,13 +181,31 @@ final class DecisionsStub: URLProtocol {
             "Heat pump regrets in a cold climate|Mitsubishi heat pump prices": 0.94, "Mitsubishi heat pump prices|Heat Pump Systems": 0.7,
         ])))
         var picks = try await Self.decider("likeliest.test").decide(AIGroupAsk(groups: [group], loose: [loose], fresh: [fresh]))
-        #expect(picks[fresh.id] == .tab(loose.id))
+        #expect(picks[fresh.id] == .group(group.id))
         DecisionsStub.answer("folder-first.test", DecisionsStub.chances(Self.pair([
             "Mitsubishi heat pump prices|Heat pumps": 0.9, "Mitsubishi heat pump prices|Heat pump regrets in a cold climate": 0.9,
             "Heat pump regrets in a cold climate|Mitsubishi heat pump prices": 0.9, "Mitsubishi heat pump prices|Heat Pump Systems": 0.7,
         ])))
         picks = try await Self.decider("folder-first.test").decide(AIGroupAsk(groups: [group], loose: [loose], fresh: [fresh]))
         #expect(picks[fresh.id] == .group(group.id))
+    }
+
+    @Test func severalNewTabsAskAboutAFoldersTabsOnlyAfterItsOwnAnswer() async throws {
+        let flight = Self.tab("Flights to Lisbon", "skyscanner.net")
+        let group = AIGroupInfo(id: UUID(), name: "Lisbon trip", members: [flight])
+        let hotel = Self.tab("Hotels in Lisbon", "booking.com")
+        let pasta = Self.tab("Pasta recipes", "bbc.co.uk")
+        DecisionsStub.answer("asked-after.test", DecisionsStub.chances(Self.pair([
+            "Hotels in Lisbon|Lisbon trip": 0.8, "Hotels in Lisbon|Flights to Lisbon": 0.9, "Pasta recipes|Lisbon trip": 0.1,
+        ])))
+        let picks = try await Self.decider("asked-after.test").decide(AIGroupAsk(groups: [group], loose: [], fresh: [hotel, pasta]))
+        #expect(picks[hotel.id] == .group(group.id))
+        #expect(picks[pasta.id] == AIGroupPick.none)
+        let asked = DecisionsStub.seen("asked-after.test").map { DecisionsStub.asked($0.body) }
+        #expect(asked.count == 3)
+        #expect(asked.filter { $0.questions.keys.contains("folder1") }.map(\.tab).sorted() == ["Hotels in Lisbon", "Pasta recipes"])
+        #expect(asked.filter { $0.questions.keys.contains("folder1tab1") }.map(\.tab) == ["Hotels in Lisbon"])
+        #expect(asked.allSatisfy { !($0.questions.keys.contains("folder1") && $0.questions.keys.contains("folder1tab1")) })
     }
 
     @Test func twoNewTabsJoinOnlyWhenBothWaysSayYes() async throws {

@@ -121,26 +121,32 @@ final class OpenRouterDecider: AIGroupDecider {
 
     var endpoint: URL { base.appending(path: "alpha/decisions") }
 
-    func requests(_ ask: AIGroupAsk) -> [Request] {
+    static let floor = 0.3
+
+    func requests(_ ask: AIGroupAsk, members: Bool = true) -> [Request] {
         ask.fresh.compactMap { tab in
             for (index, most) in Self.shown.enumerated() {
-                let made = request(for: tab, in: ask, showing: most.0, pairing: most.1)
+                let made = request(for: tab, in: ask, showing: most.0, pairing: members ? most.1 : 0)
                 if index == Self.shown.count - 1 || ((try? Self.encoded(made.body).count) ?? 0) <= Self.longest { return made.asked.isEmpty ? nil : made }
             }
             return nil
         }
     }
 
-    func request(for tab: AIGroupTab, in ask: AIGroupAsk, showing most: Int, pairing: Int) -> Request {
+    func request(for tab: AIGroupTab, in ask: AIGroupAsk, showing most: Int, pairing: Int, only: Set<UUID>? = nil) -> Request {
         var questions: [String: Question] = [:]
         var asked: [String: Candidate] = [:]
         var named: [String: String] = [:]
         for (index, group) in ask.groups.enumerated() where !group.refused.contains(tab.key) && !group.members.isEmpty {
             let id = "folder\(index + 1)"
-            let folder = Folder(name: group.name, tabs: group.members.prefix(most).map(Seen.init))
-            questions[id] = Question(instructions: Instructions(question: Self.sameFolder, folder: folder), criteria: Self.criteria)
-            asked[id] = .group(group.id)
-            named[id] = "folder " + group.name
+            if let only {
+                guard only.contains(group.id) else { continue }
+            } else {
+                let folder = Folder(name: group.name, tabs: group.members.prefix(most).map(Seen.init))
+                questions[id] = Question(instructions: Instructions(question: Self.sameFolder, folder: folder), criteria: Self.criteria)
+                asked[id] = .group(group.id)
+                named[id] = "folder " + group.name
+            }
             for (place, member) in group.members.prefix(pairing).enumerated() {
                 let pair = id + "tab\(place + 1)"
                 questions[pair] = Question(instructions: Instructions(question: Self.sameTab, other: Seen(member)), criteria: Self.criteria)
@@ -152,7 +158,7 @@ final class OpenRouterDecider: AIGroupDecider {
                 named[pair + "by"] = group.name + ": by " + member.by
             }
         }
-        for (index, other) in (ask.loose + ask.fresh).enumerated() where other.id != tab.id {
+        for (index, other) in (ask.loose + ask.fresh).enumerated() where other.id != tab.id && only == nil {
             let id = "tab\(index + 1)"
             questions[id] = Question(instructions: Instructions(question: Self.sameTab, other: Seen(other)), criteria: Self.criteria)
             asked[id] = .tab(other.id)
@@ -201,12 +207,27 @@ final class OpenRouterDecider: AIGroupDecider {
     }
 
     func decide(_ ask: AIGroupAsk) async throws -> [UUID: AIGroupPick] {
-        let made = requests(ask)
+        let whole = ask.fresh.count == 1
+        let made = requests(ask, members: whole)
         guard !made.isEmpty else { return Self.picks(ask, heard: [:], thresholds: thresholds) }
         try allowed()
         var heard = try await hear(made)
-        heard.merge(try await hear(confirmations(ask, heard: heard))) { one, _ in one }
+        heard.merge(try await hear(confirmations(ask, heard: heard) + (whole ? [] : members(ask, heard: heard)))) { one, two in
+            one.merging(two) { first, _ in first }
+        }
         return Self.picks(ask, heard: heard, thresholds: thresholds)
+    }
+
+    func members(_ ask: AIGroupAsk, heard: [UUID: [Candidate: Double]]) -> [Request] {
+        ask.fresh.compactMap { tab in
+            let near = Set(ask.groups.filter { (heard[tab.id]?[.group($0.id)] ?? 0) >= Self.floor }.map(\.id))
+            guard !near.isEmpty else { return nil }
+            for (index, most) in Self.shown.enumerated() {
+                let made = request(for: tab, in: ask, showing: most.0, pairing: most.1, only: near)
+                if index == Self.shown.count - 1 || ((try? Self.encoded(made.body).count) ?? 0) <= Self.longest { return made.asked.isEmpty ? nil : made }
+            }
+            return nil
+        }
     }
 
     func fits(_ tab: AIGroupTab, in group: AIGroupInfo) async throws -> AIGroupFit {
@@ -301,7 +322,8 @@ final class OpenRouterDecider: AIGroupDecider {
                 guard let said = chance(tab.id, .group(group.id)), said >= thresholds.yes, said > (best?.chance ?? -1) else { continue }
                 best = (.group(group.id), said)
             }
-            for other in ask.loose + ask.fresh where other.id != tab.id {
+            let housed = best != nil
+            for other in ask.loose + ask.fresh where other.id != tab.id && !housed {
                 guard let said = chance(tab.id, .tab(other.id)), said >= thresholds.yes, said > (best?.chance ?? -1) else { continue }
                 best = (.tab(other.id), said)
             }
