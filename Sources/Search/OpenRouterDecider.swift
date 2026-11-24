@@ -301,7 +301,8 @@ final class OpenRouterDecider: AIGroupDecider {
                 guard let said = chance(tab.id, .group(group.id)), said >= thresholds.yes, said > (best?.chance ?? -1) else { continue }
                 best = (.group(group.id), said)
             }
-            for other in ask.loose + ask.fresh where other.id != tab.id {
+            let housed = best != nil
+            for other in ask.loose + ask.fresh where other.id != tab.id && !housed {
                 guard let said = chance(tab.id, .tab(other.id)), said >= thresholds.yes, said > (best?.chance ?? -1) else { continue }
                 best = (.tab(other.id), said)
             }

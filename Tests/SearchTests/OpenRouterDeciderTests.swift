@@ -181,7 +181,7 @@ final class DecisionsStub: URLProtocol {
             "Heat pump regrets in a cold climate|Mitsubishi heat pump prices": 0.94, "Mitsubishi heat pump prices|Heat Pump Systems": 0.7,
         ])))
         var picks = try await Self.decider("likeliest.test").decide(AIGroupAsk(groups: [group], loose: [loose], fresh: [fresh]))
-        #expect(picks[fresh.id] == .tab(loose.id))
+        #expect(picks[fresh.id] == .group(group.id))
         DecisionsStub.answer("folder-first.test", DecisionsStub.chances(Self.pair([
             "Mitsubishi heat pump prices|Heat pumps": 0.9, "Mitsubishi heat pump prices|Heat pump regrets in a cold climate": 0.9,
             "Heat pump regrets in a cold climate|Mitsubishi heat pump prices": 0.9, "Mitsubishi heat pump prices|Heat Pump Systems": 0.7,
