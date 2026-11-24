@@ -95,7 +95,7 @@ final class MergedTurnTests {
         canvas(row)?.layer?.sublayers?.first { !($0 is CAGradientLayer) }
     }
 
-    private func crest(_ row: TabRowView) -> CAGradientLayer? {
+    private func band(_ row: TabRowView) -> CAGradientLayer? {
         canvas(row)?.layer?.sublayers?.compactMap { $0 as? CAGradientLayer }.first
     }
 
@@ -175,9 +175,25 @@ final class MergedTurnTests {
         #expect(turned.plays == 1)
         #expect(turned.mergedLayers == 2)
         #expect(turned.mergedTraces == 1)
-        #expect(fill(turned)?.animation(forKey: "merged.transform.scale.x") != nil)
+        let grow = try #require(fill(turned)?.animation(forKey: "merged.grow") as? CABasicAnimation)
+        #expect(grow.keyPath == "bounds.size.width")
+        #expect(grow.fromValue as? Int == 0)
+        #expect(grow.toValue as? CGFloat == turned.bounds.width)
+        #expect(grow.duration == MergedWash.sweep)
+        func point(_ index: Int) -> [Swift.Float] {
+            var out: [Swift.Float] = [0, 0]
+            grow.timingFunction?.getControlPoint(at: index, values: &out)
+            return out
+        }
+        #expect(point(1) == [0.3, 0])
+        #expect(point(2) == [0.7, 1])
         #expect(fill(turned)?.anchorPoint == CGPoint(x: 0, y: 0.5))
-        #expect(crest(turned)?.animation(forKey: "merged.crest") != nil)
+        #expect(fill(turned)?.animation(forKey: "merged.transform.scale.x") == nil)
+        let pass = try #require(band(turned)?.animation(forKey: "merged.band") as? CAAnimationGroup)
+        #expect(abs(pass.duration - MergedWash.sweep - MergedWash.settle) < 0.001)
+        #expect(band(turned)?.bounds.width == MergedWash.reach)
+        #expect(band(turned)?.anchorPoint == CGPoint(x: 1, y: 0.5))
+        #expect(band(turned)?.opacity == 0)
         #expect(badge(turned)?.isHidden == false)
         #expect(badge(turned)?.merged == true)
         #expect(turned.arrivals == 1)
@@ -239,7 +255,7 @@ final class MergedTurnTests {
                     let scene = MergedScene(bounds: .zero, radius: 0, ink: ground.ink, under: under, side: side, pill: pill, dark: ground.dark)
                     let washed = scene.ground
                     let glyph = ChecksTint.rgb(scene.glyph)
-                    let worst = min(ChecksTint.contrast(glyph, washed), ChecksTint.contrast(glyph, under))
+                    let worst = min(ChecksTint.contrast(glyph, washed), ChecksTint.contrast(glyph, under), ChecksTint.contrast(glyph, scene.crest))
                     if worst < ChecksTint.minimum { failing.append("\(ground.name) \(pill) \((worst * 100).rounded() / 100)") }
                 }
             }
@@ -454,7 +470,7 @@ final class MergedTurnTests {
         let lead = try #require(row(63, in: column))
         let member = try #require(row(62, in: column))
         let worn = (lead.mergedForm, member.mergedForm, member.mergedLayers, member.plays,
-                    fill(member)?.animation(forKey: "merged.transform.scale.x") != nil, crest(member)?.animation(forKey: "merged.crest") != nil)
+                    fill(member)?.animation(forKey: "merged.grow")?.duration, band(member)?.animation(forKey: "merged.band") != nil)
         LiveRefs.known[LiveRefs.slot(key(62), space: browser.spaceID)] = LiveRefs.Known(updated: nil, branch: pull(62, position: 2).branch, read: Date(),
                                                                                          state: .open)
         LiveFolders.shared.apply(.items(LiveStacks.arranged(rail.filter { $0.key != key(63) }), nil), to: made.id)
@@ -466,8 +482,8 @@ final class MergedTurnTests {
         #expect(worn.1 == .follow)
         #expect(worn.2 == 2)
         #expect(worn.3 == 0)
-        #expect(worn.4)
-        #expect(!worn.5)
+        #expect(worn.4 == MergedWash.sweep)
+        #expect(worn.5)
         #expect(!LiveFolders.shared.turning(key(62)))
         let back = try #require(row(62, in: column))
         #expect(back.mergedForm == nil)
@@ -619,6 +635,85 @@ final class MergedTurnTests {
         #expect(LiveFolders.shared.mergedHold == 2)
         #expect(answer["style"] == nil)
         #expect(answer["picked"] == nil)
+    }
+
+    @Test func theBandsFrontIsAboutOnePointEightTimesTheRestingWashAndNeverAboveTheMost() {
+        for strength in [0.14, 0.22, 0.27, 0.33, 0.36, 0.5, 0.6] {
+            let front = strength + MergedWash.rise(strength) * (1 - strength)
+            #expect(abs(front - min(MergedWash.most, strength * MergedWash.lift)) < 0.0001, "\(strength) \(front)")
+            #expect(front >= strength - 0.0001)
+            #expect(front <= MergedWash.most + 0.0001)
+        }
+        #expect(abs(MergedWash.peak(0.14) - 0.252) < 0.0001)
+        #expect(MergedWash.peak(0.36) == MergedWash.most)
+    }
+
+    @Test func aFollowerThatStartsLateShortensItsFillToEndBeforeTheHold() {
+        #expect(MergedWash.lasts(elapsed: 0, hold: LiveFolders.hold) == MergedWash.sweep)
+        #expect(MergedWash.lasts(elapsed: 0.18, hold: LiveFolders.hold) == MergedWash.sweep)
+        #expect(abs(MergedWash.lasts(elapsed: 0.27, hold: LiveFolders.hold) - 1.18) < 0.0001)
+        #expect(MergedWash.lasts(elapsed: 2, hold: LiveFolders.hold) == 0)
+        #expect(MergedWash.lasts(elapsed: 0, hold: 0.05) == 0)
+    }
+
+    @Test func aTallStacksLowerRowsEndTheirFillBeforeTheRowsLeave() async throws {
+        LiveFolders.shared.mergedHold = LiveFolders.hold
+        LiveFolders.shared.stackStagger = 0.5
+        let made = prs(rail)
+        let (column, window) = shown(made)
+        defer {
+            window.contentView = nil
+            window.close()
+        }
+
+        merge(64, column: column)
+        try await pump(column, for: 1.15)
+
+        let lead = try #require(row(64, in: column))
+        let start = try #require(lead.wornAt)
+        #expect(lead.mergedForm == .full)
+        #expect(lead.mergedLasts == MergedWash.sweep)
+        for number in [63, 62] {
+            let follower = try #require(row(number, in: column))
+            let began = try #require(follower.mergedBegan)
+            #expect(follower.mergedForm == .follow)
+            #expect(follower.mergedLasts < MergedWash.sweep)
+            #expect(follower.mergedLasts > 0)
+            #expect(began + follower.mergedLasts <= start + LiveFolders.hold - MergedWash.spare + 0.02, "\(number) \(began - start) \(follower.mergedLasts)")
+            #expect(fill(follower)?.animation(forKey: "merged.grow")?.duration == follower.mergedLasts)
+        }
+    }
+
+    @Test func thePageInFrontThatSaysMergedPlaysTheFullFillThroughARereadMidFill() throws {
+        let made = prs([pull(1), pull(2)])
+        let (column, window) = shown(made)
+        defer {
+            window.contentView = nil
+            window.close()
+        }
+        let page = try #require(tab(made, 1))
+        browser.select(page)
+        settle(column)
+        let turned = try #require(row(1, in: column))
+
+        browser.livePullState(page, at: try #require(URL(string: key(1))), said: .merged)
+        settle(column)
+
+        #expect(browser.activeID == page.id)
+        #expect(turned.mergedForm == .full)
+        #expect(turned.plays == 1)
+        #expect(turned.mergedLasts == MergedWash.sweep)
+        let grow = fill(turned)?.animation(forKey: "merged.grow")
+        #expect(grow != nil)
+
+        LiveFolders.shared.apply(.items([pull(1), pull(2)], nil), to: made.id)
+        settle(column)
+
+        let after = try #require(row(1, in: column))
+        #expect(after === turned)
+        #expect(after.mergedForm == .full)
+        #expect(after.plays == 1)
+        #expect(fill(after)?.animation(forKey: "merged.grow") === grow || fill(after)?.animation(forKey: "merged.grow")?.beginTime == grow?.beginTime)
     }
 
     @Test func onlyTheFirstRowOfACrowdPlays() {

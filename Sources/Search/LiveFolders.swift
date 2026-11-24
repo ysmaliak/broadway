@@ -1244,6 +1244,8 @@ final class LiveFolders {
 
     func leads(_ key: String) -> Bool { turning(key) && !claimedRow(key) }
 
+    func followed(_ key: String) -> Date? { claims[LiveIdentity.of(key)]?.since }
+
     func explained(_ folder: LiveFolder) -> Set<String> {
         var out = Set(folder.hidden.map(LiveIdentity.of))
         out.formUnion(departed[folder.id] ?? [])
