@@ -27,7 +27,8 @@ struct CallScreenTests {
     }
 
     @Test func controlsInTheGridAreHidden() {
-        #expect(script.contains(":is(button, [role=button], [role=menu], [role=tooltip]):not(:has(video, canvas, [data-participant-id]))"))
+        #expect(script.contains(":is(button, [role=button], [role=menu], [role=tooltip]):not([data-participant-id], [data-participant-id] *)"))
+        #expect(script.contains(":not(:has(video, canvas, [data-participant-id]))"))
     }
 
     @Test func landingForgetsThePickAndTheCount() {

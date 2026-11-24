@@ -159,7 +159,8 @@ enum CallTiles {
         transform-origin: 0 0 !important; }
         [data-broadway-tiles-chrome], [data-broadway-tiles-grid] [data-participant-id] button, [data-broadway-tiles-grid] [role=toolbar], \
         [data-broadway-tiles-grid] [role=alert], [data-broadway-tiles-grid] [role=dialog], \
-        [data-broadway-tiles-grid] :is(button, [role=button], [role=menu], [role=tooltip]):not(:has(video, canvas, [data-participant-id])) \
+        [data-broadway-tiles-grid] :is(button, [role=button], [role=menu], [role=tooltip]):not([data-participant-id], [data-participant-id] *)\
+        :not(:has(video, canvas, [data-participant-id])) \
         { visibility: hidden !important; }
         html[data-broadway-tiles=screen] body, html[data-broadway-tiles=screen] body *:not([data-broadway-tiles-screen]) \
         { visibility: hidden !important; }
