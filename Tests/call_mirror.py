@@ -1,13 +1,4 @@
 #!/usr/bin/env python3
-"""A floating call keeps the page's own mirror: the person's camera faces the way the tab shows it.
-
-Build first (`./build.sh`), then `python3 Tests/call_mirror.py [OUT]`. Each fake call page
-mirrors its own camera the way call sites do, with a transform on the video or on a
-box above it, and floats. The probe reads the sign of the whole chain of transforms
-from the camera's video up to the page's root, in the tab and in the float, and
-checks they agree. A shared screen the page does not mirror stays unmirrored. Each case is shot into OUT
-(default .context/call-mirror).
-"""
 import json
 import os
 import subprocess
@@ -18,8 +9,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import split_view as sv  # noqa: E402
-import visual_diff as vd  # noqa: E402
+import split_view as sv
+import visual_diff as vd
 
 sv.use("page-call-mirror")
 t = sv.T()
@@ -133,6 +124,8 @@ def body(case):
         return f"{head}<div class=stage><div class=box><video id=me class='flip mirror' autoplay muted playsinline></video></div></div>{bar}"
     if case == "bare-controls":
         return f"{head}<div class=stage><div class=box><video id=me class='flip mirror' autoplay muted playsinline></video>{bar}</div></div>"
+    if case == "plain-controls":
+        return f"{head}<div class=stage><div class=box><video id=me autoplay muted playsinline></video>{bar}</div></div>"
     if case == "bare-wrapped":
         return f"{head}<div class=stage><div class=box><div class='fill flip mirror'><video id=me autoplay muted playsinline></video></div></div></div>{bar}"
     if case == "bare-above":
@@ -179,6 +172,7 @@ CASES = [
     ("one-wrapped", "case=one-wrapped", "grid"),
     ("bare", "case=bare", "grid"),
     ("bare-controls", "case=bare-controls", "grid"),
+    ("plain-controls", "case=plain-controls", "grid"),
     ("bare-wrapped", "case=bare-wrapped", "grid"),
     ("bare-above", "case=bare-above", "grid"),
     ("lone", "case=lone", "screen"),
@@ -256,7 +250,8 @@ def case(name, query, mode, idle, out, tag):
     t.ok(f"{name}: the call starts", until(lambda: sv.ev(page, "window.state") == "started"), sv.ev(page, "window.state"))
     time.sleep(0.5)
     tab = sv.ev(page, "facing('#me')")
-    t.ok(f"{name}: in the tab the camera is mirrored", tab == -1, tab)
+    want = sv.ev(page, "document.querySelector('.mirror') ? -1 : 1")
+    t.ok(f"{name}: in the tab the camera faces as the page sets it", tab == want, (want, tab))
     shown_tab = sv.ev(page, "facing('#shared')") if name.startswith("share") else None
     sv.cmd({"do": "select", "id": idle})
     t.ok(f"{name}: leaving the tab floats it", until(lambda: call()["showing"]), call())
@@ -271,7 +266,7 @@ def case(name, query, mode, idle, out, tag):
         inside(name, page, "#shared")
     else:
         now = sv.ev(page, "facing('#me')")
-        t.ok(f"{name}: the float shows the camera mirrored as the tab does", now == tab, (tab, now))
+        t.ok(f"{name}: the float shows the camera facing as the tab does", now == tab, (tab, now))
         t.ok(f"{name}: the camera shows", sv.ev(page, "seen('#me')") == "shown")
         inside(name, page, "#me")
         if took == "grid":
@@ -284,7 +279,7 @@ def case(name, query, mode, idle, out, tag):
     t.ok(f"{name}: shot", shoot(out / f"{name}-{tag}.png"))
     call("return")
     until(lambda: not call()["showing"])
-    t.ok(f"{name}: landing gives the page its mirror back", until(lambda: sv.ev(page, "facing('#me')") == tab, within=3), sv.ev(page, "facing('#me')"))
+    t.ok(f"{name}: landing gives the camera back its own facing", until(lambda: sv.ev(page, "facing('#me')") == tab, within=3), sv.ev(page, "facing('#me')"))
     t.ok(f"{name}: landing leaves no marks", until(lambda: sv.ev(page, "document.querySelectorAll('[data-broadway-tiles-grid],[data-broadway-tiles-path],"
          "[data-broadway-tiles-screen],[data-broadway-tiles-flip],#broadway-call-tiles,#broadway-call-fit').length") == 0, within=3))
     sv.ev(page, "end(), 1")
