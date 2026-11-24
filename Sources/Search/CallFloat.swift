@@ -158,7 +158,9 @@ enum CallTiles {
         visibility: visible !important; background: transparent !important; overflow: visible !important; clip-path: none !important; \
         transform-origin: 0 0 !important; }
         [data-broadway-tiles-chrome], [data-broadway-tiles-grid] [data-participant-id] button, [data-broadway-tiles-grid] [role=toolbar], \
-        [data-broadway-tiles-grid] [role=alert], [data-broadway-tiles-grid] [role=dialog] { visibility: hidden !important; }
+        [data-broadway-tiles-grid] [role=alert], [data-broadway-tiles-grid] [role=dialog], \
+        [data-broadway-tiles-grid] :is(button, [role=button], [role=menu], [role=tooltip]):not(:has(video, canvas, [data-participant-id])) \
+        { visibility: hidden !important; }
         html[data-broadway-tiles=screen] body, html[data-broadway-tiles=screen] body *:not([data-broadway-tiles-screen]) \
         { visibility: hidden !important; }
         html[data-broadway-tiles=screen] [data-broadway-tiles-path] { opacity: 1 !important; clip-path: none !important; \
@@ -266,6 +268,7 @@ enum CallTiles {
             });
             dress('');
           }
+          tell(lone);
           window.__broadwayCallFitNow = function () {
             var room = window.__broadwayCallRoom;
             if (!room) return;
@@ -370,6 +373,7 @@ enum CallTiles {
       window.__broadwayCallFitNow = null;
       window.__broadwayCallRoom = null;
       window.__broadwayCallScreen = null;
+      \(CallScreen.forget)
       window.dispatchEvent(new Event('resize'));
       return true;
     })()
