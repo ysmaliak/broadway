@@ -344,7 +344,7 @@ Each works on the tab chosen as above and is gated on its site.
 | --- | --- | --- |
 | `settings list [--page PAGE] [--can-set]`, `settings find WORDS` | O | each setting's id, title, value, what it takes (`takes`, the fourth column), who may change it (`changes`) and, for a row with nothing to set, the command or place that does its job (`instead`). Values only while agents are on. `--can-set` lists only what the command can change |
 | `settings get SETTING` | R | |
-| `settings set SETTING VALUE` | A | refused for the settings listed below |
+| `settings set SETTING VALUE [SETTING VALUE...]` | A | refused for the settings listed below. Several pairs are all checked first, so one refused or wrong value changes nothing. In Ask mode the whole line is one question. The answer gives each setting's old and new value |
 | `settings open [SETTING]` | A | Settings in Broadway, at that row |
 | `shortcuts list [QUERY]` | R | |
 | `shortcuts set SHORTCUT KEYS`, `clear`, `reset [SHORTCUT] [--all]` | A | keys like `cmd+shift+k` |

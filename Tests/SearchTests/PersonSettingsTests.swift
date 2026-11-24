@@ -1,4 +1,5 @@
 import AppKit
+import BroadwayCLI
 import Testing
 @testable import Search
 
@@ -9,6 +10,9 @@ final class PersonSettingsTests {
     private var box: BrowserToolbox!
 
     init() async throws {
+        keepSetting(Shared.prefs, \.look, "look")
+        keepSetting(Shared.prefs, \.pageZoom, "pageZoom")
+        keepSetting(Shared.prefs, \.floatingNewTab, "newtab.floating")
         addTeardownBlock { await self.tearDown() }
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
@@ -91,5 +95,104 @@ final class PersonSettingsTests {
 
         #expect(found["changes"] as? String == "nothing to set here")
         #expect(found["instead"] as? String == "broadway live list")
+    }
+
+    private func setting(_ words: [String]) -> PersonCall {
+        var arguments: [String: Any] = ["setting": words[0], "value": words[1]]
+        if words.count > 2 { arguments["values"] = Array(words.dropFirst(2)) }
+        return call("set", arguments)
+    }
+
+    private func set(_ words: [String]) async throws -> [String: Any] {
+        let entry = try #require(PersonCommands.find("settings", "set"))
+        let given = setting(words)
+        try await entry.first?(given)
+        return try await entry.run(given)
+    }
+
+    @Test func severalSettingsChangeInOneCall() async throws {
+        Shared.prefs.look = .light
+        Shared.prefs.pageZoom = 1
+        Shared.prefs.floatingNewTab = false
+
+        let answer = try await set(["look", "dark", "pageZoom", "110", "newtab.floating", "true"])
+        let rows = try #require(answer["settings"] as? [[String: Any]])
+
+        #expect(Shared.prefs.look == .dark)
+        #expect(Shared.prefs.pageZoom == 1.1)
+        #expect(Shared.prefs.floatingNewTab)
+        #expect(rows.map { $0["id"] as? String } == ["look", "pageZoom", "newtab.floating"])
+        #expect(rows[0]["was"] as? String == "light")
+        #expect(rows[0]["value"] as? String == "dark")
+        #expect(rows[1]["was"] as? Int == 100)
+        #expect(rows[1]["value"] as? Int == 110)
+        #expect(answer["message"] as? String == "Changed 3 settings")
+    }
+
+    @Test func oneRefusedPairChangesNothing() async throws {
+        Shared.prefs.floatingNewTab = false
+
+        await #expect(throws: PersonRefusal.self) { try await self.set(["newtab.floating", "true", "ai.agents", "true"]) }
+
+        #expect(!Shared.prefs.floatingNewTab)
+        #expect(throws: PersonRefusal.self) { try PersonSettings.planned(self.setting(["newtab.floating", "true", "ai.agents", "true"])) }
+        do {
+            _ = try PersonSettings.planned(setting(["newtab.floating", "true", "ai.agents", "true"]))
+        } catch let refused as PersonRefusal {
+            #expect(refused.code == "person_only")
+            #expect(refused.message.hasSuffix("Nothing was changed."))
+        }
+    }
+
+    @Test func aWrongValueAnywhereChangesNothing() async throws {
+        Shared.prefs.look = .light
+
+        do {
+            _ = try await set(["look", "dark", "pageZoom", "9000"])
+            Issue.record("a zoom of 9000 was taken")
+        } catch let refused as PersonRefusal {
+            #expect(refused.code == "usage")
+            #expect(refused.message.hasPrefix("pageZoom takes"))
+        }
+
+        #expect(Shared.prefs.look == .light)
+    }
+
+    @Test func aSettingWithoutAValueIsRefused() {
+        #expect(throws: PersonRefusal.self) { try PersonSettings.planned(self.setting(["look", "dark", "pageZoom"])) }
+    }
+
+    @Test func aSettingNamedTwiceIsRefused() {
+        #expect(throws: PersonRefusal.self) { try PersonSettings.planned(self.setting(["look", "dark", "look", "light"])) }
+    }
+
+    @Test func aSinglePairAnswersAsBefore() async throws {
+        let answer = try await set(["look", "dark"])
+
+        #expect(Set(answer.keys) == ["id", "value", "message"])
+        #expect(answer["id"] as? String == "look")
+        #expect(answer["message"] as? String == "Changed")
+    }
+
+    @Test func theQuestionQuotesTheWholeLineOnce() {
+        let given = setting(["look", "dark", "pageZoom", "110"])
+
+        #expect(given.line == "broadway settings set look dark pageZoom 110")
+        #expect(PersonAsk.title(for: given, site: nil) == "Change 2 settings?")
+        #expect(PersonAsk.title(for: setting(["look", "dark"]), site: nil) == "Change a setting?")
+    }
+
+    @Test func theUsageLineTakesMorePairs() throws {
+        let line = try #require(NounSchema.lines.first { $0.noun == "settings" && $0.verb == "set" })
+
+        #expect(line.arguments.map(\.name) == ["setting", "value", "values"])
+        #expect(line.arguments.last?.many == true)
+        #expect(line.arguments.last?.required == false)
+    }
+
+    @Test func everySettingThatChangesChecksBeforeItWrites() {
+        for (id, access) in PersonSettings.table where access.write != nil {
+            #expect(access.check != nil, "\(id)")
+        }
     }
 }

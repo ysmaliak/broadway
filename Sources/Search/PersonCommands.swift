@@ -355,6 +355,12 @@ enum PersonAsk {
         "folders close": "Close a folder's tabs?",
     ]
 
+    static func title(for call: PersonCall, site: String?) -> String {
+        let more = call.strings("values").count / 2
+        if call.noun == "settings", call.verb == "set", more > 0 { return "Change \(more + 1) settings?" }
+        return title(noun: call.noun, verb: call.verb, site: site)
+    }
+
     static func title(noun: String, verb: String, site: String?) -> String {
         guard let words = titles["\(noun) \(verb)"] else { return generic }
         return words.replacingOccurrences(of: "SITE", with: site ?? "this page")
@@ -368,7 +374,7 @@ enum PersonAsk {
                                 hint: "Tell the person, or run it with --wait-person MIN while they are at Broadway")
         }
         if channel.gone { throw PersonRefusal("needs_you", "Nobody answered in Broadway. Nothing was done.") }
-        var question = AgentQuestion(kind: .approval(act), title: asked ?? title(noun: call.noun, verb: call.verb, site: site))
+        var question = AgentQuestion(kind: .approval(act), title: asked ?? title(for: call, site: site))
         question.tab = call.tab?.tab.id
         question.site = site
         question.quote = AgentQuestion.clean(call.line)
