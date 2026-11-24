@@ -28,9 +28,10 @@ struct CallScreenTests {
         #expect(script.contains("root.removeAttribute('data-broadway-tiles');\n    root.removeAttribute('data-broadway-tiles-found');"))
     }
 
-    @Test func controlsInTheGridAreHidden() {
-        #expect(script.contains(":is(button, [role=button], [role=menu], [role=tooltip]):not([data-participant-id], [data-participant-id] *)"))
-        #expect(script.contains(":not(:has(video, canvas, [data-participant-id]))"))
+    @Test func onlyControlsSmallerThanAPersonInTheGridAreHidden() {
+        #expect(script.contains("grid.querySelectorAll('button, [role=button], [role=menu], [role=tooltip]')"))
+        #expect(script.contains("r.width * r.height < least * 0.5) el.setAttribute('data-broadway-tiles-chrome', '')"))
+        #expect(!script.contains(":not(:has(video, canvas, [data-participant-id]))"))
     }
 
     @Test func landingForgetsThePickAndTheCount() {

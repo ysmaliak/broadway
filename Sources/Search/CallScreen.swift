@@ -185,8 +185,20 @@ enum CallScreen {
         root.removeAttribute('data-broadway-tiles-found');
         return;
       }
-      var people = find(grid).length || (/^(VIDEO|CANVAS)$/.test(grid.tagName) ? 1 : 0);
+      var found = find(grid);
+      var people = found.length || (/^(VIDEO|CANVAS)$/.test(grid.tagName) ? 1 : 0);
       if (root.getAttribute('data-broadway-tiles-found') !== String(people)) root.setAttribute('data-broadway-tiles-found', String(people));
+      var least = found.reduce(function (a, p) {
+        var r = p.getBoundingClientRect(), s = r.width * r.height;
+        return s > 0 && (!a || s < a) ? s : a;
+      }, 0);
+      if (!least) return;
+      [].forEach.call(grid.querySelectorAll('button, [role=button], [role=menu], [role=tooltip]'), function (el) {
+        if (el.hasAttribute('data-broadway-tiles-chrome') || el.closest('[data-participant-id]')
+          || el.querySelector('video, canvas, [data-participant-id]')) return;
+        var r = el.getBoundingClientRect();
+        if (r.width * r.height < least * 0.5) el.setAttribute('data-broadway-tiles-chrome', '');
+      });
     }
     """
 

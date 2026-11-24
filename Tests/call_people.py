@@ -53,7 +53,7 @@ main { flex: 1; position: relative; min-height: 0; background: #2a2b2e; }
 const Q = new URLSearchParams(location.search);
 const N = +(Q.get('n') || 6), BARE = Q.get('bare') === '1', ROI = Q.get('roi') !== '0', RES = (Q.get('res') || '1280x720');
 const CONTAIN = +(Q.get('contain') ?? -1), OWN = Q.get('own') === '1', WORD = Q.get('word') || '', PRES = Q.get('pres') || '';
-const AT = +(Q.get('at') ?? 2), FLOW = Q.get('flow') === '1';
+const AT = +(Q.get('at') ?? 2), FLOW = Q.get('flow') === '1', OTHERS = Q.get('others') === '1';
 const NAMES = ['Nadia Brooks', 'Oscar Lindqvist', 'Pia Sorensen', 'Tomas Ferro', 'Sam Rowe', 'Gil Navarro', 'Hana Ito', 'Ivo Brandt'];
 const COLOURS = ['#1e8e3e', '#a142f4', '#e37400', '#1a73e8', '#d93025', '#12b5cb', '#f538a0', '#5f6368'];
 const main = document.querySelector('main');
@@ -136,6 +136,15 @@ function person(i, kind) {
   el.appendChild(hover);
   return wrap;
 }
+function overflow(i) {
+  const wrap = document.createElement('div'); wrap.className = 'wrap';
+  const el = document.createElement('div'); el.className = 'person'; el.setAttribute('role', 'button');
+  el.setAttribute('aria-label', BARE ? NAMES[i % 8] : 'Show 3 more people');
+  el.innerHTML = '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:40px;color:#fff">'
+    + (BARE ? NAMES[i % 8][0] : '+3') + '</div><div class=name>' + (BARE ? NAMES[i % 8] : '3 others') + '</div>';
+  wrap.appendChild(el);
+  return wrap;
+}
 function stray() {
   const one = document.createElement('button'); one.className = 'stray one';
   one.setAttribute('aria-label', 'Others might see more of your background. Click to view your full video.'); one.textContent = 'Your background';
@@ -153,7 +162,7 @@ function build() {
     wrap.appendChild(c); main.appendChild(wrap);
   } else {
     if (PRES) main.appendChild(person(0, 'pres'));
-    for (let i = 0; i < N; i++) main.appendChild(person(i, 'cam'));
+    for (let i = 0; i < N; i++) main.appendChild(OTHERS && i === N - 1 ? overflow(i) : person(i, 'cam'));
   }
   stray();
   lay();
@@ -262,6 +271,8 @@ TILED = [
     ("bare-grid", "bare=1", 6, False),
     ("bare-speaker", "bare=1&layout=speaker&contain=0", 6, False),
     ("canvas", "canvas=1", 1, False),
+    ("grid-others", "others=1", (5, 6), False),
+    ("bare-avatar", "bare=1&others=1", (5, 6), False),
 ]
 SHOWN = [
     ("present-label", "pres=label&layout=present", "label"),
@@ -342,9 +353,10 @@ def watch(page, seconds):
 
 
 def tiled(name, page, people):
+    found_count, people = people if isinstance(people, tuple) else (people, people)
     m = marks(page)
     t.ok(f"{name}: the float is in tiles mode", m["mode"] == "" and m["screen"] is None and m["grid"] == 1, m)
-    t.ok(f"{name}: it says it found {people}", m["found"] == str(people), m)
+    t.ok(f"{name}: it says it found {found_count}", m["found"] == str(found_count), m)
     found = json.loads(sv.ev(page, "people()"))
     width, height = found.pop()[:2]
     k = width / (call().get("width") or FLOAT_WIDTH)
