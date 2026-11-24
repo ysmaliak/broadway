@@ -321,6 +321,7 @@ enum CallTiles {
               return r;
             }
             var people = find(grid);
+            if (!people.length && /^(VIDEO|CANVAS)$/.test(grid.tagName)) people = [grid];
             var boxes = people.map(seen).filter(Boolean);
             if (!boxes.length) return;
             var areas = boxes.map(function (b) { return (b.r - b.l) * (b.b - b.t); });

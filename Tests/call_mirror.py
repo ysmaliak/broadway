@@ -77,7 +77,10 @@ function screen() {
   }
   paint(); setInterval(paint, 100);
   const s = c.captureStream(15);
-  if (Q.get('display') === '1') s.getVideoTracks().forEach(k => { const own = k.getSettings.bind(k); k.getSettings = () => Object.assign(own(), {displaySurface: 'monitor'}); });
+  if (Q.get('display') === '1') {
+    const ids = new Set(s.getVideoTracks().map(k => k.id)), own = MediaStreamTrack.prototype.getSettings;
+    MediaStreamTrack.prototype.getSettings = function () { const v = own.call(this); return ids.has(this.id) ? Object.assign({}, v, {displaySurface: 'monitor'}) : v; };
+  }
   return s;
 }
 const me = document.getElementById('me');
@@ -260,6 +263,9 @@ def case(name, query, mode, idle, out, tag):
     tab = sv.ev(page, "facing('#me')")
     t.ok(f"{name}: in the tab the camera is mirrored", tab == -1, tab)
     shown_tab = sv.ev(page, "facing('#shared')") if name.startswith("share") else None
+    if name == "share-display":
+        surface = sv.ev(page, "document.getElementById('shared').srcObject.getVideoTracks()[0].getSettings().displaySurface || 'none'")
+        t.ok(f"{name}: the page's shared screen reads as a display capture", surface == "monitor", surface)
     sv.cmd({"do": "select", "id": idle})
     t.ok(f"{name}: leaving the tab floats it", until(lambda: call()["showing"]), call())
     time.sleep(2.5)
