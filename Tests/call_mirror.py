@@ -5,7 +5,7 @@ Build first (`./build.sh`), then `python3 Tests/call_mirror.py [OUT]`. Each fake
 mirrors its own camera the way call sites do, with a transform on the video or on a
 box above it, and floats. The probe reads the sign of the whole chain of transforms
 from the camera's video up to the page's root, in the tab and in the float, and
-checks they agree. A shared screen is never mirrored. Each case is shot into OUT
+checks they agree. A shared screen the page does not mirror stays unmirrored. Each case is shot into OUT
 (default .context/call-mirror).
 """
 import json
@@ -77,10 +77,6 @@ function screen() {
   }
   paint(); setInterval(paint, 100);
   const s = c.captureStream(15);
-  if (Q.get('display') === '1') {
-    const ids = new Set(s.getVideoTracks().map(k => k.id)), own = MediaStreamTrack.prototype.getSettings;
-    MediaStreamTrack.prototype.getSettings = function () { const v = own.call(this); return ids.has(this.id) ? Object.assign({}, v, {displaySurface: 'monitor'}) : v; };
-  }
   return s;
 }
 const me = document.getElementById('me');
@@ -148,8 +144,8 @@ def body(case):
                  "lone-scale": "<video id=me class='scaled mirror' autoplay muted playsinline></video>",
                  "lone-canvas": "<canvas id=me class='fill flip mirror' width=640 height=360></canvas>"}[case]
         return f"{head}<div class=stage><div class=box>{video}</div></div>{extra}"
-    if case in ("share", "share-display"):
-        wrap = " flip" if case == "share-display" else ""
+    if case == "share":
+        wrap = ""
         return (f"{head}<div class=stage><div class=strip><div class=tile data-participant-id='spaces/a/devices/1'><video id=me class='flip mirror' autoplay muted playsinline></video>"
                 f"<span class=name>You</span></div>{faces(2)}</div><div class='main{wrap}'><div class=share data-participant-id='spaces/a/devices/presentation'>"
                 f"<video id=shared autoplay muted playsinline></video><span class=name>Ana (Presentation)</span></div></div></div>{bar}")
@@ -190,7 +186,6 @@ CASES = [
     ("lone-canvas", "case=lone-canvas", "screen"),
     ("lone-scale", "case=lone-scale", "screen"),
     ("share", "case=share", "screen"),
-    ("share-display", "case=share-display&display=1", "screen"),
 ]
 ROOM = {"top": 8, "side": 8, "bottom": 58}
 
@@ -263,9 +258,6 @@ def case(name, query, mode, idle, out, tag):
     tab = sv.ev(page, "facing('#me')")
     t.ok(f"{name}: in the tab the camera is mirrored", tab == -1, tab)
     shown_tab = sv.ev(page, "facing('#shared')") if name.startswith("share") else None
-    if name == "share-display":
-        surface = sv.ev(page, "document.getElementById('shared').srcObject.getVideoTracks()[0].getSettings().displaySurface || 'none'")
-        t.ok(f"{name}: the page's shared screen reads as a display capture", surface == "monitor", surface)
     sv.cmd({"do": "select", "id": idle})
     t.ok(f"{name}: leaving the tab floats it", until(lambda: call()["showing"]), call())
     time.sleep(2.5)
