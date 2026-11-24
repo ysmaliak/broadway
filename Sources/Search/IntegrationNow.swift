@@ -16,18 +16,20 @@ enum IntegrationNow {
         for folder in folders where !folder.paused && folder.state == .fine {
             let lists = folder.source.pullLists
             let review = folder.source.asksForReview
-            guard review || folder.source.assignsToYou else { continue }
+            let again = lists?.contains(.changed) == true
+            guard review || again || folder.source.assignsToYou else { continue }
             for item in folder.items where item.opened == nil && !memory.hides("integration:\(item.key)", at: now) && seen.insert(item.key).inserted {
                 let asks = lists == nil ? review : item.list?.asksForReview == true
-                guard asks || folder.source.assignsToYou && item.arrived != nil else { continue }
-                let said = asks ? "Review requested" : "Assigned to you"
+                let returned = again && item.list == .changed
+                guard asks || returned || folder.source.assignsToYou && item.arrived != nil else { continue }
+                let said = asks ? "Review requested" : returned ? PullList.changed.label ?? "" : "Assigned to you"
                 let detail = [said, item.author].compactMap { $0 }.joined(separator: " · ")
                 let key = item.key
                 let row = NowRow(id: "integration:\(key)", title: item.title, detail: detail,
-                                 symbol: asks ? "arrow.triangle.pull" : "checklist", url: URL(string: key)) { browser in
+                                 symbol: asks || returned ? "arrow.triangle.pull" : "checklist", url: URL(string: key)) { browser in
                     browser.openLiveItem(key)
                 }
-                if asks { rows.append(row) } else { later.append(row) }
+                if asks || returned { rows.append(row) } else { later.append(row) }
             }
         }
         return Array((rows + later).prefix(most))

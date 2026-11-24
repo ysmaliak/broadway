@@ -8,6 +8,7 @@ enum LiveRefs {
         var read: Date
         var state: PullPageState? = nil
         var headed: Bool? = nil
+        var seen: [String: PullSigns.Seen]? = nil
     }
 
     struct Page: Equatable {
@@ -16,11 +17,19 @@ enum LiveRefs {
         var state: PullPageState? = nil
         var members: [Int] = []
         var headed = false
+        var talk: PullSigns.Talk? = nil
     }
 
     static func page(in html: String, repository: String, number: Int? = nil) -> Page {
-        Page(branch: branch(in: html, repository: repository), signs: PullSigns.page(html).map(PullSigns.read),
-             state: state(in: html, number: number), members: stack(in: html)?.members ?? [], headed: header(in: html) != nil)
+        let talk = PullSigns.page(html)
+        return Page(branch: branch(in: html, repository: repository), signs: talk.map { PullSigns.read($0) },
+                    state: state(in: html, number: number), members: stack(in: html)?.members ?? [], headed: header(in: html) != nil, talk: talk)
+    }
+
+    static func judged(_ page: Page, before: [String: PullSigns.Seen]?, at now: Date) -> (signs: PullSigns.Read?, seen: [String: PullSigns.Seen]?) {
+        guard let talk = page.talk else { return (page.signs, before) }
+        let seen = PullSigns.seen(talk, before: before, at: now)
+        return (PullSigns.read(talk, seen: seen), seen)
     }
 
     static func header(in html: String) -> PullPageState? {
@@ -49,11 +58,12 @@ enum LiveRefs {
         guard let signs else { return }
         item.activity = signs.activity
         item.unanswered = signs.unanswered > 0 ? signs.unanswered : nil
+        item.back = signs.back ? true : nil
         item.signsRead = true
     }
 
     static func kept(_ item: LiveItem) -> PullSigns.Read? {
-        item.signsRead == true ? PullSigns.Read(activity: item.activity, unanswered: item.unanswered ?? 0) : nil
+        item.signsRead == true ? PullSigns.Read(activity: item.activity, unanswered: item.unanswered ?? 0, back: item.back == true) : nil
     }
 
     static func due(_ known: Known, at now: Date) -> Bool {
@@ -284,15 +294,16 @@ enum LiveRefs {
                 let staleBranch = known[at(item.key)]?.branch ?? before[LiveIdentity.of(item.key)]?.branch
                 let staleSigns = known[at(item.key)]?.signs ?? before[LiveIdentity.of(item.key)].flatMap(kept)
                 let page = found[want.url]
+                let judged = page.map { judged($0, before: known[at(item.key)]?.seen, at: now) }
                 out[want.index].branch = page?.branch ?? staleBranch
-                signed(&out[want.index], page?.signs ?? staleSigns)
+                signed(&out[want.index], judged?.signs ?? staleSigns)
                 guard let page, page.branch != nil || page.signs != nil || page.state != nil else {
                     out[want.index].pageRead = known[at(item.key)]?.read ?? before[LiveIdentity.of(item.key)]?.pageRead
                     missed.insert(want.index)
                     continue
                 }
-                known[at(item.key)] = Known(updated: item.updated, branch: page.branch ?? staleBranch, signs: page.signs ?? staleSigns, read: now,
-                                        state: page.state, headed: page.headed)
+                known[at(item.key)] = Known(updated: item.updated, branch: page.branch ?? staleBranch, signs: judged?.signs ?? staleSigns, read: now,
+                                        state: page.state, headed: page.headed, seen: judged?.seen)
                 out[want.index].pageRead = now
                 guard let fresh = page.branch else { continue }
                 let changed = staleBranch.map { old in old.stackRead == true && (old.stack != fresh.stack || old.position != fresh.position) }

@@ -388,6 +388,7 @@ struct LiveItem: Codable, Equatable {
     var pageRead: Date? = nil
     var status: String? = nil
     var on: [PullList]? = nil
+    var back: Bool? = nil
 
     var fresh: Bool {
         guard let activity else { return false }
@@ -504,6 +505,7 @@ struct LiveFolder: Codable, Identifiable, Equatable {
     var items: [LiveItem] = []
     var hidden: [String] = []
     var hiddenMissing: [String: Date]? = nil
+    var listsOn: [String: Date]? = nil
     var read: Date? = nil
     var noticing: Bool? = nil
     var sso: LiveSSO? = nil
@@ -642,6 +644,7 @@ enum LiveMerge {
                 hidden.append(identity)
             }
         }
+        let turnedOn = folder.listsOn ?? [:]
         let refused = Set(hidden)
         var seen = Set<String>()
         var items: [LiveItem] = []
@@ -654,6 +657,10 @@ enum LiveMerge {
             if !baseline, item.noticed == nil, item.signsRead == true, unsigned.contains(identity),
                let activity = item.activity, let seen = opened[identity], seen >= activity {
                 item.noticed = activity
+            }
+            if !baseline, item.noticed == nil, !known.contains(identity), let on = item.on, !on.isEmpty, let activity = item.activity {
+                let since = on.compactMap { turnedOn[$0.rawValue] }
+                if since.count == on.count, let first = since.min(), activity <= first { item.noticed = activity }
             }
             items.append(item)
         }
@@ -908,9 +915,16 @@ final class LiveFolders {
     func move(_ id: UUID, to address: String) { change(id) { $0.source.address = address } }
     func setOrder(_ id: UUID, _ order: [String]?) { change(id) { $0.order = order } }
 
-    func setLists(_ id: UUID, _ lists: [PullList]) {
+    func setLists(_ id: UUID, _ lists: [PullList], now: Date = Date()) {
         guard !lists.isEmpty else { return }
-        change(id) { $0.source.lists = PullList.ordered(lists) }
+        change(id) { folder in
+            let was = folder.source.pullLists ?? []
+            folder.source.lists = PullList.ordered(lists)
+            let on = folder.source.pullLists ?? []
+            var since = (folder.listsOn ?? [:]).filter { key, _ in on.contains { $0.rawValue == key } }
+            for list in on where !was.contains(list) && (folder.state == .fine || !folder.items.isEmpty) { since[list.rawValue] = now }
+            folder.listsOn = since.isEmpty ? nil : since
+        }
         update(id)
     }
 
@@ -1071,7 +1085,7 @@ final class LiveFolders {
     }
 
     static func listsOwn(_ source: LiveSource) -> Bool {
-        source.kind == .pullRequests && (source.pullLists ?? []).contains { $0.words.contains("author:@me") || $0.words.contains("involves:@me") }
+        source.kind == .pullRequests && (source.pullLists ?? []).contains(where: \.own)
     }
 
     func keep(_ folder: LiveFolder) -> TimeInterval {
@@ -1126,6 +1140,7 @@ final class LiveFolders {
                         if let branch = new.branch { next.branch = branch }
                         next.activity = new.activity
                         next.unanswered = new.unanswered
+                        next.back = new.back
                         next.signsRead = new.signsRead
                         next.pageRead = new.pageRead
                         if wanted.contains(identity) { next.noticed = new.activity ?? row.noticed }

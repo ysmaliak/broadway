@@ -169,6 +169,110 @@ final class PullSignsTests {
         #expect(read.unanswered == 1)
     }
 
+    private func spoke(_ who: String, _ minutes: Double, _ kind: PullSigns.Kind = .word, bot: Bool = false) -> PullSigns.Said {
+        PullSigns.Said(at: at(minutes), who: who, bot: bot, kind: kind)
+    }
+
+    private func reviewed(_ said: [PullSigns.Said], threads: [PullSigns.Thread] = []) -> PullSigns.Talk {
+        PullSigns.Talk(said: [spoke("octo-sam", 1, .review)] + said, threads: threads, viewer: "octo-sam", author: "dana")
+    }
+
+    @Test func aReviewThenAnAuthorPushIsBack() {
+        #expect(PullSigns.read(reviewed([spoke("dana", 2, .push)])).back)
+    }
+
+    @Test func aReviewThenAnAuthorReplyIsBack() {
+        let reply = PullSigns.Thread(resolved: false, said: [spoke("octo-sam", 1), spoke("dana", 3)])
+
+        #expect(PullSigns.read(reviewed([], threads: [reply])).back)
+    }
+
+    @Test func aReviewThenAThirdPersonsCommentIsNotBack() {
+        #expect(!PullSigns.read(reviewed([spoke("lee", 2)])).back)
+    }
+
+    @Test func aPushBySomeoneOtherThanTheAuthorIsBack() {
+        #expect(PullSigns.read(reviewed([spoke("lee", 2, .push)])).back)
+    }
+
+    @Test func anApprovalThenAPushIsNotBack() {
+        let talk = PullSigns.Talk(said: [spoke("octo-sam", 1, .approval), spoke("dana", 2, .push)], viewer: "octo-sam", author: "dana")
+
+        #expect(!PullSigns.read(talk).back)
+    }
+
+    @Test func requestedChangesThenTheReviewersThreadsResolvedIsBack() {
+        let open = PullSigns.Thread(resolved: false, said: [spoke("octo-sam", 1)], id: "41")
+        let closed = PullSigns.Thread(resolved: true, said: [], id: "41")
+        let before = reviewed([], threads: [open])
+        let after = reviewed([], threads: [closed])
+
+        let first = PullSigns.seen(before, before: nil, at: at(2))
+        let second = PullSigns.seen(after, before: first, at: at(9))
+        let read = PullSigns.read(after, seen: second)
+
+        #expect(!PullSigns.read(before, seen: first).back)
+        #expect(read.back)
+        #expect(read.activity == at(9))
+    }
+
+    @Test func aThreadAlreadyResolvedAtTheFirstReadIsNotBack() {
+        let talk = reviewed([], threads: [PullSigns.Thread(resolved: true, said: [spoke("octo-sam", 1)], id: "41")])
+
+        #expect(!PullSigns.read(talk, seen: PullSigns.seen(talk, before: nil, at: at(9))).back)
+    }
+
+    @Test func aResolvedThreadWhereTheReviewerDidNotSpeakLastIsNotBack() {
+        let open = PullSigns.Thread(resolved: false, said: [spoke("octo-sam", 1), spoke("lee", 1.5)], id: "41")
+        let first = PullSigns.seen(reviewed([spoke("octo-sam", 1.8)], threads: [open]), before: nil, at: at(2))
+        let after = reviewed([spoke("octo-sam", 1.8)], threads: [PullSigns.Thread(resolved: true, said: [], id: "41")])
+
+        #expect(!PullSigns.read(after, seen: PullSigns.seen(after, before: first, at: at(9))).back)
+    }
+
+    @Test func aBotAloneIsNotBack() {
+        let bot = PullSigns.Thread(resolved: false, said: [spoke("octo-sam", 1), spoke("copilot", 3, bot: true)])
+
+        #expect(!PullSigns.read(reviewed([spoke("dependabot", 2, .push, bot: true), spoke("codecov", 3, bot: true)], threads: [bot])).back)
+    }
+
+    @Test func theReviewersReplyEndsIt() {
+        #expect(!PullSigns.read(reviewed([spoke("dana", 2, .push), spoke("dana", 3), spoke("octo-sam", 4)])).back)
+    }
+
+    @Test func yourOwnPullRequestIsNeverBack() {
+        let talk = PullSigns.Talk(said: [spoke("octo-sam", 1, .review), spoke("dana", 2, .push)], viewer: "octo-sam", author: "octo-sam")
+
+        #expect(!PullSigns.read(talk).back)
+    }
+
+    @Test func thePageTellsReviewsApprovalsPushesAndThreads() throws {
+        let approval = """
+        <div class="js-timeline-item js-timeline-progressive-focus-container" data-gid="PRR_kwDOapproved">
+        <div class="TimelineItem"><div class="TimelineItem-body"><strong>\(author("lee", 3))</strong> approved these changes</div></div></div>
+        """
+        let pushed = """
+        <div class="js-timeline-item js-timeline-progressive-focus-container" data-gid="C_kwDOpushed">
+        <div class="TimelineItem-body"><a class="author Link--primary text-bold" data-hovercard-type="user" href="/dana">dana</a> added <span>2</span> commits
+        <a href="#commits-pushed-1"><relative-time tense="past" datetime="\(Self.stamp(at(8)))">Nov 12</relative-time></a></div></div>
+        """
+        let folded = """
+        <turbo-frame id="review-thread-or-comment-id-777" target="_top">
+        <review-thread-collapsible class="review-thread-component js-comment-container" data-resolved="true"
+            data-deferred-content-url="/acme/rocket/pull/412/threads/777?rendering_on_files_tab=false"></review-thread-collapsible></turbo-frame>
+        """
+        let html = page(opener: "dana", [review("octo-sam", 2, changes: true, threads: [thread(resolved: false, [("octo-sam", 2)]), folded]),
+                                         approval, pushed])
+
+        let talk = try #require(PullSigns.page(html))
+
+        #expect(talk.said.map(\.kind) == [.review, .approval, .push])
+        #expect(talk.said.last?.at == at(8))
+        #expect(talk.threads.map(\.id) == ["2", "777"])
+        #expect(talk.threads.last?.said.isEmpty == true)
+        #expect(PullSigns.read(talk).back)
+    }
+
     @Test func aPageWithNoViewerOrNoTimelineGivesNoSigns() {
         #expect(PullSigns.page(page(viewer: "", [comment("dana", 2)])) == nil)
         #expect(PullSigns.page("<html><meta name=\"user-login\" content=\"octo-sam\"><body>Sign in to GitHub</body></html>") == nil)
