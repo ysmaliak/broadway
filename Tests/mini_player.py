@@ -136,7 +136,7 @@ window.go = function () { var v = document.getElementById('t'); v.volume = 0.01;
 class H(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split("?")[0]
-        pages = {"/music": MUSIC, "/book": BOOK, "/plain": PLAIN, "/loose": LOOSE, "/video": VIDEO, "/ding": DINGPAGE, "/synth": SYNTH, "/slowvideo": SLOWVIDEO,
+        pages = {"/abc-defg-hij": CALL, "/music": MUSIC, "/book": BOOK, "/plain": PLAIN, "/loose": LOOSE, "/video": VIDEO, "/ding": DINGPAGE, "/synth": SYNTH, "/slowvideo": SLOWVIDEO,
                  "/chime": CHIMEPAGE, "/webchime": WEBCHIME, "/half": HALFPAGE, "/latechime": LATECHIME, "/call": CALL}
         if path in pages:
             return self.send(pages[path].encode(), "text/html")
@@ -352,8 +352,26 @@ def short_sounds(base, other):
     seen, heard, ended = watch_card(call, "Call page", lambda: sv.ev(call, "document.getElementById('t').ended") is True)
     t.ok("hung up with its stream left in the page, paused, the chime ends", ended and sv.ev(call, "document.getElementById('s').paused") is True,
          sv.ev(call, "document.getElementById('t').ended"))
-    t.ok("and the card does not stay for the paused stream", not carded(call, "Call page"), (seen, mini()))
+    t.ok("on a page that is no call, the paused stream keeps its card, as a paused radio does", carded(call, "Call page"), (seen, mini()))
     sv.cmd({"do": "close", "id": call})
+
+    sv.cmd({"do": "meetalert", "action": "fixture", "hosts": {"localhost": "meet"}, "events": []})
+    port = base.rsplit(":", 1)[1]
+    meeting = sv.cmd({"do": "open", "url": f"http://localhost:{port}/abc-defg-hij"})["id"]
+    sv.cmd({"do": "wait", "id": meeting, "seconds": 10})
+    sv.cmd({"do": "select", "id": meeting})
+    time.sleep(0.4)
+    sv.ev(meeting, "go()")
+    sv.cmd({"do": "select", "id": other})
+    seen, heard, playing = watch_card(meeting, "Call page", lambda: sv.ev(meeting, "document.getElementById('s').paused") is False, after=5)
+    t.ok("a meeting page's stream plays", playing, sv.ev(meeting, "document.getElementById('s').paused"))
+    t.ok("and never brings the card up", not seen, (seen, heard, mini()))
+    sv.ev(meeting, "hangup()")
+    seen, heard, ended = watch_card(meeting, "Call page", lambda: sv.ev(meeting, "document.getElementById('t').ended") is True)
+    t.ok("hung up with its stream left paused, its chime ends", ended, sv.ev(meeting, "document.getElementById('t').ended"))
+    t.ok("and the card never comes", not seen, (seen, mini()))
+    sv.cmd({"do": "close", "id": meeting})
+    sv.cmd({"do": "meetalert", "action": "fixture", "hosts": {}, "events": []})
 
     half = opened(base, "half")
     sv.cmd({"do": "select", "id": half})
