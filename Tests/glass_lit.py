@@ -78,10 +78,11 @@ def face(image, spot):
     return mean, mean[1] - max(mean[0], mean[2])
 
 
-def shoot(theme, hold):
+def shoot(theme, hold, ground=None):
     sv.cmd({"do": "lights", "hold": hold})
-    name = f"{'held' if hold else 'unheld'}-{theme}"
-    state = sv.cmd({"do": "meetalert", "action": "shot-start", "dark": theme == "dark", "front": False, "controls": True})
+    name = f"{'held' if hold else 'unheld'}-{theme}" + (f"-{ground}" if ground else "")
+    state = sv.cmd({"do": "meetalert", "action": "shot-start", "dark": theme == "dark", "front": False, "controls": True,
+                    "ground": ground})
     try:
         time.sleep(1.0)
         lights = sv.cmd({"do": "lights"})
@@ -109,6 +110,17 @@ def apart(a, b):
     return total / max(1, count)
 
 
+def real_card(hold):
+    sv.cmd({"do": "lights", "hold": hold})
+    sv.cmd({"do": "meetalert", "action": "off"})
+    sv.cmd({"do": "meetalert", "action": "fixture", "lead": "1", "hosts": {"127.0.0.1": "meet"},
+            "events": [{"title": "Design sync", "in": 0.5, "link": f"{sv.BASE}/abc-defg-hij"}]})
+    time.sleep(1.0)
+    lights = sv.cmd({"do": "lights"})
+    panel = next((p for p in lights.get("panels", []) if p.get("kind") == "Lifted"), {})
+    return lights, panel, {g["owner"]: g["lit"] for g in panel.get("glass", [])}, [g["lit"] for g in panel.get("glass", [])]
+
+
 def main():
     WORK.mkdir(parents=True, exist_ok=True)
     sv.setup()
@@ -118,10 +130,19 @@ def main():
         sv.cmd({"do": "meetalert", "action": "fixture", "lead": "1", "hosts": {"127.0.0.1": "meet"},
                 "events": [{"title": "Design sync", "in": 0.5, "link": f"{sv.BASE}/abc-defg-hij"}]})
         t.ok("one card is up", len(sv.cmd({"do": "meetalert"})["due"]) == 1)
-        for theme in ("light", "dark"):
+        for hold in (True, False, True):
+            lights, panel, owners, lit = real_card(hold)
+            word = "held" if hold else "unheld"
+            print(f"        real card {word}: active {lights.get('active')} hidden {lights.get('hidden')} key {lights.get('keyWindow')!r} glass {panel.get('glass')}")
+            t.ok(f"real card {word}: Broadway is behind and no window of it is key", not lights.get("active") and not lights.get("keyWindow"), lights.get("keyWindow"))
+            t.ok(f"real card {word}: the ground, both keys and Join are glass",
+                 set(owners) == {"KitGlass", "KitGlassKey", "MeetingJoinButton"} and len(lit) == 4, panel.get("glass"))
+            t.ok(f"real card {word}: every glass is {'lit' if hold else 'dim'}", lit == [hold] * 4, panel.get("glass"))
+        for theme, ground in (("light", None), ("dark", None), ("light", "clear"), ("dark", "clear")):
+            label = theme + (f" {ground}" if ground else "")
             shots = {}
             for hold in (True, False):
-                name, image, faces, took, panel = shoot(theme, hold)
+                name, image, faces, took, panel = shoot(theme, hold, ground)
                 t.ok(f"{name}: a picture of the probe's own window", image is not None, {k: v for k, v in took.items() if k != "png"})
                 t.ok(f"{name}: Broadway is behind and the panel is not key", not took.get("active") and not took.get("key"),
                      {k: v for k, v in took.items() if k != "png"})
@@ -135,15 +156,15 @@ def main():
                 continue
             drawn = max(held["glass still"][1], unheld["glass still"][1], held["glass interactive"][1], unheld["glass interactive"][1])
             moved = apart(held_image, unheld_image)
-            print(f"        {theme}: the two pictures differ by {moved:.1f} a channel on average")
+            print(f"        {label}: the two pictures differ by {moved:.1f} a channel on average")
             if drawn < 15 and moved < 2:
-                blind.append(theme)
-                print(f"  {theme}: glass is not drawn on this screen, cannot tell")
+                blind.append(label)
+                print(f"  {label}: glass is not drawn on this screen, cannot tell")
                 continue
-            t.ok(f"{theme}: the held glass keeps the green a key window shows", held["glass still"][1] >= 40, held["glass still"])
-            t.ok(f"{theme}: without the hold the glass dims", unheld["glass still"][1] < held["glass still"][1] - 15,
+            t.ok(f"{label}: the held glass keeps the green a key window shows", held["glass still"][1] >= 40, held["glass still"])
+            t.ok(f"{label}: without the hold the glass dims", unheld["glass still"][1] < held["glass still"][1] - 15,
                  (held["glass still"], unheld["glass still"]))
-            t.ok(f"{theme}: the two pictures differ clearly", moved >= 2, moved)
+            t.ok(f"{label}: the two pictures differ clearly", moved >= 2, moved)
         print("        pictures in", WORK)
     finally:
         try:

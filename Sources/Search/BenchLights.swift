@@ -28,8 +28,33 @@ enum BenchLights {
                 "held": (window as? KitLitPanel)?.heldLit ?? false,
                 "lit": active(window, "_hasActiveAppearance") as Any,
                 "litIgnoringKey": active(window, "_hasActiveAppearanceIgnoringKeyFocus") as Any,
+                "glass": glass(window),
             ]
         }
+    }
+
+    static func glass(_ window: NSWindow) -> [[String: Any]] {
+        guard let top = window.contentView?.superview ?? window.contentView else { return [] }
+        return top.kitSubviews(of: NSGlassEffectView.self).map { glass in
+            var owner: NSView = glass
+            var up = glass.superview
+            while let here = up, !(here is NSGlassEffectView) {
+                if here is KitButton { owner = here; break }
+                up = here.superview
+            }
+            return ["owner": String(describing: type(of: owner)), "lit": lit(glass) as Any]
+        }
+    }
+
+    static func lit(_ glass: NSView) -> Bool? {
+        func backdrop(_ layer: CALayer) -> CALayer? {
+            if String(describing: type(of: layer)) == "CABackdropLayer" { return layer }
+            for sub in layer.sublayers ?? [] { if let found = backdrop(sub) { return found } }
+            return nil
+        }
+        guard let layer = glass.layer, let found = backdrop(layer),
+              let margin = (found.value(forKey: "marginWidth") as? NSNumber)?.doubleValue else { return nil }
+        return margin > 1
     }
 
     static func report() -> [String: Any] {
