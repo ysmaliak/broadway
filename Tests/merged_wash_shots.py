@@ -1,33 +1,4 @@
 #!/usr/bin/env python3
-"""The wash: a pull request row at the moment it turns merged, pictured.
-
-Build first (`./build.sh`), then `python3 Tests/merged_wash_shots.py [OUT]`.
-Window pictures need a screen recording grant, so on the mini run it from a
-Rex pane, not over ssh.
-
-A hidden test copy in a world of its own reads a fake signed-in GitHub on
-::1 through `integrations.api` (the fake of Tests/merged_stack.py), so the
-rows carry github.com addresses and nothing is asked of the real site. Every
-pull request, repository and person is invented.
-
-A row turns merged and the copy draws its own sidebar at fixed moments
-through the turn (`mergedturn`, test runs only), as its layers stand at that
-moment: merge purple wipes across the row from its leading edge with a soft
-crest, the row rests on the tinted ground through the hold, and the row
-leaves with its ground. Nothing is taken from a screen. The scenes: a plain
-row, the row of the page in front and a stack of three, each light and dark
-on a plain sidebar, the plain and the front row on a saturated tint and on
-a pale one, the row
-under the pointer, three unrelated rows in one go, and Reduce Motion.
-
-The probe also asks each row how it turned and measures the pictures: the
-row in front stands apart from the sidebar at least as clearly as a plain
-row, the rows of a stack keep the list's gap between their grounds, and the
-ground is still on the row as it starts to leave.
-
-OUT (default .context/merged-wash-shots) gets one folder per scene with
-every frame, sheet-turn.png, sheet-rows.png and merged-wash-shots.json.
-"""
 import json
 import shutil
 import subprocess
@@ -46,14 +17,17 @@ import split_view as sv  # noqa: E402
 
 OUT = (Path(ARGS[0]) if ARGS else ROOT / ".context" / "merged-wash-shots").resolve()
 HOLD = 1.6
-TIMES = [0.06, 0.14, 0.24, 0.36, 0.5, 0.8, 1.2, 1.5]
+TIMES = [0.06, 0.15, 0.4, 0.8, 1.15, 1.4, 1.5]
 AFTER = [0.02, 0.06, 0.1, 0.4]
 MOMENTS = ["before"] + [f"{m:.2f}" for m in TIMES] + [f"left-{m:.2f}" for m in AFTER]
 LEAVING = "left-0.06"
 GONE = "left-0.40"
 LATE = 0.045
-PEAK = "0.14"
-REST = "1.20"
+REST = "1.50"
+FRONTS = ["0.15", "0.40", "0.80", "1.15"]
+FULL = "1.40"
+SLACK = 6
+SWEEP = 1.2
 SIGN = 2
 TINT = {"custom": "3139FB", "intensity": 2.0, "glass": False, "transparency": 0, "grain": 0}
 PALE = {"custom": "FFD3E0", "intensity": 1.0, "glass": False, "transparency": 0, "grain": 0}
@@ -217,6 +191,68 @@ def side_of(got, number, moment):
     return pixel(got, moment, min(got["size"][0] - 2, x + w + 4), y + h / 2)
 
 
+def ease(p):
+    if p <= 0:
+        return 0.0
+    if p >= 1:
+        return 1.0
+    lo, hi = 0.0, 1.0
+    for _ in range(60):
+        s = (lo + hi) / 2
+        x = 3 * (1 - s) ** 2 * s * 0.3 + 3 * (1 - s) * s * s * 0.7 + s ** 3
+        if x < p:
+            lo = s
+        else:
+            hi = s
+    s = (lo + hi) / 2
+    return 3 * (1 - s) * s * s + s ** 3
+
+
+def line(got, moment, x, y, w):
+    shot = next((f for f in got["frames"] if f["name"] == moment and f.get("file")), None)
+    if not shot:
+        return None
+    raw = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", str(Path(got["folder"]) / shot["file"]), "-vf",
+                          f"crop={int(w * SCALE)}:1:{int(x * SCALE)}:{int(y * SCALE)}", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+                         check=True, capture_output=True, stdin=subprocess.DEVNULL).stdout
+    return [tuple(raw[i:i + 3]) for i in range(0, len(raw) - 2, 3)]
+
+
+def front_of(got, number, moment):
+    x, y, w, h = got["rows"][ms.url(number)]
+    then, now = line(got, "before", x, y + 5, w), line(got, moment, x, y + 5, w)
+    if then is None or now is None:
+        return None, 0
+    washed = [i for i, (a, b) in enumerate(zip(then, now)) if max(abs(p - q) for p, q in zip(a, b)) > 5]
+    return ((washed[-1] + 1) / SCALE if washed else 0.0), len(washed) / SCALE
+
+
+def meant_front(got, number, moment):
+    x, y, w, h = got["rows"][ms.url(number)]
+    shot = next(f for f in got["frames"] if f["name"] == moment)
+    row = next((r for r in shot["rows"] if r["url"] == ms.url(number)), {})
+    began, lasts = row.get("began", -1), row.get("lasts", 0)
+    if began < 0 or lasts <= 0:
+        return 0.0, began, lasts
+    return w * ease((shot["t"] - began) / lasts), began, lasts
+
+
+def fronts(label, got, numbers):
+    seen = {}
+    for number in numbers:
+        x, y, w, h = got["rows"][ms.url(number)]
+        for moment in FRONTS:
+            found, _ = front_of(got, number, moment)
+            meant, began, lasts = meant_front(got, number, moment)
+            seen[f"{number - got['numbers'][0]} {moment}"] = (found, round(meant, 1), round(began, 3), round(lasts, 3))
+            t.ok(f"{label}: at {moment} s the front of row {number % 100} is where the curve puts it",
+                 found is not None and abs(found - meant) <= SLACK, (found, round(meant, 1), began, lasts, w))
+        found, span = front_of(got, number, FULL)
+        t.ok(f"{label}: row {number % 100} is fully washed at {FULL} s", found is not None and found >= w - SLACK and span >= w - 2 * SLACK,
+             (found, span, w))
+    return seen
+
+
 def said_at(got, moment):
     shot = next((f for f in got["frames"] if f["name"] == moment), None)
     return {row["url"]: row for row in (shot or {}).get("rows", [])}
@@ -279,7 +315,7 @@ def main():
                 cells.append((f"{label} {moment}", crop(got, label, moment, middle)))
             return got
 
-        few = ["before", PEAK, "0.24", REST, LEAVING]
+        few = ["before", "0.15", "0.40", REST, LEAVING]
         clear = {}
 
         def measure(label, got, lit):
@@ -305,10 +341,15 @@ def main():
         for look in ("light", "dark"):
             sv.cmd({"do": "ui", "look": look})
             time.sleep(0.5)
-            measure(f"plain-{look}", scene(f"plain-{look}", [2], ["full"]), None)
-            measure(f"selected-{look}", scene(f"selected-{look}", [2], ["full"], before=lambda n: turn(lit=ms.url(n + 2))), f"plain-{look}")
+            got = scene(f"plain-{look}", [2], ["full"])
+            said.setdefault("fronts", {})[f"plain-{look}"] = fronts(f"plain-{look}", got, got["numbers"])
+            measure(f"plain-{look}", got, None)
+            got = scene(f"selected-{look}", [2], ["full"], before=lambda n: turn(lit=ms.url(n + 2)))
+            said["fronts"][f"selected-{look}"] = fronts(f"selected-{look}", got, got["numbers"])
+            measure(f"selected-{look}", got, f"plain-{look}")
             got = scene(f"stack-{look}", [6], ["full", "follow", "follow"], around=5, also=[4])
             n = got["numbers"][0] - 6
+            said["fronts"][f"stack-{look}"] = fronts(f"stack-{look}", got, [n + 6, n + 5, n + 4])
             boxes = sorted((got["rows"][ms.url(n + k)] for k in (6, 5, 4)), key=lambda b: b[1])
             gaps = [round(lower[1] - (upper[1] + upper[3]), 2) for upper, lower in zip(boxes, boxes[1:])]
             t.ok(f"stack-{look}: the three rows keep the list's gap", all(2.5 <= g <= 3.5 for g in gaps), gaps)
@@ -319,12 +360,9 @@ def main():
             started = [next((m for m in MOMENTS[1:] if frames_of.get(m, {}).get(ms.url(n + k), {}).get("form")), None) for k in (6, 5, 4)]
             t.ok(f"stack-{look}: the rows turn from the top down", all(s is not None for s in started)
                  and [MOMENTS.index(s) for s in started] == sorted(MOMENTS.index(s) for s in started), started)
-            def early(k):
-                x, y, w, h = got["rows"][ms.url(n + k)]
-                return pixel(got, "0.14", x + w * 0.3, y + 2.5)
-            mid = [early(k) for k in (6, 5, 4)]
+            mid = [front_of(got, n + k, "0.40")[0] for k in (6, 5, 4)]
             t.ok(f"stack-{look}: mid-cascade the top row is further on than the bottom one",
-                 apart(mid[0], side) > apart(mid[2], side), [round(apart(m, side), 4) for m in mid])
+                 None not in mid and mid[0] > mid[2], mid)
         sv.cmd({"do": "ui", "look": "light"})
         time.sleep(0.5)
         scene("hovered", [2], ["full"], moments=few, before=lambda n: sv.cmd({"do": "rowhover", "id": tab_of(n + 2), "on": True}))
