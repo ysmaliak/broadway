@@ -127,6 +127,59 @@ def real_card(hold):
     return lights, panel, {g["owner"]: g["lit"] for g in panel.get("glass", [])}, lit
 
 
+def card_glass(within=0.0):
+    end = time.time() + within
+    while True:
+        lights = sv.cmd({"do": "lights"})
+        panel = next((p for p in lights.get("panels", []) if p.get("kind") == "Lifted"), {})
+        lit = [g["lit"] for g in panel.get("glass", [])]
+        if (len(lit) == 4 and None not in lit) or time.time() >= end:
+            return lights, lit
+        time.sleep(0.2)
+
+
+def read(label, front=None, within=0.0):
+    lights, lit = card_glass(within)
+    print(f"        {label}: active {lights.get('active')} front app {lights.get('frontApp')!r} key {lights.get('keyWindow')!r} glass {lit}")
+    if front is not None:
+        t.ok(f"{label}: Broadway is {'in front' if front else 'behind'}", bool(lights.get("active")) == front,
+             (lights.get("active"), lights.get("frontApp")))
+    t.ok(f"{label}: the card's ground, both keys and Join are lit", lit == [True] * 4, lit)
+
+
+def give_back(label):
+    sv.cmd({"do": "lights", "front": False})
+    read(f"{label}, given back at once")
+    time.sleep(0.5)
+    read(f"{label}, given back 0.5 s")
+    time.sleep(1.5)
+    read(f"{label}, given back 2 s", front=False)
+
+
+def front_cases():
+    lights = sv.cmd({"do": "lights"})
+    if lights.get("frontApp") in ("", "loginwindow"):
+        print("  skip front cases: this Mac shows its login window, so no app can come to the front")
+        return
+    real_card(True)
+    read("behind, card up", front=False)
+    try:
+        sv.cmd({"do": "lights", "front": True, "key": True})
+        time.sleep(0.5)
+        read("in front, a browser window key", front=True)
+    finally:
+        give_back("card up before the front")
+    sv.cmd({"do": "meetalert", "action": "off"})
+    try:
+        sv.cmd({"do": "lights", "front": True, "key": True})
+        time.sleep(0.3)
+        sv.cmd({"do": "meetalert", "action": "fixture", "lead": "1", "hosts": {"127.0.0.1": "meet"},
+                "events": [{"title": "Design sync", "in": 0.5, "link": f"{sv.BASE}/abc-defg-hij"}]})
+        read("card made in front, a browser window key", front=True, within=2.5)
+    finally:
+        give_back("card made in front")
+
+
 def main():
     WORK.mkdir(parents=True, exist_ok=True)
     sv.setup()
@@ -144,6 +197,7 @@ def main():
             t.ok(f"real card {word}: the ground, both keys and Join are glass",
                  set(owners) == {"KitGlass", "KitGlassKey", "MeetingJoinButton"} and len(lit) == 4, panel.get("glass"))
             t.ok(f"real card {word}: every glass is {'lit' if hold else 'dim'}", lit == [hold] * 4, panel.get("glass"))
+        front_cases()
         for theme, ground in (("light", None), ("dark", None), ("light", "clear"), ("dark", "clear")):
             label = theme + (f" {ground}" if ground else "")
             shots = {}
@@ -174,7 +228,7 @@ def main():
         print("        pictures in", WORK)
     finally:
         try:
-            sv.cmd({"do": "lights", "hold": True})
+            sv.cmd({"do": "lights", "hold": True, "front": False})
         except Exception:
             pass
         sv.quit()

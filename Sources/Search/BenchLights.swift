@@ -5,7 +5,28 @@ enum BenchLights {
     static func run(_ request: [String: Any], _ answer: @escaping ([String: Any]) -> Void) {
         guard Store.testing else { return answer(["error": "lights only works on a --test run"]) }
         if let hold = request["hold"] as? Bool { KitLitPanel.benchHold = hold }
+        if let front = request["front"] as? Bool { take(front, key: request["key"] as? Bool ?? false) }
         answer(report())
+    }
+
+    private static var given: NSRunningApplication?
+
+    static func take(_ front: Bool, key: Bool) {
+        guard front else {
+            given?.activate()
+            given = nil
+            Bench.frontAsked = false
+            return
+        }
+        let mine = NSRunningApplication.current
+        if let app = NSWorkspace.shared.frontmostApplication, app != mine { given = app }
+        Bench.frontAsked = true
+        NSApp.activate(ignoringOtherApps: true)
+        if !NSApp.isActive, let given { mine.activate(from: given, options: .activateAllWindows) }
+        guard key, let window = (Browsers.front ?? Browsers.primary)?.window else { return }
+        window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)) - 1)
+        if let screen = NSScreen.main?.frame { window.setFrameOrigin(NSPoint(x: screen.minX + 40, y: screen.minY + 40)) }
+        window.makeKeyAndOrderFront(nil)
     }
 
     static func name(_ window: NSWindow?) -> String {
@@ -61,6 +82,7 @@ enum BenchLights {
         let screen = NSScreen.main?.visibleFrame ?? .zero
         return [
             "active": NSApp.isActive, "hidden": NSApp.isHidden,
+            "frontApp": NSWorkspace.shared.frontmostApplication?.localizedName ?? "",
             "hold": KitLitPanel.benchHold, "asked": KitLitPanel.asked, "panels": panels(),
             "keyWindow": name(NSApp.keyWindow), "mainWindow": name(NSApp.mainWindow),
             "screen": [Int(screen.minX), Int(screen.minY), Int(screen.width), Int(screen.height)],
