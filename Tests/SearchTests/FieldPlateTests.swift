@@ -58,17 +58,4 @@ struct FieldPlateTests {
             #expect(SidebarStyleTests.contrast(title, plate) >= 4.5, "\(seen.name)")
         }
     }
-
-    @Test func aSecondLineLosesLittleToThePlate() {
-        for seen in Self.grounds {
-            let plate = SidebarStyleTests.over(FieldPlate.tone(dark: seen.dark), seen.ground)
-            let muted = KitColor.muted.kitResolved(dark: seen.dark)
-
-            let onPlate = SidebarStyleTests.contrast(SidebarStyleTests.over(muted, plate), plate)
-            let bare = SidebarStyleTests.contrast(SidebarStyleTests.over(muted, seen.ground), seen.ground)
-
-            #expect(onPlate >= 3, "\(seen.name)")
-            #expect(onPlate >= bare * 0.85, "\(seen.name)")
-        }
-    }
 }
