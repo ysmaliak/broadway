@@ -502,6 +502,7 @@ final class LiveReader: NSObject, WKNavigationDelegate {
         var found = 0
         var last: Scan?
         var counts: [Int] = []
+        var marks: [Bool] = []
         for wait in [0.4, 1.2, 2.5, 4.0] {
             try? await Task.sleep(for: .seconds(wait))
             guard let scan = await scan(web, source: source) else { continue }
@@ -510,11 +511,17 @@ final class LiveReader: NSObject, WKNavigationDelegate {
             counts.append(scan.links.count)
             if scan.sso != nil, again, scan.links.count == found, (scan.pending ?? 0) == 0 { break }
             if scan.limit == true || signedOut(scan, asked: url, source: source) || LiveLabels.broken(status: status, found: scan.links.count) { break }
+            marks.append(scan.links.isEmpty && scan.nothing == true)
+            if LiveReader.provedEmpty(marks) { break }
             if !scan.links.isEmpty, scan.links.count == found, (scan.pending ?? 0) == 0 { break }
             found = scan.links.count
         }
         guard let last else { return .failed }
         return LiveReader.answer(last, asked: url, status: status, headers: headers, source: source, growing: LiveReader.growing(counts))
+    }
+
+    static func provedEmpty(_ marks: [Bool]) -> Bool {
+        marks.count >= 2 && marks.suffix(2).allSatisfy { $0 }
     }
 
     static func growing(_ counts: [Int]) -> Bool {
