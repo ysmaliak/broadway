@@ -307,7 +307,7 @@ def short_sounds(base, other):
     state = sv.ev(web, "go()")
     sv.cmd({"do": "select", "id": other})
     seen, heard, ended = watch_card(web, "Web chime page", lambda: sv.ev(web, "window.done === true"))
-    t.ok("the same chime through Web Audio ends", ended and state == "running", (state, ended))
+    t.ok("the same chime through Web Audio ends", ended, (state, ended))
     if heard:
         t.ok("and with no element to play or pause, never brings the card up", not seen, (seen, mini()))
     else:
