@@ -8,6 +8,9 @@ final class ScriptedGroupEngine: AIGroupDecider, AIGroupNamer, @unchecked Sendab
     private var named: [AIGroupNameAsk] = []
     var picking: @Sendable (AIGroupAsk) -> [UUID: AIGroupPick]
     var naming: @Sendable (AIGroupNameAsk) -> AIGroupName
+    var size = 8
+
+    var batch: Int { size }
 
     init(picking: @escaping @Sendable (AIGroupAsk) -> [UUID: AIGroupPick],
          naming: @escaping @Sendable (AIGroupNameAsk) -> AIGroupName) {

@@ -7,6 +7,7 @@ final class DecisionsStub: URLProtocol {
         var status = 200
         var body = Data()
         var failure: URLError?
+        var delay: Double = 0
     }
 
     private static let lock = NSLock()
@@ -50,6 +51,15 @@ final class DecisionsStub: URLProtocol {
             Self.heard[host, default: []].append((request, body))
             return Self.replies[host].map { $0(request, body) }
         } ?? Reply(failure: URLError(.cannotFindHost))
+        if reply.delay > 0 {
+            nonisolated(unsafe) let loading = self
+            DispatchQueue.global().asyncAfter(deadline: .now() + reply.delay) { loading.deliver(reply) }
+            return
+        }
+        deliver(reply)
+    }
+
+    private func deliver(_ reply: Reply) {
         if let failure = reply.failure {
             client?.urlProtocol(self, didFailWithError: failure)
             return
