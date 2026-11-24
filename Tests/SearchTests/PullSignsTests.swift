@@ -273,6 +273,60 @@ final class PullSignsTests {
         #expect(PullSigns.read(talk).back)
     }
 
+    private func forcePushed(_ who: String, _ minutes: Double) -> String {
+        """
+        <div id="event-\(Int(minutes))" class="TimelineItem js-targetable-element"><div class="TimelineItem-body"><div class="d-flex">
+        <a class="d-inline-block" data-test-selector="pr-timeline-events-actor-avatar" data-hovercard-type="user" href="/\(who)"><img class="avatar avatar-user" alt="@\(who)"></a>
+        <div class="flex-auto"><a class="author Link--primary text-bold" data-test-selector="pr-timeline-events-actor-profile-link" data-hovercard-type="user" href="/\(who)">\(who)</a>
+        <a href="/acme/rocket/compare/1a2b3c4..5d6e7f8" class="Link--inTextBlock Link--secondary Link">force-pushed</a> the <span class="commit-ref"><span class="css-truncate-target">retry-uploads</span></span>
+        branch from <a href="/acme/rocket/commit/1a2b3c4" class="Link--primary Link text-bold"><code>1a2b3c4</code></a> to <a href="/acme/rocket/commit/5d6e7f8" class="Link--primary Link text-bold"><code>5d6e7f8</code></a>
+        <a href="#event-\(Int(minutes))" class="Link--secondary Link"><relative-time tense="past" datetime="\(Self.stamp(at(minutes)))">Nov 12</relative-time></a></div></div></div></div>
+        """
+    }
+
+    private func forcePush(_ who: String, _ minutes: Double) -> String {
+        """
+        <div class="js-timeline-item js-timeline-progressive-focus-container" data-gid="HRFPE_kwDO\(Int(minutes))">
+        \(forcePushed(who, minutes))</div>
+        """
+    }
+
+    private func movedThenForcePushed(_ who: String, _ minutes: Double) -> String {
+        """
+        <div class="js-timeline-item js-timeline-progressive-focus-container" data-gid="PVTISC_kwDO\(Int(minutes))">
+        <div class="TimelineItem js-targetable-element"><div class="TimelineItem-body">\(author(who, minutes - 1)) moved this from <strong>New</strong> to <strong>In review</strong></div></div>
+        \(forcePushed(who, minutes))</div>
+        """
+    }
+
+    @Test func aReviewThenAForcePushByTheAuthorAndNothingElseIsBack() throws {
+        let talk = try #require(PullSigns.page(page(opener: "dana", [review("octo-sam", 2, changes: true, threads: []), forcePush("dana", 5)])))
+
+        #expect(talk.said.map(\.kind) == [.review, .push])
+        #expect(talk.said.last?.at == at(5))
+        #expect(PullSigns.read(talk).back)
+    }
+
+    @Test func aForcePushGroupedAfterAnotherEventStillCountsAsAPush() throws {
+        let talk = try #require(PullSigns.page(page(opener: "dana", [review("octo-sam", 2, changes: true, threads: []), movedThenForcePushed("dana", 5)])))
+
+        #expect(talk.said.map(\.kind) == [.review, .event, .push])
+        #expect(PullSigns.read(talk).back)
+    }
+
+    @Test func aForcePushByTheReviewerThemselfIsNotBack() throws {
+        let talk = try #require(PullSigns.page(page(opener: "dana", [review("octo-sam", 2, changes: true, threads: []), forcePush("octo-sam", 5)])))
+
+        #expect(!PullSigns.read(talk).back)
+    }
+
+    @Test func aBotsForcePushIsNotBack() throws {
+        let talk = try #require(PullSigns.page(page(opener: "dana", [review("octo-sam", 2, changes: true, threads: []), forcePush("apps/renovate", 5)])))
+
+        #expect(talk.said.last?.bot == true)
+        #expect(!PullSigns.read(talk).back)
+    }
+
     @Test func aPageWithNoViewerOrNoTimelineGivesNoSigns() {
         #expect(PullSigns.page(page(viewer: "", [comment("dana", 2)])) == nil)
         #expect(PullSigns.page("<html><meta name=\"user-login\" content=\"octo-sam\"><body>Sign in to GitHub</body></html>") == nil)

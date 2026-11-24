@@ -138,13 +138,15 @@ enum PullSigns {
             }
             let parts = split(segment, on: "<review-thread-collapsible")
             let head = segment.range(of: "<review-thread-collapsible").map { segment[..<$0.lowerBound] } ?? segment
-            var said = authors(in: head)
+            let found = authored(in: head)
+            var said = found.map(\.said)
             if !said.isEmpty {
                 let review = gid.hasPrefix("PRR_") && head.contains("requested changes")
                 said[0].asks = gid.hasPrefix("IC_") || review
                 said[0].kind = kind(gid, head)
                 for index in said.indices.dropFirst() { said[index].kind = .event }
             }
+            for index in said.indices where found[index].rest.contains(">force-pushed</a>") { said[index].kind = .push }
             if let latest = said.map(\.at).max() { clock = max(clock ?? latest, latest) }
             talk.said += said
             var before = parts.first.map { $0.hasPrefix("<review-thread-collapsible") ? Substring() : $0 } ?? Substring()
@@ -216,7 +218,11 @@ enum PullSigns {
     }
 
     private static func authors(in text: Substring) -> [Said] {
-        var out: [Said] = []
+        authored(in: text).map(\.said)
+    }
+
+    private static func authored(in text: Substring) -> [(said: Said, rest: Substring)] {
+        var out: [(said: Said, rest: Substring)] = []
         var search = text.startIndex
         while let found = text.range(of: #"class="author"#, range: search..<text.endIndex) {
             guard let tag = tag(around: found, in: text) else { break }
@@ -225,7 +231,7 @@ enum PullSigns {
             guard let (who, bot) = person(tag), let time = text.range(of: "<relative-time", range: tag.endIndex..<next),
                   let stamp = text[time.upperBound...].prefix(300).firstIndex(of: ">").map({ text[time.upperBound..<$0] }),
                   let when = attribute("datetime", in: stamp).flatMap(GitHubAPI.date) else { continue }
-            out.append(Said(at: when, who: who, bot: bot))
+            out.append((Said(at: when, who: who, bot: bot), text[tag.endIndex..<next]))
         }
         return out
     }
