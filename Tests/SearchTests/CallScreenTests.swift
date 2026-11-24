@@ -21,9 +21,11 @@ struct CallScreenTests {
     }
 
     @Test func theFloatSaysWhyAndHowManyItFound() {
-        #expect(script.contains("tell(lone);"))
+        #expect(script.contains("tell(lone, grid);"))
         #expect(script.contains("setAttribute('data-broadway-tiles-screen', reason)"))
-        #expect(script.contains("setAttribute('data-broadway-tiles-found', String(tiles.length))"))
+        #expect(script.contains("var people = find(grid).length"))
+        #expect(script.contains("setAttribute('data-broadway-tiles-found', String(people))"))
+        #expect(script.contains("root.removeAttribute('data-broadway-tiles');\n    root.removeAttribute('data-broadway-tiles-found');"))
     }
 
     @Test func controlsInTheGridAreHidden() {

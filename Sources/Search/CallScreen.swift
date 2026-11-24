@@ -167,7 +167,6 @@ enum CallScreen {
       });
       if (!best) {
         state.el = null;
-        root.setAttribute('data-broadway-tiles-found', String(tiles.length));
         return null;
       }
       if (best.why !== 'display') {
@@ -175,18 +174,19 @@ enum CallScreen {
           state.el = best.el;
           state.since = now;
         }
-        if (now - state.since < hold) {
-          root.setAttribute('data-broadway-tiles-found', String(tiles.length));
-          return null;
-        }
+        if (now - state.since < hold) return null;
       }
       reason = best.why;
       return best.el;
     }
-    function tell(lone) {
-      if (!lone) return;
-      if (lone.getAttribute('data-broadway-tiles-screen') !== reason) lone.setAttribute('data-broadway-tiles-screen', reason);
-      root.removeAttribute('data-broadway-tiles-found');
+    function tell(lone, grid) {
+      if (lone) {
+        if (lone.getAttribute('data-broadway-tiles-screen') !== reason) lone.setAttribute('data-broadway-tiles-screen', reason);
+        root.removeAttribute('data-broadway-tiles-found');
+        return;
+      }
+      var people = find(grid).length || (/^(VIDEO|CANVAS)$/.test(grid.tagName) ? 1 : 0);
+      if (root.getAttribute('data-broadway-tiles-found') !== String(people)) root.setAttribute('data-broadway-tiles-found', String(people));
     }
     """
 

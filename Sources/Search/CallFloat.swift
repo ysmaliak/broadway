@@ -249,6 +249,7 @@ enum CallTiles {
           if (!lone && (!grid || grid === document.body || grid === root)) {
             clear();
             root.removeAttribute('data-broadway-tiles');
+            root.removeAttribute('data-broadway-tiles-found');
             drop('broadway-call-tiles');
             drop('broadway-call-fit');
             return 'none';
@@ -285,7 +286,7 @@ enum CallTiles {
             });
             dress('');
           }
-          tell(lone);
+          tell(lone, grid);
           window.__broadwayCallFitNow = function () {
             var room = window.__broadwayCallRoom;
             if (!room) return;

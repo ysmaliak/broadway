@@ -26,6 +26,8 @@ main { flex: 1; position: relative; min-height: 0; background: #2a2b2e; }
 .crop video { width: 100%; height: 100%; }
 .person video, .person canvas { width: 100%; height: 100%; object-fit: cover; }
 .person video.fit { object-fit: contain; }
+.person.flow { position: relative; inset: auto; }
+.person.flow > video { position: static; display: block; width: 100%; height: auto; }
 .name { position: absolute; left: 10px; bottom: 8px; font-weight: 500; text-shadow: 0 1px 2px #000; }
 .hover { position: absolute; right: 6px; top: 6px; display: flex; gap: 4px; }
 .hover button, .share { border: 0; border-radius: 14px; background: #0008; color: #fff; height: 28px; min-width: 28px; font: 12px system-ui; }
@@ -51,7 +53,7 @@ main { flex: 1; position: relative; min-height: 0; background: #2a2b2e; }
 const Q = new URLSearchParams(location.search);
 const N = +(Q.get('n') || 6), BARE = Q.get('bare') === '1', ROI = Q.get('roi') !== '0', RES = (Q.get('res') || '1280x720');
 const CONTAIN = +(Q.get('contain') ?? -1), OWN = Q.get('own') === '1', WORD = Q.get('word') || '', PRES = Q.get('pres') || '';
-const AT = +(Q.get('at') ?? 2);
+const AT = +(Q.get('at') ?? 2), FLOW = Q.get('flow') === '1';
 const NAMES = ['Nadia Brooks', 'Oscar Lindqvist', 'Pia Sorensen', 'Tomas Ferro', 'Sam Rowe', 'Gil Navarro', 'Hana Ito', 'Ivo Brandt'];
 const COLOURS = ['#1e8e3e', '#a142f4', '#e37400', '#1a73e8', '#d93025', '#12b5cb', '#f538a0', '#5f6368'];
 const main = document.querySelector('main');
@@ -94,7 +96,7 @@ function video(stream, fit) {
 function person(i, kind) {
   const name = kind === 'pres' ? 'Nadia Brooks' : NAMES[i % 8];
   const wrap = document.createElement('div'); wrap.className = 'wrap';
-  const el = document.createElement('div'); el.className = 'person'; wrap.appendChild(el);
+  const el = document.createElement('div'); el.className = 'person' + (FLOW && kind === 'pres' ? ' flow' : ''); wrap.appendChild(el);
   const id = kind === 'pres' ? (PRES === 'label' ? 'presentation' : '99') : String(i + 1);
   if (!BARE) {
     el.setAttribute('data-participant-id', 'spaces/standup/devices/' + id);
@@ -165,7 +167,7 @@ let shape = want();
 function lay() {
   const wraps = [...main.querySelectorAll('.wrap')];
   const W = main.clientWidth, H = main.clientHeight, gap = 8;
-  const set = (el, l, t, w, h) => { el.style.cssText = 'left:' + l + 'px;top:' + t + 'px;width:' + w + 'px;height:' + h + 'px'; };
+  const set = (el, l, t, w, h) => { el.style.cssText = 'left:' + l + 'px;top:' + t + 'px;width:' + w + 'px;height:' + (el.querySelector('.flow') ? 'auto' : h + 'px'); };
   if (shape === 'speaker' && wraps.length > 1) {
     const strip = 90, sw = 160;
     set(wraps[0], gap, gap, W - 2 * gap, H - strip - 3 * gap);
@@ -264,6 +266,7 @@ TILED = [
 SHOWN = [
     ("present-label", "pres=label&layout=present", "label"),
     ("present-guess", "pres=plain&layout=present", "guess"),
+    ("present-flow", "pres=label&layout=present&flow=1", "label"),
 ]
 ROOM = {"top": 8, "side": 8, "bottom": 58}
 FLOAT_WIDTH = 340
@@ -461,7 +464,16 @@ def screen_case(name, query, why, idle, out, tag):
     t.ok(f"{name}: the screen mark says why: {why}", m["screen"] == why and "screen" in (m["which"] or ""), m)
     t.ok(f"{name}: no count is written in screen mode", m["found"] is None, m)
     t.ok(f"{name}: shot", shoot(out / f"{name}.png"))
-    if why == "label":
+    if "flow=1" in query:
+        back = until(lambda: marks(page)["mode"] == "", within=7)
+        t.ok(f"{name}: a tile sized by its picture collapses once the picture is lifted out, so the float goes back to tiles", back, marks(page))
+        seen = watch(page, 6)
+        modes = {m["mode"] for m in seen}
+        t.ok(f"{name}: and it settles there without flipping", modes == {""}, [m["mode"] for m in seen])
+        if back:
+            tiled(f"{name}, settled in tiles", page, 7)
+            t.ok(f"{name}: shot settled", shoot(out / f"{name}-settled.png"))
+    elif why == "label":
         sv.ev(page, "even()")
         back = until(lambda: marks(page)["mode"] == "", within=6)
         t.ok(f"{name}: once the presentation is one tile among equals, the float goes back to tiles", back, marks(page))
