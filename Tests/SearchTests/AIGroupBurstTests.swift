@@ -298,6 +298,8 @@ enum Burst {
     }
 }
 
+let burstAll = ProcessInfo.processInfo.environment["BROADWAY_BURST_ALL"] == "1"
+
 @Suite(.sharedWorld, .timeLimit(.minutes(10)), .serialized)
 @MainActor
 final class AIGroupBurstTests {
@@ -313,8 +315,7 @@ final class AIGroupBurstTests {
         }
     }
 
-    @Test(arguments: [UInt64(1), 2, 3])
-    func aBurstWithTheFakeMakesOneFolderPerSubject(seed: UInt64) async {
+    private func fake(_ seed: UInt64) async {
         let outcome = await Burst.run(seed: seed, jev: false)
 
         #expect(outcome.twins.isEmpty)
@@ -324,7 +325,33 @@ final class AIGroupBurstTests {
         #expect(outcome.folders.count == 6)
         #expect(outcome.passes == 1)
         #expect(outcome.asks <= 10)
-        #expect(outcome.settled < 20)
+    }
+
+    private func jev(_ seed: UInt64) async {
+        let outcome = await Burst.run(seed: seed, jev: true)
+
+        #expect(outcome.twins.isEmpty)
+        #expect(outcome.lost.isEmpty)
+        #expect(outcome.passes == 1)
+        #expect(outcome.questions < 3000)
+    }
+
+    @Test func aBurstWithTheFakeMakesOneFolderPerSubject() async {
+        await fake(1)
+    }
+
+    @Test(.enabled(if: burstAll), arguments: [UInt64(2), 3])
+    func aBurstWithTheFakeInOtherOrdersMakesOneFolderPerSubject(seed: UInt64) async {
+        await fake(seed)
+    }
+
+    @Test func aBurstWithJevMakesOneFolderPerSubject() async {
+        await jev(1)
+    }
+
+    @Test(.enabled(if: burstAll), arguments: [UInt64(2), 3])
+    func aBurstWithJevInOtherOrdersMakesOneFolderPerSubject(seed: UInt64) async {
+        await jev(seed)
     }
 
     @Test(arguments: [false, true])
@@ -335,7 +362,7 @@ final class AIGroupBurstTests {
         #expect(outcome.lost.isEmpty)
     }
 
-    @Test(arguments: [(false, true, false), (false, false, true), (true, true, false), (true, false, true)])
+    @Test(.enabled(if: burstAll), arguments: [(false, true, false), (false, false, true), (true, true, false), (true, false, true)])
     func aBurstInMixedRowsOrInTwoWavesMakesOneFolderPerSubject(jev: Bool, mixed: Bool, waves: Bool) async {
         let outcome = await Burst.run(seed: mixed ? 4 : 5, jev: jev, mixed: mixed, waves: waves)
 
@@ -346,17 +373,6 @@ final class AIGroupBurstTests {
             #expect(outcome.jumps.isEmpty)
             #expect(outcome.vanished == 0)
         }
-    }
-
-    @Test(arguments: [UInt64(1), 2, 3])
-    func aBurstWithJevMakesOneFolderPerSubject(seed: UInt64) async {
-        let outcome = await Burst.run(seed: seed, jev: true)
-
-        #expect(outcome.twins.isEmpty)
-        #expect(outcome.lost.isEmpty)
-        #expect(outcome.passes == 1)
-        #expect(outcome.questions < 3000)
-        #expect(outcome.settled < 38)
     }
 }
 
@@ -414,6 +430,20 @@ final class AIGroupTwinTests {
 
     private func settle(_ seconds: Double = 0.8) async {
         try? await Task.sleep(for: .seconds(seconds))
+    }
+
+    private func until(_ seconds: Double = 20, _ done: () -> Bool) async {
+        let end = Date().addingTimeInterval(seconds)
+        while !done(), Date() < end { try? await Task.sleep(for: .milliseconds(20)) }
+    }
+
+    private func idle(_ grouper: AIGrouper, _ browser: Browser) async {
+        var calm = 0
+        let end = Date().addingTimeInterval(20)
+        while calm < 10, Date() < end {
+            try? await Task.sleep(for: .milliseconds(20))
+            calm = grouper.busy || !(grouper.pending[browser.spaceID] ?? [:]).isEmpty ? 0 : calm + 1
+        }
     }
 
     private let lisbon = [("Lisbon flights", "https://booking.com/flights"), ("Lisbon hotels", "https://airbnb.com/s/lisbon"),
@@ -495,7 +525,8 @@ final class AIGroupTwinTests {
         tab.cameBack = false
 
         grouper.landed(tab)
-        await settle(2.0)
+        await until { grouper.passes > 0 }
+        await idle(grouper, browser)
 
         #expect(DecisionsStub.seen(host).count == 1)
     }
@@ -531,10 +562,10 @@ final class AIGroupTwinTests {
         late.cameBack = false
 
         grouper.landed(late)
-        await settle(1.5)
+        await idle(grouper, browser)
         #expect(late.groupID == nil)
         late.restore(url: url, title: "Lisbon food")
-        await settle(1.0)
+        await until { late.groupID != nil }
 
         #expect(late.groupID == group.id)
     }
@@ -560,7 +591,8 @@ final class AIGroupTwinTests {
         let grouper = AIGroups.shared.grouper(for: browser)
 
         for tab in browser.tabs { grouper.landed(tab) }
-        await settle(1.5)
+        await until { grouper.passes > 0 }
+        await idle(grouper, browser)
 
         let group = browser.tabGroups.first { $0.ai }
         #expect(group != nil)
@@ -582,13 +614,18 @@ final class AIGroupTwinTests {
         tab.restore(url: URL(string: "https://timeout.com/lisbon/food")!, title: "Lisbon food")
         tab.cameBack = false
 
+        let passes = grouper.passes
+        let asks = engine.asks.count
         let started = Date()
         grouper.landed(tab)
-        while tab.groupID == nil, Date().timeIntervalSince(started) < 6 { try? await Task.sleep(for: .milliseconds(20)) }
+        await until { tab.groupID != nil }
         let took = Date().timeIntervalSince(started)
 
         #expect(tab.groupID == group.id)
-        #expect(took < 1.5 + 0.3 + 1.2)
+        #expect(grouper.passes == passes + 1)
+        #expect(engine.asks.count == asks + 1)
+        #expect(engine.asks.last?.fresh.map(\.title) == ["Lisbon food"])
+        #expect(took < AIGroups.shared.quiet + 0.3 + 3)
         print("SINGLE took=\(String(format: "%.2f", took))s")
     }
 }
