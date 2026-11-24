@@ -13,10 +13,31 @@ struct PersonRefusal: Error {
     }
 
     static func usage(_ message: String, hint: String? = nil) -> PersonRefusal { PersonRefusal("usage", message, hint: hint) }
-    static func missing(_ what: String, _ named: String) -> PersonRefusal { PersonRefusal("not_found", "No such \(what): \(named)") }
-    static func ambiguous(_ what: String, _ named: String, _ count: Int) -> PersonRefusal {
-        PersonRefusal("ambiguous", "\(named) matches \(count) of them. Give more of the \(what).")
+    static func missing(_ what: String, _ named: String) -> PersonRefusal {
+        PersonRefusal("not_found", "No such \(what): \(named)", hint: looks[what] ?? "Run broadway help for the list")
     }
+    static func ambiguous(_ what: String, _ named: String, _ count: Int) -> PersonRefusal {
+        PersonRefusal("ambiguous", "\(named) matches \(count) of them", hint: "Give more of the \(what)")
+    }
+
+    static let looks: [String: String] = [
+        "setting": "Look for it with broadway settings find WORDS",
+        "command": "Look for it with broadway shortcuts list WORDS",
+        "space": "broadway spaces list names them",
+        "folder": "broadway folders list names them",
+        "bookmark": "broadway bookmarks list gives their ids",
+        "bookmark folder": "broadway bookmarks list gives their ids",
+        "download": "broadway downloads list gives their ids",
+        "download under way": "broadway downloads list gives their ids",
+        "Live Folder": "broadway live list gives their ids",
+        "skill": "broadway skills list names them",
+        "watch": "broadway replies list gives their ids",
+        "row": "broadway now list gives their ids",
+        "hidden element": "broadway site hidden lists them",
+        "extension": "broadway extensions list gives their ids",
+        "permission": "broadway permissions list names them",
+        "agent session": "broadway agents list gives their ids",
+    ]
     static func person(_ message: String, where place: String) -> PersonRefusal {
         PersonRefusal("person_only", message, hint: "The person can do this in Broadway: \(place)")
     }

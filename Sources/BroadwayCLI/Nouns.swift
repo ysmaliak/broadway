@@ -249,7 +249,7 @@ enum Nouns {
             Verb("settings list [--page PAGE]", "List settings", about: "With agents off, without their values", columns: ["id", "value", "title"]),
             Verb("settings find <words...>", "Find a setting", columns: ["id", "value", "title"]),
             Verb("settings get <setting>", "Read a setting"),
-            Verb("settings set <setting> <value>", "Change a setting", about: "What weakens safety can only be changed in Broadway: broadway settings open ID goes there. languages takes a comma list in order, or mac.", examples: ["broadway settings set tabs.give false", "broadway settings set look dark", "broadway settings set languages en-GB,pl"]),
+            Verb("settings set <setting> <value>", "Change a setting", about: "What weakens safety can only be changed in Broadway: broadway settings open ID goes there. languages takes a comma list in order, or mac.", examples: ["broadway settings set newtab.floating true", "broadway settings set look dark", "broadway settings set languages en-GB,pl"]),
             Verb("settings open [setting]", "Open Settings in Broadway"),
         ]),
         Noun("shortcuts", "Keyboard shortcuts", group: "Settings", [

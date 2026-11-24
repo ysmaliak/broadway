@@ -351,7 +351,9 @@ enum PersonSettings {
         PersonVerb("settings", "list", .open) { call in
             var items = SettingsIndex.items
             if let page = call.string("page") {
-                guard let wanted = SettingsPage.named(page) else { throw PersonRefusal.missing("settings page", page) }
+                guard let wanted = SettingsPage.named(page) else {
+                    throw PersonRefusal("not_found", "No such settings page: \(page)", hint: "Pages: \(SettingsPage.allCases.map(\.rawValue).joined(separator: ", "))")
+                }
                 items = items.filter { $0.page == wanted }
             }
             return ["settings": rows(items, call)]
