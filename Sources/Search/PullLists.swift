@@ -64,7 +64,7 @@ enum PullList: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .reviewRequests: return "Pull requests that ask for your review"
         case .teamReviews: return "Pull requests that ask a team of yours for a review"
-        case .changed: return "Pull requests you reviewed, once the author pushes, replies or resolves your comment"
+        case .changed: return "Ones you reviewed, once the author pushes or answers you"
         case .needsAction: return "Yours, with changes requested"
         case .waiting: return "Yours, waiting for a review"
         case .ready: return "Yours, approved"
