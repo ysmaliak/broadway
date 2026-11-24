@@ -60,6 +60,8 @@ def png(size=96, colour=(214, 120, 64)):
 
 TONE = wav()
 DING = wav(1)
+CHIME = wav(2)
+HALF = wav(30)
 ART = png()
 
 MUSIC = """<!doctype html><title>Music page</title><p>music</p><audio id=t src=/tone.wav></audio><script>
@@ -95,6 +97,32 @@ window.go = function () { window.c = new AudioContext(); var o = c.createOscilla
   g.gain.value = 0.0001; o.connect(g); g.connect(c.destination); o.start(); return c.state; };
 </script>"""
 
+CHIMEPAGE = """<!doctype html><title>Chime page</title><p>chime</p><audio id=t src=/chime.wav></audio>
+<button id=b onclick="document.getElementById('t').play()">Ring</button>"""
+
+WEBCHIME = """<!doctype html><title>Web chime page</title><p>web chime</p><script>
+window.go = function () { window.c = new AudioContext(); var b = c.createBuffer(1, c.sampleRate * 2, c.sampleRate), d = b.getChannelData(0);
+  for (var i = 0; i < d.length; i++) d[i] = (Math.floor(i / 9) % 2 ? 1 : -1) * 0.0001;
+  var s = c.createBufferSource(); s.buffer = b; s.connect(c.destination); s.onended = function () { window.done = true; }; s.start(); return c.state; };
+</script>"""
+
+HALFPAGE = """<!doctype html><title>Half page</title><p>half a minute</p><audio id=t src=/half.wav></audio>"""
+
+LATECHIME = """<!doctype html><title>Late chime page</title><p>late chime</p><audio id=t></audio><script>
+window.go = function () { var a = document.getElementById('t'); a.src = '/slowchime.wav?' + Date.now();
+  var p = a.play(); if (p && p.catch) p.catch(function () {}); return String(a.duration); };
+</script>"""
+
+CALL = """<!doctype html><title>Call page</title><p>call</p><audio id=s></audio><audio id=t src=/chime.wav></audio><script>
+window.go = function () { window.c = new AudioContext(); window.o = c.createOscillator(); var g = c.createGain(), d = c.createMediaStreamDestination();
+  g.gain.value = 0.0001; o.connect(g); g.connect(d); o.start(); var s = document.getElementById('s'); s.srcObject = d.stream;
+  var p = s.play(); if (p && p.catch) p.catch(function () {}); return String(s.duration); };
+window.leave = function () { var p = document.getElementById('t').play(); if (p && p.catch) p.catch(function () {});
+  setTimeout(function () { var s = document.getElementById('s'); s.pause(); s.srcObject = null; s.remove(); o.stop(); }, 300); return 1; };
+window.hangup = function () { var p = document.getElementById('t').play(); if (p && p.catch) p.catch(function () {});
+  setTimeout(function () { document.getElementById('s').pause(); o.stop(); }, 300); return 1; };
+</script>"""
+
 VIDEO = """<!doctype html><title>Video page</title><body style="margin:0;background:#000">
 <video id=t src=/clip.mp4 loop playsinline style="width:800px;height:450px;display:block"></video></body>"""
 
@@ -108,13 +136,21 @@ window.go = function () { var v = document.getElementById('t'); v.volume = 0.01;
 class H(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split("?")[0]
-        pages = {"/music": MUSIC, "/book": BOOK, "/plain": PLAIN, "/loose": LOOSE, "/video": VIDEO, "/ding": DINGPAGE, "/synth": SYNTH, "/slowvideo": SLOWVIDEO}
+        pages = {"/abc-defg-hij": CALL, "/music": MUSIC, "/book": BOOK, "/plain": PLAIN, "/loose": LOOSE, "/video": VIDEO, "/ding": DINGPAGE, "/synth": SYNTH, "/slowvideo": SLOWVIDEO,
+                 "/chime": CHIMEPAGE, "/webchime": WEBCHIME, "/half": HALFPAGE, "/latechime": LATECHIME, "/call": CALL}
         if path in pages:
             return self.send(pages[path].encode(), "text/html")
         if path == "/tone.wav":
             return self.send(TONE, "audio/wav")
         if path == "/ding.wav":
             return self.send(DING, "audio/wav")
+        if path == "/chime.wav":
+            return self.send(CHIME, "audio/wav")
+        if path == "/slowchime.wav":
+            time.sleep(2.5)
+            return self.send(CHIME, "audio/wav")
+        if path == "/half.wav":
+            return self.send(HALF, "audio/wav")
         if path == "/art.png":
             return self.send(ART, "image/png")
         if path == "/clip.mp4" and CLIP.exists():
@@ -233,6 +269,129 @@ def make_clip():
     return CLIP.exists()
 
 
+def noisy(tab):
+    return any(x.get("noisy") for x in sv.cmd({"do": "small", "action": "sound"}).get("tabs", []) if x.get("id") == short(tab))
+
+
+def carded(tab, title):
+    state = mini()
+    return short(tab) in (state.get("roles") or {}) or any(i.get("title") == title for i in state.get("items") or [])
+
+
+def watch_card(tab, title, done, after=4, within=12):
+    seen, heard, end, finished = [], False, time.time() + within, None
+    while time.time() < end:
+        if carded(tab, title):
+            seen.append(round(within - (end - time.time()), 1))
+        heard = heard or noisy(tab)
+        if finished is None and done():
+            finished = time.time()
+        if finished is not None and time.time() - finished >= after:
+            break
+        time.sleep(0.15)
+    return seen, heard, finished is not None
+
+
+def short_sounds(base, other):
+    sv.cmd({"do": "select", "id": other})
+    chime = opened(base, "chime")
+    sv.cmd({"do": "select", "id": other})
+    time.sleep(0.4)
+    sv.ev(chime, "document.getElementById('b').click(), 1")
+    seen, heard, ended = watch_card(chime, "Chime page", lambda: sv.ev(chime, "document.getElementById('t').ended") is True)
+    t.ok("a two-second chime played once on a click ends", ended, sv.ev(chime, "var e = document.getElementById('t'); [e.duration, e.currentTime, e.ended].join()"))
+    t.ok("and never brings the card up, playing or ended", not seen, (seen, heard, mini()))
+    sv.cmd({"do": "close", "id": chime})
+
+    web = opened(base, "webchime")
+    sv.cmd({"do": "select", "id": web})
+    time.sleep(0.4)
+    state = sv.ev(web, "go()")
+    sv.cmd({"do": "select", "id": other})
+    seen, heard, ended = watch_card(web, "Web chime page", lambda: sv.ev(web, "window.done === true"))
+    t.ok("the same chime through Web Audio ends", ended, (state, ended))
+    if heard:
+        t.ok("and with no element to play or pause, never brings the card up", not seen, (seen, mini()))
+    else:
+        print("  skip  Web Audio chime: the tab never counted as making sound here", state, seen)
+    sv.cmd({"do": "close", "id": web})
+
+    late = opened(base, "latechime")
+    sv.cmd({"do": "select", "id": late})
+    time.sleep(0.4)
+    first = sv.ev(late, "go()")
+    sv.cmd({"do": "select", "id": other})
+    seen, heard, ended = watch_card(late, "Late chime page", lambda: sv.ev(late, "document.getElementById('t').ended") is True, within=16)
+    t.ok("a chime whose length is unknown at first", first == "NaN", first)
+    t.ok("turns out two seconds long and ends", ended and abs((sv.ev(late, "document.getElementById('t').duration") or 0) - 2) < 0.1,
+         sv.ev(late, "var e = document.getElementById('t'); [e.duration, e.ended].join()"))
+    t.ok("and never brings the card up", not seen, (seen, heard, mini()))
+    sv.cmd({"do": "close", "id": late})
+
+    call = opened(base, "call")
+    sv.cmd({"do": "select", "id": call})
+    time.sleep(0.4)
+    live = sv.ev(call, "go()")
+    sv.cmd({"do": "select", "id": other})
+    t.ok("a stream with no end is treated as long and takes the card", until(lambda: mini()["roles"].get(short(call)) == "mini", 10),
+         (live, mini()))
+    sv.ev(call, "leave()")
+    seen, heard, ended = watch_card(call, "Call page", lambda: sv.ev(call, "document.getElementById('t').ended") is True)
+    t.ok("the stream gone, its leaving chime ends", ended and sv.ev(call, "!!document.getElementById('s')") is False,
+         sv.ev(call, "document.getElementById('t').ended"))
+    t.ok("and the card does not stay for the chime", not carded(call, "Call page"), (seen, mini()))
+    sv.cmd({"do": "close", "id": call})
+
+    call = opened(base, "call")
+    sv.cmd({"do": "select", "id": call})
+    time.sleep(0.4)
+    sv.ev(call, "go()")
+    sv.cmd({"do": "select", "id": other})
+    t.ok("a call's stream takes the card again", until(lambda: mini()["roles"].get(short(call)) == "mini", 10), mini())
+    sv.ev(call, "hangup()")
+    seen, heard, ended = watch_card(call, "Call page", lambda: sv.ev(call, "document.getElementById('t').ended") is True)
+    t.ok("hung up with its stream left in the page, paused, the chime ends", ended and sv.ev(call, "document.getElementById('s').paused") is True,
+         sv.ev(call, "document.getElementById('t').ended"))
+    t.ok("on a page that is no call, the paused stream keeps its card, as a paused radio does", carded(call, "Call page"), (seen, mini()))
+    sv.cmd({"do": "close", "id": call})
+
+    sv.cmd({"do": "meetalert", "action": "fixture", "hosts": {"localhost": "meet"}, "events": []})
+    port = base.rsplit(":", 1)[1]
+    meeting = sv.cmd({"do": "open", "url": f"http://localhost:{port}/abc-defg-hij"})["id"]
+    sv.cmd({"do": "wait", "id": meeting, "seconds": 10})
+    sv.cmd({"do": "select", "id": meeting})
+    time.sleep(0.4)
+    sv.ev(meeting, "go()")
+    sv.cmd({"do": "select", "id": other})
+    seen, heard, playing = watch_card(meeting, "Call page", lambda: sv.ev(meeting, "document.getElementById('s').paused") is False, after=5)
+    t.ok("a meeting page's stream plays", playing, sv.ev(meeting, "document.getElementById('s').paused"))
+    t.ok("and never brings the card up", not seen, (seen, heard, mini()))
+    sv.ev(meeting, "hangup()")
+    seen, heard, ended = watch_card(meeting, "Call page", lambda: sv.ev(meeting, "document.getElementById('t').ended") is True)
+    t.ok("hung up with its stream left paused, its chime ends", ended, sv.ev(meeting, "document.getElementById('t').ended"))
+    t.ok("and the card never comes", not seen, (seen, mini()))
+    sv.cmd({"do": "close", "id": meeting})
+    sv.cmd({"do": "meetalert", "action": "fixture", "hosts": {}, "events": []})
+
+    half = opened(base, "half")
+    sv.cmd({"do": "select", "id": half})
+    time.sleep(0.4)
+    sv.ev(half, "document.getElementById('t').play(), 1")
+    sv.cmd({"do": "select", "id": other})
+    t.ok("thirty seconds of sound still takes the card", until(lambda: shown().get("title") == "Half page" and shown().get("playing"), 10), mini())
+    mini("toggle")
+    t.ok("pausing it from the card pauses the page", until(lambda: sv.ev(half, "document.getElementById('t').paused") is True))
+    t.ok("and the card stays, paused", until(lambda: shown().get("title") == "Half page" and not shown().get("playing")), mini())
+    time.sleep(1.5)
+    t.ok("still there a moment later", shown().get("title") == "Half page", mini())
+    sv.ev(half, "var e = document.getElementById('t'); e.currentTime = 28; e.play(), 1")
+    t.ok("played to its end", until(lambda: sv.ev(half, "document.getElementById('t').ended") is True, 8))
+    time.sleep(1.5)
+    t.ok("a long track that ended keeps its card, showing play", shown().get("title") == "Half page" and not shown().get("playing"), mini())
+    sv.cmd({"do": "close", "id": half})
+    t.ok("its tab closed, the foot is empty", until(lambda: not shown() and not mini()["items"]), mini())
+
+
 def opened(base, name):
     tab = sv.cmd({"do": "open", "url": f"{base}/{name}"})["id"]
     sv.cmd({"do": "wait", "id": tab, "seconds": 10})
@@ -252,6 +411,9 @@ def main():
         sv.cmd({"do": "floataway"})
         stage(False)
         other = opened(base, "other")
+        short_sounds(base, other)
+        if os.environ.get("MINI_ONLY") == "short":
+            return
         music = opened(base, "music")
         sv.cmd({"do": "select", "id": music})
         time.sleep(0.5)
@@ -440,15 +602,14 @@ def main():
         time.sleep(0.4)
         state = sv.ev(synth, "go()")
         sv.cmd({"do": "select", "id": other})
-        if until(lambda: shown().get("title") == "Synth page", within=10):
-            t.ok("Web Audio with nothing to press shows once it lasts", True)
-            mini("toggle")
-            t.ok("pausing it suspends the page and keeps the card", until(lambda: shown().get("title") == "Synth page"
-                                                                         and not shown().get("playing")), mini())
-            time.sleep(1.5)
-            t.ok("still there a moment later", shown().get("title") == "Synth page", mini())
-            mini("toggle")
-            t.ok("play resumes it", until(lambda: shown().get("playing")), mini())
+        if until(lambda: noisy(synth), within=4):
+            seen = []
+            end = time.time() + 6
+            while time.time() < end:
+                if carded(synth, "Synth page"):
+                    seen.append(round(6 - (end - time.time()), 1))
+                time.sleep(0.15)
+            t.ok("Web Audio with nothing to press never takes the card, however long it lasts", not seen and noisy(synth), (seen, mini()))
         else:
             print("  skip  Web Audio made no sound here", state, mini())
         sv.cmd({"do": "close", "id": synth})
@@ -608,8 +769,8 @@ def main():
         server.shutdown()
         if CLIP.exists():
             CLIP.unlink()
-    t.done()
-    sys.exit(1 if t.failed else 0)
 
 
 main()
+t.done()
+sys.exit(1 if t.failed else 0)

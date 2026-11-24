@@ -57,18 +57,38 @@ struct MiniPlayerTests {
         #expect(held == .mini)
     }
 
-    @Test func soundNoFrameCanSeeIsTheMiniPlayersOnceItHasLasted() {
+    @Test func soundWithNothingToPlayOrPauseNeverTakesTheCard() {
         let early = MiniFacts(noisy: true, waited: false, reports: [])
         let later = MiniFacts(noisy: true, waited: true, reports: [])
 
         let first = MiniRule.role(early, was: .none)
         let then = MiniRule.role(later, was: .none)
+        let held = MiniRule.role(later, was: .mini)
 
         #expect(first == .none)
-        #expect(then == .mini)
+        #expect(then == .none)
+        #expect(held == .none)
     }
 
-    @Test func aShortSoundDoesNotTakeThePlayerUntilItLasts() {
+    @Test func webAudioThatDeclaresItselfStillTakesTheCardOnceItHasLasted() {
+        var declared = MiniReport()
+        declared.session.title = "Night Radio"
+        declared.session.actions = ["play", "pause"]
+        let facts = MiniFacts(noisy: true, waited: true, reports: [declared])
+
+        let role = MiniRule.role(facts, was: .none)
+
+        #expect(role == .mini)
+    }
+
+    private func chime(playing: Bool = true, duration: Double = 2, time: Double = 0.4) -> MiniReport {
+        var made = MiniReport(sound: playing)
+        made.reading = MiniReport.Reading(playing: playing, time: time, duration: duration, source: "audio")
+        made.media = [MiniReport.Media(kind: "audio", duration: duration, time: time, paused: !playing, chosen: true)]
+        return made
+    }
+
+    @Test func aShortSoundNeverTakesTheCardHoweverLongTheTabSounds() {
         var ding = MiniReport(sound: true)
         ding.reading = MiniReport.Reading(playing: true, time: 0.2, duration: 1)
         let early = MiniFacts(noisy: true, waited: false, reports: [ding])
@@ -78,7 +98,110 @@ struct MiniPlayerTests {
         let then = MiniRule.role(lasted, was: .none)
 
         #expect(first == .none)
-        #expect(then == .mini)
+        #expect(then == .none)
+    }
+
+    @Test func aChimeUnderFiveSecondsNeverBringsTheCardUp() {
+        let playing = MiniFacts(noisy: true, waited: true, reports: [chime(duration: 4.9)])
+        let ended = MiniFacts(noisy: false, reports: [chime(playing: false, duration: 4.9, time: 4.9)])
+
+        #expect(MiniRule.role(playing, was: .none) == .none)
+        #expect(MiniRule.role(ended, was: .none) == .none)
+    }
+
+    @Test func aChimeNeverHoldsTheCardPlayingPausedOrEnded() {
+        let playing = MiniFacts(noisy: true, reports: [chime()])
+        let paused = MiniFacts(noisy: false, reports: [chime(playing: false, time: 1)])
+        let ended = MiniFacts(noisy: false, reports: [chime(playing: false, time: 2)])
+
+        #expect(MiniRule.role(playing, was: .mini) == .none)
+        #expect(MiniRule.role(paused, was: .mini) == .none)
+        #expect(MiniRule.role(ended, was: .mini) == .none)
+    }
+
+    @Test func aChimeOnAPageThatDeclaresMediaStillNeverBringsTheCardUp() {
+        var report = chime()
+        report.session.title = "Meeting"
+        let facts = MiniFacts(noisy: true, waited: true, reports: [report])
+
+        #expect(MiniRule.role(facts, was: .none) == .none)
+        #expect(MiniRule.role(facts, was: .mini) == .none)
+    }
+
+    @Test func fiveSecondsIsLongEnough() {
+        var report = chime(duration: 5)
+        report.session.title = "Five"
+        let facts = MiniFacts(noisy: true, reports: [report])
+
+        #expect(MiniRule.role(facts, was: .none) == .mini)
+    }
+
+    @Test func aSoundOfUnknownLengthIsTreatedAsLongUntilItTurnsOutShort() {
+        var unknown = chime(duration: 0)
+        unknown.session.title = "Loading"
+        let known = { var made = unknown; made.reading?.duration = 2; made.media[0].duration = 2; return made }()
+
+        let before = MiniRule.role(MiniFacts(noisy: true, waited: true, reports: [unknown]), was: .none)
+        let after = MiniRule.role(MiniFacts(noisy: true, waited: true, reports: [known]), was: before)
+
+        #expect(before == .mini)
+        #expect(after == .none)
+    }
+
+    @Test func anEndlessStreamIsTreatedAsLong() {
+        var stream = MiniReport(sound: true)
+        stream.reading = MiniReport.Reading(playing: true, time: 40, duration: 0, live: true, source: "audio")
+        stream.media = [MiniReport.Media(kind: "audio", duration: -1, time: 40, paused: false, chosen: true)]
+        let facts = MiniFacts(noisy: true, reports: [stream])
+
+        #expect(MiniRule.role(facts, was: .none) == .mini)
+    }
+
+    @Test func aCallsLeavingChimeDoesNotKeepTheCardTheStreamHeld() {
+        let facts = MiniFacts(noisy: false, reports: [chime(playing: false, time: 2)])
+
+        let role = MiniRule.role(facts, was: .mini)
+
+        #expect(role == .none)
+    }
+
+    @Test func aMeetingPageNeverGetsTheCardForItsStreamOrItsChimes() {
+        var stream = MiniReport(sound: true)
+        stream.reading = MiniReport.Reading(playing: true, time: 40, duration: 0, live: true, source: "audio")
+        stream.media = [MiniReport.Media(kind: "audio", duration: -1, time: 40, paused: false, chosen: true)]
+        var left = stream
+        left.sound = false
+        left.reading?.playing = false
+        left.media[0].paused = true
+        let during = MiniFacts(noisy: true, waited: true, call: true, reports: [stream])
+        let after = MiniFacts(noisy: false, call: true, reports: [left])
+        let radio = MiniFacts(noisy: false, call: false, reports: [left])
+
+        #expect(MiniRule.role(during, was: .none) == .none)
+        #expect(MiniRule.role(during, was: .mini) == .none)
+        #expect(MiniRule.role(after, was: .mini) == .none)
+        #expect(MiniRule.role(radio, was: .mini) == .mini)
+    }
+
+    @Test func aChimeBesideAPausedTrackLeavesTheTrackItsCard() {
+        var report = MiniReport(sound: true)
+        report.reading = MiniReport.Reading(playing: false, time: 60, duration: 200, source: "audio")
+        report.media = [MiniReport.Media(kind: "audio", duration: 200, time: 60, paused: true, chosen: true),
+                        MiniReport.Media(kind: "audio", duration: 2, time: 0.5, paused: false)]
+        let facts = MiniFacts(noisy: true, waited: true, reports: [report])
+
+        #expect(MiniRule.role(facts, was: .none) == .none)
+        #expect(MiniRule.role(facts, was: .mini) == .mini)
+    }
+
+    @Test func aLongTrackBesideAChimeKeepsTheCard() {
+        var report = MiniReport(sound: true)
+        report.reading = MiniReport.Reading(playing: true, time: 60, duration: 200, source: "audio")
+        report.media = [MiniReport.Media(kind: "audio", duration: 200, time: 60, paused: false, chosen: true),
+                        MiniReport.Media(kind: "audio", duration: 2, time: 0.5, paused: false)]
+        let facts = MiniFacts(noisy: true, reports: [report])
+
+        #expect(MiniRule.role(facts, was: .none) == .mini)
     }
 
     @Test func aResumingVideoWithAStaleReportWaitsForItsOwn() {
