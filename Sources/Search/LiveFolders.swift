@@ -784,7 +784,10 @@ final class LiveFolders {
         guard !loaded else { return }
         loaded = true
         retired = Set((Store.settings.stringArray(forKey: LiveFolders.retiredKey) ?? []).compactMap(UUID.init(uuidString:)))
-        guard let data = try? Data(contentsOf: LiveFolders.file) else { return }
+        guard let data = try? Data(contentsOf: LiveFolders.file) else {
+            Store.settings.set(true, forKey: LiveFolders.againKey)
+            return
+        }
         guard let read = LiveFile.read(data, retiredKinds: LiveFolders.retiredKinds) else {
             Store.quarantine(LiveFolders.file)
             lost = true
@@ -808,9 +811,18 @@ final class LiveFolders {
                 save()
             }
         }
+        if !Store.settings.bool(forKey: LiveFolders.againKey) {
+            Store.settings.set(true, forKey: LiveFolders.againKey)
+            let moved = LiveFolders.reviewingAgain(folders)
+            if moved != folders {
+                folders = moved
+                save()
+            }
+        }
     }
 
     static let namedKey = "live.prsNamed"
+    static let againKey = "live.reviewAgain"
     static let retiredKey = "live.retired"
     static let retiredKinds: Set<String> = ["actions", "deployments", "mergeRequests"]
 
@@ -824,6 +836,23 @@ final class LiveFolders {
             var folder = folder
             if folder.good == nil, folder.state == .fine { folder.good = folder.read }
             if folder.state == .waiting { folder.read = nil }
+            return folder
+        }
+    }
+
+    static func reviewingAgain(_ folders: [LiveFolder], now: Date = Date()) -> [LiveFolder] {
+        folders.map { folder in
+            guard folder.source.kind == .pullRequests else { return folder }
+            var folder = folder
+            if let lists = folder.source.lists {
+                guard Set(lists) == PullList.oldStandard else { return folder }
+                folder.source.lists = PullList.ordered(lists + [.changed])
+            } else if folder.source.address != LiveSource.pullRequests.address {
+                return folder
+            }
+            var since = folder.listsOn ?? [:]
+            since[PullList.changed.rawValue] = now
+            folder.listsOn = since
             return folder
         }
     }

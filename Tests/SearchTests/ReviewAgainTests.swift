@@ -195,4 +195,46 @@ final class ReviewAgainTests {
         #expect(later.items.map(\.fresh) == [false, true])
     }
 
+    @Test func theStandardListsIncludeTheNewOne() {
+        #expect(PullList.standard == [.reviewRequests, .changed, .created, .assigned])
+        #expect(LiveSource.pullRequests.pullLists == PullList.standard)
+    }
+
+    @Test func aFolderWithTheOldThreeListsGainsTheNewOneOnce() {
+        var source = LiveSource.pullRequests
+        source.lists = [.reviewRequests, .created, .assigned]
+        let folder = LiveFolder(space: UUID(), name: "PRs", source: source)
+
+        let moved = LiveFolders.reviewingAgain([folder], now: at(1))
+
+        #expect(moved.first?.source.lists == [.reviewRequests, .changed, .created, .assigned])
+        #expect(moved.first?.listsOn == [PullList.changed.rawValue: at(1)])
+    }
+
+    @Test func aPresetFolderWithNoStoredListsGainsItQuietly() {
+        let folder = LiveFolder(space: UUID(), name: "PRs", source: .pullRequests)
+
+        let moved = LiveFolders.reviewingAgain([folder], now: at(1))
+
+        #expect(moved.first?.source.lists == nil)
+        #expect(moved.first?.source.pullLists == PullList.standard)
+        #expect(moved.first?.listsOn == [PullList.changed.rawValue: at(1)])
+    }
+
+    @Test func aFolderWithAnyOtherSetIsLeftAsItIs() {
+        var custom = LiveSource.pullRequests
+        custom.lists = [.reviewRequests, .drafts]
+        let folders = [LiveFolder(space: UUID(), name: "Mine", source: custom),
+                       LiveFolder(space: UUID(), name: "Reviews", source: .reviewRequests),
+                       LiveFolder(space: UUID(), name: "Feed", source: LiveSource(kind: .feed, address: "https://example.com/feed.xml"))]
+
+        #expect(LiveFolders.reviewingAgain(folders, now: at(1)) == folders)
+    }
+
+    @Test func theShorthandsKeepTheirMeaning() {
+        #expect(LiveSource.from("github:reviews") == .reviewRequests)
+        #expect(LiveSource.from("github:reviews")?.pullLists == nil)
+        #expect(LiveSource.from("github:mine") == .myPullRequests)
+    }
+
 }

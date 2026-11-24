@@ -5,7 +5,8 @@ enum PullList: String, Codable, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    static let standard: [PullList] = [.reviewRequests, .created, .assigned]
+    static let standard: [PullList] = [.reviewRequests, .changed, .created, .assigned]
+    static let oldStandard: Set<PullList> = [.reviewRequests, .created, .assigned]
 
     var title: String {
         switch self {
