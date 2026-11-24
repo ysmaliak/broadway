@@ -71,6 +71,17 @@ struct CallCornersTests {
         #expect(CallTiles.leave.contains("broadway-call-fit"))
     }
 
+    @Test func aMirroredCameraKeepsThePagesOwnMirror() {
+        let room = NSEdgeInsets(top: 16, left: 16, bottom: 116, right: 16)
+
+        let script = CallTiles.enter(room: room, corner: 12)
+
+        #expect(script.contains("[data-broadway-tiles-screen][data-broadway-tiles-flip] { transform: scaleX(-1) !important;"))
+        #expect(script.contains("function turned(") && script.contains("!display(lone) && turned(lone)"))
+        #expect(script.contains("(flip ? -ns : ns)"))
+        #expect(CallTiles.leave.contains("data-broadway-tiles-flip"))
+    }
+
     @Test func aSharedScreenIsPinnedAloneAndTheRestOfThePageIsHidden() {
         let room = NSEdgeInsets(top: 16, left: 16, bottom: 116, right: 16)
 
