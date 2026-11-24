@@ -877,7 +877,7 @@ final class LiveFolderTests {
         let sso = LiveSSO(org: "Octo Corp", url: signOnPage.absoluteString)
         let created = LiveItem(key: "https://github.com/octocorp/ios/pull/3", title: "Three")
         let assigned = LiveItem(key: "https://github.com/octocorp/ios/pull/4", title: "Four")
-        var answers: [LiveReader.Answer] = [.sso(sso, []), .items([created], nil), .items([assigned], nil)]
+        var answers: [LiveReader.Answer] = [.sso(sso, []), .items([created], nil), .items([assigned], nil), .items([], nil)]
 
         let answer = await LiveReader.readLists(.pullRequests) { _ in answers.removeFirst() }
 

@@ -90,6 +90,31 @@ enum PersonStuff {
         }
     }
 
+    private static func lists(_ call: PersonCall, in folder: LiveFolder) throws -> [PullList] {
+        let names = PullList.allCases.map(\.rawValue).joined(separator: ", ")
+        guard folder.source.pullLists != nil else {
+            throw PersonRefusal("refused", "\(folder.name) has no lists to choose", hint: "Only a pull request folder chooses its lists")
+        }
+        let named = call.strings("list")
+        guard !named.isEmpty else { throw PersonRefusal.usage("Name at least one list", hint: "Choose from \(names)") }
+        return try named.map { word in
+            guard let list = PullList.named(word) else {
+                throw PersonRefusal("refused", "There is no list called \(word)", hint: "Choose from \(names)")
+            }
+            return list
+        }
+    }
+
+    private static func range(_ call: PersonCall, in folder: LiveFolder) throws -> LiveRange {
+        guard folder.source.kind == .repository else {
+            throw PersonRefusal("refused", "\(folder.name) has no range to choose", hint: "Only a repository folder chooses how far back its pull requests go")
+        }
+        guard let range = call.string("range").flatMap({ LiveRange(rawValue: $0.lowercased()) }) else {
+            throw PersonRefusal.usage("Say today, week, month or open", hint: "broadway live range ID week")
+        }
+        return range
+    }
+
     private static func fetch(_ call: PersonCall, can: (FetchEntry) -> Bool, _ act: (Browser, FetchEntry) -> Void) throws -> [String: Any] {
         let entry = try running(call.browser, try call.need("id"))
         guard can(entry) else { throw PersonRefusal("refused", "That can't be done to \(entry.name) as it stands") }
@@ -252,7 +277,12 @@ enum PersonStuff {
             var shown: [String: Any] = ["website": true, "name": found.name, "state": found.status ?? "fine", "items": found.items.map {
                 ["title": $0.title, "label": $0.label ?? "", "byline": $0.byline ?? "", "checks": $0.checks?.rawValue ?? "", "url": address($0.key), "fresh": $0.fresh] as [String: Any]
             }]
-            if let lists = found.source.pullLists { shown["lists"] = lists.map(\.title) }
+            if let lists = found.source.pullLists {
+                shown["lists"] = lists.map(\.title)
+                shown["listsLeftOut"] = PullList.allCases.filter { !lists.contains($0) }.map(\.title)
+            }
+            if found.source.kind == .repository { shown["range"] = (found.source.range ?? .open).rawValue }
+            shown["hidden"] = found.hiddenInFeed
             if found.source.asksForReview { shown["hidesDraftReviewRequests"] = found.source.leavesOutDraftReviews }
             if let statuses = found.source.linearStatuses {
                 shown["statuses"] = statuses.map(\.title)
@@ -269,6 +299,31 @@ enum PersonStuff {
             let left = LiveFolders.shared.folder(found.id)?.source.leftOut ?? []
             return ["id": short(found.id), "statuses": LinearStatus.ordered(chosen).map(\.title), "leftOut": left.map(\.title),
                     "message": left.isEmpty ? "Shows every open status" : "Leaves out \(LinearStatus.words(left))"]
+        },
+        PersonVerb("live", "lists", .arrange, first: { call in
+            _ = try lists(call, in: try live(call))
+        }) { call in
+            let found = try live(call)
+            let chosen = try lists(call, in: found)
+            LiveFolders.shared.setLists(found.id, chosen)
+            let on = LiveFolders.shared.folder(found.id)?.source.pullLists ?? []
+            return ["id": short(found.id), "lists": on.map(\.title), "listsLeftOut": PullList.allCases.filter { !on.contains($0) }.map(\.title),
+                    "message": "Reads " + PullList.said(on)]
+        },
+        PersonVerb("live", "range", .arrange, first: { call in
+            _ = try range(call, in: try live(call))
+        }) { call in
+            let found = try live(call)
+            let chosen = try range(call, in: found)
+            LiveFolders.shared.setRange(found.id, chosen)
+            return ["id": short(found.id), "range": chosen.rawValue, "message": "Shows \(chosen.title)"]
+        },
+        PersonVerb("live", "unhide", .arrange) { call in
+            let found = try live(call)
+            let count = found.hiddenInFeed
+            LiveFolders.shared.showHidden(found.id)
+            return ["id": short(found.id), "shown": count,
+                    "message": count == 0 ? "Nothing was removed" : count == 1 ? "1 row is back" : "\(count) rows are back"]
         },
         PersonVerb("live", "drafts", .arrange, first: { call in
             _ = try draftChoice(call, in: try live(call))

@@ -117,6 +117,17 @@ struct LiveTrustTests {
         #expect(!LiveReader.growing([]))
     }
 
+    @Test func aListMarkedEmptyTwiceInARowIsProvedEmpty() {
+        #expect(LiveReader.provedEmpty([true, true]))
+        #expect(LiveReader.provedEmpty([false, true, true]))
+    }
+
+    @Test func oneMarkedScanOrAnUnmarkedEmptyPageKeepsWaiting() {
+        #expect(!LiveReader.provedEmpty([true]))
+        #expect(!LiveReader.provedEmpty([true, false]))
+        #expect(!LiveReader.provedEmpty([false, false, false]))
+    }
+
     @Test func aRowLeavingOnceIsReadAgainAndStaysWhenTheSecondReadHasIt() async {
         let had = [pull(1), pull(2)]
         var answers: [LiveReader.Answer] = [.read(LiveRead(items: [pull(1)], marked: true)),

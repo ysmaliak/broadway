@@ -275,13 +275,23 @@ final class LiveReader: NSObject, WKNavigationDelegate {
         }
         let url = staged(asked)
         let known = LiveFolders.shared.explained(folder)
+        let paged = folder.source.kind == .pullRequests || folder.source.kind == .repository
+        let pages = paged ? await pageFetch(folder, asked: asked, store: store) : nil
+        let judging = folder.source.pullLists?.contains(.changed) == true
+        let again = LiveFolders.shared.rereads
+        let keep = LiveFolders.shared.keep(folder)
+        let judge: (([LiveItem], [LiveItem]) async -> [LiveItem])? = judging ? { others, rows in
+            guard let pages else { return rows }
+            return await LiveRefs.filled(others + rows, previous: folder.items, space: folder.space, host: pages.host, also: pages.also,
+                                         again: again, keep: keep, fetch: pages.fetch)
+        } : nil
         let answer = folder.source.pullLists != nil
-            ? await readLists(folder.source, before: folder.items, known: known) { await readPage(staged($0), source: folder.source, store: store) }
+            ? await readLists(folder.source, before: folder.items, known: known, judge: judge) { await readPage(staged($0), source: folder.source, store: store) }
             : await LiveTrust.looked(folder.items, known: known) { await readPage(url, source: folder.source, store: store) }.more(asked)
-        guard folder.source.kind == .pullRequests || folder.source.kind == .repository, let items = answer.found else { return answer }
-        let pages = await pageFetch(folder, asked: asked, store: store)
-        let branched = await LiveRefs.filled(items, previous: folder.items, space: folder.space, host: pages.host, also: pages.also, limit: folder.source.cap,
-                                             again: LiveFolders.shared.rereads, keep: LiveFolders.shared.keep(folder), fetch: pages.fetch)
+        guard let pages, let items = answer.found else { return answer }
+        let branched = judging ? items
+            : await LiveRefs.filled(items, previous: folder.items, space: folder.space, host: pages.host, also: pages.also, limit: folder.source.cap,
+                                    again: again, keep: keep, fetch: pages.fetch)
         LiveFolders.shared.pagesRead()
         switch answer {
         case .read(var read):
@@ -342,7 +352,7 @@ final class LiveReader: NSObject, WKNavigationDelegate {
     }
 
     static func readLists(_ source: LiveSource, before: [LiveItem] = [], known: Set<String> = [], pause: Duration = LiveTrust.pause,
-                          page: (URL) async -> Answer) async -> Answer {
+                          judge: (([LiveItem], [LiveItem]) async -> [LiveItem])? = nil, page: (URL) async -> Answer) async -> Answer {
         var found: [(PullList, [LiveItem])] = []
         var missed: [PullList: LiveMiss] = [:]
         var signedOut: Set<PullList> = []
@@ -350,7 +360,7 @@ final class LiveReader: NSObject, WKNavigationDelegate {
         var more: String?
         var sso: LiveSSO?
         let lists = source.pullLists ?? []
-        for list in lists {
+        for list in PullList.reading(lists) {
             let had = before.filter { LiveTrust.on($0, list) }
             switch await LiveTrust.looked(had, known: known, pause: pause, read: { await page(source.page(list)) }) {
             case .items(let items, _): found.append((list, items))
@@ -360,7 +370,7 @@ final class LiveReader: NSObject, WKNavigationDelegate {
                 } else {
                     found.append((list, read.items))
                     whole = whole && read.whole
-                    if read.more != nil, more == nil { more = source.page(list).absoluteString }
+                    if read.more != nil, more == nil, list != .changed { more = source.page(list).absoluteString }
                 }
             case .signIn: signedOut.insert(list)
             case .sso(let asked, let items):
@@ -371,11 +381,13 @@ final class LiveReader: NSObject, WKNavigationDelegate {
             }
             if !signedOut.isEmpty, found.isEmpty, sso == nil { return .signIn }
         }
-        if let sso { return .sso(sso, PullList.merged(found, keepsState: true)) }
+        found.sort { PullList.allCases.firstIndex(of: $0.0) ?? 0 < PullList.allCases.firstIndex(of: $1.0) ?? 0 }
+        if let sso { return .sso(sso, PullList.merged(await PullList.judged(found, cap: source.cap, judge: nil), keepsState: true)) }
         if found.isEmpty {
             if !signedOut.isEmpty { return .signIn }
             return .missed(lists.lazy.compactMap { missed[$0] }.first ?? LiveMiss())
         }
+        found = await PullList.judged(found, cap: source.cap, judge: judge)
         let shared = PullList.shared(found, cap: source.cap)
         if more == nil, let cut = shared.cut.first { more = source.page(cut).absoluteString }
         return .read(LiveRead(items: PullList.merged(shared.answers, keepsState: true), missed: missed, signedOut: signedOut, whole: whole,
@@ -490,6 +502,7 @@ final class LiveReader: NSObject, WKNavigationDelegate {
         var found = 0
         var last: Scan?
         var counts: [Int] = []
+        var marks: [Bool] = []
         for wait in [0.4, 1.2, 2.5, 4.0] {
             try? await Task.sleep(for: .seconds(wait))
             guard let scan = await scan(web, source: source) else { continue }
@@ -498,11 +511,17 @@ final class LiveReader: NSObject, WKNavigationDelegate {
             counts.append(scan.links.count)
             if scan.sso != nil, again, scan.links.count == found, (scan.pending ?? 0) == 0 { break }
             if scan.limit == true || signedOut(scan, asked: url, source: source) || LiveLabels.broken(status: status, found: scan.links.count) { break }
+            marks.append(scan.links.isEmpty && scan.nothing == true)
+            if LiveReader.provedEmpty(marks) { break }
             if !scan.links.isEmpty, scan.links.count == found, (scan.pending ?? 0) == 0 { break }
             found = scan.links.count
         }
         guard let last else { return .failed }
         return LiveReader.answer(last, asked: url, status: status, headers: headers, source: source, growing: LiveReader.growing(counts))
+    }
+
+    static func provedEmpty(_ marks: [Bool]) -> Bool {
+        marks.count >= 2 && marks.suffix(2).allSatisfy { $0 }
     }
 
     static func growing(_ counts: [Int]) -> Bool {

@@ -335,9 +335,12 @@ The **C** column is how the command is gated. The classes are explained under [W
 | `files list [QUERY]` | R | what was downloaded and what was given to sites |
 | `history list [QUERY] [--limit N]` | T | newest first |
 | `history delete [URL] [--site HOST] [--since TIME]`, `history clear` | E | `--since` takes times like `30m`, `2h` or `7d` |
-| `live list`, `live show ID` | R | Live Folders |
+| `live list`, `live show ID` | R | Live Folders. `show` gives a pull request folder's lists on and left out, and a repository folder's range |
 | `live add NAME SOURCE [--space NAME]`, `rename`, `pause`, `resume`, `update [ID]` | A | a source is a feed, a site, a GitHub `owner/repository`, or one of `github:reviews`, `github:mine`, `github:issues`, `github:notifications`, `linear:assigned`, `linear:mentions`, `linear:inbox`, `linear:cycle/TEAM` |
 | `live drafts ID hide\|show` | A | a pull request folder that asks for your review leaves out drafts on Review Requests and Team Reviews, or shows them again |
+| `live lists ID LIST...` | A | a pull request folder reads only the named lists: `reviewRequests`, `teamReviews`, `changed`, `needsAction`, `waiting`, `ready`, `drafts`, `created`, `assigned`, `involved`, or their titles. `changed` is Changed Since Your Review: a pull request you reviewed shows once its author pushes, replies or resolves your comment, and leaves when you answer |
+| `live range ID today\|week\|month\|open` | A | how far back a repository folder's pull requests go |
+| `live unhide ID` | A | the rows removed from the folder come back |
 | `live statuses ID STATUS...` | A | a Linear assigned, created or cycle folder shows only the named statuses: `triage`, `backlog`, `todo`, `progress`. Backlog is out until named |
 | `live delete ID` | E | |
 | `logins list [SITE]` | R | site and user name only |

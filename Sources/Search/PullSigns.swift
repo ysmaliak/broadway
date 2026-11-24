@@ -1,28 +1,43 @@
 import Foundation
 
 enum PullSigns {
+    enum Kind: Equatable { case word, review, approval, push, event }
+
     struct Said: Equatable {
         var at: Date
         var who: String
         var bot: Bool = false
         var asks: Bool = false
+        var kind: Kind = .word
 
-        init(at: Date, who: String, bot: Bool = false, asks: Bool = false) {
+        init(at: Date, who: String, bot: Bool = false, asks: Bool = false, kind: Kind = .word) {
             self.at = at
             self.who = who.lowercased()
             self.bot = bot
             self.asks = asks
+            self.kind = kind
         }
+
+        var spoken: Bool { kind == .word || kind == .review || kind == .approval }
     }
 
     struct Thread: Equatable {
         var resolved: Bool
         var said: [Said]
+        var id: String? = nil
+
+        var key: String { id ?? said.first.map { "\($0.who)@\($0.at.timeIntervalSince1970)" } ?? "" }
+    }
+
+    struct Seen: Equatable {
+        var resolved: Date?
+        var yours: Bool
     }
 
     struct Read: Equatable {
         var activity: Date?
         var unanswered: Int
+        var back: Bool = false
     }
 
     struct Talk: Equatable {
@@ -32,8 +47,50 @@ enum PullSigns {
         var author: String?
     }
 
-    static func read(_ talk: Talk) -> Read {
-        read(talk.said, threads: talk.threads, viewer: talk.viewer, author: talk.author)
+    static func read(_ talk: Talk) -> Read { read(talk, seen: [:]) }
+
+    static func read(_ talk: Talk, seen: [String: Seen]) -> Read {
+        var made = read(talk.said, threads: talk.threads, viewer: talk.viewer, author: talk.author)
+        if let since = back(talk, seen: seen) {
+            made.back = true
+            if since > (made.activity ?? .distantPast), since != .distantPast { made.activity = since }
+        }
+        return made
+    }
+
+    static func seen(_ talk: Talk, before: [String: Seen]?, at now: Date) -> [String: Seen] {
+        let me = talk.viewer?.lowercased()
+        var out: [String: Seen] = [:]
+        for thread in talk.threads {
+            let talking = thread.said.filter { !$0.bot }
+            let shown = talking.max { $0.at < $1.at }
+            let yours = shown.map { last in last.who == me && talking.contains { $0.who == me } } ?? before?[thread.key]?.yours ?? false
+            guard thread.resolved else {
+                out[thread.key] = Seen(resolved: nil, yours: yours)
+                continue
+            }
+            let when = before.map { $0[thread.key]?.resolved ?? now } ?? .distantPast
+            out[thread.key] = Seen(resolved: when, yours: yours)
+        }
+        return out
+    }
+
+    static func back(_ talk: Talk, seen: [String: Seen] = [:]) -> Date? {
+        guard let me = talk.viewer?.lowercased(), !me.isEmpty else { return nil }
+        let author = talk.author?.lowercased()
+        guard author != me else { return nil }
+        let everything = (talk.said + talk.threads.flatMap(\.said)).filter { !$0.bot }
+        guard let last = everything.filter({ $0.who == me && $0.spoken }).map(\.at).max() else { return nil }
+        let review = talk.said.filter { $0.who == me && ($0.kind == .review || $0.kind == .approval) }.max { $0.at < $1.at }
+        guard review?.kind != .approval else { return nil }
+        let news = everything.filter { one in
+            one.who != me && one.at > last && (one.kind == .push || one.spoken && one.who == author)
+        }.map(\.at)
+        let resolves = talk.threads.compactMap { thread -> Date? in
+            guard thread.resolved, let mark = seen[thread.key], mark.yours, let when = mark.resolved, when > last else { return nil }
+            return when
+        }
+        return (news + resolves).max()
     }
 
     static func read(_ said: [Said], threads: [Thread], viewer: String?, author: String? = nil) -> Read {
@@ -69,9 +126,14 @@ enum PullSigns {
         for segment in split(html[start..<end], on: marker) {
             let gid = attribute("data-gid", in: segment.prefix(400)) ?? ""
             if gid.hasPrefix("C_") {
+                if let pushed = authors(in: segment).first {
+                    clock = max(clock ?? pushed.at, pushed.at)
+                    talk.said.append(Said(at: pushed.at, who: pushed.who, bot: pushed.bot, kind: .push))
+                    continue
+                }
                 guard let after = clock, let (who, bot) = committer(in: segment) else { continue }
                 clock = after.addingTimeInterval(1)
-                talk.said.append(Said(at: after.addingTimeInterval(1), who: who, bot: bot))
+                talk.said.append(Said(at: after.addingTimeInterval(1), who: who, bot: bot, kind: .push))
                 continue
             }
             let parts = split(segment, on: "<review-thread-collapsible")
@@ -80,15 +142,41 @@ enum PullSigns {
             if !said.isEmpty {
                 let review = gid.hasPrefix("PRR_") && head.contains("requested changes")
                 said[0].asks = gid.hasPrefix("IC_") || review
+                said[0].kind = kind(gid, head)
+                for index in said.indices.dropFirst() { said[index].kind = .event }
             }
             if let latest = said.map(\.at).max() { clock = max(clock ?? latest, latest) }
             talk.said += said
-            for part in parts where part.hasPrefix("<review-thread-collapsible") {
+            var before = parts.first.map { $0.hasPrefix("<review-thread-collapsible") ? Substring() : $0 } ?? Substring()
+            for part in parts {
+                guard part.hasPrefix("<review-thread-collapsible") else {
+                    before = part
+                    continue
+                }
                 let tag = part.prefix { $0 != ">" }
-                talk.threads.append(Thread(resolved: tag.contains(#"data-resolved="true""#), said: authors(in: part)))
+                talk.threads.append(Thread(resolved: tag.contains(#"data-resolved="true""#), said: authors(in: part),
+                                           id: thread(tag, after: before)))
+                before = part
             }
         }
         return talk
+    }
+
+    private static func kind(_ gid: String, _ head: Substring) -> Kind {
+        if gid.hasPrefix("PRR_") { return head.contains("approved these changes") ? .approval : .review }
+        if gid.hasPrefix("HRFPE_") { return .push }
+        if gid.hasPrefix("IC_") || gid.isEmpty { return .word }
+        return .event
+    }
+
+    private static func thread(_ tag: Substring, after before: Substring) -> String? {
+        if let found = tag.range(of: "/threads/") {
+            let digits = tag[found.upperBound...].prefix { $0.isNumber }
+            if !digits.isEmpty { return String(digits) }
+        }
+        guard let found = before.range(of: "review-thread-or-comment-id-", options: .backwards) else { return nil }
+        let digits = before[found.upperBound...].prefix { $0.isNumber }
+        return digits.isEmpty ? nil : String(digits)
     }
 
     private static func split(_ text: Substring, on marker: String) -> [Substring] {
