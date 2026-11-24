@@ -308,6 +308,9 @@ enum LiveFolderRows {
         LiveWords.settings(folder, reading: reading, now: now)
     }
 
+    static let listsFooter = "A pull request on several lists shows once"
+    static let hidesDrafts = "Hide draft review requests"
+
     static func statusesFooter(_ list: LinearAPI.List) -> String {
         list.isCycle
             ? "Done and canceled issues in the cycle show too. Every team's own statuses fall under these four, so In Review counts as In Progress."
@@ -473,6 +476,37 @@ extension SettingsPageView {
                     line(status.title, status.detail, id: row, control: made)
                     update { [weak made] in made?.isEnabled = shown() != [status] }
                 }
+            }
+        }
+        shape { live.folder(id)?.source.pullLists != nil }
+        shape { live.folder(id)?.source.asksForReview == true }
+        if folder.source.pullLists != nil {
+            section("Lists", footer: LiveFolderRows.listsFooter) {
+                let shown = { live.folder(id)?.source.pullLists ?? [] }
+                for list in PullList.allCases {
+                    let row = "live.list." + list.rawValue
+                    let made = toggle(row, get: { shown().contains(list) }, set: { on in
+                        live.setLists(id, on ? shown() + [list] : shown().filter { $0 != list })
+                    })
+                    line(list.title, list.detail, id: row, control: made)
+                    update { [weak made] in made?.isEnabled = shown() != [list] }
+                }
+            }
+        }
+        if folder.source.asksForReview {
+            section {
+                let hides = toggle("live.drafts", get: { live.folder(id)?.source.leavesOutDraftReviews == true },
+                                   set: { live.setHidesDraftReviews(id, $0) })
+                line(LiveFolderRows.hidesDrafts, nil, id: "live.drafts", control: hides)
+            }
+        }
+        if folder.source.kind == .repository {
+            section {
+                let ranges = LiveRange.allCases
+                let range = popUp("live.range", titles: ranges.map(\.title),
+                                  picked: { ranges.firstIndex(of: live.folder(id)?.source.range ?? .open) ?? 0 },
+                                  set: { live.setRange(id, ranges[$0]) })
+                line("Pull Requests", nil, id: "live.range", control: range)
             }
         }
         section("Updates") {

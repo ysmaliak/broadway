@@ -60,6 +60,21 @@ enum PullList: String, Codable, CaseIterable, Identifiable {
 
     var asksForReview: Bool { self == .reviewRequests || self == .teamReviews }
 
+    var detail: String {
+        switch self {
+        case .reviewRequests: return "Pull requests that ask for your review"
+        case .teamReviews: return "Pull requests that ask a team of yours for a review"
+        case .changed: return "Pull requests you reviewed, once the author pushes, replies or resolves your comment"
+        case .needsAction: return "Yours, with changes requested"
+        case .waiting: return "Yours, waiting for a review"
+        case .ready: return "Yours, approved"
+        case .drafts: return "Your drafts"
+        case .created: return "Every open pull request of yours"
+        case .assigned: return "Open pull requests assigned to you"
+        case .involved: return "Every open pull request you wrote, reviewed or were mentioned in"
+        }
+    }
+
     var own: Bool { words.split(separator: " ").contains { $0 == "author:@me" || $0 == "involves:@me" } }
 
     func page(hidingDrafts: Bool) -> URL {

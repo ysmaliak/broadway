@@ -68,6 +68,19 @@ final class ReviewAgainTests {
         return read
     }
 
+    private func page(_ id: UUID) -> SettingsPageView {
+        let shell = SettingsShell()
+        shell.go(to: .liveFolders)
+        shell.openLiveFolder(id)
+        let made = SettingsPageView(browser: browser, shell: shell)
+        made.rebuild()
+        return made
+    }
+
+    private func settingsRow(_ id: String, on page: SettingsPageView) -> SettingsRowView? {
+        page.kitSubviews(of: SettingsRowView.self).first { $0.rowID == id }
+    }
+
     @Test func theListAsksForPullRequestsYouReviewedThatAreNotYours() {
         #expect(PullList.changed.title == "Changed Since Your Review")
         #expect(PullList.changed.label == "Review again")
@@ -312,6 +325,66 @@ final class ReviewAgainTests {
         #expect(kept != nil)
         #expect(live.folder(made.id)?.hiddenAt == nil)
         #expect(live.folder(made.id)?.hidden.isEmpty == true)
+    }
+
+    @Test func theFolderPageHasASwitchForEveryList() throws {
+        let made = LiveFolders.shared.add(name: "PRs", source: .pullRequests, space: browser.spaceID)
+
+        let shown = page(made.id)
+        let rows = PullList.allCases.compactMap { settingsRow("live.list." + $0.rawValue, on: shown) }
+        let footers = shown.kitSubviews(of: SettingsFooter.self).compactMap { $0.accessibilityLabel() }
+
+        #expect(rows.map(\.title.stringValue) == PullList.allCases.map(\.title))
+        #expect(rows.map(\.detail.stringValue) == PullList.allCases.map(\.detail))
+        #expect(rows.map { ($0.control as? KitSwitch)?.isOn == true } == PullList.allCases.map(PullList.standard.contains))
+        #expect(footers.contains("A pull request on several lists shows once"))
+    }
+
+    @Test func turningAListOffOnThePageChangesTheFolderAndTheLastOneStaysOn() async throws {
+        var source = LiveSource.pullRequests
+        source.lists = [.changed, .created]
+        let made = LiveFolders.shared.add(name: "PRs", source: source, space: browser.spaceID)
+        let shown = page(made.id)
+
+        (settingsRow("live.list.created", on: shown)?.control as? KitSwitch)?.onChange?(false)
+        let after = page(made.id)
+
+        #expect(LiveFolders.shared.folder(made.id)?.source.lists == [.changed])
+        #expect((settingsRow("live.list.changed", on: after)?.control as? KitSwitch)?.isEnabled == false)
+        #expect((settingsRow("live.list.created", on: after)?.control as? KitSwitch)?.isEnabled == true)
+    }
+
+    @Test func theDraftSwitchShowsOnlyWhenTheFolderAsksForReviews() throws {
+        var mine = LiveSource.pullRequests
+        mine.lists = [.created]
+        let asking = LiveFolders.shared.add(name: "PRs", source: .pullRequests, space: browser.spaceID)
+        let quiet = LiveFolders.shared.add(name: "Mine", source: mine, space: browser.spaceID)
+
+        let drafts = try #require(settingsRow("live.drafts", on: page(asking.id)))
+        (drafts.control as? KitSwitch)?.onChange?(true)
+
+        #expect(drafts.title.stringValue == "Hide draft review requests")
+        #expect(LiveFolders.shared.folder(asking.id)?.source.leavesOutDraftReviews == true)
+        #expect(settingsRow("live.drafts", on: page(quiet.id)) == nil)
+    }
+
+    @Test func aRepositoryFolderChoosesItsRangeOnThePage() throws {
+        let made = LiveFolders.shared.add(name: "Rocket", source: try #require(LiveSource.from("acme/rocket")), space: browser.spaceID)
+
+        let range = try #require(settingsRow("live.range", on: page(made.id)))
+        let pick = try #require(range.kitSubviews(of: NSPopUpButton.self).first)
+        pick.selectItem(at: 1)
+        NSApp.sendAction(try #require(pick.action), to: pick.target, from: pick)
+
+        #expect(pick.itemTitles == LiveRange.allCases.map(\.title))
+        #expect(LiveFolders.shared.folder(made.id)?.source.range == .week)
+        #expect(settingsRow("live.list.changed", on: page(made.id)) == nil)
+    }
+
+    @Test func settingsSearchFindsThePageByItsLists() {
+        for words in ["lists", "review", "changed since"] {
+            #expect(SettingsIndex.find(words).contains { $0.page == .liveFolders }, "\(words)")
+        }
     }
 
 }
