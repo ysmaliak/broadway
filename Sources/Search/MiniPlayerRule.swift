@@ -41,6 +41,8 @@ struct MiniReport: Equatable {
         var loop = false
         var source = ""
         var why = ""
+
+        var brief: Bool { !live && duration > 0 && duration < MiniRule.shortest }
     }
 
     struct Media: Equatable {
@@ -56,10 +58,22 @@ struct MiniReport: Equatable {
 
         var pictured: Bool { kind == "video" && picture && !muted && (chosen || !paused) }
         var heard: Bool { chosen && !muted && !(kind == "video" && picture) }
+        var brief: Bool { duration > 0 && duration < MiniRule.shortest }
+        var sounding: Bool { !paused && !muted }
     }
 
     var video: Bool { unseen || media.contains(where: \.pictured) }
     var audio: Bool { !video && (sound || media.contains(where: \.heard)) }
+
+    var chiming: Bool {
+        let heard = media.filter(\.sounding)
+        return !heard.isEmpty && heard.allSatisfy(\.brief)
+    }
+
+    var lasting: Bool {
+        guard let reading else { return session.declared }
+        return !reading.brief
+    }
 
     struct Reported: Equatable {
         var duration: Double = 0
@@ -138,13 +152,17 @@ struct MiniFacts: Equatable {
     var reports: [MiniReport] = []
 
     var earned: Bool {
-        waited || reports.contains { report in
+        (waited && !chiming) || reports.contains { report in
             report.session.declared || (report.reading?.duration ?? 0) >= MiniRule.soundLeast || report.reading?.live == true
         }
     }
 
     var picture: Bool { reports.contains(where: \.picture) }
-    var sound: Bool { reports.contains(where: \.sound) }
+    var sound: Bool { reports.contains { $0.sound && !$0.chiming } }
+    var chiming: Bool {
+        reports.contains(where: \.chiming) && !reports.contains { $0.media.contains { $0.sounding && !$0.brief } }
+    }
+    var lasting: Bool { reports.contains(where: \.lasting) }
     var undecided: Bool { reports.contains(where: \.undecided) }
     var video: Bool { reports.contains(where: \.video) && !reports.contains(where: \.audio) }
     var playing: Bool { noisy || reports.contains { $0.reading?.playing == true } }
@@ -156,11 +174,14 @@ enum MiniRule {
     static let skipDefault = 15
 
     static let soundLeast: Double = 30
+    static let shortest: Double = 5
     static let lasting: TimeInterval = 3
 
     static func role(_ facts: MiniFacts, was: MiniRole) -> MiniRole {
         let role = sounding(facts, was: was)
-        return role == .mini && facts.video ? .none : role
+        guard role == .mini else { return role }
+        if facts.video { return .none }
+        return facts.held || facts.lasting ? .mini : .none
     }
 
     private static func sounding(_ facts: MiniFacts, was: MiniRole) -> MiniRole {
@@ -168,8 +189,8 @@ enum MiniRule {
         if facts.held { return .mini }
         if facts.sound { return facts.earned || was == .mini ? .mini : was }
         if facts.undecided { return was == .mini ? .mini : .none }
-        if facts.noisy { return facts.waited || was == .mini ? .mini : was }
-        return was == .mini && facts.reports.contains(where: { $0.reading != nil || $0.session.declared }) ? .mini : .none
+        if facts.noisy && !facts.chiming { return facts.waited || was == .mini ? .mini : was }
+        return was == .mini && facts.lasting ? .mini : .none
     }
 
     static func seekable(actions: Set<String>, duration: Double, live: Bool) -> Bool {
