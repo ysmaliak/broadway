@@ -37,6 +37,10 @@ struct PersonRefusal: Error {
         "extension": "broadway extensions list gives their ids",
         "permission": "broadway permissions list names them",
         "agent session": "broadway agents list gives their ids",
+        "link rule": "broadway links list gives their ids",
+        "site shortcut": "broadway keywords list names them",
+        "Quick Action": "broadway actions list gives their ids",
+        "snippet": "broadway snippets list names them",
     ]
     static func person(_ message: String, where place: String) -> PersonRefusal {
         PersonRefusal("person_only", message, hint: "The person can do this in Broadway: \(place)")
@@ -132,7 +136,7 @@ struct PersonVerb {
 
 @MainActor
 enum PersonCommands {
-    static let table: [PersonVerb] = PersonTabs.verbs + PersonFolders.verbs + PersonGroups.verbs + PersonStuff.verbs + PersonPages.verbs + PersonSettings.verbs + PersonKnowledge.verbs + PersonAgents.verbs + completionVerbs
+    static let table: [PersonVerb] = PersonTabs.verbs + PersonFolders.verbs + PersonGroups.verbs + PersonStuff.verbs + PersonPages.verbs + PersonSettings.verbs + PersonConfig.verbs + PersonKnowledge.verbs + PersonAgents.verbs + completionVerbs
 
     private static let completionVerbs = [
         PersonVerb("complete", "values", .look) { call in
@@ -342,6 +346,19 @@ enum PersonAsk {
         "spaces delete": "Delete a space?",
         "settings set": "Change a setting?",
         "shortcuts set": "Change a keyboard shortcut?",
+        "links add": "Add a link rule?",
+        "links move": "Move a link rule?",
+        "links delete": "Delete a link rule?",
+        "keywords add": "Add a site shortcut?",
+        "keywords delete": "Delete a site shortcut?",
+        "actions add": "Add a Quick Action?",
+        "actions rename": "Rename a Quick Action?",
+        "actions move": "Move a Quick Action?",
+        "actions delete": "Delete a Quick Action?",
+        "snippets add": "Add a snippet?",
+        "snippets rename": "Rename a snippet?",
+        "snippets delete": "Delete a snippet?",
+        "spaces colour": "Change a space's colour?",
         "shortcuts clear": "Clear a keyboard shortcut?",
         "shortcuts reset": "Reset keyboard shortcuts?",
         "extensions install": "Install an extension?",

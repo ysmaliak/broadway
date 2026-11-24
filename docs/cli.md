@@ -273,10 +273,11 @@ The **C** column is how the command is gated. The classes are explained under [W
 
 | Command | C | What it does |
 | --- | --- | --- |
-| `spaces list` | R | every space, its tab count and which is on screen |
+| `spaces list` | R | every space, its tab count, its colour and which is on screen |
 | `spaces switch SPACE` (also `space SPACE`, and `space` alone says which) | A | put a space on screen |
 | `spaces new NAME [--fresh] [--icon SYMBOL] [--switch]` | A | a new space, left behind unless `--switch`. `--fresh` gives it separate accounts |
 | `spaces rename SPACE NAME`, `spaces move SPACE POSITION`, `spaces icon SPACE SYMBOL` | A | |
+| `spaces colour SPACE COLOUR` | A | one of the preset colours, by id or name: graphite, gray, paper, coral, peach, sage, sky, lavender or rose. Transparency, grain and glass stay as they are |
 | `spaces delete SPACE` | E | closes its tabs |
 | `tabs list [--space NAME] [--all] [--pinned]` | T | the open tabs. Private windows are never listed |
 | `tabs show TAB` | R | one tab: space, folder, pin, sleep, zoom, sound, split |
@@ -348,6 +349,19 @@ Each works on the tab chosen as above and is gated on its site.
 | `settings open [SETTING]` | A | Settings in Broadway, at that row |
 | `shortcuts list [QUERY]` | R | |
 | `shortcuts set SHORTCUT KEYS`, `clear`, `reset [SHORTCUT] [--all]` | A | keys like `cmd+shift+k` |
+| `links list` | R | the link rules, first to last: each one's id, what it matches and where it opens |
+| `links add MATCH --space NAME [--kind KIND]` | A | links that fit open in that space. The kind (`site`, `host`, `starts`, `contains`, `pattern`, `regex`) is read from the match unless `--kind` says it. A rule to another app or browser (`--app`) is `person_only` |
+| `links move ID POSITION` | A | the first rule that fits wins |
+| `links delete ID` | E | |
+| `keywords list` | R | site shortcuts: the word, the site and its search address |
+| `keywords add KEYWORD ADDRESS` | A | an http or https address with one `%s`. A word that already goes somewhere is `person_only` |
+| `keywords delete KEYWORD` | E | |
+| `actions list` | R | Quick Actions in their order, built-in and the person's own |
+| `actions add SHORT ADDRESS [--name TEXT]`, `actions rename ACTION NAME`, `actions move ACTION POSITION` | A | a short name that already opens something is `person_only` |
+| `actions delete ACTION` | E | New document and New meeting come back from Settings |
+| `snippets list` | R | each snippet's keyword, title and first line |
+| `snippets add KEYWORD TEXT [--title TEXT]`, `snippets rename KEYWORD TITLE` | A | `{date}`, `{time}`, `{clipboard}` and `{cursor}` fill in when it is used |
+| `snippets delete KEYWORD` | E | |
 | `extensions list`, `show ID` | R | |
 | `extensions enable`, `disable`, `reload` | A | |
 | `extensions install LINK` | A | the person then answers Broadway's own sheet about its permissions |
@@ -437,7 +451,8 @@ A row with no control of its own (a button, a list, a note) reads as such and re
 | Clearing cookies and cache | it signs out of everything |
 | Import | its panels pick profiles and need Keychain prompts |
 | Opening a downloaded file | it would run whatever a site sent. The path is in `downloads list` |
-| Space colours and looks | a picker's worth of values nobody types |
+| Custom space looks, colours of the person's own and pictures | a picker's worth of values nobody types. The preset colours have `spaces colour` |
+| Link rules that send links to another app or browser, and site shortcuts or Quick Actions sent somewhere new | what the person types or clicks would go somewhere they never chose |
 
 ## How it is built
 

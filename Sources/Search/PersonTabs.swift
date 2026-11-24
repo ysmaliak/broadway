@@ -96,7 +96,8 @@ enum PersonTabs {
             let every = everyTab(call)
             return ["on": browser.prefs.usesSpaces, "spaces": browser.spaces.map { space in
                 ["id": PersonCommands.short(space.id), "name": space.name, "tabs": every.filter { $0.space == space.id && $0.browser === browser && !$0.tab.agent }.count,
-                 "current": space.id == browser.spaceID, "accounts": space.accounts.rawValue, "icon": space.shownIcon.saved] as [String: Any]
+                 "current": space.id == browser.spaceID, "accounts": space.accounts.rawValue, "icon": space.shownIcon.saved,
+                 "colour": PersonConfig.colour(of: space)] as [String: Any]
             }]
         },
         PersonVerb("spaces", "switch", .arrange) { call in

@@ -85,16 +85,25 @@ enum PersonSettings {
         onOff(bar, read: { _ in LinkRules.shared.settings[keyPath: path] }, apply: { _, on in LinkRules.shared.set { $0[keyPath: path] = on } })
     }
 
-    private static let outside = settable(takes: "front or ask", read: { _ in
+    private static var linkSpaces: [Space] {
+        (Browsers.linkTargets.isEmpty ? Browsers.all : Browsers.linkTargets).flatMap(\.spaces)
+    }
+
+    private static func linkSpace(_ named: String) -> UUID? {
+        linkSpaces.first { $0.name.caseInsensitiveCompare(named) == .orderedSame }?.id
+    }
+
+    private static let outside = settable(takes: "front, ask or a space's name", read: { _ in
         switch LinkRules.shared.settings.outsideDefault {
         case .front: return "front"
         case .ask: return "ask"
-        case .space(let id): return Browsers.linkTargets.flatMap(\.spaces).first { $0.id == id }?.name ?? "a space that is gone"
+        case .space(let id): return linkSpaces.first { $0.id == id }?.name ?? "a space that is gone"
         }
-    }, check: { ["front", "ask"].contains($0.lowercased()) }) { _, text in
+    }, check: { ["front", "ask"].contains($0.lowercased()) || linkSpace($0) != nil }) { _, text in
         switch text.lowercased() {
         case "front": LinkRules.shared.set { $0.outsideDefault = .front }
-        default: LinkRules.shared.set { $0.outsideDefault = .ask }
+        case "ask": LinkRules.shared.set { $0.outsideDefault = .ask }
+        default: if let id = linkSpace(text) { LinkRules.shared.set { $0.outsideDefault = .space(id) } }
         }
     }
 
@@ -134,7 +143,7 @@ enum PersonSettings {
         "clear.history": row("broadway history clear"),
         "codes.gmail": stored("codes.gmail", fallback: true),
         "downloads.folder": SettingAccess(bar: .always, read: { $0.asksWhereToSave ? "ask each time" : $0.downloads.path }),
-        "field.snippets": row(),
+        "field.snippets": row("broadway snippets list"),
         "languages": settable(takes: "a comma list of languages such as en-GB,pl, or mac",
                               read: { _ in LanguagePrefs.shared.chosen?.joined(separator: ",") ?? "mac" },
                               check: { PreferredLanguages.parse($0) != nil }) { _, text in
@@ -222,21 +231,21 @@ enum PersonSettings {
             return OpenAtLogin.on == on
         }, check: { yes($0) != nil }, failure: "macOS keeps login items in System Settings › General › Login Items"),
         "quit.confirm": flag(\.confirmsQuit),
-        "routes": row(),
+        "routes": row("broadway links list"),
         "search.engine": settable(takes: Engine.allCases.filter { $0 != .custom }.map(\.rawValue).joined(separator: ", "), read: { $0.engine.rawValue },
                                   check: { Engine(rawValue: $0).map { $0 != .custom } == true }) { prefs, text in
             if let engine = Engine(rawValue: text) { prefs.engine = engine }
         },
-        "search.keywords": row(),
-        "search.quickactions": row(),
-        "search.shortcuts": row(),
+        "search.keywords": row("broadway keywords list"),
+        "search.quickactions": row("broadway actions list"),
+        "search.shortcuts": row("broadway keywords list, broadway actions list and broadway snippets list"),
         "search.suggest": flag(\.engineSuggests, .turningOn),
         "shield": flag(\.shielded, .turningOff),
         "shortcuts": row("broadway shortcuts list"),
         "sidebar.button": flag(\.sideButton),
         "sidebar.selected": flag(\.selectedShortcut),
         "sites.keep": flag(\.keepsSignIns, .turningOff),
-        "space.look": row("In each space's menu: Edit Look…"),
+        "space.look": row("broadway spaces colour SPACE COLOUR"),
         "spaces.stacked": flag(\.stackedSpaces),
         "tabs.close.after": settable(takes: TabLife.allCases.map { "\($0.rawValue)" }.joined(separator: ", ") + " hours", read: { $0.tabLife.rawValue },
                                      check: { Int($0).flatMap(TabLife.init) != nil }) { prefs, text in
@@ -311,7 +320,7 @@ enum PersonSettings {
         func whole(_ refused: PersonRefusal) -> PersonRefusal {
             guard several else { return refused }
             var told = refused
-            told.message += ". Nothing was changed."
+            told.message = "\(refused.message). Nothing was changed."
             return told
         }
         guard words.count.isMultiple(of: 2) else {

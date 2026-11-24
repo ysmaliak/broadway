@@ -126,12 +126,13 @@ enum Nouns {
 
     static let all: [Noun] = [
         Noun("spaces", "Your spaces", group: "Spaces and tabs", [
-            Verb("spaces list", "List the spaces and which is on screen", examples: ["broadway spaces", "broadway spaces list --json"], columns: ["name", "tabs", "current", "accounts"]),
+            Verb("spaces list", "List the spaces and which is on screen", examples: ["broadway spaces", "broadway spaces list --json"], columns: ["name", "tabs", "current", "accounts", "colour"]),
             Verb("spaces switch <space>", "Switch to a space", examples: ["broadway spaces switch Work", "broadway space Work"]),
             Verb("spaces new <name> [--fresh] [--icon SYMBOL] [--switch]", "Make a space", about: "It stays behind unless --switch. It gets shared accounts: it stays signed in to the sites your other spaces use. --fresh gives it separate accounts: every site starts signed out, with cookies of its own.", examples: ["broadway spaces new Work", "broadway spaces new Clients --fresh --switch"]),
             Verb("spaces rename <space> <name>", "Rename a space"),
             Verb("spaces move <space> <position>", "Move a space among the others", about: "Position 1 is first. ⌃1–⌃9 follow the order."),
             Verb("spaces icon <space> <symbol>", "Change a space's icon"),
+            Verb("spaces colour <space> <colour>", "Change a space's colour", about: "One of graphite, gray, paper, coral, peach, sage, sky, lavender or rose, by id or name. Its transparency, grain and glass stay as they are. A custom colour or a picture is the person's to choose, in the space's menu: Edit Look…", examples: ["broadway spaces colour Work sage"]),
             Verb("spaces delete <space>", "Delete a space and close its tabs"),
         ]),
         Noun("space", "Which space is on screen, or go to one", group: "Spaces and tabs", first: "show", [
@@ -260,6 +261,35 @@ enum Nouns {
             Verb("shortcuts set <shortcut> <keys>", "Give a command a key", examples: ["broadway shortcuts set view.reload cmd+shift+r"]),
             Verb("shortcuts clear <shortcut>", "Take a command's key away"),
             Verb("shortcuts reset [shortcut] [--all]", "Put a key back"),
+        ]),
+        Noun("links", "Link rules: the space a link opens in", group: "Settings", [
+            Verb("links list", "List the rules, first to last", about: "The first rule that fits a link decides where it opens", columns: ["id", "match", "opens", "on"]),
+            Verb("links add <match> [--space NAME] [--kind site|host|starts|contains|pattern|regex] [--app NAME]", "Open links that fit in a space",
+                 about: "The kind is read from the match unless --kind says it: a site, exactly a host, the start of an address, words in it, a pattern with *, or a regular expression. A rule for a site goes before broader ones, and the others go last. A rule that hands links to another app or browser is the person's to make, so --app answers person_only with the place. broadway settings set links.open SPACE sends every other link from outside to a space.",
+                 examples: ["broadway links add github.com --space Work", "broadway links add /pull/ --kind contains --space Reviews"]),
+            Verb("links move <id> <position>", "Move a rule among the others", about: "Position 1 is first, and the first rule that fits wins"),
+            Verb("links delete <id>", "Delete a rule"),
+        ]),
+        Noun("keywords", "Site shortcuts: a word before a search sends it to a site", group: "Settings", [
+            Verb("keywords list", "List the site shortcuts", columns: ["keyword", "site", "address"]),
+            Verb("keywords add <keyword> <address>", "Add a site shortcut", about: "The address is http or https with one %s where the words go. A word that already goes somewhere is the person's to change.",
+                 examples: ["broadway keywords add yt 'https://www.youtube.com/results?search_query=%s'"]),
+            Verb("keywords delete <keyword>", "Delete a site shortcut"),
+        ]),
+        Noun("actions", "Quick Actions: short names in the address field that open something new", group: "Settings", [
+            Verb("actions list", "List the Quick Actions in their order", columns: ["id", "short", "name", "address"]),
+            Verb("actions add <short> <address> [--name TEXT]", "Add a Quick Action", about: "Typing the short name in the address field opens the address. A short name that already opens something is the person's to change.",
+                 examples: ["broadway actions add pr github.com/pulls --name \"My pull requests\""]),
+            Verb("actions rename <action> <name>", "Rename a Quick Action", about: "By id or short name"),
+            Verb("actions move <action> <position>", "Move a Quick Action among the others", about: "Position 1 is first"),
+            Verb("actions delete <action>", "Delete a Quick Action", about: "New document and New meeting come back from Settings › Field › Quick Actions"),
+        ]),
+        Noun("snippets", "Snippets: your own text, offered when you type ;keyword in a field", group: "Settings", [
+            Verb("snippets list", "List the snippets", columns: ["keyword", "title", "line"]),
+            Verb("snippets add <keyword> <text> [--title TEXT]", "Add a snippet", about: "{date}, {time}, {clipboard} and {cursor} fill in when it is used. The title is the keyword unless --title gives one.",
+                 examples: ["broadway snippets add sig 'Best, Sam' --title Signature"]),
+            Verb("snippets rename <keyword> <title>", "Change a snippet's title"),
+            Verb("snippets delete <keyword>", "Delete a snippet"),
         ]),
         Noun("extensions", "Extensions", group: "Settings", [
             Verb("extensions list", "List extensions", columns: ["id", "name", "version", "enabled"]),

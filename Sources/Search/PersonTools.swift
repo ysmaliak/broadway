@@ -54,6 +54,7 @@ enum PersonTools {
         "site": "not asked for", "shortcuts": "not asked for", "extensions": "not asked for", "shields": "not asked for",
         "permissions": "not asked for", "skills": "not asked for", "replies": "not asked for", "now": "not asked for",
         "agents": "not asked for", "approvals": "not asked for", "hooks": "not asked for",
+        "links": "not asked for", "keywords": "not asked for", "actions": "not asked for", "snippets": "not asked for",
         "complete": "Broadway's own completion of a shell's words, not a command an agent runs",
     ]
 
