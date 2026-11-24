@@ -89,6 +89,12 @@ enum PullList: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    static func said(_ lists: [PullList]) -> String {
+        let titles = ordered(lists).map(\.title)
+        guard titles.count > 1 else { return titles.first ?? "" }
+        return titles.dropLast().joined(separator: ", ") + " and " + titles[titles.count - 1]
+    }
+
     static func reading(_ lists: [PullList]) -> [PullList] {
         ordered(lists).filter { $0 != .changed } + (lists.contains(.changed) ? [.changed] : [])
     }

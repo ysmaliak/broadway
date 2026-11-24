@@ -68,6 +68,15 @@ final class ReviewAgainTests {
         return read
     }
 
+    private func short(_ id: UUID) -> String { String(id.uuidString.prefix(8)).lowercased() }
+
+    private func call(_ verb: String, _ arguments: [String: Any]) async throws -> [String: Any] {
+        let box = BrowserToolbox()
+        box.browser = browser
+        let found = try #require(PersonCommands.find("live", verb))
+        return try await found.run(PersonCall(noun: "live", verb: verb, arguments: arguments, browser: browser, box: box))
+    }
+
     private func page(_ id: UUID) -> SettingsPageView {
         let shell = SettingsShell()
         shell.go(to: .liveFolders)
@@ -387,4 +396,56 @@ final class ReviewAgainTests {
         }
     }
 
+    @Test func liveListsChoosesTheListsBehindTheSameGateAsRename() async throws {
+        let made = LiveFolders.shared.add(name: "PRs", source: .pullRequests, space: browser.spaceID)
+
+        let changed = try await call("lists", ["id": short(made.id), "list": ["changed", "Created by You"]])
+        let shown = try await call("show", ["id": short(made.id)])
+
+        #expect(PersonCommands.find("live", "lists")?.kind == PersonCommands.find("live", "rename")?.kind)
+        #expect(LiveFolders.shared.folder(made.id)?.source.lists == [.changed, .created])
+        #expect(changed["message"] as? String == "Reads Changed Since Your Review and Created by You")
+        #expect(shown["lists"] as? [String] == ["Changed Since Your Review", "Created by You"])
+        #expect((shown["listsLeftOut"] as? [String])?.contains("Review Requests") == true)
+    }
+
+    @Test func liveListsRefusesAnUnknownNameAndSaysTheNames() async throws {
+        let made = LiveFolders.shared.add(name: "PRs", source: .pullRequests, space: browser.spaceID)
+        let feed = LiveFolders.shared.add(name: "News", source: LiveSource(kind: .feed, address: "https://example.com/feed.xml"), space: browser.spaceID)
+
+        do {
+            _ = try await call("lists", ["id": short(made.id), "list": ["later"]])
+            Issue.record("an unknown list was taken")
+        } catch let refusal as PersonRefusal {
+            #expect(refusal.hint?.contains("changed") == true)
+            #expect(refusal.hint?.contains("reviewRequests") == true)
+        }
+        await #expect(throws: PersonRefusal.self) { try await self.call("lists", ["id": self.short(feed.id), "list": ["changed"]]) }
+        #expect(LiveFolders.shared.folder(made.id)?.source.lists == nil)
+    }
+
+    @Test func liveRangeChoosesARepositoryFoldersRange() async throws {
+        let made = LiveFolders.shared.add(name: "Rocket", source: try #require(LiveSource.from("acme/rocket")), space: browser.spaceID)
+        let prs = LiveFolders.shared.add(name: "PRs", source: .pullRequests, space: browser.spaceID)
+
+        let said = try await call("range", ["id": short(made.id), "range": "month"])
+
+        #expect(LiveFolders.shared.folder(made.id)?.source.range == .month)
+        #expect(said["message"] as? String == "Shows This Month")
+        await #expect(throws: PersonRefusal.self) { try await self.call("range", ["id": self.short(made.id), "range": "year"]) }
+        await #expect(throws: PersonRefusal.self) { try await self.call("range", ["id": self.short(prs.id), "range": "week"]) }
+    }
+
+    @Test func liveUnhideBringsBackTheRemovedRows() async throws {
+        let live = LiveFolders.shared
+        let made = live.add(name: "PRs", source: .pullRequests, space: browser.spaceID)
+        live.apply(.items([row(1), row(2)], nil), to: made.id)
+        live.hide(pull(1), in: made.id)
+        live.hide(pull(2), in: made.id)
+
+        let said = try await call("unhide", ["id": short(made.id)])
+
+        #expect(said["message"] as? String == "2 rows are back")
+        #expect(live.folder(made.id)?.hidden.isEmpty == true)
+    }
 }
