@@ -209,10 +209,65 @@ final class MeetingAlertsTests {
         let changes = MeetingAlertRules.changes(meeting)
 
         #expect(changes.contains(meeting.start.addingTimeInterval(-30)))
-        #expect(MeetingAlertRules.when(meeting, at: meeting.start.addingTimeInterval(-31)).hasSuffix("in 1 min"))
-        #expect(MeetingAlertRules.when(meeting, at: meeting.start.addingTimeInterval(-30)).hasSuffix("now"))
-        #expect(MeetingAlertRules.when(meeting, at: meeting.start.addingTimeInterval(60)).hasSuffix("started 1 min ago"))
+        #expect(MeetingAlertRules.when(meeting, at: meeting.start.addingTimeInterval(-31)).hasPrefix("In 1 min · "))
+        #expect(MeetingAlertRules.when(meeting, at: meeting.start.addingTimeInterval(-30)).hasPrefix("Now · "))
+        #expect(MeetingAlertRules.when(meeting, at: meeting.start.addingTimeInterval(60)).hasPrefix("Started 1 min ago · "))
         #expect(changes == changes.sorted())
+    }
+
+    @Test func snoozeSaysHowLongItPutsTheCardAway() {
+        let meeting = event(in: 3)
+
+        #expect(MeetingAlertRules.snoozeTitle(meeting, at: meeting.start.addingTimeInterval(-170)) == "Snooze 3 min")
+        #expect(MeetingAlertRules.snoozeTitle(meeting, at: meeting.start.addingTimeInterval(-31)) == "Snooze 1 min")
+        #expect(MeetingAlertRules.snoozeTitle(meeting, at: meeting.start.addingTimeInterval(-30)) == "Snooze 2 min")
+        #expect(MeetingAlertRules.snoozeTitle(meeting, at: meeting.start.addingTimeInterval(90)) == "Snooze 2 min")
+    }
+
+    @Test func thePanelTakesClicksOverACardAndLetsThemThroughBesideIt() async throws {
+        _ = NSApplication.shared
+        let clock = Clock(now)
+        let alerts = alerts(AlertCalendar([event("standup", in: 0.5)]), clock: clock)
+        alerts.present = nil
+        alerts.start()
+        await alerts.reading?.value
+        let card = try #require(alerts.panelCards.first)
+
+        #expect(!alerts.panelTakesClicks)
+        #expect(alerts.panelFrame.insetBy(dx: MeetingAlertPanel.bleed, dy: MeetingAlertPanel.bleed).equalTo(card))
+
+        alerts.panelReach(at: NSPoint(x: card.midX, y: card.midY))
+        #expect(alerts.panelTakesClicks)
+
+        alerts.panelReach(at: NSPoint(x: card.minX - 6, y: card.midY))
+        #expect(!alerts.panelTakesClicks)
+
+        alerts.panelReach(at: NSPoint(x: card.midX, y: card.maxY + MeetingAlertPanel.bleed - 2))
+        #expect(!alerts.panelTakesClicks)
+        alerts.stop()
+        #expect(!alerts.panelShown)
+    }
+
+    @Test func theCardsSymbolIsCentredOnItsWordsAndOnTheFacesAxis() throws {
+        let surface = MeetingAlerts.surface("one")
+        let window = NSWindow(contentRect: NSRect(x: -20_000, y: -20_000, width: surface.frame.width, height: surface.frame.height),
+                              styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        window.contentView = surface
+        surface.layoutSubtreeIfNeeded()
+        let card = try #require(surface.kitSubviews(of: MeetingAlertCardView.self).first)
+        let symbol = try #require(card.kitSubviews(of: KitSymbol.self).first { $0.name == "video" })
+        let face = try #require(card.kitSubviews(of: MeetingFaceView.self).first)
+        let title = try #require(card.kitSubviews(of: NSTextField.self).first)
+        let lines = card.kitSubviews(of: KitLabel.self).filter { $0.text.contains(" · ") || $0.text == "Room 4" }
+        func box(_ view: NSView) -> NSRect { view.convert(view.bounds, to: card) }
+        let bottom = try #require(lines.map { box($0).maxY }.max())
+
+        #expect(lines.count == 2)
+        #expect(abs(box(symbol).midX - box(face).midX) <= 1.5)
+        #expect(abs(box(symbol).midY - (box(title).minY + bottom) / 2) <= 1.5)
+        #expect(box(face).minX == MeetingAlertCardView.inset)
     }
 
     @Test func initialsFromNamesOrAddresses() {

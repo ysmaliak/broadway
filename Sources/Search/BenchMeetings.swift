@@ -103,7 +103,8 @@ extension Bench {
             }
         case "shot-start":
             answer(alerts.shot(dark: request["dark"] as? Bool ?? false, front: request["front"] as? Bool ?? false,
-                               controls: request["controls"] as? Bool ?? false, key: request["key"] as? Bool ?? false)
+                               controls: request["controls"] as? Bool ?? false, key: request["key"] as? Bool ?? false,
+                               ground: request["ground"] as? String)
                    ?? ["error": "no alert to capture"])
         case "shot-take":
             let held = alerts.shotState
