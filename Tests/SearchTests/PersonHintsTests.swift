@@ -8,7 +8,7 @@ import Testing
 struct PersonHintsTests {
     private static let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
-    private static let scanned = ["Sources/BroadwayCLI/Nouns.swift"]
+    private static let scanned = ["Sources/BroadwayCLI/Nouns.swift", "Sources/BroadwayCLI/Help.swift", "Sources/BroadwayCLI/Setup.swift", "Sources/Search/MCPServer.swift"]
 
     private static func sources() throws -> [(name: String, text: String)] {
         let folder = root.appendingPathComponent("Sources/Search")
@@ -74,6 +74,17 @@ struct PersonHintsTests {
         #expect(Self.problem(["find"]) == nil)
         #expect(Self.problem(["space"]) == nil)
         #expect(Self.problem(["zoom", "125"]) == nil)
+    }
+
+    @Test func theGuideTeachesSettingBroadwayUp() {
+        let guide = Help.guideText
+
+        #expect(guide.contains("## Setting Broadway up"))
+        #expect(guide.contains("broadway settings list --can-set"))
+        #expect(guide.contains("person_only"))
+        #expect(Setup.skill.contains("set up through the command"))
+        #expect(MCPServer.instructions.contains("more_tools finds settings"))
+        #expect(Help.mcpInstructions.contains("more_tools finds settings"))
     }
 
     @Test func anUnknownSettingPointsAtSettingsFind() {

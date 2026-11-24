@@ -277,6 +277,11 @@ final class PersonToolsTests {
         #expect(PersonTools.tool("spaces_colour") != nil)
     }
 
+    @Test func theCanSetTheInstructionsNameIsSettingsListsArgument() {
+        #expect(PersonTools.tool("settings_list")?.properties["can-set"]?["type"] as? String == "boolean")
+        #expect(MCPServer.instructions.contains("settings_list with can-set"))
+    }
+
     @Test func moreToolsFindsTheNewNounsByName() async {
         let mcp = server(session())
 

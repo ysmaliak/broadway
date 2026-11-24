@@ -245,6 +245,14 @@ final class PersonConfigTests {
         #expect(named == SpaceLook.presets.map(\.id))
     }
 
+    @Test func aNameThatIsNoneOfThemIsNotFound() async {
+        #expect(await refused("links", "move", ["id": "zzzzzzzz", "position": "1"])?.code == "not_found")
+        #expect(await refused("links", "delete", ["id": "zzzzzzzz"])?.code == "not_found")
+        #expect(await refused("actions", "rename", ["action": "zznone", "name": "X"])?.code == "not_found")
+        #expect(await refused("snippets", "delete", ["keyword": "zznone"])?.code == "not_found")
+        #expect(await refused("spaces", "colour", ["space": "Nowhere", "colour": "sage"])?.code == "not_found")
+    }
+
     @Test func theNewVerbsAreGatedLikeTheOthers() {
         for name in ["links list", "keywords list", "actions list", "snippets list"] {
             #expect(PersonCommands.table.first { $0.name == name }?.kind == .look, "\(name)")

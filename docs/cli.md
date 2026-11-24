@@ -8,6 +8,26 @@ Set it up from Settings › Agents › The broadway command, or run `Broadway.ap
 
 Nothing reads or acts until the person turns on Settings › Agents › Let agents use Broadway. See [agents.md](agents.md) for how agents are told apart, what they may do and what the person sees.
 
+## Setting Broadway up
+
+An agent can set Broadway up for the person with the command alone, or over MCP with the same verbs as tools. There is no settings file to edit, on purpose: a file an agent could write would walk past every bar that keeps a change the person's. `broadway settings list --can-set` lists every setting the command can change, with its value and what it takes, and `broadway settings set` takes several pairs in one call and one question. What only the person may change answers `person_only`, and `broadway settings open ID` takes them to the row.
+
+| Noun | What it sets up |
+| --- | --- |
+| `settings` | the settings, the sidebar side, Darken Bright Pages, the bookmarks bar, Ask before quitting and Open at Login among them |
+| `shortcuts` | keyboard shortcuts |
+| `spaces` | spaces, their order, icons and colours |
+| `folders` | folders of tabs |
+| `bookmarks` | bookmarks and their folders |
+| `live` | Live Folders |
+| `links` | link rules: the space a link opens in |
+| `keywords` | site shortcuts |
+| `actions` | Quick Actions |
+| `snippets` | snippets |
+| `extensions` | extensions, installed after the person's yes |
+| `shields` | the ad and tracker blocker, on again for a site, and its lists |
+| `permissions` | site permissions, forgotten so a site asks again |
+
 ## Options, output and exit codes
 
 These work on every command:
