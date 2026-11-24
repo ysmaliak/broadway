@@ -42,6 +42,12 @@ final class ReviewAgainTests {
         LiveItem(key: pull(number), title: "#\(number)", activity: activity)
     }
 
+    private func labeled(_ number: Int, _ label: String) -> LiveItem {
+        var item = row(number)
+        item.label = label
+        return item
+    }
+
     private func numbers(_ items: [LiveItem]) -> [Int] {
         items.compactMap { $0.key.split(separator: "/").last.flatMap { Int($0) } }
     }
@@ -171,6 +177,25 @@ final class ReviewAgainTests {
         #expect(numbers(read.items) == [7])
         #expect(read.items.first?.list == .changed)
         #expect(read.items.first?.label == "Review again")
+    }
+
+    @Test func aBackRowReadsReviewAgainOverChangesRequestedAndDraft() {
+        let rows = PullList.merged([(.changed, [labeled(1, PullState.changes), labeled(2, PullState.draft)])], keepsState: true)
+
+        #expect(rows.map(\.label) == ["Review again", "Review again"])
+    }
+
+    @Test func aBackRowThatMergedClosedOrConflictsKeepsThatWord() {
+        let rows = PullList.merged([(.changed, [labeled(1, PullState.merged), labeled(2, PullState.closed), labeled(3, PullState.conflict)])],
+                                   keepsState: true)
+
+        #expect(Set(rows.compactMap(\.label)) == [PullState.merged, PullState.closed, PullState.conflict])
+    }
+
+    @Test func yourOwnPullRequestWithChangesRequestedKeepsItsWord() {
+        let rows = PullList.merged([(.created, [labeled(1, PullState.changes)]), (.assigned, [labeled(2, PullState.changes)])], keepsState: true)
+
+        #expect(rows.map(\.label) == [PullState.changes, PullState.changes])
     }
 
     @Test func aBackRowNobodyOpenedJoinsNowAsReviewAgain() throws {

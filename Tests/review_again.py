@@ -26,6 +26,7 @@ def url(n):
 
 
 OTHERS = {7: "review-requested:@me", 8: "assignee:@me", 9: "author:@me"}
+ASKED_CHANGES = {5, 9}
 TITLES = {5: "Retry uploads on 502", 7: "Trim the cache", 8: "Move settings to the sidebar", 9: "Try a lighter list cell"}
 
 
@@ -41,7 +42,8 @@ def list_page(search):
     rows = "".join(
         f'<li class="listItem"><h3><a href="{url(n)}" data-testid="listitem-title-link"><span>{TITLES[n]}</span></a></h3>'
         f'<div><div class="leadingElement">{OPEN}</div><span>#{n}</span>'
-        f'<a data-testid="author-filter-link" href="/acme/rocket/pulls?q=author%3Adana">dana</a></div></li>' for n in numbers)
+        f'<a data-testid="author-filter-link" href="/acme/rocket/pulls?q=author%3Adana">dana</a>'
+        f'{"<span>Changes requested</span>" if n in ASKED_CHANGES else ""}</div></li>' for n in numbers)
     if not numbers:
         rows = "</ul><h3>No results matched your search.</h3><ul>"
     blob = json.dumps({"payload": {"pullRequestsIndex": {"results": {"items": [
@@ -164,13 +166,15 @@ def back_and_away():
     t.ok("the folder reads fine", folder("PRs", st)["state"] == "fine", folder("PRs", st)["state"])
     t.ok("the other lists show their rows", sorted(found) == [7, 8, 9], sorted(found))
     t.ok("with nothing new since the review it is absent", 5 not in found, found)
+    t.ok("your own pull request with changes requested says so", (found.get(9) or {}).get("label") == "Changes requested", found.get(9))
 
     print("— the author pushes")
     STATE["timeline"].append(push("dana", "2026-11-18T10:00:00Z"))
     STATE["updated"] = "2026-11-18T10:00:00Z"
     found = read_until("PRs", lambda rows: 5 in rows)
     t.ok("it appears", 5 in found, found)
-    t.ok("labeled Review again", (found.get(5) or {}).get("label") == "Review again", found.get(5))
+    t.ok("labeled Review again, though its review asks for changes", (found.get(5) or {}).get("label") == "Review again", found.get(5))
+    t.ok("your own pull request still says Changes requested", (found.get(9) or {}).get("label") == "Changes requested", found.get(9))
     t.ok("from Changed Since Your Review", (found.get(5) or {}).get("list") == "changed", found.get(5))
 
     print("— the reviewer answers")

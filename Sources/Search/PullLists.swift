@@ -162,7 +162,9 @@ enum PullList: String, Codable, CaseIterable, Identifiable {
                     continue
                 }
                 if let label = list.label {
-                    if !keepsState || PullState.rank(label) < PullState.rank(item.label) { item.label = label }
+                    let wins = list == .changed ? PullState.rank(item.label) > PullState.rank(PullState.conflict)
+                        : PullState.rank(label) < PullState.rank(item.label)
+                    if !keepsState || wins { item.label = label }
                 }
                 item.list = list
                 item.on = [list]
