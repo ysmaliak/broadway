@@ -360,3 +360,235 @@ final class AIGroupBurstTests {
     }
 }
 
+@Suite(.sharedWorld, .timeLimit(.minutes(5)), .serialized)
+@MainActor
+final class AIGroupTwinTests {
+    init() {
+        keepSetting(AIGroups.shared, \.on, AIGroups.onKey)
+        keepSetting(AIGroups.shared, \.emoji, AIGroups.emojiKey)
+        addTeardownBlock { @MainActor in
+            AIGroups.shared.standIn = nil
+            AIGroups.shared.quiet = 1.5
+            AIGroups.shared.gap = 4
+            AIGroups.shared.timeout = 25
+            AIGroups.shared.stop = 8
+        }
+    }
+
+    private func browser(_ pages: [(String, String)], quiet: Double = 0.05, gap: Double = 0.3) -> Browser {
+        _ = NSApplication.shared
+        NSApp.setActivationPolicy(.prohibited)
+        let browser = Browser(record: WindowRecord())
+        browser.leaveFiles()
+        browser.prefs.usesTabGroups = true
+        for (index, page) in pages.enumerated() {
+            if index > 0 { browser.newTab() }
+            browser.tabs.last?.restore(url: URL(string: page.1)!, title: page.0)
+            browser.tabs.last?.cameBack = false
+        }
+        let groups = AIGroups.shared
+        groups.on = true
+        groups.emoji = true
+        groups.quiet = quiet
+        groups.gap = gap
+        groups.timeout = 5
+        addTeardownBlock { @MainActor in browser.closeAll() }
+        return browser
+    }
+
+    private func folder(_ browser: Browser, _ name: String, _ titles: [String], ai: Bool = true, renamed: Bool = false) -> UUID {
+        var group = TabGroup(id: UUID(), name: name, collapsed: false)
+        group.ai = ai
+        group.pinned = false
+        group.userNamed = renamed
+        if !ai { group.madeName = name }
+        browser.tabGroups.append(group)
+        for tab in browser.tabs where titles.contains(tab.title) { tab.groupID = group.id }
+        browser.arrangeGroupedTabs()
+        return group.id
+    }
+
+    private func titled(_ browser: Browser, _ title: String) -> Tab {
+        browser.tabs.first { $0.title == title }!
+    }
+
+    private func settle(_ seconds: Double = 0.8) async {
+        try? await Task.sleep(for: .seconds(seconds))
+    }
+
+    private let lisbon = [("Lisbon flights", "https://booking.com/flights"), ("Lisbon hotels", "https://airbnb.com/s/lisbon"),
+                          ("Lisbon food", "https://timeout.com/lisbon/food"), ("Swift docs", "https://developer.apple.com/documentation/swift"),
+                          ("Lisbon trams", "https://carris.pt/trams"), ("Lisbon tiles", "https://museudoazulejo.pt/tiles")]
+
+    @Test func twinFoldersBecomeOneUnderTheLargersNameAndPlace() async {
+        let browser = browser(lisbon)
+        AIGroups.shared.standIn = FakeGroupEngine()
+        let small = folder(browser, "Lisbon Trip", ["Lisbon trams", "Lisbon tiles"])
+        let other = folder(browser, "Docs", ["Swift docs"], ai: false)
+        let large = folder(browser, "lisbon  trips", ["Lisbon flights", "Lisbon hotels", "Lisbon food"])
+        let grouper = AIGroups.shared.grouper(for: browser)
+
+        let joined = await grouper.joinTwins(fresh: [small], space: browser.spaceID, decider: FakeGroupEngine())
+
+        #expect(joined == 2)
+        #expect(browser.tabGroups.map(\.id) == [other, large])
+        #expect(browser.tabGroups.last?.name == "lisbon  trips")
+        #expect(browser.tabs(in: large).map(\.title) == ["Lisbon flights", "Lisbon hotels", "Lisbon food", "Lisbon trams", "Lisbon tiles"])
+        #expect(browser.tabs.count == lisbon.count)
+    }
+
+    @Test func foldersAboutOneSubjectAreJoinedWhenTheEngineSaysSo() async {
+        let browser = browser(lisbon + [("Porto wine", "https://porto.example/wine"), ("Porto trains", "https://cp.pt/porto")])
+        let engine = FakeGroupEngine()
+        AIGroups.shared.standIn = engine
+        let small = folder(browser, "Lisbon Tiles", ["Lisbon trams", "Lisbon tiles"])
+        let large = folder(browser, "Lisbon", ["Lisbon flights", "Lisbon hotels", "Lisbon food"])
+        let porto = folder(browser, "Porto", ["Porto wine", "Porto trains"])
+        let grouper = AIGroups.shared.grouper(for: browser)
+
+        let joined = await grouper.joinTwins(fresh: [small, porto], space: browser.spaceID, decider: engine)
+
+        #expect(joined == 2)
+        #expect(Set(browser.tabGroups.map(\.id)) == [large, porto])
+        #expect(browser.tabs(in: porto).count == 2)
+        #expect(engine.fitAsks.allSatisfy { $0.group.name == "Lisbon" })
+    }
+
+    @Test func tabsSomeoneUngroupedAreNeverPutTogetherByAJoin() async {
+        let browser = browser(lisbon)
+        let engine = FakeGroupEngine()
+        AIGroups.shared.standIn = engine
+        let grouper = AIGroups.shared.grouper(for: browser)
+        let parted = folder(browser, "Lisbon", ["Lisbon flights", "Lisbon trams"])
+        grouper.ungrouped(browser.tabGroups.first { $0.id == parted }!)
+        browser.tabGroups.removeAll { $0.id == parted }
+        for tab in browser.tabs { tab.groupID = nil }
+        let small = folder(browser, "Lisbon Trip", ["Lisbon trams", "Lisbon tiles"])
+        let large = folder(browser, "Lisbon Trips", ["Lisbon flights", "Lisbon hotels", "Lisbon food"])
+
+        let joined = await grouper.joinTwins(fresh: [small, large], space: browser.spaceID, decider: engine)
+        let shown = browser.tabs.compactMap(AIGrouper.shown)
+        func tab(_ title: String) -> UUID { shown.first { $0.title == title }!.id }
+        let everyone = Dictionary(uniqueKeysWithValues: shown.map { ($0.id, $0) })
+        let kept = await grouper.together([[tab("Lisbon flights"), tab("Lisbon hotels")], [tab("Lisbon trams"), tab("Lisbon tiles")]],
+                                          everyone: everyone, decider: engine, dismissed: grouper.dismissed[browser.spaceID] ?? [])
+        let merged = await grouper.together([[tab("Lisbon flights"), tab("Lisbon hotels")], [tab("Lisbon food"), tab("Lisbon tiles")]],
+                                            everyone: everyone, decider: engine, dismissed: grouper.dismissed[browser.spaceID] ?? [])
+
+        #expect(joined == 0)
+        #expect(browser.tabGroups.map(\.id) == [small, large])
+        #expect(kept.count == 2)
+        #expect(merged.count == 1)
+    }
+
+    @Test func aLoneTabAsksJevOnceAsBefore() async {
+        let browser = browser([("San Francisco: 1 bed at 12 Hyde St", "https://zillow.com/homedetails/1"),
+                               ("San Francisco: 2 bed at 40 Market St", "https://redfin.com/home/2")], quiet: 0.05, gap: 0.3)
+        let host = "lone-\(UUID().uuidString.prefix(6).lowercased()).test"
+        DecisionsStub.answer(host, BurstJev.answering(seed: 9))
+        AIGroups.shared.standIn = BurstJev(host: host)
+        _ = folder(browser, "San Francisco", browser.tabs.map(\.title))
+        let grouper = AIGroups.shared.grouper(for: browser)
+        browser.newTab()
+        let tab = browser.tabs.last!
+        tab.restore(url: URL(string: "https://hotpads.com/unit/3")!, title: "San Francisco: 3 bed at 9 Valencia St")
+        tab.cameBack = false
+
+        grouper.landed(tab)
+        await settle(2.0)
+
+        #expect(DecisionsStub.seen(host).count == 1)
+    }
+
+    @Test func foldersSomeoneMadeOrRenamedAreNeverJoined() async {
+        let browser = browser(lisbon)
+        let engine = FakeGroupEngine()
+        AIGroups.shared.standIn = engine
+        let renamed = folder(browser, "Lisbon Trip", ["Lisbon trams", "Lisbon tiles"], renamed: true)
+        let made = folder(browser, "Lisbon trips", ["Swift docs"], ai: false)
+        let large = folder(browser, "Lisbon Trips", ["Lisbon flights", "Lisbon hotels", "Lisbon food"])
+        let grouper = AIGroups.shared.grouper(for: browser)
+
+        let joined = await grouper.joinTwins(fresh: [renamed, made, large], space: browser.spaceID, decider: engine)
+
+        #expect(joined == 0)
+        #expect(browser.tabGroups.map(\.id) == [renamed, made, large])
+        #expect(browser.tabs(in: renamed).count == 2)
+        #expect(browser.tabGroups.first?.name == "Lisbon Trip")
+        #expect(engine.fitAsks.isEmpty)
+    }
+
+    @Test func aTabWithNoTitleYetIsJudgedOnceItHasOne() async {
+        let browser = browser([("Lisbon flights", "https://booking.com/flights"), ("Lisbon hotels", "https://airbnb.com/s/lisbon")])
+        AIGroups.shared.standIn = FakeGroupEngine()
+        let grouper = AIGroups.shared.grouper(for: browser)
+        await grouper.regroup()
+        let group = browser.tabGroups.first { $0.ai }!
+        browser.newTab()
+        let late = browser.tabs.last!
+        let url = URL(string: "https://timeout.com/lisbon/food")!
+        late.restore(url: url, title: "")
+        late.cameBack = false
+
+        grouper.landed(late)
+        await settle(1.5)
+        #expect(late.groupID == nil)
+        late.restore(url: url, title: "Lisbon food")
+        await settle(1.0)
+
+        #expect(late.groupID == group.id)
+    }
+
+    @Test func aTabAskedBeforeItsFolderExistedIsAskedAgainOnceItDoes() async {
+        let subjects = ["Ryokan booking": "kyoto", "Shinkansen pass": "kyoto", "Temple opening hours": "kyoto", "Pasta recipes": "food"]
+        let engine = ScriptedGroupEngine(picking: { ask in
+            var out: [UUID: AIGroupPick] = [:]
+            for tab in ask.fresh {
+                let subject = subjects[tab.title]
+                if let group = ask.groups.first(where: { $0.members.contains { subjects[$0.title] == subject } }) {
+                    out[tab.id] = .group(group.id)
+                } else if let other = ask.fresh.first(where: { $0.id != tab.id && subjects[$0.title] == subject }) {
+                    out[tab.id] = .tab(other.id)
+                }
+            }
+            return out
+        }, naming: { _ in AIGroupName(name: "Kyoto Trip", emoji: "🏯") })
+        engine.size = 2
+        let browser = browser([("Ryokan booking", "https://ryokan.example/book"), ("Pasta recipes", "https://bbc.co.uk/food/pasta"),
+                               ("Shinkansen pass", "https://jrpass.example/"), ("Temple opening hours", "https://temples.example/hours")])
+        AIGroups.shared.standIn = engine
+        let grouper = AIGroups.shared.grouper(for: browser)
+
+        for tab in browser.tabs { grouper.landed(tab) }
+        await settle(1.5)
+
+        let group = browser.tabGroups.first { $0.ai }
+        #expect(group != nil)
+        #expect(Set(browser.tabs(in: group?.id).map(\.title)) == ["Ryokan booking", "Shinkansen pass", "Temple opening hours"])
+        #expect(grouper.passes == 1)
+    }
+
+    @Test func aSingleTabOnAQuietSidebarJoinsAsSoonAsBefore() async {
+        let browser = browser([("Lisbon flights", "https://booking.com/flights"), ("Lisbon hotels", "https://airbnb.com/s/lisbon")], quiet: 1.5, gap: 4)
+        let engine = FakeGroupEngine()
+        AIGroups.shared.standIn = engine
+        let grouper = AIGroups.shared.grouper(for: browser)
+        await grouper.regroup()
+        let group = browser.tabGroups.first { $0.ai }!
+        await settle(4.2)
+        engine.pause = { 0.3 }
+        browser.newTab()
+        let tab = browser.tabs.last!
+        tab.restore(url: URL(string: "https://timeout.com/lisbon/food")!, title: "Lisbon food")
+        tab.cameBack = false
+
+        let started = Date()
+        grouper.landed(tab)
+        while tab.groupID == nil, Date().timeIntervalSince(started) < 6 { try? await Task.sleep(for: .milliseconds(20)) }
+        let took = Date().timeIntervalSince(started)
+
+        #expect(tab.groupID == group.id)
+        #expect(took < 1.5 + 0.3 + 1.2)
+        print("SINGLE took=\(String(format: "%.2f", took))s")
+    }
+}
