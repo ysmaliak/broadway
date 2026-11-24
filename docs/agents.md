@@ -84,7 +84,7 @@ All of these are in Settings › Agents, and none of them can be changed from th
 - **Sites.** A site can be marked Always Here or Never Here from a question's answer. Never Here refuses every act on it. Always Here lets everything through except paying.
 - **Connected agents**, and **the broadway command** for setting it up.
 
-[cli.md](cli.md#who-may-do-what) lists how each command is gated. The MCP tools for spaces, folders, bookmarks, live folders and settings take the same path as their commands, so each is gated exactly as its command is.
+[cli.md](cli.md#who-may-do-what) lists how each command is gated. The MCP tools for spaces, folders, bookmarks, live folders, settings, shortcuts, extensions, shields, permissions, link rules, site shortcuts, Quick Actions and snippets take the same path as their commands, so each is gated exactly as its command is.
 
 ## The Agents area
 

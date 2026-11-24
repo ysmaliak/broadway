@@ -204,7 +204,8 @@ final class MCPServer {
         let fits = hidden.enumerated().map { (at: $0.offset, tool: $0.element, score: Self.fit($0.element, words: words)) }
             .filter { $0.score > 0 }
             .sorted { ($0.score, -$0.at) > ($1.score, -$1.at) }
-        let taken = fits.prefix(6).compactMap { $0.tool["name"] as? String }
+        let named = (fits.first?.score ?? 0) >= 3
+        let taken = fits.filter { !named || $0.score >= 2 }.prefix(6).compactMap { $0.tool["name"] as? String }
         added.formUnion(taken)
         if !taken.isEmpty { reply(["jsonrpc": "2.0", "method": "notifications/tools/list_changed"]) }
         let left = hidden.compactMap { $0["name"] as? String }.filter { !taken.contains($0) }

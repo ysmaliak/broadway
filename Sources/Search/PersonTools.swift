@@ -45,25 +45,25 @@ enum PersonTools {
         }
     }
 
-    static let nouns: [String] = ["spaces", "folders", "bookmarks", "live", "settings"]
+    static let nouns: [String] = ["spaces", "folders", "bookmarks", "live", "settings", "shortcuts", "extensions", "shields", "permissions",
+                                  "links", "keywords", "actions", "snippets"]
 
     static let leftOut: [String: String] = [
         "space": "not asked for", "tabs": "not asked for", "groups": "not asked for", "split": "not asked for",
         "windows": "not asked for", "downloads": "not asked for", "files": "not asked for", "history": "not asked for",
         "logins": "not asked for", "fill": "not asked for", "page": "not asked for",
-        "site": "not asked for", "shortcuts": "not asked for", "extensions": "not asked for", "shields": "not asked for",
-        "permissions": "not asked for", "skills": "not asked for", "replies": "not asked for", "now": "not asked for",
+        "site": "not asked for", "skills": "not asked for", "replies": "not asked for", "now": "not asked for",
         "agents": "not asked for", "approvals": "not asked for", "hooks": "not asked for",
-        "links": "not asked for", "keywords": "not asked for", "actions": "not asked for", "snippets": "not asked for",
         "complete": "Broadway's own completion of a shell's words, not a command an agent runs",
     ]
 
     static let gentle: Set<String> = [
         "spaces_new", "spaces_switch", "folders_new", "folders_fold", "folders_unfold",
         "bookmarks_add", "bookmarks_folder", "bookmarks_open", "live_add", "live_update", "settings_open",
+        "shields_on", "shields_update", "links_add", "keywords_add", "actions_add", "snippets_add",
     ]
 
-    static let reachesSites: Set<String> = ["bookmarks_open", "live_add", "live_update", "live_resume"]
+    static let reachesSites: Set<String> = ["bookmarks_open", "live_add", "live_update", "live_resume", "extensions_install", "shields_update"]
 
     static func name(_ noun: String, _ verb: String) -> String { "\(noun)_\(verb)" }
 

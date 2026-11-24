@@ -268,4 +268,58 @@ final class PersonToolsTests {
         let said = await call(mcp, "settings_list")
         #expect(error(said)["code"] as? String == "agents_off")
     }
+
+    @Test func theNounsThatSetBroadwayUpAreReachable() {
+        for noun in ["shortcuts", "extensions", "shields", "permissions", "links", "keywords", "actions", "snippets"] {
+            #expect(PersonTools.nouns.contains(noun), "\(noun)")
+            #expect(PersonTools.leftOut[noun] == nil, "\(noun)")
+        }
+        #expect(PersonTools.tool("spaces_colour") != nil)
+    }
+
+    @Test func moreToolsFindsTheNewNounsByName() async {
+        let mcp = server(session())
+
+        let links = await call(mcp, MCPServer.moreTools, ["query": "links add"])
+        let shortcuts = await call(mcp, MCPServer.moreTools, ["query": "shortcuts set"])
+
+        #expect((data(links)["added"] as? [String])?.first == "links_add")
+        #expect((data(shortcuts)["added"] as? [String])?.first == "shortcuts_set")
+    }
+
+    @Test func aWordInADescriptionAloneDoesNotCrowdANamedTool() async {
+        let mcp = server(session())
+
+        let ask = await call(mcp, MCPServer.moreTools, ["query": "ask"])
+
+        #expect(data(ask)["added"] as? [String] == ["ask"])
+    }
+
+    @Test func theNewToolsSayWhatTheyMayDo() throws {
+        let install = PersonTools.annotations(try #require(PersonTools.tool("extensions_install")))
+        let add = PersonTools.annotations(try #require(PersonTools.tool("links_add")))
+        let list = PersonTools.annotations(try #require(PersonTools.tool("keywords_list")))
+        let delete = PersonTools.annotations(try #require(PersonTools.tool("snippets_delete")))
+
+        #expect(install["openWorldHint"] == nil)
+        #expect(add["destructiveHint"] as? Bool == false)
+        #expect(add["openWorldHint"] as? Bool == false)
+        #expect(list["readOnlyHint"] as? Bool == true)
+        #expect(delete["destructiveHint"] == nil)
+    }
+
+    @Test func aPersonOnlyVerbAnswersOverMCPAsTheCommandDoes() async {
+        let link = session()
+        let mcp = server(link)
+        for (verb, arguments) in [("shields_off", ["host": "example.com"]), ("permissions_allow", ["site": "example.com"]), ("extensions_private", ["id": "abc"])] {
+            let said = await call(mcp, verb, arguments)
+            let parts = verb.split(separator: "_").map(String.init)
+            let shell = await PersonCommands.perform(["noun": parts[0], "verb": parts[1], "arguments": arguments],
+                                                     browser: browser, socket: socket, channel: PersonChannel { _ in }) { AgentLinks.shared.link(link) }
+            let fromShell = shell["error"] as? [String: Any] ?? [:]
+
+            #expect(error(said)["code"] as? String == "person_only", "\(verb)")
+            #expect(error(said)["hint"] as? String == fromShell["hint"] as? String, "\(verb)")
+        }
+    }
 }
