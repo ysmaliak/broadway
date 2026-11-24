@@ -149,6 +149,7 @@ struct MiniFacts: Equatable {
     var noisy = false
     var waited = false
     var held = false
+    var call = false
     var reports: [MiniReport] = []
 
     var earned: Bool {
@@ -180,7 +181,7 @@ enum MiniRule {
     static func role(_ facts: MiniFacts, was: MiniRole) -> MiniRole {
         let role = sounding(facts, was: was)
         guard role == .mini else { return role }
-        if facts.video { return .none }
+        if facts.video || facts.call { return .none }
         return facts.held || facts.lasting ? .mini : .none
     }
 

@@ -165,6 +165,24 @@ struct MiniPlayerTests {
         #expect(role == .none)
     }
 
+    @Test func aMeetingPageNeverGetsTheCardForItsStreamOrItsChimes() {
+        var stream = MiniReport(sound: true)
+        stream.reading = MiniReport.Reading(playing: true, time: 40, duration: 0, live: true, source: "audio")
+        stream.media = [MiniReport.Media(kind: "audio", duration: -1, time: 40, paused: false, chosen: true)]
+        var left = stream
+        left.sound = false
+        left.reading?.playing = false
+        left.media[0].paused = true
+        let during = MiniFacts(noisy: true, waited: true, call: true, reports: [stream])
+        let after = MiniFacts(noisy: false, call: true, reports: [left])
+        let radio = MiniFacts(noisy: false, call: false, reports: [left])
+
+        #expect(MiniRule.role(during, was: .none) == .none)
+        #expect(MiniRule.role(during, was: .mini) == .none)
+        #expect(MiniRule.role(after, was: .mini) == .none)
+        #expect(MiniRule.role(radio, was: .mini) == .mini)
+    }
+
     @Test func aChimeBesideAPausedTrackLeavesTheTrackItsCard() {
         var report = MiniReport(sound: true)
         report.reading = MiniReport.Reading(playing: false, time: 60, duration: 200, source: "audio")

@@ -63,7 +63,8 @@ extension Tab {
         }
         let heard = Array(soundFrames.values)
         if turned, noisy { next.held = false }
-        let facts = MiniFacts(noisy: noisy, waited: next.waited, held: next.held, reports: heard.map(\.report))
+        let call = pageAddress.flatMap(MeetingLink.service) != nil
+        let facts = MiniFacts(noisy: noisy, waited: next.waited, held: next.held, call: call, reports: heard.map(\.report))
         next.role = MiniRule.role(facts, was: sound.role)
         let lead = Self.leadFrame(soundFrames, was: sound.frame)
         next.frame = lead?.key
