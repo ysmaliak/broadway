@@ -342,6 +342,8 @@ final class Browser: NSObject {
     /// The address field, raised over a page by ⌘L. A blank tab shows it
     /// without being asked — there is nothing else for that tab to show.
     let fieldState = FieldState()
+    @ObservationIgnored var downloadsWatch: AnyCancellable?
+    @ObservationIgnored var keptThere: [String: Bool] = [:]
 
     var editing: Bool {
         get { fieldState.editing }
@@ -387,6 +389,7 @@ final class Browser: NSObject {
         set {
             let old = fieldState.fieldPlace
             fieldState.fieldPlace = newValue
+            if (newValue == .downloads) != (old == .downloads) { watchDownloads(newValue == .downloads) }
             if newValue != old, fieldShowing { guess() }
         }
     }
@@ -1627,8 +1630,14 @@ final class Browser: NSObject {
     }
 
     var hoarding: Bool {
-        get { pageTab(.downloads) != nil }
-        set { if newValue { show(InternalPage(.downloads)) } else { putAway(.downloads) } }
+        get { fieldShowing && fieldPlace == .downloads }
+        set {
+            if newValue {
+                showDownloads()
+            } else if fieldPlace == .downloads {
+                quitField()
+            }
+        }
     }
     var recallHunt = ""
 
@@ -6400,6 +6409,7 @@ extension Browser {
         tab.delegate = self
         wireBack(tab)
         tab.knowsTitle = { [weak self] url in self?.knownTitle(for: url) }
+        tab.wantsDownloads = { [weak self] in self?.showDownloads() }
         // With two pages up, the keys going to the other one — Tab walked
         // past the last field of this one — make it the focused page, so the
         // outline, ⌘L and the site card follow what is being typed into.
@@ -6833,6 +6843,7 @@ extension Browser {
         }
         if case .command(let command) = offer.kind {
             command.run(on: self)
+            if command.keepsField { return }
         } else if let id = offer.tab, let tab = tabs.first(where: { $0.id == id }) {
             if !switchFromNewTab(to: tab) { select(tab) }
         } else if launching {
@@ -6938,7 +6949,7 @@ extension Browser {
 
     var returnIsIdle: Bool {
         if fieldPlace == .snippets { return !fieldMenu.showing && pickedOffer == nil && !SnippetStore.shared.snippets.isEmpty }
-        if fieldPlace != nil { return !fieldMenu.showing && pickedOffer?.placed == nil }
+        if fieldPlace != nil { return !fieldMenu.showing && pickedOffer?.placed?.returns != true }
         return !fieldMenu.showing && fieldRow == nil && siteChip == nil && pointed != Self.siteRow
             && typed.trimmingCharacters(in: .whitespaces).isEmpty && offers.first?.leads != true
     }
@@ -7071,6 +7082,7 @@ extension Browser {
         }
         if case .command(let command) = chosen?.kind {
             command.run(on: self)
+            if command.keepsField { return }
             editing = false
             typed = ""
             picked = nil
@@ -7094,7 +7106,7 @@ extension Browser {
         hints.typed(url)
         if let page = InternalPage(url: url) {
             show(page)
-            picked = nil
+            if page.kind != .downloads { picked = nil }
             return
         }
         let known = knownTitle(picked: chosen, going: url)
@@ -8778,6 +8790,15 @@ extension Browser {
     /// window — and the page opens beside it.
     @discardableResult
     func show(_ page: InternalPage) -> Tab {
+        if page.kind == .downloads {
+            showDownloads()
+            if let here = active ?? tabs.first { return here }
+            let blank = makeTab()
+            prepare(blank)
+            tabs.append(blank)
+            select(blank)
+            return blank
+        }
         if page.kind == .settings, let detail = page.detail, let section = SettingsPage.named( detail) {
             settingsPage = section
         }
@@ -8821,7 +8842,7 @@ extension Browser {
     /// comes back, as a link would. Unless that page is already open in a
     /// tab of its own, which is then the one shown.
     func lead(to page: InternalPage) {
-        guard let here = active, here.page != nil, pageTab(page.kind) == nil else {
+        guard page.kind != .downloads, let here = active, here.page != nil, pageTab(page.kind) == nil else {
             show(page)
             return
         }

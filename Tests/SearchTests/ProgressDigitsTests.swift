@@ -49,21 +49,23 @@ struct ProgressDigitsTests {
         #expect(Set(keys.map { $0.map(\.minX) }).count == 1, "\(keys)")
     }
 
-    @Test func theDownloadsPageRowsStateHoldsItsWidthWhileTheDownloadRuns() throws {
+    @Test func theDownloadsPlaceRowsBytesHoldTheirWidthWhileTheDownloadRuns() throws {
         var widths: [CGFloat] = []
-        var controls: [[CGFloat]] = []
+        var frames: [[CGFloat]] = []
         for done: Int64 in [11_100_000, 44_400_000, 10_000_000, 88_800_000] {
             let entry = FetchEntry.bench("report.pdf", .downloading, done: done, total: 150_000_000)
-            let line = FetchLineView(entry: entry, pause: {}, resume: {}, retry: {}, cancel: {})
-            line.frame = NSRect(x: 0, y: 0, width: 640, height: line.rowHeight)
-            line.layoutSubtreeIfNeeded()
-            let state = try #require(line.kitSubviews(of: KitLabel.self).first { $0.text == "Downloading · \(entry.sizeText)" })
-            widths.append(state.intrinsicContentSize.width)
-            #expect(state.frame.width == state.intrinsicContentSize.width, "\(state.text)")
-            controls.append(line.kitSubviews(of: NSButton.self).map(\.frame.minX))
+            let item = FieldPlaceItem(place: .downloads, id: "fetch " + entry.id.uuidString, title: entry.name, detail: "", aside: "",
+                                      url: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(entry.name),
+                                      fetch: FieldFetch(entry: entry))
+            let row = FieldPlaceRowView(item: item, lit: false)
+            row.frame = NSRect(x: 0, y: 0, width: 640, height: 38)
+            row.layoutSubtreeIfNeeded()
+            let bytes = try #require(row.kitSubviews(of: KitLabel.self).first { $0.text == entry.detailText })
+            widths.append(bytes.intrinsicContentSize.width)
+            frames.append([bytes.frame.minX, bytes.frame.width])
         }
         #expect(Set(widths).count == 1, "\(widths)")
-        #expect(Set(controls).count == 1, "\(controls)")
+        #expect(Set(frames).count == 1, "\(frames)")
     }
 
     @Test func theUpdateCardsPercentHoldsItsWidthAndPlace() throws {

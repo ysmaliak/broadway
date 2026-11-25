@@ -607,6 +607,8 @@ final class FieldListView: NSView {
     private var placeRow: (host: NSView, place: FieldPlace)?
     private var heads: [String: KitLabel] = [:]
     private var rows: [Int: Row] = [:]
+    private var laidKeys: [Int: String] = [:]
+    private var band: ClosedRange<CGFloat> = 0...0
     private var frames: [Int: NSRect] = [:]
     private var headFrames: [String: NSRect] = [:]
     private var slabAt: Int?
@@ -677,20 +679,28 @@ final class FieldListView: NSView {
 
         var used = Set<Int>()
         var usedHeads = Set<String>()
+        var laid: [Int: String] = [:]
+        let seen = scroll.contentView.bounds
+        let reach = max(seen.height, bounds.height, rowHeight * 40)
+        let near = (seen.minY - reach)...(seen.minY + max(seen.height, bounds.height) + reach)
+        band = near
         func lay(_ range: Range<Int>, section: String) {
             for index in range where offers.indices.contains(index) {
                 let rect = NSRect(x: 7, y: y, width: width, height: rowHeight)
                 frames[index] = rect
                 y += rowHeight
-                used.insert(index)
                 let key = "\(section)|\(index)"
+                laid[index] = key
+                guard rect.maxY >= near.lowerBound, rect.minY <= near.upperBound else { continue }
+                used.insert(index)
+                let made = rows[index] == nil
                 let row = rows[index] ?? {
                     let made = Row()
                     content.addSubview(made.host)
                     rows[index] = made
                     return made
                 }()
-                let fresh = row.key != key || row.leaving
+                let fresh = made ? laidKeys[index] != key : (row.key != key || row.leaving)
                 if row.leaving {
                     row.leaving = false
                     row.host.layer?.removeAllAnimations()
@@ -704,7 +714,8 @@ final class FieldListView: NSView {
                     let offer = offers[index]
                     FieldHosts.setRow(row.host, offer: offer, height: rowHeight, lit: lit, splits: browser.fieldPairs,
                                       take: { [weak browser] in browser?.take(offer) },
-                                      copy: { [weak browser] in browser?.copyAnswer($0, whole: true) })
+                                      copy: { [weak browser] in browser?.copyAnswer($0, whole: true) },
+                                      menu: offer.placed.map { item in { [weak browser] view in browser?.downloadsContextMenu(item, from: view) } })
                 }
                 if row.host.frame != rect { row.host.frame = rect }
                 if fresh, animated { settle(row.host, order: index - range.lowerBound) }
@@ -735,8 +746,14 @@ final class FieldListView: NSView {
             heads[title] = nil
         }
         for (index, row) in rows where !used.contains(index) && !row.leaving {
-            leave(index, row, animated: animated)
+            if laid[index] == row.key {
+                row.host.removeFromSuperview()
+                rows[index] = nil
+            } else {
+                leave(index, row, animated: animated)
+            }
         }
+        laidKeys = laid
 
         let along = NSRect(x: 0, y: 0, width: scroll.contentSize.width, height: y)
         if content.frame != along { content.frame = along }
@@ -912,6 +929,11 @@ final class FieldListView: NSView {
     @objc private func scrolled() {
         let clip = scroll.contentView.bounds
         let insets = scroll.contentInsets
+        let margin = max(clip.height, rowHeight * 40) / 2
+        if (clip.minY - margin < band.lowerBound && band.lowerBound > 0)
+            || (clip.maxY + margin > band.upperBound && band.upperBound < content.frame.height) {
+            needsLayout = true
+        }
         if room != nil {
             let height = content.frame.height
             let top = clip.minY + insets.top > 1

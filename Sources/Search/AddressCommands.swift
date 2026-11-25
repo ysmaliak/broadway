@@ -40,6 +40,8 @@ enum AddressCommand: CaseIterable, Equatable {
 
     var title: String { aliases[0].localizedCapitalized }
 
+    var keepsField: Bool { self == .downloads }
+
     /// Some only mean something once the feature behind them is even on.
     func available(in browser: Browser) -> Bool {
         switch self {

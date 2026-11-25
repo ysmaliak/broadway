@@ -104,7 +104,6 @@ def main():
                 time.sleep(1.2)
                 shoot(f"{mode}-03-after-welcome")
             open_url("broadway://history"); shoot(f"{mode}-04-history")
-            open_url("broadway://downloads"); shoot(f"{mode}-05-downloads")
             open_url("broadway://bookmarks"); shoot(f"{mode}-06-bookmarks")
             open_url("broadway://files"); shoot(f"{mode}-07-files")
             open_url("http://nothing-here.invalid/", wait=3); shoot(f"{mode}-08-not-found")

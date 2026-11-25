@@ -906,6 +906,7 @@ final class Bench {
                 "sheetReturn": browser.window?.attachedSheet?.defaultButtonCell?.title ?? "",
                 "history": browser.recalling,
                 "downloads": browser.hoarding,
+                "downloadsTab": browser.pageTab(.downloads) != nil,
                 "bookmarks": browser.bookmarking,
                 // The dropdown off the button, the ⇧⌘B card in it, and how
                 // many are kept, for every window alike.

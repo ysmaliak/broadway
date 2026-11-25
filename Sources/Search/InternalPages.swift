@@ -25,7 +25,8 @@ struct InternalPage: Equatable {
     }
 
     static func retired(_ url: URL) -> Bool {
-        url.scheme?.lowercased() == scheme && InternalPage(url: url) == nil
+        guard url.scheme?.lowercased() == scheme else { return false }
+        return InternalPage(url: url).map { $0.kind == .downloads } ?? true
     }
 
     var url: URL {

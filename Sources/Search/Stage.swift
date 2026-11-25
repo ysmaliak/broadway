@@ -1025,7 +1025,7 @@ final class InternalPageHolder: KitFlippedView {
         switch page.kind {
         case .settings: return SettingsTab(browser: browser, asked: page.detail)
         case .history: return HistoryPage(browser: browser)
-        case .downloads: return DownloadsPage(browser: browser, loot: browser.loot)
+        case .downloads: return KitFlippedView()
         case .files: return FilesPageView(browser: browser, loot: browser.loot, asTab: true)
         case .bookmarks: return BookmarksPageView(browser: browser, bookmarks: browser.bookmarks, asTab: true)
         case .passwords: return PasswordsPageView(browser: browser)
@@ -1056,8 +1056,6 @@ final class InternalPageHolder: KitFlippedView {
         content.frame = bounds
         if let history = content as? HistoryPage {
             history.show(hunt: browser.recallHunt, clearing: browser.recallMode == .clearing)
-        } else if let downloads = content as? DownloadsPage {
-            downloads.show(entries: browser.fetches.entries, kept: browser.loot.kept)
         }
     }
 }

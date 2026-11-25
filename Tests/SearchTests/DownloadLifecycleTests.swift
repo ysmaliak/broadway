@@ -296,11 +296,13 @@ final class DownloadLifecycleTests {
     }
 
     private func writePanelSnapshot(to destination: URL) throws {
-        let host = DownloadsPage(browser: browser, loot: browser.loot)
-        host.show(entries: browser.fetches.entries, kept: browser.loot.kept)
-        host.frame = NSRect(x: 0, y: 0, width: 560, height: 680)
+        browser.edit()
+        browser.enterPlace(.downloads)
+        defer { browser.quitField() }
+        let host = FieldPicture(browser: browser, menu: browser.fieldMenu, size: NSSize(width: 640, height: 474))
+        host.frame = NSRect(x: 0, y: 0, width: 640, height: 474)
         let snapshotWindow = NSWindow(
-            contentRect: NSRect(x: -20000, y: -20000, width: 560, height: 680),
+            contentRect: NSRect(x: -20000, y: -20000, width: 640, height: 474),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false

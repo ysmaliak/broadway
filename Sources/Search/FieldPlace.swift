@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import UniformTypeIdentifiers
 
 enum FieldPlace: String, CaseIterable, Equatable {
@@ -34,11 +35,11 @@ enum FieldPlace: String, CaseIterable, Equatable {
         }
     }
 
-    var page: InternalPage {
+    var page: InternalPage? {
         switch self {
         case .history: InternalPage(.history)
         case .bookmarks: InternalPage(.bookmarks)
-        case .downloads: InternalPage(.downloads)
+        case .downloads: nil
         case .snippets: InternalPage(.settings, "snippets")
         }
     }
@@ -109,6 +110,7 @@ struct FieldPlaceItem: Equatable {
     let aside: String
     let url: URL
     var missing = false
+    var fetch: FieldFetch?
 }
 
 @MainActor
@@ -150,13 +152,7 @@ extension Browser {
                                detail: kept.title.isEmpty ? "" : Address.pretty(kept.url), aside: kept.folders.joined(separator: " › "), url: kept.url)
             }
         case .downloads:
-            return FieldPlace.downloads(loot.kept, matching: typed).map { keep in
-                let there = keep.stillThere
-                return FieldPlaceItem(place: .downloads, id: keep.path, title: keep.name,
-                                      detail: keep.from.isEmpty ? "" : "From " + Address.withoutWWW(keep.from),
-                                      aside: there ? When.said(keep.date) : "Moved or deleted",
-                                      url: keep.url, missing: !there)
-            }
+            return downloadItems(matching: typed)
         case .snippets:
             return []
         }
@@ -181,6 +177,10 @@ extension Browser {
     }
 
     func openPlaced(_ item: FieldPlaceItem, aside: Bool = false, front: Bool = false) {
+        if let entry = item.fetch?.entry {
+            if let verb = FieldDownloadKeys.returnVerb(entry) { runDownload(verb, on: entry) }
+            return
+        }
         if item.place == .downloads {
             guard FileManager.default.fileExists(atPath: item.url.path) else {
                 announce("\(item.title) isn't there any more")
@@ -207,6 +207,7 @@ extension Browser {
     }
 
     func copyPlaced(_ item: FieldPlaceItem) {
+        guard item.fetch == nil, !item.missing else { return }
         if item.place == .downloads {
             AnswerBoard.write(item.url.path)
             announce("Path copied")
@@ -217,7 +218,7 @@ extension Browser {
     }
 
     func revealPlaced(_ item: FieldPlaceItem) {
-        guard item.place == .downloads else { return }
+        guard item.place == .downloads, item.fetch == nil else { return }
         guard FileManager.default.fileExists(atPath: item.url.path) else {
             announce("\(item.title) isn't there any more")
             return
@@ -248,7 +249,7 @@ extension Browser {
             said = "Removed \(item.title)"
             undo = { [bookmarks] in _ = bookmarks.insert(node, into: parent, at: index) }
         case .downloads:
-            guard let keep = loot.kept.first(where: { $0.path == item.id }) else { return }
+            guard item.fetch == nil, let keep = loot.kept.first(where: { $0.path == item.id }) else { return }
             loot.forget(keep)
             said = "Removed \(keep.name) from the list"
             undo = { [loot] in loot.restore(keep) }
@@ -277,6 +278,7 @@ extension Browser {
             return true
         }
         guard let row = pickedOffer?.placed else { return false }
+        if let entry = row.fetch?.entry { return downloadKey(combo, on: entry) }
         switch combo {
         case KeyCombo("x", command: false, control: true), KeyCombo("delete", command: false, shift: true):
             forgetPlaced(row)
@@ -297,10 +299,7 @@ extension Browser {
             items.append(FieldMenuItem(id: id, title: title, symbol: symbol, keys: keys, run: run))
         }
         if item.place == .downloads {
-            add("open", "Open", "return", keys: "↩") { [weak self] in self?.openPlaced(item) }
-            add("reveal", "Show in Finder", "folder", keys: "⌘R") { [weak self] in self?.revealPlaced(item) }
-            add("copy", "Copy Path", "doc.on.doc", keys: "⇧⌘C") { [weak self] in self?.copyPlaced(item) }
-            add("forget", "Remove from List", "minus.circle", keys: "⌃X") { [weak self] in self?.forgetPlaced(item) }
+            return downloadMenuItems(item)
         } else {
             add("open", "Open", "return", keys: "↩") { [weak self] in self?.openPlaced(item) }
             add("background", "Open in Background", "square.on.square", keys: "⌘↩") { [weak self] in
@@ -319,15 +318,21 @@ extension Browser {
                 add("forget", "Remove Bookmark", "bookmark.slash", keys: "⌃X") { [weak self] in self?.forgetPlaced(item) }
             }
         }
-        items.append(placePageItem(item.place))
+        if let page = placePageItem(item.place) { items.append(page) }
         return items
     }
 
-    func placePageItem(_ place: FieldPlace) -> FieldMenuItem {
-        FieldMenuItem(id: "page", title: "Open \(place.title) Page", symbol: place.symbol) { [weak self] in
+    func placePageItem(_ place: FieldPlace) -> FieldMenuItem? {
+        guard let page = place.page else { return nil }
+        return FieldMenuItem(id: "page", title: "Open \(place.title) Page", symbol: place.symbol) { [weak self] in
             self?.quitField()
-            self?.show(place.page)
+            self?.show(page)
         }
+    }
+
+    func restingPlaceItems(_ place: FieldPlace) -> [FieldMenuItem] {
+        if place == .downloads { return clearDownloadsItem().map { [$0] } ?? [] }
+        return placePageItem(place).map { [$0] } ?? []
     }
 }
 
@@ -444,11 +449,19 @@ final class FieldPlaceRowView: NSView {
     }
 
     private var icon: NSView?
+    private var iconKey = ""
     private let title = FieldLine.label("", size: 14)
     private let detail = FieldLine.label("", size: 14, opacity: 0.68, overflow: .middle)
     private let trailing = NSView()
     private let aside = FieldLine.label("", size: 12, color: KitColor.muted)
     private var hints: [(cap: FieldKeyCap, word: KitLabel)] = []
+    private var shownHints: [String] = []
+    private var bar: NSProgressIndicator?
+    private var progress: KitLabel?
+    private var progressWidth: CGFloat = 0
+    private var progressState: FetchEntry.State?
+    private var watch: AnyCancellable?
+    private weak var watched: FetchEntry?
 
     var splits: Bool { didSet { if splits != oldValue { refresh() } } }
 
@@ -471,39 +484,128 @@ final class FieldPlaceRowView: NSView {
 
     override var isFlipped: Bool { true }
 
+    private var entry: FetchEntry? { item.fetch?.entry }
+
     private func refresh() {
-        icon?.removeFromSuperview()
-        let made: NSView
-        if item.place == .downloads {
-            let image = NSImageView(image: FieldPlace.icon(forFile: item.title))
-            image.imageScaling = .scaleProportionallyUpOrDown
-            made = image
-        } else {
-            let host = item.url.host().map(Address.withoutWWW) ?? ""
-            made = FieldMark(icon: Favicons.shared.cached(for: item.url), letter: host.first.map { String($0).uppercased() } ?? "•", size: 18)
+        let entry = entry
+        watchEntry(entry)
+        let name = entry?.name ?? item.title
+        let key = item.place == .downloads ? "file " + (name as NSString).pathExtension.lowercased() : "mark " + item.url.absoluteString
+        if item.place != .downloads || key != iconKey || icon == nil {
+            icon?.removeFromSuperview()
+            let made: NSView
+            if item.place == .downloads {
+                let image = NSImageView(image: FieldPlace.icon(forFile: name))
+                image.imageScaling = .scaleProportionallyUpOrDown
+                made = image
+            } else {
+                let host = item.url.host().map(Address.withoutWWW) ?? ""
+                made = FieldMark(icon: Favicons.shared.cached(for: item.url), letter: host.first.map { String($0).uppercased() } ?? "•", size: 18)
+            }
+            addSubview(made)
+            icon = made
+            iconKey = key
         }
-        made.alphaValue = item.missing ? 0.45 : 1
-        addSubview(made)
-        icon = made
-        title.text = item.title
+        icon?.alphaValue = item.missing ? 0.45 : 1
+        title.text = name
         title.color = item.missing ? KitColor.muted : KitColor.ink
         title.overflow = item.place == .downloads ? .middle : .tail
         detail.text = item.detail
-        detail.isHidden = item.detail.isEmpty || lit
-        aside.text = item.aside
-        aside.isHidden = lit || item.aside.isEmpty
-        for hint in hints {
-            hint.cap.removeFromSuperview()
-            hint.word.removeFromSuperview()
+        detail.isHidden = entry != nil || item.detail.isEmpty || lit
+        if let entry {
+            showProgress(entry)
+        } else {
+            bar?.removeFromSuperview()
+            bar = nil
+            progress?.removeFromSuperview()
+            progress = nil
+            progressState = nil
         }
-        hints = lit ? item.place.hints(splits: splits).map { (FieldKeyCap($0.keys), FieldLine.label($0.word, size: 11.5, color: KitColor.muted)) } : []
-        for hint in hints {
-            hint.word.setAccessibilityElement(false)
-            trailing.addSubview(hint.cap)
-            trailing.addSubview(hint.word)
+        aside.text = entry.map { $0.state == .failed ? "Failed" : "" } ?? item.aside
+        aside.isHidden = lit || aside.text.isEmpty
+        let wanted = lit ? item.hints(splits: splits) : []
+        let words = wanted.map { $0.keys + " " + $0.word }
+        if words != shownHints {
+            shownHints = words
+            for hint in hints {
+                hint.cap.removeFromSuperview()
+                hint.word.removeFromSuperview()
+            }
+            hints = wanted.map { (FieldKeyCap($0.keys), FieldLine.label($0.word, size: 11.5, color: KitColor.muted)) }
+            for hint in hints {
+                hint.word.setAccessibilityElement(false)
+                trailing.addSubview(hint.cap)
+                trailing.addSubview(hint.word)
+            }
         }
-        setAccessibilityLabel([item.title, item.detail, item.aside].filter { !$0.isEmpty }.joined(separator: ", "))
+        let said = entry.map { [name, $0.detailText] } ?? [item.title, item.detail, item.aside]
+        setAccessibilityLabel(said.filter { !$0.isEmpty }.joined(separator: ", "))
         needsLayout = true
+    }
+
+    private func watchEntry(_ entry: FetchEntry?) {
+        guard watched !== entry || (entry == nil) != (watch == nil) else { return }
+        watched = entry
+        guard let entry else {
+            watch = nil
+            return
+        }
+        watch = kitObserve(initial: false, { [weak entry] in
+            entry.map { ($0.state, $0.name, $0.fraction, $0.completedBytes, $0.totalBytes, $0.errorDescription) }
+        }) { [weak self] _ in self?.refresh() }
+    }
+
+    private func showProgress(_ entry: FetchEntry) {
+        let label = progress ?? {
+            let made = KitLabel("", font: .monospacedDigitSystemFont(ofSize: 12, weight: .regular), color: KitColor.muted)
+            made.setAccessibilityElement(false)
+            addSubview(made)
+            progress = made
+            return made
+        }()
+        let failed = entry.state == .failed
+        label.text = entry.detailText
+        label.overflow = .tail
+        label.toolTip = failed ? entry.detailText : nil
+        if progressState != entry.state {
+            progressState = entry.state
+            progressWidth = 0
+        }
+        if entry.showsBar {
+            let shown = bar ?? {
+                let made = NSProgressIndicator()
+                made.style = .bar
+                made.controlSize = .small
+                made.minValue = 0
+                made.maxValue = 1
+                made.isIndeterminate = false
+                made.setAccessibilityElement(false)
+                addSubview(made)
+                bar = made
+                return made
+            }()
+            if let fraction = entry.fraction {
+                if shown.isIndeterminate {
+                    shown.stopAnimation(nil)
+                    shown.isIndeterminate = false
+                }
+                shown.doubleValue = min(1, max(0, fraction))
+            } else if entry.state == .downloading || entry.state == .resuming {
+                if !shown.isIndeterminate {
+                    shown.isIndeterminate = true
+                    shown.startAnimation(nil)
+                }
+            } else {
+                if shown.isIndeterminate {
+                    shown.stopAnimation(nil)
+                    shown.isIndeterminate = false
+                }
+                shown.doubleValue = 0
+            }
+        } else {
+            bar?.removeFromSuperview()
+            bar = nil
+        }
     }
 
     private var trailingWidth: CGFloat {
@@ -515,12 +617,27 @@ final class FieldPlaceRowView: NSView {
         return aside.isHidden ? 0 : FieldLine.width(aside, scale: scale)
     }
 
+    static let barWidth: CGFloat = 64
+
     override func layout() {
         super.layout()
         var items: [FieldLine.Item] = []
         if let icon { items.append(.box(icon, 18, 18)) }
         items.append(.text(title, priority: 1))
-        if !detail.isHidden { items.append(.text(detail)) }
+        if let bar { items.append(.box(bar, Self.barWidth, bar.intrinsicContentSize.height)) }
+        if let progress {
+            if progressState == .failed {
+                items.append(.text(progress, priority: 1))
+            } else {
+                progressWidth = max(progressWidth, FieldLine.width(progress, scale: kitScale))
+                items.append(.box(progress, progressWidth, bounds.height))
+            }
+        } else if !detail.isHidden {
+            let room = bounds.width - 20 - 18 - 12 * 3 - 8 - trailingWidth
+            let fits = item.place != .downloads || FieldLine.width(title, scale: kitScale) + 60 < room
+            detail.alphaValue = fits ? 1 : 0
+            if fits { items.append(.text(detail)) }
+        }
         items.append(.spacer(8))
         items.append(.box(trailing, trailingWidth, bounds.height))
         FieldLine.place(items, in: self, padding: 10, spacing: 12)
@@ -535,5 +652,12 @@ final class FieldPlaceRowView: NSView {
             hint.word.frame = trailing.kitSnap(NSRect(x: x, y: 0, width: word, height: trailing.bounds.height))
             x += word + 10
         }
+    }
+
+    var bench: [String: Any] {
+        ["title": title.text, "progress": progress?.text ?? "", "bar": bar != nil, "indeterminate": bar?.isIndeterminate ?? false,
+         "fraction": bar?.doubleValue ?? 0, "hints": shownHints, "aside": aside.isHidden ? "" : aside.text,
+         "dimmed": (icon?.alphaValue ?? 1) < 1, "progressWidth": Double(progress?.frame.width ?? 0),
+         "titleWidth": Double(title.frame.width), "width": Double(bounds.width)]
     }
 }

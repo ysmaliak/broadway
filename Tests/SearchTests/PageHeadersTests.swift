@@ -10,8 +10,7 @@ struct PageHeadersTests {
         let pages: [NSView] = [BookmarksPageView(browser: browser, bookmarks: browser.bookmarks),
                                FilesPageView(browser: browser, loot: Loot()),
                                PasswordsPageView(browser: browser),
-                               HistoryPage(browser: browser),
-                               DownloadsPage(browser: browser, loot: Loot())]
+                               HistoryPage(browser: browser)]
 
         let plates = try pages.map { page in
             page.frame = NSRect(x: 0, y: 0, width: 1200, height: 800)

@@ -308,7 +308,7 @@ extension Browser {
     func submitSnippetPlace() {
         guard !SnippetStore.shared.snippets.isEmpty else {
             quitField()
-            show(FieldPlace.snippets.page)
+            if let page = FieldPlace.snippets.page { show(page) }
             return
         }
         guard case .snippet(let snippet) = pickedOffer?.kind else { return }
