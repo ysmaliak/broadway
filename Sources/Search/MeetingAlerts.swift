@@ -411,8 +411,9 @@ final class MeetingAlerts {
     var panelCards: [NSRect] { panel.cards.compactMap { card in card.window.map { $0.convertToScreen(card.convert(card.bounds, to: nil)) } } }
     var panelShown: Bool { panel.shown }
 
-    func shot(dark: Bool, front: Bool = false, controls: Bool = false, key: Bool = false, ground: String? = nil) -> [String: Any]? {
-        panel.beginShot(dark: dark, front: front, controls: controls, key: key, ground: ground)
+    func shot(dark: Bool, front: Bool = false, controls: Bool = false, key: Bool = false, ground: String? = nil,
+              join: String? = nil) -> [String: Any]? {
+        panel.beginShot(dark: dark, front: front, controls: controls, key: key, ground: ground, join: join)
     }
     var shotState: [String: Any] { panel.shotState }
     func endShot() { panel.endShot() }
@@ -529,7 +530,8 @@ final class MeetingAlertPanel {
         pulse = nil
     }
 
-    func beginShot(dark: Bool, front: Bool = false, controls: Bool = false, key: Bool = false, ground: String? = nil) -> [String: Any]? {
+    func beginShot(dark: Bool, front: Bool = false, controls: Bool = false, key: Bool = false, ground: String? = nil,
+                   join pose: String? = nil) -> [String: Any]? {
         guard Store.testing, !alerts.due.isEmpty else { return nil }
         endShot()
         let view = MeetingAlertShotView(due: alerts.due, alerts: alerts, dark: dark, drawn: false, controls: controls, ground: ground)
@@ -574,6 +576,10 @@ final class MeetingAlertPanel {
             NSApp.unhideWithoutActivation()
         }
         view.layoutSubtreeIfNeeded()
+        let joinKey = view.kitSubviews(of: MeetingJoinButton.self).first
+        if let joinKey, let pose { self.pose(joinKey, pose, in: window) }
+        view.layoutSubtreeIfNeeded()
+        view.displayIfNeeded()
         let scale = window.backingScaleFactor
         func spot(_ target: NSView) -> [Int] {
             let box = target.convert(target.bounds, to: nil)
@@ -585,7 +591,18 @@ final class MeetingAlertPanel {
         if let stack = view.kitSubviews(of: MeetingAlertStackView.self).first { spots["stack"] = spot(stack) }
         for (index, card) in view.kitSubviews(of: MeetingAlertCardView.self).enumerated() { spots["card\(index)"] = spot(card) }
         for (name, swatch) in view.swatches { spots[name] = spot(swatch) }
-        return ["window": window.windowNumber, "pid": ProcessInfo.processInfo.processIdentifier,
+        var join: [String: Any] = [:]
+        if let joinKey {
+            join["layers"] = joinKey.layer.map { Self.layerLines($0) } ?? []
+            join["views"] = Self.viewLines(joinKey)
+            join["face"] = Self.srgb(joinKey.face.layer?.backgroundColor)
+            join["systemGreen"] = Self.srgb(joinKey.resolved(.systemGreen))
+            join["pressed"] = joinKey.pressed
+            join["hovering"] = joinKey.hovering
+            join["focused"] = window.firstResponder === joinKey
+            join["scale"] = scale
+        }
+        return ["join": join, "window": window.windowNumber, "pid": ProcessInfo.processInfo.processIdentifier,
                 "width": Int(window.frame.width * scale), "height": Int(window.frame.height * scale), "spots": spots]
     }
 
@@ -631,7 +648,56 @@ final class MeetingAlertPanel {
         return rep.representation(using: .png, properties: [:])
     }
 
+    private var focusWas: (() -> Bool)?
+
+    private func pose(_ key: MeetingJoinButton, _ pose: String, in window: NSWindow) {
+        switch pose {
+        case "hover":
+            key.benchPillHover(true)
+        case "press":
+            let middle = key.convert(NSPoint(x: key.bounds.midX, y: key.bounds.midY), to: nil)
+            if let down = NSEvent.mouseEvent(with: .leftMouseDown, location: middle, modifierFlags: [],
+                                             timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                                             context: nil, eventNumber: 0, clickCount: 1, pressure: 1) {
+                window.sendEvent(down)
+            }
+        case "focus":
+            focusWas = KitFocus.keyboardAccess
+            KitFocus.keyboardAccess = { true }
+            window.makeFirstResponder(key)
+            key.needsDisplay = true
+        default:
+            break
+        }
+    }
+
+    private static func srgb(_ color: CGColor?) -> [Int] {
+        guard let color, let sRGB = CGColorSpace(name: CGColorSpace.sRGB),
+              let made = color.converted(to: sRGB, intent: .defaultIntent, options: nil), let parts = made.components, parts.count >= 3 else { return [] }
+        return parts.prefix(4).map { Int(($0 * 255).rounded()) }
+    }
+
+    private static func layerLines(_ layer: CALayer, depth: Int = 0) -> [String] {
+        let colour = srgb(layer.backgroundColor)
+        let line = String(repeating: "  ", count: depth) + "\(type(of: layer)) \(layer.name ?? "")"
+            + " frame=\(layer.frame.integral) radius=\(layer.cornerRadius) clips=\(layer.masksToBounds) bg=\(colour)"
+            + " border=\(layer.borderWidth) shadow=\(layer.shadowOpacity) hidden=\(layer.isHidden) opacity=\(layer.opacity)"
+            + " mask=\(layer.mask != nil) filters=\(layer.filters?.count ?? 0) bgFilters=\(layer.backgroundFilters?.count ?? 0)"
+            + " contents=\(layer.contents != nil) delegate=\(layer.delegate.map { "\(type(of: $0))" } ?? "-")"
+        return [line] + (layer.sublayers ?? []).flatMap { layerLines($0, depth: depth + 1) }
+    }
+
+    private static func viewLines(_ view: NSView, depth: Int = 0) -> [String] {
+        let radius = (view as? NSGlassEffectView).map { " glassRadius=\($0.cornerRadius) tint=\(srgb($0.tintColor?.cgColor))" } ?? ""
+        let line = String(repeating: "  ", count: depth) + "\(type(of: view)) frame=\(view.frame)\(radius) hidden=\(view.isHidden)"
+        return [line] + view.subviews.flatMap { viewLines($0, depth: depth + 1) }
+    }
+
     func endShot() {
+        if let focusWas {
+            KitFocus.keyboardAccess = focusWas
+            self.focusWas = nil
+        }
         guard let window = shotWindow else { return }
         window.orderOut(nil)
         Bench.frontAsked = false
@@ -1134,6 +1200,12 @@ final class MeetingJoinButton: KitButton {
     override func mouseUp(with event: NSEvent) {
         super.mouseUp(with: event)
         paint()
+    }
+
+    func resolved(_ color: NSColor) -> CGColor {
+        var out = color.cgColor
+        effectiveAppearance.performAsCurrentDrawingAppearance { out = color.cgColor }
+        return out
     }
 
     private func paint() {
