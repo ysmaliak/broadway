@@ -59,6 +59,7 @@ struct FloatMediaState {
     var captions: [FloatCaption] = []
     var chapters: [FloatChapter] = []
     var waiting = false
+    var shape: NSSize?
 
     init() {}
 
@@ -68,6 +69,7 @@ struct FloatMediaState {
         rate = value["rate"] as? Double
         timeline = FloatTimeline(ranges: value["ranges"] as? [[Double]] ?? [], live: value["live"] as? Bool ?? false)
         waiting = (value["waiting"] as? Double ?? 0) >= 0.4
+        if let size = value["shape"] as? [Double], size.count == 2 { shape = NSSize(width: size[0], height: size[1]) }
         captions = (value["captions"] as? [[String: Any]] ?? []).compactMap {
             guard let id = $0["id"] as? Int, let name = $0["name"] as? String else { return nil }
             return FloatCaption(id: id, name: name, selected: $0["selected"] as? Bool ?? false)

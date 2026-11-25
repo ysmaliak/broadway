@@ -6242,7 +6242,11 @@ extension Browser {
                                         web.evaluateJavaScript(Isolate.off, in: frame, in: Web.world) { _ in }
                                         return frames(rest)
                                     }
-                                    then(answer, frame)
+                                    var found = answer as? [String: Any] ?? [:]
+                                    if found["shape"] as? [NSNumber] == nil, let shape = ((try? inner.get()) as? [String: Any])?["shape"] {
+                                        found["shape"] = shape
+                                    }
+                                    then(found, frame)
                                 }
                             }
                         }
@@ -6309,7 +6313,10 @@ extension Browser {
                 page: (found["page"] as? [NSNumber] ?? []).map(\.doubleValue)
             )
         }
-        floater.lift(tab.web, still: still)
+        let shape = (found["shape"] as? [NSNumber]).flatMap {
+            $0.count == 2 ? NSSize(width: $0[0].doubleValue, height: $0[1].doubleValue) : nil
+        }
+        floater.lift(tab.web, still: still, shape: shape)
     }
 
     private func inFloat(_ tab: Tab, _ js: String, search: Bool = false, then: ((Any?) -> Void)? = nil) {
