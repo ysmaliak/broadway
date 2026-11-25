@@ -1,0 +1,24 @@
+<h2>Broadway 0.7</h2>
+<h3>New in this version</h3>
+<ul>
+  <li><strong>Agents can sign in for you.</strong> An agent such as Claude Code or Codex can ask Broadway to fill a sign-in you keep. A card names the account and the site, the agent never sees the password, and each sign-in shows which agent last used it. Broadway can also fill a one-time code from your mail. With the 1Password switch in Settings › Passwords, it offers sign-ins kept there too.</li>
+  <li><strong>Secrets an agent holds stay hidden.</strong> An agent can type a secret of its own into a password box without it being shown. A value sealed this way stays out of every answer, picture and PDF, also after its tab closes.</li>
+  <li><strong>A saved password for a program in a terminal.</strong> With Settings › Agents › Let agents ask for a saved password turned on, an agent can ask for a password you keep, for a command line program that needs it. It is off by default. Broadway asks with a card and Touch ID every time, and an agent that gets a password can read it.</li>
+  <li><strong>Agents on another Mac.</strong> The broadway command and MCP work over ssh. Pictures, PDFs, downloads and uploads cross the connection, and a command over ssh never starts Broadway by itself.</li>
+  <li><strong>Agents can set Broadway up.</strong> Ask an agent to change a setting, add a link rule, a site shortcut, a Quick Action or a snippet, or colour a space. It can change several settings in one go with one question to you.</li>
+  <li><strong>Better pictures and surer clicks for agents.</strong> A picture of a page takes a width, tiles, marks or one element. An action waits for a control that is becoming ready, icon buttons have names, find answers with the page's own text, and a miss names the closest controls.</li>
+  <li><strong>You know who is asking.</strong> The first question from an agent says who signed its program, a session is named for its folder, the Dock counts the questions waiting for you, and an agent's command never lands in a private window.</li>
+  <li><strong>Changed Since Your Review.</strong> A new list for pull request live folders. A pull request you reviewed comes back, reading Review again, once the author pushes, replies or resolves your thread. Each folder's lists are in Settings › Live Folders.</li>
+  <li><strong>A clearer meeting alert.</strong> The card says when first, such as In 4 min, Now or Started 3 min ago. Snooze says how long, Join is easier to read, and a click beside the card reaches the page under it.</li>
+  <li><strong>A merged pull request fills up.</strong> A row that turns merged fills with purple from left to right like a loading bar, then leaves.</li>
+  <li><strong>A calmer ⌘T list.</strong> The selected row sits on a flat neutral plate like the sidebar's tabs, and the row under the pointer on a fainter one. The Actions menu and the Open Link In chooser match.</li>
+</ul>
+<h3>Fixed and improved</h3>
+<ul>
+  <li><strong>Tab grouping keeps up with many tabs.</strong> Opening many tabs at once gives one folder per subject, where before two folders with nearly the same name could appear. The sidebar settles sooner, and a tab that had no title yet is sorted once it has one.</li>
+  <li><strong>Everyone in the floating call.</strong> The floating call window no longer takes one person's camera for a shared screen and hides everyone else. It also keeps the mirror a site gives your own camera.</li>
+  <li>A short sound from a page, such as the chime at the end of a call, no longer brings up the sidebar's player. A meeting page never does.</li>
+  <li>An empty pull request list no longer slows a live folder's read.</li>
+  <li>For scripts: <code>broadway shot</code> and <code>broadway pdf</code> write their bytes to standard output only with <code>--out -</code>. Without it they print the path of the file they made.</li>
+</ul>
+<p>Requires macOS 27 on a Mac with Apple silicon.</p>
