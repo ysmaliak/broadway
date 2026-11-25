@@ -144,10 +144,6 @@ final class GlassKeyGallery {
         page.action = { [weak self] in self?.fire("passwords key") }
         add("passwords key", page, glass: { [weak page] in page?.kitSubviews(of: NSGlassEffectView.self).first })
 
-        let join = MeetingJoinButton(symbol: "video.fill", drawn: false)
-        join.action = { [weak self] in self?.fire("meeting join") }
-        add("meeting join", join, size: NSSize(width: 84, height: 28), glass: { [weak join] in join?.kitSubviews(of: NSGlassEffectView.self).first })
-
         let choice = KitChoice("Size", options: [.init(title: "Small", symbol: "circle"), .init(title: "Large", symbol: "circle.fill")], picked: 0)
         choice.pick = { [weak self] _ in self?.fire("choice") }
         add("choice thumb", choice, glass: { [weak choice] in choice?.kitSubviews(of: KitGlass.self).last }, point: { [weak choice] in

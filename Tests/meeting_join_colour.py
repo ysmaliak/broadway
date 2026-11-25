@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The meeting card's Join button reads green whether Broadway is in front or not.
+"""The meeting card's Join button is the system green whether Broadway is in front or not, with nothing outside its capsule.
 
 Build first (`./build.sh`), then `python3 Tests/meeting_join_colour.py`. A
 test copy shows one fake meeting and puts a copy of its card, in the same
@@ -284,12 +284,14 @@ def main():
         subprocess.run(["defaults", "write", sv.SUITE, "contrast.testRaised", "-bool", "true"])
         time.sleep(0.5)
         for theme in ("light", "dark"):
-            name, faces, _, _ = shoot(theme, False, tag="-contrast")
+            name, faces, took, _ = shoot(theme, False, tag="-contrast")
             for key, (mean, green) in sorted((faces or {}).items()):
                 if key in ("join", "snooze"):
                     print(f"        {name:22} {key:18} rgb{mean} green {green:+d}")
-            t.ok(f"{name}: Join is a deeper green with Increase Contrast",
-                 faces is not None and faces["join"][1] >= 40 and sum(faces["join"][0]) < 330, faces and faces["join"])
+            want = took.get("join", {}).get("systemGreen", [])[:3]
+            t.ok(f"{name}: Join keeps the system's own green, which follows Increase Contrast by itself",
+                 faces is not None and bool(want) and max(abs(a - b) for a, b in zip(faces["join"][0], want)) <= 8,
+                 (faces and faces["join"], want))
         subprocess.run(["defaults", "delete", sv.SUITE, "contrast.testRaised"])
         print("        pictures in", WORK)
     finally:

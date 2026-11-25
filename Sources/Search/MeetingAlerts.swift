@@ -1003,7 +1003,7 @@ final class MeetingAlertCardView: NSView {
         join?.removeFromSuperview()
         join = nil
         if meeting.link != nil {
-            let made = MeetingJoinButton(symbol: meeting.symbol + ".fill", drawn: drawn)
+            let made = MeetingJoinButton(symbol: meeting.symbol + ".fill")
             made.action = { [weak alerts] in alerts?.join(meeting) }
             made.kitAccess(label: "Join", help: meeting.service.map { "Join with \($0.rawValue)" } ?? "Join")
             inside.addSubview(made)
@@ -1185,23 +1185,28 @@ private final class MeetingDrawnKey: KitButton {
 }
 
 @MainActor
+enum MeetingGreen {
+    static func resolved(in appearance: NSAppearance) -> NSColor {
+        var out = NSColor.systemGreen
+        appearance.performAsCurrentDrawingAppearance { out = NSColor.systemGreen.usingColorSpace(.sRGB) ?? .systemGreen }
+        return out
+    }
+
+    static func fill(in appearance: NSAppearance, lit: Bool = false, pressed: Bool = false) -> NSColor {
+        let base = resolved(in: appearance)
+        if pressed { return base.shadow(withLevel: 0.2) ?? base }
+        if lit { return base.shadow(withLevel: 0.08) ?? base }
+        return base
+    }
+}
+
+@MainActor
 final class MeetingJoinButton: KitButton {
-    private let glass: NSView
     let face = KitBox(fill: nil, corners: .capsule)
 
-    init(symbol: String, drawn: Bool) {
-        if drawn {
-            glass = face
-        } else {
-            let made = KitGlass(interactive: true)
-            made.capsule = true
-            face.autoresizingMask = [.width, .height]
-            made.kitCatch.addSubview(face)
-            glass = made
-        }
+    init(symbol: String) {
         super.init(.plain(press: 0.97), label: "Join")
-        addSubview(glass, positioned: .below, relativeTo: nil)
-        pressGlass = glass as? NSGlassEffectView
+        addSubview(face, positioned: .below, relativeTo: nil)
         content = MeetingJoinWords(symbol: symbol)
         paint()
     }
@@ -1209,21 +1214,9 @@ final class MeetingJoinButton: KitButton {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    static func fill(dark: Bool, raised: Bool = false, lit: Bool = false, pressed: Bool = false) -> NSColor {
-        let base = raised ? NSColor(srgbRed: 0.094, green: 0.431, blue: 0.18, alpha: 1)
-            : dark ? NSColor(srgbRed: 0.13, green: 0.6, blue: 0.27, alpha: 1) : NSColor(srgbRed: 0.106, green: 0.553, blue: 0.231, alpha: 1)
-        if pressed { return base.blended(withFraction: 0.18, of: .black) ?? base }
-        if lit { return base.blended(withFraction: 0.1, of: .white) ?? base }
-        return base
-    }
-
     override func layout() {
         super.layout()
-        glass.frame = bounds
-        if face !== glass {
-            face.superview?.frame = glass.bounds
-            face.frame = glass.bounds
-        }
+        face.frame = bounds
     }
 
     override func hoverChanged() {
@@ -1258,7 +1251,7 @@ final class MeetingJoinButton: KitButton {
     }
 
     private func paint() {
-        face.fill = Self.fill(dark: kitDark, raised: Contrast.raised, lit: hovering && isEnabled, pressed: pressed)
+        face.fill = MeetingGreen.fill(in: effectiveAppearance, lit: hovering && isEnabled, pressed: pressed)
     }
 }
 

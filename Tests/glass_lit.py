@@ -121,7 +121,7 @@ def real_card(hold):
         lights = sv.cmd({"do": "lights"})
         panel = next((p for p in lights.get("panels", []) if p.get("kind") == "Lifted"), {})
         lit = [g["lit"] for g in panel.get("glass", [])]
-        if (len(lit) == 4 and None not in lit) or time.time() > end:
+        if (len(lit) == 3 and None not in lit) or time.time() > end:
             break
         time.sleep(0.3)
     return lights, panel, {g["owner"]: g["lit"] for g in panel.get("glass", [])}, lit
@@ -133,7 +133,7 @@ def card_glass(within=0.0):
         lights = sv.cmd({"do": "lights"})
         panel = next((p for p in lights.get("panels", []) if p.get("kind") == "Lifted"), {})
         lit = [g["lit"] for g in panel.get("glass", [])]
-        if (len(lit) == 4 and None not in lit) or time.time() >= end:
+        if (len(lit) == 3 and None not in lit) or time.time() >= end:
             return lights, lit
         time.sleep(0.2)
 
@@ -144,7 +144,7 @@ def read(label, front=None, within=0.0):
     if front is not None:
         t.ok(f"{label}: Broadway is {'in front' if front else 'behind'}", bool(lights.get("active")) == front,
              (lights.get("active"), lights.get("frontApp")))
-    t.ok(f"{label}: the card's ground, both keys and Join are lit", lit == [True] * 4, lit)
+    t.ok(f"{label}: the card's ground and both glass keys are lit", lit == [True] * 3, lit)
 
 
 def give_back(label):
@@ -194,9 +194,9 @@ def main():
             word = "held" if hold else "unheld"
             print(f"        real card {word}: active {lights.get('active')} hidden {lights.get('hidden')} key {lights.get('keyWindow')!r} glass {panel.get('glass')}")
             t.ok(f"real card {word}: Broadway is behind and no window of it is key", not lights.get("active") and not lights.get("keyWindow"), lights.get("keyWindow"))
-            t.ok(f"real card {word}: the ground, both keys and Join are glass",
-                 set(owners) == {"KitGlass", "KitGlassKey", "MeetingJoinButton"} and len(lit) == 4, panel.get("glass"))
-            t.ok(f"real card {word}: every glass is {'lit' if hold else 'dim'}", lit == [hold] * 4, panel.get("glass"))
+            t.ok(f"real card {word}: the ground and both keys are glass, and Join is not",
+                 set(owners) == {"KitGlass", "KitGlassKey"} and len(lit) == 3, panel.get("glass"))
+            t.ok(f"real card {word}: every glass is {'lit' if hold else 'dim'}", lit == [hold] * 3, panel.get("glass"))
         front_cases()
         for theme, ground in (("light", None), ("dark", None), ("light", "clear"), ("dark", "clear")):
             label = theme + (f" {ground}" if ground else "")
