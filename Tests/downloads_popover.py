@@ -349,6 +349,12 @@ def case_reduce_motion():
 
 def fetch(tab, path):
     sv.ev(tab, f"var a = document.createElement('a'); a.href = '{path}'; document.body.appendChild(a); a.click(), 1")
+    deadline = time.monotonic() + 4
+    while time.monotonic() < deadline:
+        if sv.cmd({"do": "sitefiles"}).get("cards"):
+            sv.cmd({"do": "sitefiles", "action": "allow"})
+            return
+        time.sleep(0.2)
 
 
 def case_live():
