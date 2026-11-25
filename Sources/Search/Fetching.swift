@@ -712,6 +712,13 @@ extension Fetches {
 }
 
 extension FetchEntry {
+    static func bytes(_ count: Int64) -> String {
+        let format = ByteCountFormatter()
+        format.countStyle = .file
+        format.zeroPadsFractionDigits = true
+        return format.string(fromByteCount: count)
+    }
+
     static func bench(_ name: String, _ state: State, done: Int64, total: Int64, error: String? = nil) -> FetchEntry {
         var request = URLRequest(url: URL(string: "http://127.0.0.1:9/")!.appendingPathComponent(name))
         request.httpMethod = "GET"

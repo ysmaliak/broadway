@@ -762,12 +762,6 @@ final class FetchLineView: NSView, RecallRow {
     func open() {}
     func menuItems() -> [KitMenuItem] { [] }
 
-    private var bytes: String {
-        let received = ByteCountFormatter.string(fromByteCount: entry.completedBytes, countStyle: .file)
-        guard entry.totalBytes > 0 else { return received + " downloaded" }
-        return "\(received) of \(ByteCountFormatter.string(fromByteCount: entry.totalBytes, countStyle: .file))"
-    }
-
     private var stateLabel: String {
         switch entry.state {
         case .downloading: return "Downloading"
@@ -785,7 +779,7 @@ final class FetchLineView: NSView, RecallRow {
         case .failed: "exclamationmark.circle"
         }
         name.text = entry.name
-        state.text = "\(stateLabel) · \(bytes)"
+        state.text = "\(stateLabel) · \(entry.sizeText)"
         progress.isHidden = entry.fraction == nil
         progress.doubleValue = min(1, max(0, entry.fraction ?? 0))
         failure.isHidden = entry.state != .failed
