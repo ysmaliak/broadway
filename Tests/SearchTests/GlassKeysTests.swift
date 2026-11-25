@@ -118,6 +118,35 @@ struct GlassKeysTests {
         #expect(ground?.fill == MeetingGreen.resolved(in: NSAppearance(named: .darkAqua) ?? badge.effectiveAppearance))
     }
 
+    @Test func aClickOnTheJoinKeyDarkensItWhileHeldAndRunsItsActionOnce() {
+        var fired = 0
+        let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 240, height: 60), styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.contentView = nil }
+        let key = MeetingJoinButton(symbol: "video.fill")
+        key.action = { fired += 1 }
+        key.frame = NSRect(x: 10, y: 10, width: 198, height: 32)
+        window.contentView?.addSubview(key)
+        key.layoutSubtreeIfNeeded()
+        let middle = key.convert(NSPoint(x: key.bounds.midX, y: key.bounds.midY), to: nil)
+        func send(_ type: NSEvent.EventType) {
+            guard let event = NSEvent.mouseEvent(with: type, location: middle, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                 windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1) else { return }
+            window.sendEvent(event)
+        }
+
+        send(.leftMouseDown)
+        let held = key.face.fill
+        let pressed = key.pressed
+        send(.leftMouseUp)
+
+        #expect(pressed)
+        #expect(held == MeetingGreen.fill(in: key.effectiveAppearance, lit: key.hovering, pressed: true))
+        #expect(!key.pressed)
+        #expect(fired == 1)
+        #expect(key.face.fill == MeetingGreen.fill(in: key.effectiveAppearance, lit: key.hovering))
+    }
+
     @Test func noGlassKeyCarriesItsColourOnlyInTheGlassTint() {
         let gallery = GlassKeyGallery(dark: false)
         defer { gallery.close() }
