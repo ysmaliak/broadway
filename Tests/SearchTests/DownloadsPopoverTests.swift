@@ -204,7 +204,7 @@ final class DownloadsPopoverTests {
 
         #expect(before["keys"] as? [String] == ["pause", "cancel"])
         #expect(moved.first?["fraction"] as? Double == 0.75)
-        #expect(moved.first?["detail"] as? String == "3.45 GB of 4.6 GB")
+        #expect(moved.first?["detail"] as? String == "3.45 GB of 4.60 GB")
         #expect(failed.first?["bar"] as? Bool == false)
         #expect(failed.first?["keys"] as? [String] == ["retry", "remove"])
         #expect(failed.first?["height"] as? Double == Double(DownloadCell.short))

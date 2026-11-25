@@ -209,9 +209,9 @@ extension FetchEntry {
     }
 
     var sizeText: String {
-        let received = ByteCountFormatter.string(fromByteCount: completedBytes, countStyle: .file)
+        let received = FetchEntry.bytes(completedBytes)
         guard totalBytes > 0 else { return received + " downloaded" }
-        return "\(received) of \(ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file))"
+        return "\(received) of \(FetchEntry.bytes(totalBytes))"
     }
 
     var detailText: String {
