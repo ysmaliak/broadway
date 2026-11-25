@@ -9,7 +9,7 @@ enum BenchSurfaces {
         + ["newtab", "onboarding", "about"]
         + ["marks", "hover-tab-card", "account-list", "device-bar", "hover-folder-list", "tab-offers"]
         + ["find-bar", "find-bar-empty", "find-bar-narrow", "find-count", "form-fill-card", "form-fill-done", "form-fill-offer"]
-        + ["meeting-alert", "meeting-alert-two", "meeting-alert-faces", "meeting-alert-long", "pin-meeting-badges", "history-panel", "downloads-panel", "hidden-panel"]
+        + ["meeting-alert", "meeting-alert-two", "meeting-alert-faces", "meeting-alert-long", "pin-meeting-badges", "history-panel", "hidden-panel"]
         + BookmarksSurface.names + SettingsPieceSurfaces.names + BenchFloating.names + BenchPages.names + SiteSurfaces.names
         + BenchFieldFixtures.names + SideSurfaces.names + BenchGlassFamily.names + BenchLinkChooser.names
     private static var windows: [NSWindow] = []
@@ -117,7 +117,6 @@ enum BenchSurfaces {
         case "meeting-alert-long": return MeetingAlerts.surface("long")
         case "pin-meeting-badges": return PinMeetingSurface.make()
         case "history-panel": return RecallSurface.history()
-        case "downloads-panel": return RecallSurface.downloads()
         case "hidden-panel":
             guard let browser else { return nil }
             let panel = HiddenPanelView(browser: browser)

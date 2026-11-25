@@ -126,22 +126,23 @@ final class DownloadMenuTests {
         #expect(RecentDownloadsView.menuNames(for: .kept(gone)) == ["forget"])
     }
 
-    @Test func commandCOnASelectedFinishedRowInTheDownloadsListCopiesTheFile() throws {
+    @Test func copyFileOnAFinishedRowInTheDownloadsPlaceCopiesTheFile() throws {
         let file = made("selected.zip")
         let browser = Browser(record: WindowRecord())
-        let keep = Keep(name: "selected.zip", from: "example.com", path: file.path, date: Date())
-        let page = DownloadsPage(browser: browser, loot: browser.loot)
-        page.frame = NSRect(x: 0, y: 0, width: 720, height: 420)
-        page.show(entries: [], kept: [keep])
-        let table = try #require(page.benchTable)
-        let row = try #require((0..<table.numberOfRows).first { table.delegate?.tableView?(table, shouldSelectRow: $0) == true })
+        defer { browser.loot.forget(Keep(name: "selected.zip", from: "example.com", path: file.path, date: Date())) }
+        browser.loot.add(Keep(name: "selected.zip", from: "example.com", path: file.path, date: Date()))
+        browser.edit()
+        browser.enterPlace(.downloads)
+        let item = try #require(browser.offers.compactMap(\.placed).first { $0.title == "selected.zip" })
+        let menu = try #require(browser.downloadsContextMenu(item, from: NSView()))
+        let copy = try #require(menu.items.first { $0.accessibilityIdentifier() == "field.downloads.row.copy" })
         DownloadMenu.board.clearContents()
 
-        table.selectRowIndexes([row], byExtendingSelection: false)
-        table.copy(nil)
+        _ = (copy.target as AnyObject?)?.perform(copy.action, with: copy)
 
         let urls = DownloadMenu.board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
         #expect(urls.map(\.standardizedFileURL) == [file.standardizedFileURL])
+        browser.quitField()
     }
 
     @Test func aDownloadedRowInFilesOpensTheFileMenuAndAnUploadedRowOpensNone() throws {
@@ -157,17 +158,5 @@ final class DownloadMenuTests {
 
         #expect(titles(menu.items) == ["Open", "Open With", "Show in Finder", "-", "Copy File", "Share…", "-", "Remove from List"])
         #expect(uploaded.menu(for: click) == nil)
-    }
-
-    @Test func headersInTheDownloadsListCannotBeSelected() throws {
-        let file = made("one.zip")
-        let browser = Browser(record: WindowRecord())
-        let page = DownloadsPage(browser: browser, loot: browser.loot)
-        page.show(entries: [], kept: [Keep(name: "one.zip", from: "", path: file.path, date: Date())])
-        let table = try #require(page.benchTable)
-
-        let header = table.delegate?.tableView?(table, shouldSelectRow: 0)
-
-        #expect(header == false)
     }
 }

@@ -32,21 +32,18 @@ struct PageMeasuresTests {
         #expect(tight.fieldWidth == narrow.width)
     }
 
-    @Test func historyDownloadsAndFilesRowsShareTheirMeasures() throws {
+    @Test func historyAndFilesRowsShareTheirMeasures() throws {
         let trace = History.Trace(key: "k", address: "https://example.com/a", title: "Example",
                                   url: try #require(URL(string: "https://example.com/a")), last: then, count: 1)
         let history = laid(HistoryLineView(trace: trace, note: nil, go: {}, forget: {}))
-        let kept = laid(KeptLineView(keep: Keep(name: "a.pdf", from: "a.example", path: "/tmp/pages-none.pdf", date: then),
-                                     open: {}, reveal: {}, forget: {}))
         let file = FileRowView(frame: .zero)
         file.show(FileItem(id: "a", kind: .downloaded, name: "a.pdf", source: "a.example", path: "/tmp/pages-none.pdf", date: then), last: false)
         _ = laid(file)
 
         #expect(history.rowHeight == 40)
-        #expect(kept.rowHeight == 40)
         #expect(FileListView.rowHeight == 40)
         #expect(FileListView.inset == 0)
-        for row in [history, kept, file] as [NSView] {
+        for row in [history, file] as [NSView] {
             let words = row.subviews.compactMap { $0 as? KitLabel }.filter { !$0.isHidden }
             let icon = try #require(row.subviews.first { $0 is MarkView || $0 is KitSymbol || $0 is NSImageView })
             #expect(words.map(\.frame.minX).min() == KitPageRow.textX)
@@ -57,17 +54,14 @@ struct PageMeasuresTests {
         #expect(near(time.frame.maxX, width))
         #expect(history.rule.frame.minX == KitPageRow.textX)
         #expect(history.rule.frame.maxX == width)
-        #expect(kept.rule.frame == history.rule.frame)
     }
 
     @Test func aHoveredRowsLastButtonEndsItsWordsOnTheEdge() throws {
         let trace = History.Trace(key: "k", address: "https://example.com/a", title: "Example",
                                   url: try #require(URL(string: "https://example.com/a")), last: then, count: 1)
         let history = laid(HistoryLineView(trace: trace, note: nil, go: {}, forget: {}))
-        let kept = laid(KeptLineView(keep: Keep(name: "a.pdf", from: "a.example", path: "/tmp/pages-none.pdf", date: then),
-                                     open: {}, reveal: {}, forget: {}))
 
-        for row in [history, kept] as [NSView] {
+        for row in [history] as [NSView] {
             row.mouseEntered(with: NSEvent())
             row.needsLayout = true
             row.layoutSubtreeIfNeeded()
