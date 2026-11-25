@@ -118,6 +118,20 @@ def corners(image, spot, scale):
     return worst
 
 
+def capture(request):
+    for _ in range(3):
+        state = sv.cmd(request)
+        try:
+            time.sleep(1.0)
+            took = sv.cmd({"do": "meetalert", "action": "shot-take"})
+        finally:
+            sv.cmd({"do": "meetalert", "action": "shot-end"})
+        if took.get("png"):
+            break
+        time.sleep(0.5)
+    return state, took
+
+
 def plates():
     out = WORK / "plates"
     out.mkdir(parents=True, exist_ok=True)
@@ -135,12 +149,9 @@ def plates():
                    "front": focus, "key": focus}
         if pose != "rest":
             request["join"] = pose
-        state = sv.cmd(request)
         try:
-            time.sleep(1.0)
-            took = sv.cmd({"do": "meetalert", "action": "shot-take"})
+            state, took = capture(request)
         finally:
-            sv.cmd({"do": "meetalert", "action": "shot-end"})
             if raised:
                 subprocess.run(["defaults", "delete", sv.SUITE, "contrast.testRaised"])
         join = took.get("join", {})
@@ -194,12 +205,7 @@ def real_card():
         t.ok(f"real card, {step}: the Join key has no glass behind it", bool(radii) and all(r is None for r in radii), frames)
         if not picture:
             return
-        state = sv.cmd({"do": "meetalert", "action": "real-shot"})
-        try:
-            time.sleep(1.0)
-            took = sv.cmd({"do": "meetalert", "action": "shot-take"})
-        finally:
-            sv.cmd({"do": "meetalert", "action": "shot-end"})
+        state, took = capture({"do": "meetalert", "action": "real-shot"})
         png = base64.b64decode(took.get("png") or "")
         t.ok(f"real card, {step}: a picture of the real panel", bool(png), {k: v for k, v in took.items() if k != "png"})
         if not png or "join" not in state.get("spots", {}):
@@ -229,12 +235,7 @@ def real_card():
 
 def shoot(theme, front, key=False, tag=""):
     name = f"{'front' if front else 'behind'}{'-key' if key else ''}{tag}-{theme}"
-    state = sv.cmd({"do": "meetalert", "action": "shot-start", "dark": theme == "dark", "front": front, "controls": True, "key": key})
-    try:
-        time.sleep(1.0)
-        took = sv.cmd({"do": "meetalert", "action": "shot-take"})
-    finally:
-        sv.cmd({"do": "meetalert", "action": "shot-end"})
+    state, took = capture({"do": "meetalert", "action": "shot-start", "dark": theme == "dark", "front": front, "controls": True, "key": key})
     png = base64.b64decode(took.get("png") or "")
     if not png:
         return name, None, took, state
