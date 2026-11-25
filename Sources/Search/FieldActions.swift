@@ -368,7 +368,7 @@ extension Browser {
     }
 
     func fieldMenuItems(for offer: Suggestion?) -> [FieldMenuItem] {
-        guard let offer else { return fieldPlace.map { [placePageItem($0)] } ?? pageMenuItems() }
+        guard let offer else { return fieldPlace.map(restingPlaceItems) ?? pageMenuItems() }
         if let item = offer.placed { return placeMenuItems(item) }
         var items: [FieldMenuItem] = []
         func add(_ id: String, _ title: String, _ symbol: String, keys: String = "", run: @escaping @MainActor () -> Void) {

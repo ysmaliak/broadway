@@ -227,6 +227,53 @@ extension Bench {
         case "undo":
             browser.undoAnnounced()
             answer(state())
+        case "downloadrows":
+            let box = FieldLeaveBench.omnibox(in: browser)
+            let shown = (box?.kitSubviews(of: FieldPlaceRowView.self) ?? [])
+                .filter { $0.window != nil && !$0.isHiddenOrHasHiddenAncestor }
+                .map { ($0.convert($0.bounds, to: nil).maxY, $0) }
+                .sorted { $0.0 > $1.0 }
+                .map { $0.1 }
+            answer(state(["drawnRows": shown.map { row -> [String: Any] in
+                var said = row.bench
+                said["lit"] = row.lit
+                return said
+            }, "built": box?.kitSubviews(of: FieldRowSlot.self).filter { $0.superview != nil }.count ?? 0,
+               "idle": browser.returnIsIdle, "returnWord": browser.pickedOffer?.placed?.returnWord ?? "",
+               "downloadsTab": browser.pageTab(.downloads) != nil, "tabs": browser.tabs.count]))
+        case "rowmenu":
+            guard let item = browser.pickedOffer?.placed, let view = browser.window?.contentView,
+                  let menu = browser.downloadsContextMenu(item, from: view) else {
+                answer(["error": "no download row is lit"])
+                return
+            }
+            answer(state(["items": menu.items.map { $0.isSeparatorItem ? "-" : $0.title },
+                          "ids": menu.items.map { $0.accessibilityIdentifier() }]))
+        case "command":
+            guard let command = Command.named(args.dropFirst().first ?? "") else {
+                answer(["error": "fieldrows command ID"])
+                return
+            }
+            command.run(browser)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { answer(state()) }
+        case "keepmany":
+            let count = Int(args.dropFirst().first ?? "") ?? 100
+            let folder = Store.file("bench-downloads")
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            for index in 0..<count {
+                let file = folder.appendingPathComponent("file-\(index).txt")
+                try? Data("bench".utf8).write(to: file)
+                browser.loot.add(Keep(name: "file-\(index).txt", from: "files.example", path: file.path,
+                                      date: Date().addingTimeInterval(-Double(count - index) * 60)))
+            }
+            browser.retype()
+            answer(state())
+        case "scrollend":
+            if let list = FieldLeaveBench.omnibox(in: browser)?.kitSubviews(of: NSScrollView.self).first(where: { $0.documentView?.frame.height ?? 0 > $0.contentView.bounds.height }),
+               let page = list.documentView {
+                page.scroll(NSPoint(x: 0, y: page.frame.height - list.contentView.bounds.height))
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { answer(state()) }
         case "visit":
             let rest = Array(args.dropFirst())
             guard rest.count >= 2, let url = URL(string: rest[0]), let minutes = Double(rest[1]) else {

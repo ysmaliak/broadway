@@ -460,7 +460,7 @@ final class FieldBarView: NSView {
         if browser.fieldPlace == .snippets, browser.leadingSnippet != nil {
             return browser.snippetField.target?.editor == true || browser.snippetField.waiting ? "Insert" : "Copy"
         }
-        if browser.fieldPlace != nil { return "Open" }
+        if browser.fieldPlace != nil { return browser.pickedOffer?.placed?.returnWord ?? "Open" }
         if browser.leadingAnswer != nil { return "Copy" }
         if browser.leadingSnippet != nil { return browser.snippetField.target?.editor == true ? "Insert" : "Copy" }
         guard let picked = browser.fieldRow, browser.offers.indices.contains(picked) else {
@@ -735,6 +735,7 @@ extension Browser {
 
 final class FieldRowSlot: NSView {
     var take: (() -> Void)?
+    var rowMenu: ((NSView) -> NSMenu?)?
     private(set) var row: FieldRowView?
 
     init() {
@@ -775,6 +776,8 @@ final class FieldRowSlot: NSView {
         guard bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
         take?()
     }
+
+    override func menu(for event: NSEvent) -> NSMenu? { rowMenu?(self) }
 }
 
 final class FieldBarSlot: NSView {
@@ -812,8 +815,9 @@ enum FieldHosts {
     static func row() -> FieldRowSlot { FieldRowSlot() }
 
     static func setRow(_ slot: FieldRowSlot, offer: Suggestion, height: CGFloat, lit: Bool, splits: Bool = false,
-                       take: @escaping () -> Void, copy: @escaping (FieldAnswer) -> Void) {
+                       take: @escaping () -> Void, copy: @escaping (FieldAnswer) -> Void, menu: ((NSView) -> NSMenu?)? = nil) {
         slot.take = take
+        slot.rowMenu = menu
         slot.set(offer: offer, height: height, lit: lit, splits: splits, copy: copy)
     }
 

@@ -347,7 +347,7 @@ final class FieldPlaceTests {
         #expect(!browser.editing)
     }
 
-    @Test func aMissingDownloadSaysSoAndStays() {
+    @Test func aMissingDownloadSaysSoAndStays() throws {
         _ = keep("gone.pdf", minutesAgo: 1, there: false)
         browser.edit()
         browser.enterPlace(.downloads)
@@ -355,6 +355,12 @@ final class FieldPlaceTests {
         browser.submit()
 
         #expect(browser.offers.first?.placed?.missing == true)
+        #expect(browser.returnIsIdle)
+        #expect(PlaceFiles.done.isEmpty)
+        #expect(browser.fieldPlace == .downloads)
+
+        browser.take(try #require(browser.offers.first))
+
         #expect(PlaceFiles.done.isEmpty)
         #expect(browser.announcement == "gone.pdf isn't there any more")
         #expect(browser.fieldPlace == .downloads)
@@ -390,6 +396,7 @@ final class FieldPlaceTests {
 
     @Test func commandKInAPlaceOffersTheRowsKeysAndTheFullPage() {
         _ = keep("menu.pdf", minutesAgo: 1)
+        visit("https://menu.example/", "Menu", minutesAgo: 1)
         browser.edit()
         browser.enterPlace(.downloads)
 
@@ -397,8 +404,13 @@ final class FieldPlaceTests {
         let resting = browser.fieldMenuItems(for: nil)
 
         #expect(items.map(\.keys) == ["↩", "⌘R", "⇧⌘C", "⌃X", ""])
-        #expect(items.last?.title == "Open Downloads Page")
-        #expect(resting.map(\.title) == ["Open Downloads Page"])
+        #expect(items.last?.title == "Clear List")
+        #expect(resting.map(\.title) == ["Clear List"])
+
+        browser.enterPlace(.history)
+
+        #expect(browser.fieldMenuItems(for: browser.pickedOffer).last?.title == "Open History Page")
+        #expect(browser.fieldMenuItems(for: nil).map(\.title) == ["Open History Page"])
     }
 
     @Test func privateWindowsLeaveNothingInTheHistoryPlace() async throws {

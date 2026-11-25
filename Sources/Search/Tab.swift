@@ -299,6 +299,7 @@ final class Tab: Identifiable {
     @ObservationIgnored private var settleWork: DispatchWorkItem?
     @ObservationIgnored private(set) var origin: URL?
     @ObservationIgnored var knowsTitle: ((URL) -> String?)?
+    @ObservationIgnored var wantsDownloads: (() -> Void)?
     @ObservationIgnored private var lastLink: (href: String, words: String, at: Date)?
     private(set) var address: URL?
     /// The address of the page that is actually on screen. `address` moves
@@ -835,6 +836,10 @@ final class Tab: Identifiable {
     /// leaves is one Back comes back to — not for another section of the
     /// same page, which only moves the address.
     func show(_ next: InternalPage, stepping: Bool = true) {
+        guard next.kind != .downloads else {
+            wantsDownloads?()
+            return
+        }
         if let page, page != next, stepping, page.kind != next.kind {
             trail.append(page)
             ahead = []
@@ -1573,7 +1578,7 @@ final class Tab: Identifiable {
     func restore(url: URL, title: String, name: String? = nil) {
         if let own = InternalPage(url: url) {
             self.name = name
-            show(own)
+            if own.kind != .downloads { show(own) }
             return
         }
         address = url
