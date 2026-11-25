@@ -43,50 +43,113 @@ struct GlassKeysTests {
         #expect(label?.frame.midX == 40)
     }
 
-    @Test func theJoinKeyCarriesItsOwnGreenInsideItsGlassSoAWindowThatIsNeverKeyKeepsIt() {
-        let key = MeetingJoinButton(symbol: "video.fill", drawn: false)
-        key.frame = NSRect(x: 0, y: 0, width: 120, height: 28)
-        let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 140, height: 40), styleMask: .borderless, backing: .buffered, defer: false)
+    @Test(arguments: [NSAppearance.Name.aqua, .darkAqua])
+    func theJoinKeyIsOneSystemGreenCapsuleWithNoGlassOrPlateBehindIt(look: NSAppearance.Name) {
+        let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 240, height: 60), styleMask: .borderless, backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
-        window.contentView?.addSubview(key)
+        window.appearance = NSAppearance(named: look)
         defer { window.contentView = nil }
+        let key = MeetingJoinButton(symbol: "video.fill")
+        key.frame = NSRect(x: 0, y: 0, width: 198, height: 32)
+        window.contentView?.addSubview(key)
         key.layoutSubtreeIfNeeded()
+        key.viewDidChangeEffectiveAppearance()
 
-        let glass = key.faceGlass
-        let holder = glass?.contentView
-        let green = key.face.fill?.usingColorSpace(.sRGB)
+        var system = NSColor.systemGreen
+        NSAppearance(named: look)?.performAsCurrentDrawingAppearance { system = NSColor.systemGreen.usingColorSpace(.sRGB) ?? .systemGreen }
+        let drawn = key.subviews.filter { view in
+            guard let box = view as? KitBox else { return !(view === key.content) }
+            return box.fill != nil || box.stroke != nil || !box.gradient.isEmpty
+        }
 
-        #expect(!window.canBecomeKey && !window.isKeyWindow)
-        #expect(glass?.effectIsInteractive == true)
-        #expect(glass?.tintColor == nil)
-        #expect(key.face.superview === holder)
-        #expect(holder?.subviews.first === key.face)
-        #expect(key.content?.superview === holder)
-        #expect(key.face.frame == glass?.bounds)
-        #expect((green?.alphaComponent ?? 0) == 1)
-        #expect((green.map { $0.greenComponent - max($0.redComponent, $0.blueComponent) } ?? 0) > 0.3)
+        #expect(key.kitSubviews(of: NSGlassEffectView.self).isEmpty)
+        #expect(key.faceGlass == nil)
+        #expect(drawn.count == 1 && drawn.first === key.face)
+        #expect(key.face.corners == .capsule)
+        #expect(key.face.frame == key.bounds)
+        #expect(key.face.fill == system)
+        #expect(key.layer?.backgroundColor == nil)
+        #expect(key.content?.superview === key)
     }
 
-    @Test func theJoinGreenLightsOnHoverDarkensOnPressAndKeepsItsWhiteWordsReadableWithMoreContrast() {
+    @Test(arguments: [NSAppearance.Name.aqua, .darkAqua])
+    func theJoinGreenIsTheSystemGreenAndDarkensALittleOnHoverAndMoreOnPress(look: NSAppearance.Name) throws {
         func light(_ color: NSColor) -> CGFloat {
             let c = color.usingColorSpace(.sRGB) ?? color
             func part(_ v: CGFloat) -> CGFloat { v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
             return 0.2126 * part(c.redComponent) + 0.7152 * part(c.greenComponent) + 0.0722 * part(c.blueComponent)
         }
-        func contrast(_ color: NSColor) -> CGFloat { 1.05 / (light(color) + 0.05) }
-        for dark in [false, true] {
-            let rest = MeetingJoinButton.fill(dark: dark)
-            #expect(light(MeetingJoinButton.fill(dark: dark, lit: true)) > light(rest))
-            #expect(light(MeetingJoinButton.fill(dark: dark, pressed: true)) < light(rest))
-            #expect(contrast(MeetingJoinButton.fill(dark: dark, raised: true)) >= 4.5)
-            #expect(contrast(MeetingJoinButton.fill(dark: dark, raised: true, lit: true)) >= 4.5)
+        let appearance = try #require(NSAppearance(named: look))
+        var system = NSColor.systemGreen
+        appearance.performAsCurrentDrawingAppearance { system = NSColor.systemGreen.usingColorSpace(.sRGB) ?? .systemGreen }
+
+        let rest = MeetingGreen.fill(in: appearance)
+        let lit = MeetingGreen.fill(in: appearance, lit: true)
+        let pressed = MeetingGreen.fill(in: appearance, pressed: true)
+
+        #expect(rest == system)
+        #expect(MeetingGreen.resolved(in: appearance) == system)
+        #expect(light(lit) < light(rest))
+        #expect(light(pressed) < light(lit))
+        #expect(abs((lit.usingColorSpace(.sRGB)?.hueComponent ?? 0) - rest.hueComponent) < 0.01)
+        #expect(abs((pressed.usingColorSpace(.sRGB)?.hueComponent ?? 0) - rest.hueComponent) < 0.01)
+    }
+
+    @Test func theJoinGreenFollowsTheLookItIsDrawnIn() throws {
+        let light = try #require(NSAppearance(named: .aqua))
+        let dark = try #require(NSAppearance(named: .darkAqua))
+
+        #expect(MeetingGreen.fill(in: light) != MeetingGreen.fill(in: dark))
+    }
+
+    @Test func theSidebarJoinCapsuleWearsTheSameGreenAsTheMeetingCard() {
+        let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 80, height: 30), styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.appearance = NSAppearance(named: .darkAqua)
+        defer { window.contentView = nil }
+        let badge = PinMeetingBadgeView(browser: nil)
+        window.contentView?.addSubview(badge)
+        badge.viewDidChangeEffectiveAppearance()
+        badge.show(.join, title: "Design sync")
+
+        let ground = badge.subviews.compactMap { $0 as? KitBox }.first { $0.fill != nil }
+
+        #expect(ground?.fill == MeetingGreen.fill(in: badge.effectiveAppearance))
+        #expect(ground?.fill == MeetingGreen.resolved(in: NSAppearance(named: .darkAqua) ?? badge.effectiveAppearance))
+    }
+
+    @Test func aClickOnTheJoinKeyDarkensItWhileHeldAndRunsItsActionOnce() {
+        var fired = 0
+        let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 240, height: 60), styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer {
+            window.orderOut(nil)
+            window.contentView = nil
         }
-        Store.settings.set(true, forKey: "contrast.testRaised")
-        defer { Store.settings.removeObject(forKey: "contrast.testRaised") }
+        let key = MeetingJoinButton(symbol: "video.fill")
+        key.action = { fired += 1 }
+        key.frame = NSRect(x: 10, y: 10, width: 198, height: 32)
+        window.contentView?.addSubview(key)
+        window.benchShowBehind()
+        key.layoutSubtreeIfNeeded()
+        let middle = key.convert(NSPoint(x: key.bounds.midX, y: key.bounds.midY), to: nil)
+        func send(_ type: NSEvent.EventType) {
+            guard let event = NSEvent.mouseEvent(with: type, location: middle, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                 windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1,
+                                                 pressure: type == .leftMouseUp ? 0 : 1) else { return }
+            window.sendEvent(event)
+        }
 
-        let key = MeetingJoinButton(symbol: "video.fill", drawn: false)
+        send(.leftMouseDown)
+        let held = key.face.fill
+        let pressed = key.pressed
+        send(.leftMouseUp)
 
-        #expect(key.face.fill == MeetingJoinButton.fill(dark: key.kitDark, raised: true))
+        #expect(pressed)
+        #expect(held == MeetingGreen.fill(in: key.effectiveAppearance, lit: key.hovering, pressed: true))
+        #expect(!key.pressed)
+        #expect(fired == 1)
+        #expect(key.face.fill == MeetingGreen.fill(in: key.effectiveAppearance, lit: key.hovering))
     }
 
     @Test func noGlassKeyCarriesItsColourOnlyInTheGlassTint() {
