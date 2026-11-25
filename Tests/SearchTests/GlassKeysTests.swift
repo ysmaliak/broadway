@@ -122,16 +122,21 @@ struct GlassKeysTests {
         var fired = 0
         let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 240, height: 60), styleMask: .borderless, backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
-        defer { window.contentView = nil }
+        defer {
+            window.orderOut(nil)
+            window.contentView = nil
+        }
         let key = MeetingJoinButton(symbol: "video.fill")
         key.action = { fired += 1 }
         key.frame = NSRect(x: 10, y: 10, width: 198, height: 32)
         window.contentView?.addSubview(key)
+        window.benchShowBehind()
         key.layoutSubtreeIfNeeded()
         let middle = key.convert(NSPoint(x: key.bounds.midX, y: key.bounds.midY), to: nil)
         func send(_ type: NSEvent.EventType) {
             guard let event = NSEvent.mouseEvent(with: type, location: middle, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-                                                 windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1) else { return }
+                                                 windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1,
+                                                 pressure: type == .leftMouseUp ? 0 : 1) else { return }
             window.sendEvent(event)
         }
 
