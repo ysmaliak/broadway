@@ -194,7 +194,7 @@ extension Browser {
         loot.forgetAll()
         keptThere = [:]
         if fieldPlace == .downloads { relistDownloads() }
-        announce("Cleared the list. The files stay where they are", undo: { [weak self] in
+        announce("Cleared the list. The files stay where they are.", undo: { [weak self] in
             guard let self else { return }
             for keep in was.reversed() { self.loot.restore(keep) }
             if self.fieldPlace == .downloads { self.relistDownloads() }

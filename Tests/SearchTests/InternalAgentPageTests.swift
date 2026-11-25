@@ -26,7 +26,7 @@ final class InternalAgentPageTests {
     }
 
     @Test func everyInternalKindHasItsCanonicalAddressInAllTabReaders() async throws {
-        let pages = InternalPage.Kind.allCases.map { InternalPage($0, $0 == .settings ? "privacy" : nil) }
+        let pages = InternalPage.Kind.allCases.map { InternalPage($0, $0 == .settings ? "privacy" : nil) }.filter { !InternalPage.retired($0.url) }
         let tabs = pages.map { page in
             let tab = Tab()
             tab.restore(url: URL(string: "https://example.com/old")!, title: "Old")

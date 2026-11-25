@@ -269,7 +269,7 @@ final class FieldDownloadsTests {
         #expect(browser.loot.kept.isEmpty)
         #expect(titles().isEmpty)
         #expect(FileManager.default.fileExists(atPath: folder.appendingPathComponent("one.txt").path))
-        #expect(browser.announcement == "Cleared the list. The files stay where they are")
+        #expect(browser.announcement == "Cleared the list. The files stay where they are.")
 
         browser.undoAnnounced()
 
