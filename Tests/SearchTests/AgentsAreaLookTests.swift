@@ -180,7 +180,7 @@ final class AgentsAreaLookTests {
     }
 
     private func list(in area: AgentsAreaView) -> [NSView] {
-        area.subviews.compactMap { $0 as? NSScrollView }.first?.documentView?.subviews ?? []
+        area.kitSubviews(of: NSScrollView.self).first?.documentView?.subviews ?? []
     }
 
     private func headings(in area: AgentsAreaView) -> [String] {

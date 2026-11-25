@@ -397,6 +397,8 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
 
     var listOffset: CGFloat { listScroll.contentView.bounds.minY }
 
+    func takeWheel(_ event: NSEvent) { listScroll.scrollWheel(with: event) }
+
     var veiled: Tab.ID? {
         didSet {
             guard veiled != oldValue else { return }

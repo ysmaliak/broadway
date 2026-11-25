@@ -231,4 +231,81 @@ struct AgentsAreaTests {
         #expect(asked == asking)
         #expect(none == nil)
     }
+
+    @Test func aListThatFitsDoesNotScrollAndOnlyAnOverflowingOneDoes() {
+        let one = AgentsLayout.content([AgentsLayout.Section(rows: 1)])
+        let many = AgentsLayout.content([AgentsLayout.Section(rows: 4, whole: true)])
+        let viewport = 3 * AgentsLayout.step
+
+        #expect(AgentsLayout.fits(content: one, viewport: one))
+        #expect(AgentsLayout.limit(content: one, viewport: one) == 0)
+        #expect(!AgentsLayout.fits(content: many, viewport: viewport))
+        #expect(AgentsLayout.limit(content: many, viewport: viewport) == AgentsLayout.step)
+    }
+
+    @Test func aWheelGestureIsHandedOnOrKeptForItsWholeLengthAsItBegan() {
+        let begins = AgentsLayout.wheelPasses(fits: true, starts: true, phased: true, held: nil)
+        let carries = AgentsLayout.wheelPasses(fits: false, starts: false, phased: true, held: true)
+        let keeps = AgentsLayout.wheelPasses(fits: true, starts: false, phased: true, held: false)
+        let notch = AgentsLayout.wheelPasses(fits: false, starts: false, phased: false, held: true)
+
+        #expect(begins)
+        #expect(carries)
+        #expect(!keeps)
+        #expect(!notch)
+    }
+
+    @Test func theTopBandIsOffAtRestAndGrowsWithTheOffset() {
+        let rest = AgentsLayout.bandStrength(0)
+        let pulled = AgentsLayout.bandStrength(-12)
+        let half = AgentsLayout.bandStrength(AgentsLayout.band / 2)
+        let deep = AgentsLayout.bandStrength(200)
+        let stops = AgentsLayout.bandStops(half, height: 140)
+
+        #expect(rest == 0)
+        #expect(pulled == 0)
+        #expect(half == 0.5)
+        #expect(deep == 1)
+        #expect(stops.alphas == [0.5, 1, 1])
+        #expect(stops.locations == [0, AgentsLayout.band / 140, 1])
+        #expect(AgentsLayout.bandStops(0, height: 140).alphas == [1, 1, 1])
+    }
+
+    @Test func aRowBlursAsItPassesUnderTheBandAndNotWithReducedTransparency() {
+        let row: ClosedRange<CGFloat> = 40...74
+
+        let below = AgentsLayout.blur(row: row, offset: 0, strength: 1, plain: false)
+        let entering = AgentsLayout.blur(row: row, offset: 33, strength: 1, plain: false)
+        let under = AgentsLayout.blur(row: row, offset: 66, strength: 1, plain: false)
+        let plain = AgentsLayout.blur(row: row, offset: 66, strength: 1, plain: true)
+        let resting = AgentsLayout.blur(row: row, offset: 66, strength: 0, plain: false)
+
+        #expect(below == 0)
+        #expect(entering > 0 && entering < under)
+        #expect(under == AgentsLayout.blurMost)
+        #expect(plain == 0)
+        #expect(resting == 0)
+    }
+
+    @Test func nothingButThePersonMovesTheListDuringAScrollAndForAWhileAfter() {
+        let span = AgentsLayout.quietSpan
+
+        #expect(span == 1.5)
+        #expect(AgentsLayout.quiet(now: 10, last: 0, live: true))
+        #expect(AgentsLayout.quiet(now: 10, last: 10 - span + 0.1, live: false))
+        #expect(!AgentsLayout.quiet(now: 10, last: 10 - span - 0.1, live: false))
+    }
+
+    @Test func aListThatGotShorterIsBroughtBackToItsNewEndAndRestsOnWholePoints() {
+        let back = AgentsLayout.clamped(80, limit: 43)
+        let inside = AgentsLayout.clamped(40, limit: 43)
+
+        #expect(back == 43)
+        #expect(inside == nil)
+        #expect(AgentsLayout.whole(12.4, limit: 43) == 12)
+        #expect(AgentsLayout.whole(42.8, limit: 43) == 43)
+        #expect(AgentsLayout.whole(12, limit: 43) == nil)
+        #expect(AgentsLayout.whole(-3.5, limit: 43) == nil)
+        #expect(AgentsLayout.whole(44.2, limit: 43) == nil)
+    }
 }

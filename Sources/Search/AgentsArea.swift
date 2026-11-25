@@ -45,6 +45,10 @@ enum AgentsLayout {
     static let most = 5
     static let faces = 3
     static let faceStep: CGFloat = 12
+    static let band: CGFloat = 14
+    static let blurMost: CGFloat = 3
+    static let quietSpan: Double = 1.5
+    static let settleSpan: Double = 0.3
 
     struct Section: Equatable {
         var rows: Int
@@ -140,6 +144,40 @@ enum AgentsLayout {
         guard !sections.isEmpty else { return 0 }
         let full = row + (folded ? 0 : content(sections))
         return min(full, max(row, column * share)) + margin
+    }
+
+    static func fits(content: CGFloat, viewport: CGFloat) -> Bool { content <= viewport + 0.5 }
+
+    static func limit(content: CGFloat, viewport: CGFloat) -> CGFloat { max(0, content - viewport) }
+
+    static func bandStrength(_ offset: CGFloat) -> CGFloat { min(1, max(0, offset / band)) }
+
+    static func bandStops(_ strength: CGFloat, height: CGFloat) -> (alphas: [CGFloat], locations: [CGFloat]) {
+        guard height > 0 else { return ([1, 1], [0, 1]) }
+        return ([1 - min(1, max(0, strength)), 1, 1], [0, min(1, band / height), 1])
+    }
+
+    static func blur(row: ClosedRange<CGFloat>, offset: CGFloat, strength: CGFloat, plain: Bool) -> CGFloat {
+        guard !plain, strength > 0 else { return 0 }
+        let top = max(row.lowerBound, offset)
+        let seen = row.upperBound - top
+        guard seen > 0.5 else { return blurMost * strength }
+        let under = max(0, min(row.upperBound, offset + band) - top)
+        return blurMost * strength * min(1, under / seen)
+    }
+
+    static func quiet(now: Double, last: Double, live: Bool) -> Bool { live || now - last < quietSpan }
+
+    static func clamped(_ offset: CGFloat, limit: CGFloat) -> CGFloat? { offset > limit + 0.5 ? limit : nil }
+
+    static func whole(_ offset: CGFloat, limit: CGFloat) -> CGFloat? {
+        guard offset >= 0, offset <= limit + 0.01 else { return nil }
+        let rounded = min(limit.rounded(.down), max(0, offset.rounded()))
+        return abs(rounded - offset) > 0.001 ? rounded : nil
+    }
+
+    static func wheelPasses(fits: Bool, starts: Bool, phased: Bool, held: Bool?) -> Bool {
+        starts || !phased ? fits : held ?? fits
     }
 
     static func press(asking: UUID?, front: UUID?) -> Press {
@@ -383,10 +421,86 @@ extension Browser {
     }
 }
 
+final class AgentsScrollView: NSScrollView {
+    var fits = true { didSet { if fits != oldValue { verticalScrollElasticity = fits ? .none : .allowed } } }
+    var pass: ((NSEvent) -> Void)?
+    var began: (() -> Void)?
+    var rested: (() -> Void)?
+    private(set) var live = false
+    private(set) var lastWheel: CFTimeInterval = -1000
+    private(set) var passed = 0
+    private(set) var taken = 0
+    private var held: Bool?
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        drawsBackground = false
+        hasVerticalScroller = false
+        hasHorizontalScroller = false
+        horizontalScrollElasticity = .none
+        verticalScrollElasticity = .none
+        automaticallyAdjustsContentInsets = false
+        contentView.drawsBackground = false
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    var quiet: Bool { AgentsLayout.quiet(now: CACurrentMediaTime(), last: lastWheel, live: live) }
+
+    func moved() { lastWheel = CACurrentMediaTime() }
+
+    private(set) var tiling = false
+
+    override func tile() {
+        let kept = contentView.bounds.origin
+        tiling = true
+        super.tile()
+        if !live, contentView.bounds.origin != kept { contentView.setBoundsOrigin(kept) }
+        tiling = false
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        let starts = event.phase.contains(.began) || event.phase.contains(.mayBegin)
+        let phased = event.phase != [] || event.momentumPhase != []
+        let passes = AgentsLayout.wheelPasses(fits: fits, starts: starts, phased: phased, held: held)
+        if phased { held = passes }
+        if passes {
+            passed += 1
+            if let pass { pass(event) } else { nextResponder?.scrollWheel(with: event) }
+            return
+        }
+        taken += 1
+        if starts { began?() }
+        let ends = [NSEvent.Phase.ended, .cancelled].contains { event.phase.contains($0) || event.momentumPhase.contains($0) }
+        live = phased && !ends
+        lastWheel = CACurrentMediaTime()
+        super.scrollWheel(with: event)
+        guard !live else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.live else { return }
+            self.rested?()
+        }
+    }
+}
+
+final class AgentsListView: KitFlippedView {
+    override class var isCompatibleWithResponsiveScrolling: Bool { false }
+}
+
 final class AgentsAreaView: NSView {
     struct Scene: Equatable {
         var space: UUID
         var front: Bool
+    }
+
+    private struct Shape: Equatable {
+        var scene: Scene
+        var sections: [AgentsLayout.Section]
+        var folded: Bool
+        var keeps: Bool
+        var order: [UUID]
+        var asked: [UUID]
     }
 
     struct Veil: Equatable {
@@ -412,8 +526,21 @@ final class AgentsAreaView: NSView {
 
     private let glass = NSGlassEffectView()
     private let row = AgentHeadView()
-    private let scroll = NSScrollView()
-    private let list = KitFlippedView()
+    private let well = KitFlippedView()
+    private let scroll = AgentsScrollView()
+    private let list = AgentsListView()
+    private let band = CAGradientLayer()
+    private var steering: CGFloat?
+    private var steerTurn = 0
+    private var hold: CGFloat = 0
+    private var softened: [ObjectIdentifier: CGFloat] = [:]
+    private var drawnShape: Shape?
+    private var laidRoom: CGFloat = -1
+    private var laidContent: CGFloat = 0
+    private var placing = false
+    private var wake: DispatchWorkItem?
+    private(set) var laidOut = 0
+    var passWheel: ((NSEvent) -> Void)? { didSet { scroll.pass = passWheel } }
     private var heads: [UUID: AgentHeadView] = [:]
     private var rows: [Tab.ID: AgentRowView] = [:]
     private var mores: [UUID: AgentMoreRowView] = [:]
@@ -446,12 +573,22 @@ final class AgentsAreaView: NSView {
         glass.cornerRadius = SideLook.cardRadius
         glass.tintColor = Palette.NS.glassTint
         addSubview(glass)
-        scroll.drawsBackground = false
-        scroll.hasVerticalScroller = false
-        scroll.verticalScrollElasticity = .automatic
+        well.wantsLayer = true
+        well.layer?.cornerRadius = SideLook.cardRadius
+        well.layer?.cornerCurve = .continuous
+        well.layer?.masksToBounds = true
+        addSubview(well)
         scroll.documentView = list
         scroll.wantsLayer = true
-        addSubview(scroll)
+        scroll.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: AgentsLayout.rim, right: 0)
+        band.actions = ["bounds": NSNull(), "position": NSNull(), "frame": NSNull(), "colors": NSNull(), "locations": NSNull(),
+                        "startPoint": NSNull(), "endPoint": NSNull()]
+        scroll.layer?.mask = band
+        well.addSubview(scroll)
+        scroll.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(scrolled), name: NSView.boundsDidChangeNotification, object: scroll.contentView)
+        scroll.began = { [weak self] in self?.stopSteering() }
+        scroll.rested = { [weak self] in self?.rested() }
         addSubview(row)
         row.press = { [weak browser] in browser?.pressAgents() }
         setAccessibilityElement(space == nil)
@@ -788,6 +925,8 @@ final class AgentsAreaView: NSView {
                     tabs = session.tabs.filter { $0 !== lead }
                     let head = heads[session.id] ?? {
                         let made = AgentHeadView()
+                        made.followsPointer = true
+                        made.clipsHover = true
                         heads[session.id] = made
                         list.addSubview(made)
                         return made
@@ -830,7 +969,6 @@ final class AgentsAreaView: NSView {
                         return made
                     }()
                     view.ground = ground
-                    view.refresh()
                     keptRows.insert(tab.id)
                 }
                 if count < tabs.count {
@@ -862,6 +1000,15 @@ final class AgentsAreaView: NSView {
             leave(view)
         }
         if !facesShown { AgentFaces.show(false, in: self) }
+        var order: [UUID] = []
+        for session in shown {
+            if heads[session.id] != nil { order.append(session.id) }
+            order += (listed[session.id] ?? []).map(\.id)
+            if mores[session.id] != nil { order.append(session.id) }
+        }
+        let shape = Shape(scene: scene, sections: sections, folded: folded, keeps: keepsRows, order: order, asked: questions.map(\.id))
+        guard shape != drawnShape || room != laidRoom else { return }
+        drawnShape = shape
         needsLayout = true
         superview?.needsLayout = true
     }
@@ -911,6 +1058,10 @@ final class AgentsAreaView: NSView {
         let clock = CACurrentMediaTime()
         defer { FrameGaps.shared.note("agents", from: clock) }
         super.layout()
+        placing = true
+        defer { placing = false }
+        laidOut += 1
+        laidRoom = room
         let quiet = still
         still = false
         let animated = settled && !quiet && !entering
@@ -923,20 +1074,33 @@ final class AgentsAreaView: NSView {
         let card = NSRect(x: inset, y: 0, width: max(0, bounds.width - 2 * inset), height: max(0, bounds.height - AgentsLayout.below))
         glass.isHidden = shown.isEmpty
         glass.frame = card
+        well.frame = card
         row.isHidden = shown.isEmpty
         row.frame = NSRect(x: card.minX + pad, y: AgentsLayout.rim, width: max(0, card.width - 2 * pad), height: side)
         let top = AgentsLayout.rim + side
         let viewport = max(0, open - AgentsLayout.margin - side)
-        let seen = min(viewport, max(0, card.maxY - AgentsLayout.rim - top))
-        scroll.frame = NSRect(x: card.minX + pad, y: top, width: max(0, card.width - 2 * pad), height: seen)
+        let kept = scroll.contentView.bounds.origin
+        scroll.frame = NSRect(x: pad, y: top, width: max(0, card.width - 2 * pad), height: max(0, card.height - top))
+        if !scroll.live, steering == nil, scroll.contentView.bounds.origin != kept { scroll.contentView.setBoundsOrigin(kept) }
         let share = open - closed > 0.5 ? min(1, max(0, (room - closed) / (open - closed))) : (folded ? 0 : 1)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         scroll.layer?.opacity = Swift.Float(motion?.folds == true ? share : (folded && !moving ? 0 : 1))
         CATransaction.commit()
         let content = AgentsLayout.content(sections)
-        let documentHeight = max(viewport, content)
-        list.frame = NSRect(x: 0, y: 0, width: scroll.frame.width, height: documentHeight)
+        let limit = AgentsLayout.limit(content: content, viewport: viewport)
+        let at = steering ?? scroll.contentView.bounds.minY
+        let shrank = content < laidContent - 0.5
+        laidContent = content
+        if shrank, AgentsLayout.clamped(at, limit: limit) != nil { hold = max(hold, at + viewport) }
+        let documentHeight = max(content, hold)
+        let listFrame = NSRect(x: 0, y: 0, width: scroll.frame.width, height: documentHeight)
+        if list.frame != listFrame { list.frame = listFrame }
+        scroll.fits = AgentsLayout.fits(content: content, viewport: viewport)
+        defer {
+            edges()
+            rehover()
+        }
         let resting = folded && motion == nil
         guard !resting || !(rows.isEmpty && heads.isEmpty && mores.isEmpty) else {
             wasFolded = true
@@ -983,45 +1147,205 @@ final class AgentsAreaView: NSView {
             return
         }
         let ids = shown.map(\.id) + AgentDesk.shared.pending.map(\.id)
-        let limit = max(0, documentHeight - viewport)
+        let follows = !scroll.quiet || wasFolded
         if ids != revealedFor || wasFolded {
             revealedFor = ids
             let pending = AgentDesk.shared.pending
-            reveal(AgentsLayout.revealed(shown.map { ($0.id, $0.state(pending: pending).attention) }), limit: limit, viewport: viewport,
-                   animated: moves)
+            if follows {
+                reveal(AgentsLayout.revealed(shown.map { ($0.id, $0.state(pending: pending).attention) }), limit: limit, viewport: viewport,
+                       animated: moves)
+            }
         } else if let opened {
             reveal(opened, limit: limit, viewport: viewport, animated: moves)
-        } else if scroll.contentView.bounds.minY > limit {
-            scroll.contentView.scroll(to: NSPoint(x: 0, y: limit))
-            scroll.reflectScrolledClipView(scroll.contentView)
+        }
+        if !scroll.live, shrank || hold > 0, let target = AgentsLayout.clamped(steering ?? scroll.contentView.bounds.minY, limit: limit) {
+            steer(to: target, viewport: viewport, animated: settled && window != nil)
+        } else if steering == nil, !scroll.live, hold > 0 {
+            hold = 0
+            needsLayout = true
+        } else {
+            settleDrift(limit: limit)
         }
         wasFolded = false
         settled = true
     }
 
+    private func settleDrift(limit: CGFloat) {
+        guard steering == nil, !scroll.live, scroll.fits || !scroll.quiet else { return }
+        let clip = scroll.contentView
+        let y = clip.bounds.minY
+        let target = scroll.fits ? 0 : min(max(0, y.rounded()), limit)
+        guard abs(target - y) > 0.001 else { return }
+        place { clip.setBoundsOrigin(NSPoint(x: 0, y: target)) }
+    }
+
     private func reveal(_ id: UUID?, limit: CGFloat, viewport: CGFloat, animated: Bool) {
         guard let id, let span = spans[id] else { return }
-        let seen = scroll.contentView.bounds
-        var y = seen.minY
+        var y = steering ?? scroll.contentView.bounds.minY
         if span.upperBound > y + viewport { y = span.upperBound - viewport }
         if span.lowerBound < y { y = span.lowerBound }
-        let target = NSPoint(x: 0, y: max(0, min(limit, y)))
-        guard target.y != seen.minY else { return }
-        if animated {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.3
-                context.allowsImplicitAnimation = true
-                scroll.contentView.animator().setBoundsOrigin(target)
-            }
-        } else {
-            scroll.contentView.scroll(to: target)
+        steer(to: max(0, min(limit, y)), viewport: viewport, animated: animated)
+    }
+
+    private func steer(to target: CGFloat, viewport: CGFloat, animated: Bool) {
+        let clip = scroll.contentView
+        let from = clip.bounds.minY
+        guard abs(target - (steering ?? from)) > 0.01 else { return }
+        steerTurn += 1
+        let turn = steerTurn
+        hold = max(hold, from + viewport)
+        if list.frame.height < hold { list.frame.size.height = hold }
+        let point = NSPoint(x: 0, y: target)
+        guard animated else {
+            steering = nil
+            place { clip.setBoundsOrigin(point) }
+            needsLayout = true
+            return
         }
+        steering = target
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = AgentsLayout.settleSpan
+            context.allowsImplicitAnimation = true
+            clip.animator().setBoundsOrigin(point)
+        }, completionHandler: { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.steerTurn == turn else { return }
+                self.place {}
+                self.steering = nil
+                self.needsLayout = true
+            }
+        })
+    }
+
+    private func stopSteering() {
+        guard steering != nil else { return }
+        steerTurn += 1
+        steering = nil
+        let clip = scroll.contentView
+        let here = clip.bounds.origin
+        place {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0
+                clip.animator().setBoundsOrigin(here)
+            }
+        }
+    }
+
+    private func place(_ change: () -> Void) {
+        let was = placing
+        placing = true
+        change()
         scroll.reflectScrolledClipView(scroll.contentView)
+        placing = was
+    }
+
+    private func wakeAfterQuiet() {
+        wake?.cancel()
+        let item = DispatchWorkItem { [weak self] in self?.needsLayout = true }
+        wake = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + AgentsLayout.quietSpan + 0.05, execute: item)
+    }
+
+    private func rested() {
+        let clip = scroll.contentView
+        let limit = max(0, list.frame.height + AgentsLayout.rim - scroll.frame.height)
+        if steering == nil, let snapped = AgentsLayout.whole(clip.bounds.minY, limit: limit) {
+            place { clip.setBoundsOrigin(NSPoint(x: 0, y: snapped)) }
+        }
+        needsLayout = true
+        wakeAfterQuiet()
+    }
+
+    @objc private func scrolled() {
+        if steering == nil, !placing, !scroll.tiling {
+            scroll.moved()
+            wakeAfterQuiet()
+        }
+        edges()
+        rehover()
+    }
+
+    private func edges() {
+        let offset = scroll.contentView.bounds.minY
+        let strength = AgentsLayout.bandStrength(offset)
+        let stops = AgentsLayout.bandStops(strength, height: scroll.bounds.height)
+        let down = scroll.layer?.contentsAreFlipped() ?? false
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        band.frame = scroll.layer?.bounds ?? scroll.bounds
+        band.startPoint = CGPoint(x: 0.5, y: down ? 0 : 1)
+        band.endPoint = CGPoint(x: 0.5, y: down ? 1 : 0)
+        band.colors = stops.alphas.map { NSColor(white: 0, alpha: $0).cgColor }
+        band.locations = stops.locations.map { NSNumber(value: Double($0)) }
+        CATransaction.commit()
+        bandShown = strength
+        let plain = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        var kept: [ObjectIdentifier: CGFloat] = [:]
+        for view in list.subviews {
+            let radius = AgentsLayout.blur(row: view.frame.minY...max(view.frame.minY, view.frame.maxY), offset: offset, strength: strength, plain: plain)
+            let key = ObjectIdentifier(view)
+            let was = softened[key] ?? 0
+            kept[key] = radius
+            guard abs(radius - was) > 0.05 || (radius == 0) != (was == 0) else {
+                kept[key] = was
+                continue
+            }
+            if radius > 0.05, let filter = CIFilter(name: "CIGaussianBlur", parameters: [kCIInputRadiusKey: radius]) {
+                view.layerUsesCoreImageFilters = true
+                view.contentFilters = [filter]
+            } else {
+                view.contentFilters = []
+                kept[key] = 0
+            }
+        }
+        softened = kept
+    }
+
+    private(set) var bandShown: CGFloat = 0
+
+    private func rehover() {
+        for case let view as KitHoverView in list.subviews { view.settleHover() }
+    }
+
+    func benchOffset(_ y: CGFloat) {
+        guard Store.testing else { return }
+        stopSteering()
+        place { scroll.contentView.setBoundsOrigin(NSPoint(x: 0, y: y)) }
+    }
+
+    var benchScroll: [String: Any] {
+        guard let window, let root = window.contentView else { return [:] }
+        func box(_ view: NSView, _ rect: NSRect) -> [Double] {
+            let frame = view.convert(rect, to: nil)
+            return [frame.minX, root.bounds.height - frame.maxY, frame.width, frame.height].map(Double.init)
+        }
+        let viewport = max(0, AgentsLayout.height(sections, folded: false, column: column) - AgentsLayout.margin - AgentsLayout.row)
+        let content = AgentsLayout.content(sections)
+        let listed = list.subviews.filter { !$0.isHidden }.sorted { $0.frame.minY < $1.frame.minY }.map { view -> [String: Any] in
+            var said: [String: Any] = ["box": box(list, view.frame), "blur": Double(softened[ObjectIdentifier(view)] ?? 0),
+                                       "leaving": view.layer?.animation(forKey: "retire.opacity") != nil]
+            if let row = view as? AgentRowView {
+                said["kind"] = "row"
+                said["id"] = row.tab.id.uuidString
+                said["title"] = row.tab.title
+                said["close"] = !row.close.isHidden
+            } else {
+                said["kind"] = view is AgentHeadView ? "head" : "more"
+            }
+            if let hover = view as? KitHoverView { said["hover"] = hover.hovering }
+            return said
+        }
+        return ["offset": Double(scroll.contentView.bounds.minY), "limit": Double(AgentsLayout.limit(content: content, viewport: viewport)),
+                "content": Double(content), "viewport": Double(viewport), "document": Double(list.frame.height), "fits": scroll.fits,
+                "elastic": scroll.verticalScrollElasticity != .none, "live": scroll.live, "quiet": scroll.quiet, "steering": steering != nil,
+                "band": Double(bandShown), "bandHeight": Double(AgentsLayout.band), "inset": Double(scroll.contentInsets.bottom),
+                "passed": scroll.passed, "taken": scroll.taken, "laidOut": laidOut, "card": box(self, glass.frame), "view": box(well, scroll.frame),
+                "head": box(self, row.frame), "corner": Double(well.layer?.cornerRadius ?? 0), "rows": listed]
     }
 
     var benchState: [String: Any] {
         let card = cardFrameInColumn
-        return ["room": Double(room), "moving": moving, "card": [card.minX, card.minY, card.width, card.height].map(Double.init),
+        return ["scroll": benchScroll, "room": Double(room), "moving": moving, "card": [card.minX, card.minY, card.width, card.height].map(Double.init),
                 "radius": Double(glass.cornerRadius), "glass": !glass.isHidden, "fade": Double(scroll.layer?.opacity ?? 1),
                 "rows": rows.count + heads.count + mores.count, "trace": trace,
                 "listed": list.subviews.filter { !$0.isHidden }.sorted { $0.frame.minY < $1.frame.minY }.map { view in
@@ -1443,6 +1767,8 @@ final class AgentRowView: KitHoverView {
         self.space = space
         super.init(frame: .zero)
         wantsLayer = true
+        followsPointer = true
+        clipsHover = true
         mark.size = SideLook.rowMark
         for view in [hoverGround, liveGround, mark, title, dot, close] as [NSView] { addSubview(view) }
         title.setAccessibilityElement(false)
@@ -1561,7 +1887,14 @@ final class AgentRowView: KitHoverView {
 
 final class AgentMoreRowView: KitHoverView {
     var act: (() -> Void)?
-    var count = 0 { didSet { if count != oldValue { label.text = count == 1 ? "1 more tab" : "\(count) more tabs"; setAccessibilityLabel(label.text) } } }
+    var count = 0 {
+        didSet {
+            guard count != oldValue else { return }
+            label.text = count == 1 ? "1 more tab" : "\(count) more tabs"
+            setAccessibilityLabel(label.text)
+            needsLayout = true
+        }
+    }
     var ground = RowGround() { didSet { if ground != oldValue { paint() } } }
     private let plate = KitPlate(radius: AgentsLayout.rowCorner)
     private let symbol = KitSymbol("ellipsis", style: KitSymbol.Style(size: 11, weight: .semibold))
@@ -1570,6 +1903,8 @@ final class AgentMoreRowView: KitHoverView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
+        followsPointer = true
+        clipsHover = true
         for view in [plate, symbol, label] as [NSView] { addSubview(view) }
         label.setAccessibilityElement(false)
         setAccessibilityElement(true)
