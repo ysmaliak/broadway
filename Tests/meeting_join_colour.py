@@ -121,7 +121,7 @@ def corners(image, spot, scale):
 def plates():
     out = WORK / "plates"
     out.mkdir(parents=True, exist_ok=True)
-    cases = [(theme, ground, pose, False) for theme in ("dark", "light") for ground in ("white", "black")
+    cases = [(theme, ground, pose, False) for theme in ("dark", "light") for ground in ("white", "black", "clear")
              for pose in ("rest", "hover", "press")]
     cases += [(theme, "white", "focus", False) for theme in ("dark", "light")]
     cases += [(theme, ground, "rest", True) for theme in ("dark", "light") for ground in ("white", "black")]
@@ -143,7 +143,7 @@ def plates():
             sv.cmd({"do": "meetalert", "action": "shot-end"})
             if raised:
                 subprocess.run(["defaults", "delete", sv.SUITE, "contrast.testRaised"])
-        join = state.get("join", {})
+        join = took.get("join", {})
         if os.environ.get("JOIN_LAYERS") and pose == "rest" and not raised:
             print(f"        {name} views:\n          " + "\n          ".join(join.get("views", [])))
             print(f"        {name} layers:\n          " + "\n          ".join(join.get("layers", [])))
@@ -175,6 +175,58 @@ def plates():
     print("        plates in", out)
 
 
+def glass_radius(join):
+    for line in join.get("views", []):
+        if "KitGlass " in line and "glassRadius=" in line:
+            return float(line.split("glassRadius=")[1].split()[0])
+    return None
+
+
+def real_card():
+    out = WORK / "real"
+    out.mkdir(parents=True, exist_ok=True)
+
+    def look(step, picture=True):
+        joins = sv.cmd({"do": "meetalert", "action": "join-facts"}).get("joins", [])
+        radii = [glass_radius(j) for j in joins]
+        frames = [next((line.strip() for line in j.get("views", []) if "MeetingJoinButton" in line), "") for j in joins]
+        print(f"        real {step:24} glass radius {radii} {frames}")
+        t.ok(f"real card, {step}: the Join glass is a capsule", bool(radii) and all(r == 16 for r in radii), radii)
+        if not picture:
+            return
+        state = sv.cmd({"do": "meetalert", "action": "real-shot"})
+        try:
+            time.sleep(1.0)
+            took = sv.cmd({"do": "meetalert", "action": "shot-take"})
+        finally:
+            sv.cmd({"do": "meetalert", "action": "shot-end"})
+        png = base64.b64decode(took.get("png") or "")
+        t.ok(f"real card, {step}: a picture of the real panel", bool(png), {k: v for k, v in took.items() if k != "png"})
+        if not png or "join" not in state.get("spots", {}):
+            return
+        name = step.replace(" ", "-")
+        (out / f"{name}.png").write_bytes(png)
+        image = read_png(png)
+        scale = took.get("join", {}).get("scale", 1)
+        zoom(image, state["spots"]["join"], round(4 * scale), 4, out / f"{name}-join-4x.png")
+        worst = corners(image, state["spots"]["join"], scale)
+        for corner, (diff, here, beside) in worst.items():
+            print(f"        real {step:24} {corner:12} corner rgb{here} beside rgb{beside} differs by {diff}")
+        t.ok(f"real card, {step}: nothing shows outside the Join capsule", max(d for d, _, _ in worst.values()) <= 10, worst)
+
+    event = {"id": "life", "title": "Design sync", "in": 0.12, "link": f"{sv.BASE}/abc-defg-hij"}
+    sv.cmd({"do": "meetalert", "action": "fixture", "lead": "1", "hosts": {"127.0.0.1": "meet"}, "events": [event]})
+    look("first shown")
+    sv.cmd({"do": "meetalert", "action": "fixture", "lead": "1", "hosts": {"127.0.0.1": "meet"},
+            "events": [dict(event, title="Design sync, moved", **{"in": 0.1})]})
+    look("rebuilt in place")
+    sv.cmd({"do": "meetalert", "action": "changed"})
+    look("calendar changed", picture=False)
+    time.sleep(8)
+    look("after the start ticked")
+    print("        real card pictures in", out)
+
+
 def shoot(theme, front, key=False, tag=""):
     name = f"{'front' if front else 'behind'}{'-key' if key else ''}{tag}-{theme}"
     state = sv.cmd({"do": "meetalert", "action": "shot-start", "dark": theme == "dark", "front": front, "controls": True, "key": key})
@@ -200,6 +252,9 @@ def main():
                 "events": [{"title": "Design sync", "in": 0.5, "link": f"{sv.BASE}/abc-defg-hij"}]})
         t.ok("one card is up", len(sv.cmd({"do": "meetalert"})["due"]) == 1)
         plates()
+        real_card()
+        sv.cmd({"do": "meetalert", "action": "fixture", "lead": "1", "hosts": {"127.0.0.1": "meet"},
+                "events": [{"title": "Design sync", "in": 0.5, "link": f"{sv.BASE}/abc-defg-hij"}]})
         if os.environ.get("JOIN_ONLY") == "plates":
             return
         for front in (False, True):

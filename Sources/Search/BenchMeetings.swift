@@ -106,6 +106,10 @@ extension Bench {
                                controls: request["controls"] as? Bool ?? false, key: request["key"] as? Bool ?? false,
                                ground: request["ground"] as? String, join: request["join"] as? String)
                    ?? ["error": "no alert to capture"])
+        case "real-shot":
+            answer(alerts.realShot(join: request["join"] as? String) ?? ["error": "no alert panel to capture"])
+        case "join-facts":
+            answer(["joins": alerts.joinFacts])
         case "shot-take":
             let held = alerts.shotState
             alerts.takeShot { png in answer(held.merging(["png": png?.base64EncodedString() ?? ""]) { $1 }) }

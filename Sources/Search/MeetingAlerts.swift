@@ -417,6 +417,8 @@ final class MeetingAlerts {
     }
     var shotState: [String: Any] { panel.shotState }
     func endShot() { panel.endShot() }
+    func realShot(join: String? = nil) -> [String: Any]? { panel.beginRealShot(join: join) }
+    var joinFacts: [[String: Any]] { panel.joinFacts }
     func takeShot(then: @escaping (Data?) -> Void) { panel.take(then: then) }
     func render(dark: Bool) -> Data? { panel.render(dark: dark) }
 }
@@ -576,39 +578,77 @@ final class MeetingAlertPanel {
             NSApp.unhideWithoutActivation()
         }
         view.layoutSubtreeIfNeeded()
-        let joinKey = view.kitSubviews(of: MeetingJoinButton.self).first
-        if let joinKey, let pose { self.pose(joinKey, pose, in: window) }
+        if let joinKey = view.kitSubviews(of: MeetingJoinButton.self).first, let pose { self.pose(joinKey, pose, in: window) }
         view.layoutSubtreeIfNeeded()
-        view.displayIfNeeded()
+        var out = describe(view, in: window)
+        out["spots"] = (out["spots"] as? [String: [Int]] ?? [:]).merging(view.swatches.map { ($0.0, Self.spot($0.1, in: window)) }) { $1 }
+        return out
+    }
+
+    private var realHeld: (frame: NSRect, level: NSWindow.Level)?
+
+    func beginRealShot(join pose: String? = nil) -> [String: Any]? {
+        guard Store.testing, let panel, let stack else { return nil }
+        endShot()
+        realHeld = (panel.frame, panel.level)
+        parked = NSApp.windows.filter { $0 !== panel }.map { ($0, $0.frame) }
+        let away = NSPoint(x: (NSScreen.screens.map(\.frame.maxX).max() ?? 0) + 10000,
+                           y: (NSScreen.screens.map(\.frame.maxY).max() ?? 0) + 10000)
+        for (other, _) in parked {
+            other.orderOut(nil)
+            other.setFrameOrigin(away)
+        }
+        let screen = NSScreen.main?.frame ?? NSRect(x: 0, y: 0, width: 1000, height: 800)
+        panel.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)) - 1)
+        panel.setFrameOrigin(NSPoint(x: screen.minX + 20, y: screen.minY + 20))
+        pagesShown = Bench.pagesShown
+        Bench.pagesShown = true
+        shotWindow = panel
+        panel.orderBack(nil)
+        NSApp.unhideWithoutActivation()
+        stack.layoutSubtreeIfNeeded()
+        if let joinKey = stack.kitSubviews(of: MeetingJoinButton.self).first, let pose { self.pose(joinKey, pose, in: panel) }
+        stack.layoutSubtreeIfNeeded()
+        return describe(stack, in: panel)
+    }
+
+    var joinFacts: [[String: Any]] {
+        guard let panel else { return [] }
+        return cards.compactMap { $0.kitSubviews(of: MeetingJoinButton.self).first }.map { Self.facts($0, in: panel) }
+    }
+
+    private static func spot(_ target: NSView, in window: NSWindow) -> [Int] {
         let scale = window.backingScaleFactor
-        func spot(_ target: NSView) -> [Int] {
-            let box = target.convert(target.bounds, to: nil)
-            return [box.minX, window.frame.height - box.maxY, box.width, box.height].map { Int(($0 * scale).rounded()) }
-        }
+        let box = target.convert(target.bounds, to: nil)
+        return [box.minX, window.frame.height - box.maxY, box.width, box.height].map { Int(($0 * scale).rounded()) }
+    }
+
+    private func describe(_ view: NSView, in window: NSWindow) -> [String: Any] {
         var spots: [String: [Int]] = [:]
-        if let join = view.kitSubviews(of: MeetingJoinButton.self).first { spots["join"] = spot(join) }
-        if let snooze = view.kitSubviews(of: KitGlassKey.self).first(where: { $0.title.hasPrefix("Snooze") }) { spots["snooze"] = spot(snooze) }
-        if let stack = view.kitSubviews(of: MeetingAlertStackView.self).first { spots["stack"] = spot(stack) }
-        for (index, card) in view.kitSubviews(of: MeetingAlertCardView.self).enumerated() { spots["card\(index)"] = spot(card) }
-        for (name, swatch) in view.swatches { spots[name] = spot(swatch) }
-        var join: [String: Any] = [:]
-        if let joinKey {
-            join["layers"] = joinKey.layer.map { Self.layerLines($0) } ?? []
-            join["views"] = Self.viewLines(joinKey)
-            join["face"] = Self.srgb(joinKey.face.layer?.backgroundColor)
-            join["systemGreen"] = Self.srgb(joinKey.resolved(.systemGreen))
-            join["pressed"] = joinKey.pressed
-            join["hovering"] = joinKey.hovering
-            join["focused"] = window.firstResponder === joinKey
-            join["scale"] = scale
+        if let join = view.kitSubviews(of: MeetingJoinButton.self).first { spots["join"] = Self.spot(join, in: window) }
+        if let snooze = view.kitSubviews(of: KitGlassKey.self).first(where: { $0.title.hasPrefix("Snooze") }) {
+            spots["snooze"] = Self.spot(snooze, in: window)
         }
-        return ["join": join, "window": window.windowNumber, "pid": ProcessInfo.processInfo.processIdentifier,
+        if let stack = (view as? MeetingAlertStackView) ?? view.kitSubviews(of: MeetingAlertStackView.self).first {
+            spots["stack"] = Self.spot(stack, in: window)
+        }
+        for (index, card) in view.kitSubviews(of: MeetingAlertCardView.self).enumerated() { spots["card\(index)"] = Self.spot(card, in: window) }
+        let scale = window.backingScaleFactor
+        return ["window": window.windowNumber, "pid": ProcessInfo.processInfo.processIdentifier,
                 "width": Int(window.frame.width * scale), "height": Int(window.frame.height * scale), "spots": spots]
+    }
+
+    private static func facts(_ key: MeetingJoinButton, in window: NSWindow) -> [String: Any] {
+        ["layers": key.layer.map { layerLines($0) } ?? [], "views": viewLines(key),
+         "face": srgb(key.face.layer?.backgroundColor), "systemGreen": srgb(key.resolved(.systemGreen)),
+         "pressed": key.pressed, "hovering": key.hovering, "focused": window.firstResponder === key,
+         "scale": window.backingScaleFactor]
     }
 
     var shotState: [String: Any] {
         guard let window = shotWindow else { return [:] }
-        return ["active": NSApp.isActive, "key": window.isKeyWindow,
+        let join = window.contentView?.kitSubviews(of: MeetingJoinButton.self).first.map { Self.facts($0, in: window) } ?? [:]
+        return ["join": join, "active": NSApp.isActive, "key": window.isKeyWindow,
                 "frontApp": NSWorkspace.shared.frontmostApplication?.localizedName ?? "",
                 "front": NSWorkspace.shared.frontmostApplication?.processIdentifier == ProcessInfo.processInfo.processIdentifier]
     }
@@ -699,13 +739,22 @@ final class MeetingAlertPanel {
             self.focusWas = nil
         }
         guard let window = shotWindow else { return }
-        window.orderOut(nil)
+        if let held = realHeld {
+            realHeld = nil
+            window.level = held.level
+            window.setFrame(held.frame, display: false)
+            window.orderFrontRegardless()
+        } else {
+            window.orderOut(nil)
+        }
         Bench.frontAsked = false
         NSApp.hide(nil)
         given?.activate()
         given = nil
-        window.contentView = nil
-        window.close()
+        if window !== panel {
+            window.contentView = nil
+            window.close()
+        }
         shotWindow = nil
         for (other, frame) in parked {
             other.setFrame(frame, display: false)
