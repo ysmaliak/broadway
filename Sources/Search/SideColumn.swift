@@ -292,6 +292,7 @@ final class SideColumnView: NSView {
             addSubview(made, positioned: .above, relativeTo: topStrip)
             stackedView = made
             pages.card = nil
+            agents.passWheel = { [weak made] event in made?.takeWheel(event) }
             addSubview(agents, positioned: .above, relativeTo: footStrip)
         } else if !stacked, let view = stackedView {
             view.removeFromSuperview()
@@ -325,7 +326,10 @@ final class SidePagesView: NSView {
         didSet {
             guard card !== oldValue else { return }
             if let oldValue, oldValue.superview === self { oldValue.removeFromSuperview() }
-            if let card { addSubview(card) }
+            if let card {
+                addSubview(card)
+                card.passWheel = { [weak self] event in self?.live.takeWheel(event) }
+            }
             needsLayout = true
         }
     }

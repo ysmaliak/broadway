@@ -94,6 +94,8 @@ final class StackedColumnView: NSView {
         probeTimer = timer
     }
 
+    func takeWheel(_ event: NSEvent) { scroll.scrollWheel(with: event) }
+
     private func probeWheel(dy: Double, steps: Int, ms: Double, glide: Int, y: CGFloat) {
         guard let window, let root = window.contentView else { return }
         let inWindow = convert(NSPoint(x: bounds.midX, y: y), to: nil)
