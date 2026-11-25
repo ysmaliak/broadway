@@ -102,6 +102,22 @@ struct GlassKeysTests {
         #expect(MeetingGreen.fill(in: light) != MeetingGreen.fill(in: dark))
     }
 
+    @Test func theSidebarJoinCapsuleWearsTheSameGreenAsTheMeetingCard() {
+        let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 80, height: 30), styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.appearance = NSAppearance(named: .darkAqua)
+        defer { window.contentView = nil }
+        let badge = PinMeetingBadgeView(browser: nil)
+        window.contentView?.addSubview(badge)
+        badge.viewDidChangeEffectiveAppearance()
+        badge.show(.join, title: "Design sync")
+
+        let ground = badge.subviews.compactMap { $0 as? KitBox }.first { $0.fill != nil }
+
+        #expect(ground?.fill == MeetingGreen.fill(in: badge.effectiveAppearance))
+        #expect(ground?.fill == MeetingGreen.resolved(in: NSAppearance(named: .darkAqua) ?? badge.effectiveAppearance))
+    }
+
     @Test func noGlassKeyCarriesItsColourOnlyInTheGlassTint() {
         let gallery = GlassKeyGallery(dark: false)
         defer { gallery.close() }

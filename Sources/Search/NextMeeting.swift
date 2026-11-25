@@ -468,7 +468,7 @@ final class PinMeetingBadgeView: KitButton {
         case .join:
             word.text = "Join"
             word.color = .white
-            ground.fill = .systemGreen
+            ground.fill = MeetingGreen.fill(in: effectiveAppearance)
             toolTip = title
             setAccessibilityElement(true)
             setAccessibilityRole(.button)
@@ -509,6 +509,11 @@ final class PinMeetingBadgeView: KitButton {
     override func layout() {
         super.layout()
         ground.frame = bounds
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        if label == .join { ground.fill = MeetingGreen.fill(in: effectiveAppearance) }
     }
 }
 
