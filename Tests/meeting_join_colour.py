@@ -191,7 +191,7 @@ def real_card():
         radii = [glass_radius(j) for j in joins]
         frames = [next((line.strip() for line in j.get("views", []) if "MeetingJoinButton" in line), "") for j in joins]
         print(f"        real {step:24} glass radius {radii} {frames}")
-        t.ok(f"real card, {step}: the Join glass is a capsule", bool(radii) and all(r == 16 for r in radii), radii)
+        t.ok(f"real card, {step}: the Join key has no glass behind it", bool(radii) and all(r is None for r in radii), frames)
         if not picture:
             return
         state = sv.cmd({"do": "meetalert", "action": "real-shot"})
