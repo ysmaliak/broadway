@@ -4,11 +4,12 @@ import Foundation
 final class Context {
     let globals: Globals
     let console: Console
-    let place: Place
+    var place: Place
     let environment: [String: String]
     let binary: String
     private var link: Link?
     private var loaded: Catalog?
+    private(set) var forwarded = false
 
     init(globals: Globals, console: Console, place: Place, environment: [String: String], binary: String) {
         self.globals = globals
@@ -23,15 +24,23 @@ final class Context {
     private(set) lazy var cli: String = Setup.version(binary: binary) ?? "dev"
 
     func call(_ tool: String, _ arguments: Any) -> [String: Any] {
-        ["op": "call", "tool": tool, "arguments": arguments, "agent": Context.agent, "cli": cli]
+        let agent = Context.agent
+        Clock.mark("ancestor")
+        var request: [String: Any] = ["op": "call", "tool": tool, "arguments": arguments, "agent": agent, "cli": cli]
+        Clock.mark("version")
+        if Clock.on { request["timing"] = true }
+        return request
     }
 
     func catalog() -> Catalog {
         if let loaded { return loaded }
         var found = Catalog(nil)
         if link == nil { link = place.connect() }
+        Clock.mark("connect")
         if let link, link.send(["op": "tools"]), let reply = link.object(), let commands = reply["commands"] as? [[String: Any]] {
+            Clock.mark("tools")
             found = Catalog(commands)
+            Clock.mark("catalog")
         } else {
             link = nil
             found = Catalog(Catalog.offline(binary: binary))
@@ -40,11 +49,43 @@ final class Context {
         return found
     }
 
+    func command(_ word: String) -> Command? {
+        if let loaded { return loaded.find(word) }
+        if link == nil { link = place.connect() }
+        Clock.mark("connect")
+        if let link, link.send(["op": "tools", "only": Catalog.wanted(word)]), let reply = link.object(), let commands = reply["commands"] as? [[String: Any]] {
+            Clock.mark("tools")
+            if let found = Catalog(commands).find(word) {
+                Clock.mark("catalog")
+                return found
+            }
+        } else {
+            link = nil
+        }
+        return catalog().find(word)
+    }
+
     func connection() throws -> Link {
-        if let link { return link }
+        if let link {
+            forwarded = link.forwarded
+            return link
+        }
         let reached = try place.reach(console: console)
+        Clock.mark("connect")
         link = reached
+        forwarded = reached.forwarded
         return reached
+    }
+
+    func carry(_ request: [String: Any]) throws -> [String: Any] {
+        guard let link = place.connect() else { throw Failure("not_running", "Broadway went away", retrySafe: true) }
+        guard link.send(request), let reply = link.object() else { throw Failure("not_running", "Broadway went away", retrySafe: true) }
+        if let failure = Context.failure(reply) { throw failure }
+        return reply["data"] as? [String: Any] ?? [:]
+    }
+
+    func local(_ path: String, into folder: URL? = nil) throws -> String {
+        try Carry.fetch(path, into: folder, ask: carry).path
     }
 
     func hangUp() {
@@ -97,9 +138,9 @@ enum Builtins {
                 examples: ["broadway help", "broadway help click", "broadway help bookmarks add"]) { context, words in
             Help.show(words, context: context)
         },
-        Builtin(name: "guide", usage: "broadway guide [mcp]", summary: "A compact guide for coding agents", group: "Help",
+        Builtin(name: "guide", usage: "broadway guide [secrets|pictures|remote|mcp]", summary: "A compact guide for coding agents", group: "Help",
                 details: "Read this first if you are an agent driving Broadway",
-                examples: ["broadway guide", "broadway guide mcp"]) { context, words in
+                examples: ["broadway guide", "broadway guide secrets", "broadway guide mcp"]) { context, words in
             Help.guide(words.first, context: context)
         },
         Builtin(name: "__complete", usage: "broadway __complete WORDS… -- CURRENT", summary: "", group: "", hidden: true) { context, words in
@@ -116,6 +157,8 @@ enum Builtins {
 
 public enum BroadwayCommand {
     public static func run(_ arguments: [String]) -> Int32 {
+        Clock.start()
+        defer { Clock.report() }
         let environment = ProcessInfo.processInfo.environment
         let binary = realpath(CommandLine.arguments[0], nil).map { path -> String in
             defer { free(path) }
@@ -133,6 +176,8 @@ public enum BroadwayCommand {
             console.failure("", failure)
             return failure.exit.rawValue
         }
+        Clock.mark("arguments")
+        TempSweep.whenDue(TempSweep.commandLine)
         let place = Place.resolve(socket: globals.socket, world: globals.world, environment: environment, binary: binary)
         let context = Context(globals: globals, console: console, place: place, environment: environment, binary: binary)
         let name = words.first ?? ""
@@ -144,8 +189,15 @@ public enum BroadwayCommand {
         } catch {
             let failure = Link.halted ?? error as? Failure ?? Failure("failed", "\(error)", retrySafe: false)
             console.failure(name, failure)
+            tally(words, failure: failure, place: place)
             return failure.exit.rawValue
         }
+    }
+
+    static func tally(_ words: [String], failure: Failure, place: Place) {
+        guard ["usage", "unknown_command", "no_tasks"].contains(failure.code), let first = words.first, !streams.contains(first),
+              Builtins.find(first) == nil, let link = place.connect() else { return }
+        _ = link.send(["op": "tally", "words": Array(words.prefix(2)), "code": failure.code])
     }
 
     static let streams: Set<String> = ["watch", "serve", "mcp", "__complete"]
@@ -185,7 +237,7 @@ public enum BroadwayCommand {
             if context.catalog().find(first) != nil { return Help.show([first], context: context) }
             return Help.show([], context: context)
         }
-        if first == "pdf", let command = context.catalog().find(first) {
+        if first == "pdf", let command = context.command(first) {
             return try Browse.run(command, Array(words.dropFirst()), called: first, context: context)
         }
         if gone.contains(first) { throw noTasks }
@@ -193,14 +245,11 @@ public enum BroadwayCommand {
         let spaced = first.contains(where: \.isWhitespace)
         if !spaced, !first.hasPrefix("-") {
             if words.count == 1, Address.looksLike(first) { return try Browse.person(first, context: context) }
-            if let command = context.catalog().find(first) {
+            if let command = context.command(first) {
                 return try Browse.run(command, Array(words.dropFirst()), called: first, context: context)
             }
         }
-        if words.count == 1, !spaced { throw unknown(first, context: context) }
-        if !spaced, !first.hasPrefix("-"), let near = nearest(first, context: context) {
-            throw Failure.usage("Unknown command \(first). Did you mean \(near)?", hint: "Run broadway help for the list")
-        }
+        if !spaced, words.count == 1 || !first.hasPrefix("-") { throw unknown(first, context: context) }
         throw noTasks
     }
 
@@ -208,8 +257,10 @@ public enum BroadwayCommand {
 
     static let noTasks = Failure("no_tasks", "Broadway no longer runs tasks. An agent you start yourself uses Broadway with the broadway command.", retrySafe: false, exit: .mistake)
 
+    static let meant = ["browse": "open", "visit": "open", "goto": "go"]
+
     private static func nearest(_ word: String, context: Context) -> String? {
-        Near.best(word, in: Builtins.names + Nouns.names + context.catalog().names)
+        meant[word.lowercased()] ?? Near.best(word, in: Builtins.names + Nouns.names + context.catalog().names)
     }
 
     private static func unknown(_ word: String, context: Context) -> Failure {

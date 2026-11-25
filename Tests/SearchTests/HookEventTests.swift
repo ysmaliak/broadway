@@ -336,7 +336,7 @@ final class HookEventTests {
         }
         HookSettings.open = false
         let shell = SettingsShell()
-        shell.go(to: .agents)
+        shell.go(to: .general)
         let view = SettingsPageView(browser: browser, shell: shell)
         view.rebuild()
         let fold = try #require(view.kitSubviews(of: SettingsRowView.self).first { $0.rowID == "agents.hooks" })
@@ -352,7 +352,9 @@ final class HookEventTests {
         let found = SettingsIndex.find("hooks")
 
         let hooks = try #require(found.first { $0.id == "agents.hooks" })
-        #expect(hooks.page == .agents)
+        #expect(hooks.page == .general)
+        #expect(SettingsIndex.group(hooks.group)?.title == "Developer")
+        #expect(SettingsIndex.find("watch for a reply").first?.page == .field)
         #expect(SettingsIndex.item("agents.hooks")?.detail.count ?? 0 <= 90)
     }
 }

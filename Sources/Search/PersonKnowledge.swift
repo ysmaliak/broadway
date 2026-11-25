@@ -63,7 +63,7 @@ enum PersonKnowledge {
         },
         PersonVerb("agents", "status", .look) { call in
             let prefs = call.browser.prefs
-            var status: [String: Any] = ["switch": prefs.agentsAllowed, "mode": prefs.agentMode.rawValue, "sites": AgentSites.shared.rules.keys.sorted().map { ["site": $0, "rule": AgentSites.shared.rules[$0]?.rawValue ?? ""] }]
+            var status: [String: Any] = ["switch": prefs.agentsAllowed, "mode": prefs.agentMode.rawValue, "sites": AgentSites.shared.rules.keys.sorted().map { ["site": $0, "rule": AgentSites.shared.rules[$0]?.rawValue ?? ""] } + AgentSignIns.shared.sites.map { ["site": $0, "rule": "sign_in"] }]
             if let link = call.link { status["session"] = AgentLinks.shared.row(link) }
             return status
         },

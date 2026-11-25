@@ -8,7 +8,7 @@ from outside the world. The app starts hidden. A link arrives from outside and
 a hook sends it to a space, a timer hook runs, a changed program is refused,
 a hook the build doesn't know is kept, and the person's link rule wins.
 
-With OUT, pictures of Settings › Agents › Hooks with four hooks in different
+With OUT, pictures of Settings › General › Developer › Hooks with four hooks in different
 states, and of the Add Hook sheet, in light and dark. The probe's own window is
 kept behind every other window (windowbehind), never active and never key, and
 each still is a real picture by window id. The Links sheet is taken by its own
@@ -158,7 +158,7 @@ def pictures(out, t):
     time.sleep(0.8)
     for theme in ["dark", "light"]:
         ui(look=theme); time.sleep(0.8)
-        ui(settingsPage="agents"); time.sleep(1.2)
+        ui(settingsPage="general"); time.sleep(1.2)
         if theme == "dark":
             try:
                 ui(settingsPress="settings.row.agents.hooks"); time.sleep(1.2)

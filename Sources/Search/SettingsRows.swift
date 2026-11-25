@@ -70,6 +70,7 @@ extension SettingsPageView {
         case "ai.groups": groupTabsRow()
         case "groups.openrouter": openRouterRow()
         case "passwords.open": row(id, control: button("Open") { browser.lead(to: InternalPage(.passwords)) })
+        case "passwords.onepassword": onePasswordRow()
         case "passwords.fill":
             flag(id, \.fillsAndSavesPasswords, detail: {
                 if let name = Extensions.shared.passwordSavingTakenBy {
@@ -104,6 +105,7 @@ extension SettingsPageView {
         case IntegrationNow.key:
             row(id, control: toggle(id, get: { IntegrationNow.on }, set: { Store.settings.set($0, forKey: IntegrationNow.key) }))
         case "ai.agents", "agents.mode": agentRow(id)
+        case "agents.signIn": flag(id, \.agentsAskSignIn)
         case let id where Browser.Clearing(rawValue: id) != nil: dangerRow(id)
         default: return linkRow(id)
         }

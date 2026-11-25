@@ -58,7 +58,7 @@ extension SettingsPageView {
         if lit { HookSettings.open = true }
         let open = HookSettings.open
         shape { [HookSettings.open, book.revision] as [AnyHashable] }
-        section {
+        section("Developer") {
             let mark = NSButton(title: "", target: nil, action: nil)
             mark.bezelStyle = .disclosure
             mark.setButtonType(.pushOnPushOff)

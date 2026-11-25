@@ -572,7 +572,7 @@ final class Tab: Identifiable {
     /// The site the sign-in was sent from — not the one it landed on —
     /// then the name and the password, and whether that page came over
     /// plain http.
-    @ObservationIgnored var onCredentials: ((Tab, String, String, String, Bool) -> Void)?
+    @ObservationIgnored var onCredentials: ((Tab, String, String, String, Bool, Int?) -> Void)?
     @ObservationIgnored var onPickEnd: ((Tab) -> Void)?
     @ObservationIgnored var onPickTrouble: ((Tab, String) -> Void)?
     /// Right-click landed on an image. WebKit's own menu offers to copy or
@@ -697,6 +697,8 @@ final class Tab: Identifiable {
         }
     }
     @ObservationIgnored var agentDialog: PaneQuestion?
+    @ObservationIgnored var agentWarned = false
+    @ObservationIgnored var agentName: String?
     var agentActing: String?
     @ObservationIgnored var agentActingUntil: Date?
     var driving = false
@@ -1401,7 +1403,7 @@ final class Tab: Identifiable {
     /// Whether the sign-in worked is only known afterwards: a page that
     /// comes back without a password box took it, one that still has the
     /// box refused it, and only the first is worth remembering.
-    @ObservationIgnored private var sent: (host: String, user: String, password: String, clear: Bool, at: Date)?
+    @ObservationIgnored private var sent: (host: String, user: String, password: String, clear: Bool, port: Int?, at: Date)?
 
     func sentSignIn(user: String, password: String) {
         // The host now, while the page is still the sign-in page: a moment
@@ -1412,7 +1414,7 @@ final class Tab: Identifiable {
         // A password page with no name on it: the name is the one the step
         // before was sent with.
         let user = user.isEmpty ? givenName() ?? "" : user
-        sent = (bare, user, password, pageAddress?.scheme?.lowercased() == "http", Date())
+        sent = (bare, user, password, pageAddress?.scheme?.lowercased() == "http", SentSignIn.port(of: pageAddress), Date())
     }
 
     /// The page has moved on — a new document has loaded, or the sign-in
@@ -1449,7 +1451,7 @@ final class Tab: Identifiable {
                 if (still as? Bool) == true { return }
                 self.sent = nil
                 self.named = nil
-                self.onCredentials?(self, sent.host, sent.user, sent.password, sent.clear)
+                self.onCredentials?(self, sent.host, sent.user, sent.password, sent.clear, sent.port)
                 self.dropFillMarks()
             }
         }
@@ -1901,6 +1903,7 @@ final class Tab: Identifiable {
     func seal(_ value: String) {
         guard value.count >= 4 else { return }
         sealed.insert(value)
+        AgentSeals.keep(value)
     }
 
     /// True when the web view holds nothing — never loaded, or emptied —

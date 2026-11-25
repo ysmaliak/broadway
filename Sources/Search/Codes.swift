@@ -7,6 +7,7 @@ struct OneTimeCode: Equatable, Identifiable, CustomStringConvertible, CustomDebu
     let code: String
     let sender: String
     let at: Date
+    var address = ""
 
     var id: String { "\(at.timeIntervalSince1970)\(code)" }
     var description: String { "code from gmail, \(code.count) characters" }

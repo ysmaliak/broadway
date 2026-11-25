@@ -271,7 +271,7 @@ enum AgentChecks {
       var sides = ['top', 'right', 'bottom', 'left'].map(function (side) { return s.getPropertyValue(k.replace('#', side)); });
       return sides.every(function (v) { return v === sides[0]; }) ? sides[0] : sides.join(' ');
     }
-    var box = { x: Math.round(b.left + scrollX), y: Math.round(b.top + scrollY), width: Math.round(b.width * 10) / 10, height: Math.round(b.height * 10) / 10,
+    var box = { x: b.left, y: b.top, width: b.width, height: b.height,
                 margin: four('margin-#'), border: four('border-#-width'), padding: four('padding-#'), sizing: s.boxSizing, inView: b.bottom > 0 && b.right > 0 && b.top < innerHeight && b.left < innerWidth };
     var keys = ['display', 'position', 'top', 'right', 'bottom', 'left', 'float', 'width', 'height', 'min-width', 'max-width', 'min-height', 'max-height',
                 'overflow-x', 'overflow-y', 'font-family', 'font-size', 'font-weight', 'line-height', 'color', 'background-color', 'background-image',
@@ -331,7 +331,7 @@ enum AgentChecks {
 }
 
 extension BrowserToolbox {
-    func check(_ name: String, _ tab: Tab, _ arguments: [String: Any]) async -> ToolOutcome {
+    func check(_ name: String, _ tab: Tab, _ arguments: [String: Any], task: UUID?) async -> ToolOutcome {
         guard tab.agent else {
             return .failure("Only tabs an agent opened can be checked with \(name). Use open for a tab of your own.", code: .refused)
         }
@@ -353,7 +353,7 @@ extension BrowserToolbox {
                 return .failure("The page gave no answer in time", code: .noAnswer)
             }
             if found["failed"] != nil { return pageFailure(found, tab: tab, ref: ref) }
-            return AgentChecks.styles(found)
+            return AgentChecks.styles(found, scale: ref.contains(".") ? 1 : pixelScale(tab, task: task), zoom: ref.contains(".") ? nil : Self.zoomLine(tab))
         }
     }
 }
@@ -466,8 +466,11 @@ extension AgentChecks {
         return answered(lines, data)
     }
 
-    static func styles(_ found: [String: Any]) -> ToolOutcome {
-        let box = found["box"] as? [String: Any] ?? [:]
+    static func styles(_ found: [String: Any], scale: Double = 1, zoom: String? = nil) -> ToolOutcome {
+        var box = found["box"] as? [String: Any] ?? [:]
+        for key in ["x", "y", "width", "height"] {
+            if let value = (box[key] as? NSNumber)?.doubleValue { box[key] = (value * scale).rounded() }
+        }
         let styles = found["styles"] as? [String: Any] ?? [:]
         let hiddenBy = found["hiddenBy"] as? [[String: Any]] ?? []
         let ref = found["ref"] as? String ?? ""
@@ -475,7 +478,9 @@ extension AgentChecks {
         if let words = found["words"] as? String, !words.isEmpty { head += " \"\(AgentChange.cell(words))\"" }
         head += " \(found["element"] ?? "")"
         var lines = [head]
-        lines.append("Box: \(box["width"] ?? 0)×\(box["height"] ?? 0) at \(box["x"] ?? 0),\(box["y"] ?? 0) on the page\(box["inView"] as? Bool == true ? ", in view" : ", out of view")")
+        let whole = { (key: String) in Int((box[key] as? Double) ?? 0) }
+        lines.append("Box: \(whole("width"))×\(whole("height")) at \(whole("x")),\(whole("y")) in the pixels of broadway shot\(box["inView"] as? Bool == true ? ", in view" : ", out of view")")
+        if let zoom { lines.append(zoom) }
         lines.append("Margin \(box["margin"] ?? ""), border \(box["border"] ?? ""), padding \(box["padding"] ?? ""), box-sizing \(box["sizing"] ?? "")")
         for key in styles.keys.sorted() { lines.append("\(key): \(styles[key] ?? "")") }
         if hiddenBy.isEmpty {
@@ -488,6 +493,8 @@ extension AgentChecks {
             }
         }
         var data = found
+        data["box"] = box
+        if zoom != nil { data["zoom"] = true }
         data["website"] = true
         return answered(lines, data)
     }

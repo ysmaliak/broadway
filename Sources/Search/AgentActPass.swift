@@ -31,10 +31,19 @@ extension AgentLinks {
     }
 
     private static var asks: [UUID: Task<AgentAnswer, Never>] = [:]
+    private static var askedBy: [UUID: String] = [:]
 
     func openAsk(_ session: UUID) -> Task<AgentAnswer, Never>? { Self.asks[session] }
 
-    func keepAsk(_ session: UUID, _ asking: Task<AgentAnswer, Never>) { Self.asks[session] = asking }
+    func askSignature(_ session: UUID) -> String? { Self.askedBy[session] }
 
-    func dropAsk(_ session: UUID) { Self.asks[session] = nil }
+    func keepAsk(_ session: UUID, _ asking: Task<AgentAnswer, Never>, signature: String? = nil) {
+        Self.asks[session] = asking
+        Self.askedBy[session] = signature
+    }
+
+    func dropAsk(_ session: UUID) {
+        Self.asks[session] = nil
+        Self.askedBy[session] = nil
+    }
 }

@@ -247,6 +247,9 @@ struct AgentQuestion: Identifiable, Equatable {
     var quoteLabel = "The page says"
     var reason = ""
     var asker: String?
+    var line = ""
+    var yesWord: String?
+    var offersAlways = true
     var shown = Date()
 
     var keyDelay: TimeInterval {
@@ -276,7 +279,12 @@ enum AgentAnswer: Equatable {
 final class AgentDesk {
     static let shared = AgentDesk()
 
-    private(set) var pending: [AgentQuestion] = [] { didSet { AgentAwake.refresh() } }
+    private(set) var pending: [AgentQuestion] = [] {
+        didSet {
+            AgentAwake.refresh()
+            AgentBadge.show(pending.count)
+        }
+    }
     @ObservationIgnored private var waiting: [UUID: CheckedContinuation<AgentAnswer, Never>] = [:]
     @ObservationIgnored private var granted: Set<String> = []
     @ObservationIgnored var told: ((AgentQuestion) -> Void)?
@@ -291,14 +299,17 @@ final class AgentDesk {
     func ask(_ question: AgentQuestion) async -> AgentAnswer {
         await withCheckedContinuation { done in
             waiting[question.id] = done
+            AgentLinks.shared.asked(question.task, question: question.id)
             pending.append(question)
             told?(question)
+            AgentGone.watch(question.task)
         }
     }
 
     func take(_ id: UUID, _ answer: AgentAnswer) {
         guard let done = waiting.removeValue(forKey: id) else { return }
         pending.removeAll { $0.id == id }
+        AgentNotice.taken(id)
         done.resume(returning: answer)
     }
 
@@ -312,6 +323,7 @@ final class AgentDesk {
     func drop(task: UUID) {
         for question in pending where question.task == task { take(question.id, .dropped) }
         granted = granted.filter { !$0.hasPrefix(task.uuidString) }
+        AgentHeld.shared.forget(task: task)
     }
 
     private func key(_ act: AgentAct, _ task: UUID?, _ site: String?) -> String {
@@ -384,6 +396,7 @@ final class AgentCardView: NSView {
     private let title = KitLabel("", font: .systemFont(ofSize: 13, weight: .semibold), color: KitColor.ink)
     private let who = KitLabel("", font: .systemFont(ofSize: 11, weight: .medium), color: KitColor.muted)
     private let count = KitLabel("", font: .systemFont(ofSize: 11), color: KitColor.faint)
+    private let signer = KitLabel("", font: .systemFont(ofSize: 11), color: KitColor.muted)
     private let quote = AgentCardView.wrapping(lines: 2)
     private let reason = AgentCardView.wrapping(lines: 3)
     private var buttons: [NSView] = []
@@ -413,7 +426,7 @@ final class AgentCardView: NSView {
         super.init(frame: NSRect(x: 0, y: 0, width: Self.widest, height: 100))
         glass.hold(stage)
         addSubview(glass)
-        for view in [title, who, count, quote, reason] as [NSView] { stage.addSubview(view) }
+        for view in [title, who, count, signer, quote, reason] as [NSView] { stage.addSubview(view) }
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
     }
@@ -467,6 +480,8 @@ final class AgentCardView: NSView {
         title.text = words.title
         who.text = words.who
         who.isHidden = who.text.isEmpty
+        signer.text = words.signer
+        signer.isHidden = words.signer.isEmpty
         count.text = "1 of \(desk.pending.count)"
         count.isHidden = desk.pending.count <= 1
         quote.stringValue = question.quote.isEmpty ? "" : "\(question.quoteLabel): “\(question.quote)”"
@@ -487,12 +502,12 @@ final class AgentCardView: NSView {
         var trailing: [NSView] = []
         switch question.kind {
         case .approval(let act):
-            if AgentPolicy.allowsSiteRule(act, site: question.site), AgentPolicy.offersAlways(act) {
+            if question.offersAlways, AgentPolicy.allowsSiteRule(act, site: question.site), AgentPolicy.offersAlways(act) {
                 trailing.append(KitGlassKey(title: "Always Here", quiet: true) { AgentDesk.shared.take(id, .always) })
             }
             let never = option && browser.canRule(question)
             trailing.append(key(never ? "⌥esc" : "esc", never ? "Never Here" : "Not Now", never ? .never : .no))
-            trailing.append(key(act.heavy ? "⌘↩" : "↩", act.yes, .yes))
+            trailing.append(key(act.heavy ? "⌘↩" : "↩", question.yesWord ?? act.yes, .yes))
         case .stop:
             trailing.append(key("esc", "Not Now", .no))
             trailing.append(key("⌘↩", "Done", .yes))
@@ -536,6 +551,7 @@ final class AgentCardView: NSView {
     private func contentHeight(width: CGFloat) -> CGFloat {
         let inner = width - Self.pad * 2
         var height = Self.pad + 18
+        if !signer.isHidden { height += 16 }
         if !quote.isHidden { height += 8 + self.height(of: quote, width: inner + 4) }
         if !reason.isHidden { height += 8 + self.height(of: reason, width: inner + 4) }
         if !choices.isEmpty { height += 8 + CGFloat(choices.count) * (AgentChoiceRow.height + 4) }
@@ -557,7 +573,7 @@ final class AgentCardView: NSView {
             return
         }
         isHidden = false
-        if question.id != shownID || desk.pending.count != shownCount {
+        if question.id != shownID || desk.pending.count != shownCount || question.cardWords.signer != signer.text {
             if shownID != nil, shownID != question.id { NoticeMotion.change(self) }
             rebuild(question)
             invalidateIntrinsicContentSize()
@@ -580,6 +596,10 @@ final class AgentCardView: NSView {
         let titleWidth = min(FieldLine.width(title, scale: scale), max(0, right - (Self.pad + 26)))
         title.frame = stage.kitSnap(NSRect(x: Self.pad + 26, y: y, width: titleWidth, height: 18))
         y += 18
+        if !signer.isHidden {
+            signer.frame = stage.kitSnap(NSRect(x: Self.pad + 26, y: y + 1, width: min(FieldLine.width(signer, scale: scale), max(0, inner - 26)), height: 15))
+            y += 16
+        }
         for label in [quote, reason] where !label.isHidden {
             y += 8
             let h = self.height(of: label, width: inner + 4)

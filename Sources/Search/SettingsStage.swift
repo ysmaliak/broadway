@@ -57,6 +57,7 @@ enum SettingsStageMap {
 
         "ai.agents": .spot(.agents),
         "agents.mode": .spot(.agents),
+        "agents.signIn": .spot(.agents),
         "ai.command": .spot(.agents),
         "agents.clients": .spot(.agents),
 
@@ -64,6 +65,7 @@ enum SettingsStageMap {
         "passwords.fill": .spot(.page),
         "passwords.never": .spot(.page),
         "passwords.apple": .spot(.page),
+        "passwords.onepassword": .spot(.page),
         "apple.pairing": .spot(.page),
         "codes.gmail": .spot(.page),
         "autofill.profile": .spot(.page),
@@ -92,6 +94,7 @@ enum SettingsStageMap {
         ("agents.link.", .spot(.agents)),
         ("agents.hook", .rest),
         ("agents.site.", .spot(.page)),
+        ("agents.signIn.", .spot(.page)),
         ("shield.paused.", .spot(.page)),
         ("autofill.address.", .spot(.page)),
         ("autofill.card.", .spot(.page)),

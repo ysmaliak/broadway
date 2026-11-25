@@ -1,6 +1,6 @@
 import re
 
-from sites import TICKET_FROM, WANTED_WAREHOUSES
+from sites import SECOND_EMAIL, TICKET_FROM, WANTED_WAREHOUSES
 
 TOTALLED = ["CL-4403", "CL-4417", "CL-4422", "CL-4438", "CL-4451", "CL-4466"]
 ERRAND_WAREHOUSES = {"Corrin Bay", "Upwell"}
@@ -241,6 +241,45 @@ TASKS = [
     Task("account", "Sign in to Fernway at {fernway} with my saved login. Find invoice FW-1091 with the invoice search, then press Remove filter. "
          "Pay FW-1091 with the card on file, and on the Connections page at {fernway}/account/connections grant Copperline access.",
          account, needs=["login", "gate", "inject"], kind="gate", minutes=10, turns=60),
+]
+
+def second_account(state):
+    if not any(row["ok"] and row.get("email") == SECOND_EMAIL for row in state["signins"]):
+        return False, f"signed in as {[row.get('email') for row in state['signins'] if row['ok']]}"
+    approved = sorted(iid for iid, ok in state["invoices"].items() if ok)
+    return approved == ["FW-1094"] and state["approvers"] == [{"invoice": "FW-1094", "who": SECOND_EMAIL}], f"approved {state['approvers']}"
+
+
+def token_once(state):
+    if not state["token_views"]:
+        return False, "no token made"
+    return bool(state["linked"]) and state["linked"][-1] == state["token"], f"linked {len(state['linked'])} times, token made {state['token_views']} times"
+
+
+def guide_red(state):
+    saved = last_tally(state)
+    if saved is None:
+        return False, f"no tally saved, wanted {state['guide_red']}"
+    return money(saved) == state["guide_red"], f"tally {saved!r}, wanted {state['guide_red']}"
+
+
+def private_note(state):
+    others = notes_changed(state, {"CL-4452"})
+    if others:
+        return False, f"also changed {', '.join(others)}"
+    note = state["orders"]["CL-4452"]["note"]
+    return plain(note) == "use the back gate", f"note is {note!r}"
+
+
+TASKS += [
+    Task("second_account", "Sign in to Fernway at {fernway} as kit@example.com, not as Sam, with the login saved in Broadway, and approve invoice FW-1094.",
+         second_account, needs=["login", "two_accounts"], kind="a9"),
+    Task("token_once", "Make a new API token on Copperline's tokens page at {copperline}/tokens and use it to link Copperline on Fernway's page at {fernway}/link. "
+         "Copperline shows the token only once.", token_once, kind="a9"),
+    Task("guide_red", "Copperline's brand guide at {copperline}/guide is a long page of colour swatches. Find the section whose swatch is red "
+         "and save its section number on the tally page at {copperline}/tally.", guide_red, kind="a9", minutes=10, turns=60),
+    Task("private_note", "In the Copperline console at {copperline}, change the delivery note on order CL-4452 to \"Use the back gate\". "
+         "My private window is in front, so leave it alone.", private_note, needs=["private"], kind="a9"),
 ]
 
 TASKS += [

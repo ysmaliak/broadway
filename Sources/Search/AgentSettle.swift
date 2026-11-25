@@ -60,6 +60,17 @@ enum AgentSettleRule {
         return seconds <= 0 ? nil : min(seconds, longest)
     }
 
+    static let step: TimeInterval = 0.1
+    static let loadingStep: TimeInterval = 0.03
+    static let shortest: TimeInterval = 0.01
+
+    static func pause(elapsed: TimeInterval, quietFor: TimeInterval, busy: Int, navigating: Bool, cap: TimeInterval, step: TimeInterval = step) -> TimeInterval {
+        var wait = navigating ? min(step, loadingStep) : step
+        if !navigating, busy == 0, quietFor < quiet { wait = min(wait, quiet - quietFor) }
+        wait = min(wait, cap - elapsed)
+        return max(wait, shortest)
+    }
+
     static func verdict(elapsed: TimeInterval, quietFor: TimeInterval, busy: Int, navigating: Bool, cap: TimeInterval) -> AgentChange.Settled? {
         if !navigating, busy == 0, quietFor >= quiet { return .quiet }
         if elapsed >= cap { return .capped }
@@ -107,6 +118,7 @@ final class AgentWatchBox {
     var notes: [String] = []
     var kept: [String: Any] = [:]
     var expectNavigation = false
+    var settled: (@MainActor () async -> Void)?
 
     @TaskLocal static var current: AgentWatchBox?
 }
@@ -172,6 +184,21 @@ extension BrowserToolbox {
 
     func timed(_ tab: Tab, _ script: String, _ arguments: [String: Any] = [:], in frame: WKFrameInfo? = nil, seconds: Double = 3) async -> Any? {
         guard let web = tab.built, tab.agentDialog?.open != true else { return nil }
+        if AgentPage.walks(script) {
+            await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+                var answered = false
+                web.callAsyncJavaScript(AgentPage.closedScript, arguments: [:], in: frame, in: AgentPage.closedWorld) { _ in
+                    guard !answered else { return }
+                    answered = true
+                    done.resume()
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                    guard !answered else { return }
+                    answered = true
+                    done.resume()
+                }
+            }
+        }
         return await withCheckedContinuation { (done: CheckedContinuation<Any?, Never>) in
             var answered = false
             web.callAsyncJavaScript(script, arguments: arguments, in: frame, in: Web.world) { result in
@@ -245,6 +272,7 @@ extension BrowserToolbox {
                 return Settling(settled: .dialog, busy: 0, navigated: navigated, ms: Int(elapsed * 1000), loading: tab.loading, expect: expected, alerted: alerted)
             }
             let poll = await timed(tab, AgentPage.pollScript, [:], in: watch.frame, seconds: 0.4) as? [String: Any]
+            AgentClock.mark("poll quiet \(Int((poll?["quiet"] as? Double ?? -1).rounded())) took \(Int(Date().timeIntervalSince(now) * 1000))")
             if tab.agentDialog?.open == true { continue }
             if let doc = poll?["doc"] as? String, let was = watch.doc, doc != was { navigated = true }
             let ready = poll?["ready"] as? String ?? "loading"
@@ -269,7 +297,8 @@ extension BrowserToolbox {
                     return Settling(settled: settled, busy: busy, navigated: navigated, ms: Int(elapsed * 1000), loading: tab.loading, expect: expected, alerted: alerted)
                 }
             }
-            try? await Task.sleep(for: .milliseconds(100))
+            let wait = expect == nil ? AgentSettleRule.pause(elapsed: Date().timeIntervalSince(start), quietFor: quietFor, busy: busy, navigating: navigating, cap: limit) : AgentSettleRule.step
+            try? await Task.sleep(for: .seconds(wait))
         }
     }
 
@@ -337,7 +366,13 @@ extension BrowserToolbox {
             change.notes = box.notes
             return outcome(change, tab: tab, task: task)
         }
+        AgentClock.mark("act")
         let settling = await settle(watch, cap: AgentSettleRule.cap(arguments), expect: AgentExpect(arguments), navigation: box.expectNavigation)
+        AgentClock.mark("settle")
+        if let settled = box.settled {
+            await settled()
+            for (key, value) in box.kept { kept[key] = value }
+        }
         var change = AgentChange(tab: short, did: did, said: box.said, target: box.target, settled: settling.settled, ms: settling.ms,
                                  page: AgentChange.Page(url: AgentSecrets.shown(tab.pageAddress), title: tab.title), kept: kept)
         change.notes = box.notes
@@ -362,6 +397,7 @@ extension BrowserToolbox {
                 change.went = (after["went"] as? [Any] ?? []).compactMap { AgentChange.Element(object: $0) }
                 change.changed = (after["changed"] as? [Any] ?? []).compactMap { AgentChange.Changed(object: $0) }
                 change.text = (after["text"] as? [[String: Any]] ?? []).map { AgentChange.TextChange(was: $0["was"] as? String ?? "", now: $0["now"] as? String ?? "") }
+                change.reordered = (after["reordered"] as? [[String: Any]] ?? []).map(AgentChange.reorderLine)
                 change.more = after["more"] as? Int ?? 0
                 let counted = after["counted"] as? Int ?? 0
                 let total = max(after["total"] as? Int ?? 0, 1)
@@ -371,6 +407,7 @@ extension BrowserToolbox {
                 }
             }
         }
+        AgentClock.mark("change")
         let now = sessionTabs(task)
         let opened = visible.filter { now.contains($0.tab.id) && !watch.tabs.contains($0.tab.id) && $0.tab.id != tab.id }
         change.tabs.opened = opened.map { AgentChange.OpenedTab(id: String($0.tab.id.uuidString.prefix(8)).lowercased(), title: $0.tab.title, url: AgentSecrets.shown($0.tab.pageAddress)) }
@@ -380,6 +417,7 @@ extension BrowserToolbox {
                                                    path: record.done ? row["path"] as? String : nil)
         }
         if change.settled == .capped, settling.loading { change.notes.append("The page is still loading") }
+        if let line = AgentSignInBox.note(tab.id) { change.notes.append(line) }
         if AgentFilePicker.take(tab.built, since: watch.started) {
             let ref = change.target.map { "@\($0.ref)" } ?? "REF"
             change.notes.append("A file picker opened and Broadway closed it, so put a file on the page with broadway upload \(ref) PATH")
@@ -387,7 +425,9 @@ extension BrowserToolbox {
         }
         let times = AgentNoEffect.note(who: watch.who, tab: tab, did: did, target: change.target?.ref, nothing: change.nothing)
         if times >= 2 { change.notes.append("\(did) on this target had no effect \(times) times, so try another way or ask the person") }
-        return outcome(change, tab: tab, task: task)
+        let told = outcome(change, tab: tab, task: task)
+        AgentClock.mark("answer")
+        return told
     }
 
     func outcome(_ change: AgentChange, tab: Tab, task: UUID?) -> ToolOutcome {

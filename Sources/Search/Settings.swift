@@ -518,6 +518,7 @@ extension SettingsPageView {
             }
         }
         if prefs.usesCalendars && Meetings.shared.hasAccess && prefs.usesSpaces { callSpaceAccounts(apart: true) }
+        hooks()
         let info = Bundle.main.infoDictionary
         let version = "Broadway \(info?["CFBundleShortVersionString"] as? String ?? "dev") (\(info?["CFBundleVersion"] as? String ?? "dev"))"
         let foot = SettingsText(version, font: .systemFont(ofSize: 11), color: .secondaryLabelColor)
@@ -797,6 +798,7 @@ extension SettingsPageView {
         section("Sign-ins") {
             settingRow("passwords.open")
             settingRow("passwords.fill")
+            settingRow("passwords.onepassword")
             shape { Vault.never.isEmpty }
             if !Vault.never.isEmpty {
                 settingRow("passwords.never")

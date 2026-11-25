@@ -75,25 +75,77 @@ enum AgentSecrets {
         return result
     }
 
-    static func scrub(_ text: String, sealed: Set<String>) -> String {
-        var out = text
+    private struct Form {
+        let text: String
+        let options: String.CompareOptions
+    }
+
+    private static func forms(_ sealed: Set<String>) -> [Form] {
+        var out: [Form] = []
         for value in sealed.sorted(by: { $0.count > $1.count }) {
-            out = out.replacingOccurrences(of: value, with: "••••")
+            out.append(Form(text: value, options: []))
+            out += written(value).map { Form(text: $0, options: .caseInsensitive) }
             let spaced = value.enumerated().map { $0.offset > 0 && $0.offset % 4 == 0 ? " \($0.element)" : String($0.element) }.joined()
-            if value.allSatisfy(\.isNumber) { out = out.replacingOccurrences(of: spaced, with: "••••") }
+            if value.allSatisfy(\.isNumber) { out.append(Form(text: spaced, options: [])) }
         }
         return out
     }
 
-    static func scrub(_ data: [String: Any], sealed: Set<String>) -> [String: Any] {
-        data.mapValues { scrubbed($0, sealed: sealed) }
+    private static func replaced(_ text: String, _ forms: [Form]) -> String {
+        var out = text
+        for form in forms { out = out.replacingOccurrences(of: form.text, with: "••••", options: form.options) }
+        return out
     }
 
-    private static func scrubbed(_ value: Any, sealed: Set<String>) -> Any {
+    static func scrub(_ text: String, sealed: Set<String>) -> String {
+        replaced(text, forms(sealed))
+    }
+
+    static func written(_ value: String) -> [String] {
+        var forms: Set<String> = []
+        for kept in ["-._~", "-_.!~*'()", "*-._"] {
+            var allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+            allowed.insert(charactersIn: kept)
+            guard let encoded = value.addingPercentEncoding(withAllowedCharacters: allowed) else { continue }
+            forms.insert(encoded)
+            forms.insert(encoded.replacingOccurrences(of: "%20", with: "+"))
+        }
+        for allowed in [CharacterSet.urlQueryAllowed, .urlPathAllowed] {
+            if let encoded = value.addingPercentEncoding(withAllowedCharacters: allowed) { forms.insert(encoded) }
+        }
+        for options: JSONSerialization.WritingOptions in [[.fragmentsAllowed], [.fragmentsAllowed, .withoutEscapingSlashes]] {
+            if let data = try? JSONSerialization.data(withJSONObject: value, options: options) {
+                forms.insert(String(String(decoding: data, as: UTF8.self).dropFirst().dropLast()))
+            }
+        }
+        forms.insert(value.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;").replacingOccurrences(of: "'", with: "&#39;"))
+        forms.remove(value)
+        return forms.filter { $0.count >= 4 }.sorted { $0.count > $1.count }
+    }
+
+    static func scrub(_ outcome: ToolOutcome, sealed: Set<String>) -> ToolOutcome {
+        guard !sealed.isEmpty else { return outcome }
+        let forms = forms(sealed)
+        var said = outcome
+        said.text = said.text.map { replaced($0, forms) }
+        said.plain = said.plain.map { replaced($0, forms) }
+        said.hint = said.hint.map { replaced($0, forms) }
+        said.data = said.data.map { $0.mapValues { scrubbed($0, forms) } }
+        return said
+    }
+
+    static func scrub(_ data: [String: Any], sealed: Set<String>) -> [String: Any] {
+        let forms = forms(sealed)
+        guard !forms.isEmpty else { return data }
+        return data.mapValues { scrubbed($0, forms) }
+    }
+
+    private static func scrubbed(_ value: Any, _ forms: [Form]) -> Any {
         switch value {
-        case let text as String: scrub(text, sealed: sealed)
-        case let list as [Any]: list.map { scrubbed($0, sealed: sealed) }
-        case let object as [String: Any]: scrub(object, sealed: sealed)
+        case let text as String: replaced(text, forms)
+        case let list as [Any]: list.map { scrubbed($0, forms) }
+        case let object as [String: Any]: object.mapValues { scrubbed($0, forms) }
         default: value
         }
     }

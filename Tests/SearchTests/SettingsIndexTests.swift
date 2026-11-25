@@ -71,9 +71,9 @@ struct SettingsIndexTests {
         #expect(SettingsIndex.find("get to know").isEmpty)
         #expect(SettingsIndex.find("keep an eye").isEmpty)
         #expect(SettingsIndex.find("default plan").isEmpty)
-        #expect(SettingsIndex.items(in: "agents").map(\.id) == ["ai.agents", "agents.mode"])
+        #expect(SettingsIndex.items(in: "agents").map(\.id) == ["ai.agents", "agents.mode", "agents.signIn"])
         #expect(Set(SettingsIndex.items.filter { $0.group == "agents" }.map(\.id))
-            == ["ai.agents", "agents.mode", "agents.connected", "agents.sites", "ai.command", "ai.replies", "agents.hooks"])
+            == ["ai.agents", "agents.mode", "agents.signIn", "agents.connected", "agents.sites", "ai.command"])
     }
 
     @Test func noSettingsWordingHasASemicolon() {
@@ -214,6 +214,32 @@ struct SettingsIndexTests {
         #expect(pressed)
         #expect(remove.title == "Remove…")
         #expect((sites.rules[site] == nil) == yes)
+    }
+
+    @Test func theAgentsPageReadsSwitchModeSitesConnectedThenTheCommand() throws {
+        _ = NSApplication.shared
+        let links = AgentLinks.shared
+        let link = links.join(.connection(UUID()), name: "Order \(UUID().uuidString.prefix(6))")
+        let sites = AgentSites.shared
+        let site = "order-\(UUID().uuidString.prefix(8).lowercased()).example"
+        sites.set(.always, for: site)
+        defer {
+            links.end(link.id, .done(nil))
+            sites.set(nil, for: site)
+        }
+        let browser = Browser(record: WindowRecord())
+        defer { browser.closeAll() }
+        let shell = SettingsShell()
+        shell.go(to: .agents)
+        let view = SettingsPageView(browser: browser, shell: shell)
+        view.rebuild()
+
+        let rows = view.kitSubviews(of: SettingsRowView.self).map(\.rowID)
+        let order = ["ai.agents", "agents.mode", "agents.site." + site, "agents.link.\(link.id)", "ai.command"].compactMap { rows.firstIndex(of: $0) }
+
+        #expect(order.count >= 4)
+        #expect(order == order.sorted())
+        #expect(!rows.contains("agents.hooks"))
     }
 
     @Test(arguments: [false, true])

@@ -104,8 +104,12 @@ def wait_for(condition, seconds=10):
     return None
 
 
+def probe_agent(name):
+    return name == "Probe Agent" or str(name).startswith("Probe Agent · ")
+
+
 def card(named):
-    return next((row for row in state().get("area", []) if row["name"] == named), None)
+    return next((row for row in state().get("area", []) if row["name"] == named or (named == "Probe Agent" and probe_agent(row["name"]))), None)
 
 
 FILMING = Path(tempfile.mkdtemp(prefix="agent-mode-frames-"))
@@ -134,7 +138,7 @@ one_row = 52
 
 def connect_and_open(base):
     connected, result = data("agents", "connect", "--name", "Probe Agent")
-    check("connect", connected and connected["ok"] and connected["data"]["connected"]["name"] == "Probe Agent", result.stdout + result.stderr)
+    check("connect", connected and connected["ok"] and probe_agent(connected["data"]["connected"]["name"]), result.stdout + result.stderr)
     check("a connected agent shows before it has tabs", wait_for(lambda: card("Probe Agent")) is not None, state().get("area"))
     first, result = data("open", base + "one")
     second, _ = data("open", base + "two")
@@ -146,9 +150,9 @@ def connect_and_open(base):
     check("one agent has no heading of its own", [size["headed"] for size in state()["sizes"]] == [False], state()["sizes"])
     listed = state()["listed"]
     check("the agent's tabs left the tab list", found and not any(tab in listed for tab in found["tabs"]), listed)
-    check("one session for both commands", len([row for row in state()["links"] if row["name"] == "Probe Agent"]) == 1, state()["links"])
+    check("one session for both commands", len([row for row in state()["links"] if probe_agent(row["name"])]) == 1, state()["links"])
     alias, _ = data("agent", "list")
-    check("broadway agent is broadway agents", alias and alias["ok"] and any(row["name"] == "Probe Agent" for row in alias["data"]["agents"]), alias)
+    check("broadway agent is broadway agents", alias and alias["ok"] and any(probe_agent(row["name"]) for row in alias["data"]["agents"]), alias)
     return found, one, two
 
 
@@ -165,14 +169,14 @@ def drive(found, one):
     typed, result = data("type", box or "@e0", "hello agent", "--tab", one)
     check("type", typed and typed["ok"], result.stdout + result.stderr)
     pointer = state()["pointer"]
-    check("the pointer shows where it types", pointer.get("kind") == "type" and pointer.get("name") == "Probe Agent", pointer)
+    check("the pointer shows where it types", pointer.get("kind") == "type" and probe_agent(pointer.get("name")), pointer)
     status = card("Probe Agent")["status"]
     check("the status line says what it does", status.startswith("Typing") or status.startswith("Reading"), status)
     film("01-working")
     clicked, result = data("click", button or "@e0", "--tab", one)
     check("click", clicked and clicked["ok"], result.stdout + result.stderr)
     check("the pointer moved to the click", state()["pointer"].get("kind") == "click", state()["pointer"])
-    two_links = [row for row in state()["links"] if row["name"] == "Probe Agent"]
+    two_links = [row for row in state()["links"] if probe_agent(row["name"])]
     check("still one session", len(two_links) == 1, two_links)
 
 
@@ -265,7 +269,7 @@ def done(second):
     check("the session shows the tick and the summary", found and found["mood"] == "done" and found["status"] == "Read two pages and typed a search", found)
     film("05-done")
     closed = agent("closelink", link=found["id"][:8])
-    check("closing its tabs takes the session away", not any(row["name"] == "Probe Agent" for row in closed["area"]), closed["area"])
+    check("closing its tabs takes the session away", not any(probe_agent(row["name"]) for row in closed["area"]), closed["area"])
     gone, _ = data("agents", "disconnect", env=second)
     check("disconnect", gone and gone["ok"], gone)
     other = card("Second Agent")

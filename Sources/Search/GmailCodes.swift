@@ -39,15 +39,15 @@ enum GmailAccount {
 
 enum GmailAtom {
     private final class Reader: NSObject, XMLParserDelegate {
-        var entries: [(title: String, summary: String, name: String, stamp: String)] = []
-        private var open: (title: String, summary: String, name: String, stamp: String)?
+        var entries: [(title: String, summary: String, name: String, stamp: String, email: String)] = []
+        private var open: (title: String, summary: String, name: String, stamp: String, email: String)?
         private var path: [String] = []
         private var words = ""
 
         func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?, qualifiedName: String?, attributes: [String: String] = [:]) {
             path.append(name)
             words = ""
-            if name == "entry" { open = ("", "", "", "") }
+            if name == "entry" { open = ("", "", "", "", "") }
         }
 
         func parser(_ parser: XMLParser, foundCharacters string: String) { words += string }
@@ -65,6 +65,7 @@ enum GmailAtom {
             case ("entry", "summary"): open?.summary = words
             case ("entry", "modified"), ("entry", "issued"), ("entry", "updated"): open?.stamp = words
             case ("author", "name"): open?.name = words
+            case ("author", "email"): open?.email = words
             default: break
             }
         }
@@ -82,7 +83,7 @@ enum GmailAtom {
             guard let at = stamps.date(from: entry.stamp), at > since,
                   let code = CodeFinder.code(in: "\(entry.title). \(entry.summary)")
             else { return nil }
-            return OneTimeCode(code: code, sender: entry.name, at: at)
+            return OneTimeCode(code: code, sender: entry.name, at: at, address: entry.email)
         }
     }
 }

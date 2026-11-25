@@ -403,6 +403,9 @@ final class Preferences {
     var applePasswords: Bool {
         didSet { store.set(applePasswords, forKey: "passwords.apple") }
     }
+    var onePassword: Bool {
+        didSet { store.set(onePassword, forKey: "passwords.onepassword") }
+    }
     /// macOS's own autocorrect, inside web pages: the little "Not ×" that
     /// capitalises what you meant to leave lower-case. As the Mac has it
     /// (System Settings › Keyboard › Correct spelling automatically) until
@@ -678,6 +681,9 @@ final class Preferences {
         }
     }
     @ObservationIgnored var agentSetup = AgentSetup.shared
+    var agentsAskSignIn: Bool {
+        didSet { store.set(agentsAskSignIn, forKey: "agents.signIn") }
+    }
 
     /// Two pages share one place in the tab row.
     /// Always on since the Settings rework (Drice, 24 Oct 2026): it only
@@ -814,6 +820,7 @@ final class Preferences {
         savesPasswords = store.object(forKey: "passwords.save") as? Bool ?? true
         fillsPasswords = store.object(forKey: "passwords.fill") as? Bool ?? true
         applePasswords = AppleHelper.available && store.bool(forKey: "passwords.apple")
+        onePassword = store.bool(forKey: "passwords.onepassword")
         usesSpaces = Store.testing ? store.bool(forKey: "spaces") : true
         stackedSpaces = store.bool(forKey: Preferences.stackedKey)
         liveFolders = Store.testing ? store.bool(forKey: "live.on") : true
@@ -824,6 +831,7 @@ final class Preferences {
         pinsGoHome = keepsSite
         agentMode = AgentMode.read(store.string(forKey: "agents.mode"), bypassConsent: AgentConsent.bypassGiven)
         agentsOn = store.bool(forKey: "agents.on") && AgentConsent.given
+        agentsAskSignIn = store.bool(forKey: "agents.signIn")
         commandBar = false
         nowRows = true
         nextMeeting = store.bool(forKey: "meetings.next")

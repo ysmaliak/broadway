@@ -894,7 +894,7 @@ final class Browser: NSObject {
         let login = offer.login
         Task { [weak self] in
             let saved = await Vault.off {
-                Vault.save(host: login.host, user: login.user, password: login.password, used: Date(), clear: login.clear)
+                Vault.save(host: login.host, user: login.user, password: login.password, used: Date(), clear: login.clear, port: login.port)
             }
             guard let self else { return }
             guard saved else { return announce("The keychain refused it", kind: .error) }
@@ -2226,14 +2226,14 @@ final class Browser: NSObject {
         LinkCopy.markdown(title, url)
     }
 
-    func announce(_ text: String, file: URL? = nil, undo: (@MainActor () -> Void)? = nil, kind: NoticeKind? = nil) {
+    func announce(_ text: String, file: URL? = nil, undo: (@MainActor () -> Void)? = nil, kind: NoticeKind? = nil, seconds: TimeInterval? = nil) {
         announcement = text
         announcedFile = file
         announcedUndo = undo
         let kind = kind ?? (file == nil && undo == nil ? .note : .action)
         let view = hush?.view
         hush?.cancel()
-        let clock = NoticeClock(kind, window: { [weak self] in self?.window }) { [weak self] in
+        let clock = NoticeClock(kind, window: { [weak self] in self?.window }, seconds: seconds) { [weak self] in
             self?.announcement = nil
             self?.announcedFile = nil
             self?.announcedUndo = nil
@@ -6460,7 +6460,7 @@ extension Browser {
 
         tab.onFormEvent = { [weak self] tab, event in self?.forms.heard(event, from: tab) }
 
-        tab.onCredentials = { [weak self] tab, host, user, password, clear in
+        tab.onCredentials = { [weak self] tab, host, user, password, clear, port in
             // an extension's own page isn't a site: Bitwarden's unlock pin was offered as its password.
             guard let self, prefs.savesPasswords, !password.isEmpty, !tab.shy,
                   !Vault.isNever(host), tab.address.flatMap(Browser.extensionHost(of:)) == nil
@@ -6469,7 +6469,7 @@ extension Browser {
             // saving itself.
             if Extensions.shared.passwordSavingTakenBy != nil { return }
             if strongPasswordSent(tab, host: host, user: user, password: password) { return }
-            let sent = SentSignIn(host: host, user: user, password: password)
+            let sent = SentSignIn(host: host, user: user, password: password, port: port)
             let marks = [tab.appleFill, tab.keptFill]
             let tabID = tab.id
             Task { [weak self] in

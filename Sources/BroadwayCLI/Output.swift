@@ -34,6 +34,7 @@ struct Failure: Error {
     static let hints: [String: String] = [
         "agents_off": "Turn on Settings › Agents › Let agents use Broadway",
         "not_running": "Open Broadway, then run this again",
+        "other_user": "Run broadway as the user Broadway belongs to",
         "stale_ref": "Run broadway snapshot and use the new ref",
         "no_tab": "Run broadway tabs for the list, or broadway open URL for a tab of your own",
         "ambiguous_tab": "Run broadway tabs and give more of the id",

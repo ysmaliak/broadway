@@ -60,10 +60,43 @@ struct AgentLink: Identifiable, Equatable {
     var folder: String?
     var placed: AgentPlaceWhy = .front
     var told = false
+    var workdir: String?
+    var named = false
+    var remote = false
+    var program: AgentSigner?
+    var firstQuestion: UUID?
+    var origin: String?
 
     var live: Bool { ended == nil }
 
-    var title: String { number > 1 ? "\(name) \(number)" : name }
+    var held: Bool {
+        if case .connection = key { return true }
+        return false
+    }
+
+    var place: String? {
+        guard !named, let workdir else { return nil }
+        let last = (workdir as NSString).lastPathComponent
+        return last.isEmpty || last == "/" ? nil : last
+    }
+
+    var heading: String { place.map { "\(name) · \($0)" } ?? name }
+
+    var title: String { number > 1 ? "\(heading) \(number)" : heading }
+
+    var asker: String { number > 1 ? "\(name) \(number)" : name }
+
+    var needsYouLine: String { place.map { "\(name) in \($0) needs you" } ?? "\(title) needs you" }
+
+    func tag(most: Int = 28) -> String {
+        guard title.count > most, let place else { return title }
+        let end = number > 1 ? " \(number)" : ""
+        let room = max(5, most - name.count - 3 - end.count)
+        guard place.count > room else { return title }
+        let head = room / 2
+        let tail = room - 1 - head
+        return "\(name) · \(place.prefix(head))…\(place.suffix(tail))\(end)"
+    }
 
     var accent: Int { AgentLinks.accent(for: name) }
 
@@ -89,6 +122,7 @@ final class AgentLinks {
     @ObservationIgnored private var gone: [String: AgentGoneTab] = [:]
     @ObservationIgnored private var goneOrder: [String] = []
     @ObservationIgnored private var endedKeys: [AgentLinkKey: AgentLinkEnding] = [:]
+    @ObservationIgnored private var signing: Set<UUID> = []
     static let goneLimit = 500
     static let defaultPatience: Double = 100
     static let passLife: TimeInterval = 120
@@ -114,18 +148,22 @@ final class AgentLinks {
     }
 
     @discardableResult
-    func join(_ key: AgentLinkKey, name: String?, at now: Date = Date(), wish: AgentWish = AgentWish()) -> AgentLink {
+    func join(_ key: AgentLinkKey, name: String?, at now: Date = Date(), wish: AgentWish = AgentWish(), origin: String? = nil) -> AgentLink {
         if let found = liveLink(for: key) {
             heardAt[found.id] = now
             if let named = Self.clean(name), named != found.name { give(found.id, name: named) }
             if found.folder == nil, let folder = wish.folder { update(found.id) { $0.folder = folder } }
+            if found.workdir == nil, let workdir = wish.workdir { give(found.id, workdir: workdir) }
             return link(found.id) ?? found
         }
         let id = UUID()
         var made = AgentLink(id: id, name: Self.clean(name) ?? "Agent", key: key, connected: now)
-        let before = links.filter { $0.key == key && !$0.live }
+        let before = links.filter { !$0.live && ($0.key == key || origin != nil && $0.origin == origin) }
             .sorted { ($0.endedAt ?? $0.connected) < ($1.endedAt ?? $1.connected) }.map(\.id)
-        made.number = number(for: made.name, besides: id)
+        made.workdir = wish.workdir
+        made.named = wish.named
+        made.origin = origin
+        made.number = number(for: made, besides: id)
         made.folder = wish.folder
         let place = AgentPlaces.choose(wish, spaces: spaceNames(), learned: places.learned(wish.folder), front: here())
         made.space = place.space
@@ -201,6 +239,16 @@ final class AgentLinks {
         update(id) { $0.folder = folder }
     }
 
+    func give(_ id: UUID, workdir: String) {
+        guard var found = link(id), found.workdir == nil else { return }
+        found.workdir = workdir
+        let number = number(for: found, besides: id)
+        update(id) { link in
+            link.workdir = workdir
+            link.number = number
+        }
+    }
+
     func tell(_ id: UUID) -> Bool {
         guard let found = link(id), !found.told else { return false }
         update(id) { $0.told = true }
@@ -209,6 +257,28 @@ final class AgentLinks {
 
     func setPerson(_ id: UUID, _ on: Bool) {
         update(id) { $0.person = on }
+    }
+
+    func setRemote(_ id: UUID) {
+        guard let found = link(id), !found.remote else { return }
+        update(id) { link in
+            link.remote = true
+            link.program = .elsewhere
+        }
+    }
+
+    func sign(_ id: UUID, _ program: AgentSigner) {
+        guard let found = link(id), !found.remote, found.program != program else { return }
+        update(id) { $0.program = program }
+    }
+
+    func asked(_ id: UUID?, question: UUID) {
+        guard let id, let found = link(id), found.firstQuestion == nil else { return }
+        update(id) { $0.firstQuestion = question }
+    }
+
+    func reading(_ id: UUID) -> Bool {
+        signing.insert(id).inserted
     }
 
     static func agentExecutable(_ executable: String?) -> Bool {
@@ -242,21 +312,25 @@ final class AgentLinks {
         update(id) { $0.announced = true }
     }
 
-    func rename(_ id: UUID, _ name: String) {
-        guard let named = Self.clean(name), link(id)?.name != named else { return }
-        give(id, name: named)
+    func rename(_ id: UUID, _ name: String, given: Bool = false) {
+        guard let named = Self.clean(name), let found = link(id), found.name != named || given && !found.named else { return }
+        give(id, name: named, given: given || found.named)
     }
 
-    private func give(_ id: UUID, name named: String) {
-        let number = number(for: named, besides: id)
+    private func give(_ id: UUID, name named: String, given: Bool? = nil) {
+        guard var found = link(id) else { return }
+        found.name = named
+        if let given { found.named = given }
+        let number = number(for: found, besides: id)
         update(id) { link in
             link.name = named
+            link.named = found.named
             link.number = number
         }
     }
 
-    private func number(for name: String, besides id: UUID) -> Int {
-        let taken = Set(links.filter { $0.id != id && $0.name == name }.map(\.number))
+    private func number(for made: AgentLink, besides id: UUID) -> Int {
+        let taken = Set(links.filter { $0.id != id && $0.heading == made.heading }.map(\.number))
         return (1...).first { !taken.contains($0) } ?? 1
     }
 
@@ -330,7 +404,7 @@ final class AgentLinks {
             } else if !link.person, let process = link.process, !alive(process.pid, process.started) {
                 end(link.id, .done(nil), at: now)
                 gone.append(link.id)
-            } else if quiet >= idleLimit, quiet >= 2 * idleLimit || inFlight(link.id) == 0 && !busy(link.id) && !asking(link.id) {
+            } else if quiet >= idleLimit, !link.held, quiet >= 2 * idleLimit || inFlight(link.id) == 0 && !busy(link.id) && !asking(link.id) {
                 end(link.id, .left, at: now)
                 gone.append(link.id)
             } else if link.rest == nil, inFlight(link.id) == 0, !busy(link.id), !asking(link.id), quiet >= quietLimit {
@@ -363,9 +437,11 @@ final class AgentLinks {
         gone = [:]
         goneOrder = []
         endedKeys = [:]
+        signing = []
     }
 
     private func drop(_ id: UUID) {
+        signing.remove(id)
         heardAt[id] = nil
         lastTabs[id] = nil
         waits[id] = nil
@@ -443,17 +519,30 @@ enum AgentPatience {
 
         init(_ done: CheckedContinuation<AgentAnswer?, Never>) { self.done = done }
 
-        func resume(_ answer: AgentAnswer?) {
+        var finished: Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return done == nil
+        }
+
+        @discardableResult
+        func resume(_ answer: AgentAnswer?) -> Bool {
             lock.lock()
             let waiting = done
             done = nil
             lock.unlock()
             waiting?.resume(returning: answer)
+            return waiting != nil
         }
     }
 
     @MainActor
-    static func race(_ asking: Task<AgentAnswer, Never>, seconds: Double) async -> AgentAnswer? {
+    final class Early {
+        var hit = false
+    }
+
+    @MainActor
+    static func race(_ asking: Task<AgentAnswer, Never>, seconds: Double, unseen: Double? = nil, early: Early? = nil) async -> AgentAnswer? {
         let box = OnceBox()
         return await withTaskCancellationHandler {
             await withCheckedContinuation { (done: CheckedContinuation<AgentAnswer?, Never>) in
@@ -463,6 +552,24 @@ enum AgentPatience {
                 Task { @MainActor in
                     try? await Task.sleep(for: .seconds(seconds))
                     once.resume(nil)
+                }
+                guard let unseen, unseen < seconds else { return }
+                Task { @MainActor in
+                    var since: Date?
+                    while !once.finished {
+                        if AgentLooking.looking() {
+                            since = nil
+                        } else {
+                            let from = since ?? Date()
+                            since = from
+                            if Date().timeIntervalSince(from) >= unseen {
+                                early?.hit = true
+                                if !once.resume(nil) { early?.hit = false }
+                                return
+                            }
+                        }
+                        try? await Task.sleep(for: .milliseconds(100))
+                    }
                 }
             }
         } onCancel: {

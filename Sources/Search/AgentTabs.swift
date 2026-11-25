@@ -32,7 +32,10 @@ enum AgentBoard {
     private static var sweeping = false
     private static let homes = NSHashTable<Browser>.weakObjects()
 
-    static func note(_ browser: Browser) { homes.add(browser) }
+    static func note(_ browser: Browser) {
+        guard !browser.keepsNothing else { return }
+        homes.add(browser)
+    }
 
     static var browsers: [Browser] {
         let open = Browsers.all.filter { !$0.keepsNothing }
@@ -62,12 +65,7 @@ enum AgentBoard {
         guard clock == nil else { return }
         AgentLinks.wire()
         CodexDesktop.shared.wake()
-        AgentDesk.shared.told = { question in
-            guard !NSApp.isActive else { return }
-            let who = question.task.flatMap { AgentLinks.shared.link($0) }.map { "\($0.title) needs you" } ?? "An agent needs you"
-            SiteNotifications.shared.post(id: question.id.uuidString, title: who, body: question.title,
-                                          origin: question.site.map { "https://\($0)" } ?? "broadway://agents", tag: "", info: ["search.kind": "agent"])
-        }
+        AgentDesk.shared.told = { question in AgentNotice.tell(question) }
         clock = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
             MainActor.assumeIsolated {
                 guard !sweeping else { return }
@@ -183,7 +181,7 @@ extension Bench {
              "row": {
                  let pending = AgentDesk.shared.pending
                  let voice = AgentsLayout.voice(browser.agentSessions(links: AgentLinks.shared.links, front: true).map {
-                     ($0.link.title, $0.state(pending: pending))
+                     AgentsLayout.said($0.link, $0.state(pending: pending))
                  })
                  return ["title": voice.title, "line": voice.line, "attention": voice.attention] as [String: Any]
              }(),
@@ -236,6 +234,29 @@ extension Bench {
             }
             AgentDesk.shared.take(first.id, said)
             answer(["answered": first.title])
+        case "logins":
+            let rows = request["kept"] as? [[String: Any]] ?? []
+            let kept = rows.map { Kept(host: $0["host"] as? String ?? "", user: $0["user"] as? String ?? "", used: nil, clear: $0["clear"] as? Bool ?? true, port: $0["port"] as? Int) }
+            let secrets = Dictionary(rows.map { (($0["host"] as? String ?? "") + "\u{1}" + ($0["user"] as? String ?? ""), $0["password"] as? String ?? "") }, uniquingKeysWith: { a, _ in a })
+            AgentSocket.shared.box.logins = { _ in kept }
+            AgentSocket.shared.box.loginSecret = { one in secrets[one.id].map { Login(host: one.host, user: one.user, password: $0, used: nil, clear: one.clear, port: one.port) } }
+            if request["reset"] as? Bool == true { AgentSignIns.shared.reset() }
+            answer(["kept": kept.count, "allowed": AgentSignIns.shared.sites])
+        case "codes":
+            if let on = request["gmail"] as? Bool { AutofillBook.shared.codesFromGmail = on }
+            if let text = request["text"] as? String {
+                AgentCodes.fake = BenchCodes(text: text, sender: request["sender"] as? String ?? "", address: request["address"] as? String ?? "")
+            }
+            if let seconds = (request["patience"] as? Double) ?? (request["patience"] as? Int).map(Double.init) { AgentCodes.patience = seconds }
+            answer(["gmail": AutofillBook.shared.codesFromGmail, "patience": AgentCodes.patience])
+        case "site":
+            guard let site = request["site"] as? String, !site.isEmpty else { return answer(["error": "agent site SITE RULE"]) }
+            AgentSites.shared.set((request["rule"] as? String).flatMap(SiteRule.init(rawValue:)), for: site)
+            answer(["site": site, "rule": AgentSites.shared.rule(for: site)?.rawValue ?? ""])
+        case "persontab":
+            guard let url = (request["url"] as? String).flatMap(URL.init(string:)) else { return answer(["error": "agent persontab URL"]) }
+            let tab = browser.open(url, foreground: false, atEnd: true)
+            answer(["tab": AgentWorkTabs.short(tab.id)])
         case "mode":
             guard let mode = (request["mode"] as? String).flatMap(AgentMode.init(rawValue:)) else { return answer(["error": "agent mode ask|auto|bypass"]) }
             browser.prefs.agentMode = mode

@@ -16,6 +16,7 @@ extension BrowserToolbox {
         var header: [String] = []
         var needs: String?
         var ways: [String] = []
+        var elsewhere: String?
         var unseen = 0
     }
 
@@ -32,6 +33,7 @@ extension BrowserToolbox {
             "inside": inside?.ref ?? "", "all": all, "text": arguments["text"] as? Bool == true, "since": arguments["since"] as? Bool == true,
             "who": who, "roles": AgentTarget.roles(arguments["role"]), "find": (arguments["find"] as? String) ?? "",
             "view": arguments["view"] as? Bool == true, "limit": limit,
+            "boxes": arguments["boxes"] as? Bool == true, "scale": pixelScale(tab, task: task),
         ]
         let frames = frameNames(tab)
         var places: [(name: String?, frame: WKFrameInfo?)] = [(nil, nil)]
@@ -68,12 +70,15 @@ extension BrowserToolbox {
                     return .success(looked)
                 }
                 looked.fresh = said["fresh"] as? Bool == true
-                if let needs = said["needs"] as? String, !needs.isEmpty { looked.needs = needs }
+                if let needs = said["needs"] as? String, !needs.isEmpty {
+                    looked.needs = needs
+                    looked.elsewhere = await signedInElsewhere(tab)
+                }
                 if let ways = said["ways"] as? [String], !ways.isEmpty { looked.ways = await signedIn(ways, tab: tab) }
                 if inside == nil, looked.scope == "page" { places += frames.map { ($0.name, $0.frame) } }
             }
-            let rows = said["lines"] as? [String] ?? []
-            let items = said["items"] as? [[String: Any]] ?? []
+            let rows = (said["lines"] as? [String] ?? []).map { AgentLinkLine.fixed($0, page: tab.pageAddress) }
+            let items = (said["items"] as? [[String: Any]] ?? []).map { AgentLinkLine.fixed($0, page: tab.pageAddress) }
             let shown = said["shown"] as? Int ?? items.count
             looked.total += said["total"] as? Int ?? shown
             looked.cut = looked.cut || said["cut"] as? Bool == true
@@ -107,13 +112,20 @@ extension BrowserToolbox {
     }
 
     func snapshot(_ tab: Tab, _ arguments: [String: Any] = [:], task: UUID?) async -> ToolOutcome {
-        let looked: Looked
+        var looked: Looked
         switch await walk(tab, arguments, task: task) {
         case .failure(let failure): return failure
         case .success(let found): looked = found
         }
+        var empty: AgentReadiness.Why?
+        let whole = ((arguments["in"] ?? arguments["inside"]) as? String ?? "").isEmpty && ((arguments["find"] as? String) ?? "").isEmpty && AgentTarget.roles(arguments["role"]).isEmpty
+        if looked.since == nil, looked.total == 0, whole, let ready = await readiness(tab), ready.text == 0 {
+            let waited = await awaitText(tab)
+            if waited?.text ?? 0 > 0, case .success(let again) = await walk(tab, arguments, task: task) { looked = again }
+            if looked.total == 0 { empty = AgentReadiness.why(waited, loading: tab.loading, address: tab.pageAddress) }
+        }
         let short = String(tab.id.uuidString.prefix(8)).lowercased()
-        var header = ["\(AgentChange.cell(tab.title))  \(AgentChange.short(AgentSecrets.shown(tab.pageAddress)))"]
+        var header = ["\"\(AgentChange.cell(tab.title))\"  \(AgentChange.short(AgentSecrets.shown(tab.pageAddress)))"]
         var body: [String]
         var noted: String?
         if let since = looked.since {
@@ -123,6 +135,8 @@ extension BrowserToolbox {
             if looked.fresh, arguments["since"] as? Bool == true { header.append("New page since your last look") }
             if looked.modal { header.append("A dialog is open, so only it is shown (the page behind it: --all)") }
             if looked.unseen > 0 { header.append(Self.unseenLine(looked.unseen)) }
+            if let empty { header.append("\(empty.said). \(empty.hint)") }
+            if arguments["boxes"] as? Bool == true, let zoom = Self.zoomLine(tab) { header.append(zoom) }
             if let note = siteNote(tab, task: task) {
                 header.append("note: Broadway has notes for this site: broadway skill \(note)")
                 noted = note
@@ -133,6 +147,7 @@ extension BrowserToolbox {
             if looked.cut { body.append("(More on the page: this list stopped at 5000)") }
         }
         var told = looked.since == nil ? looked.needs.map { [AgentChange.Look.needsLine($0)] } ?? [] : []
+        if looked.since == nil, let elsewhere = looked.elsewhere { told.append(elsewhere) }
         if looked.since == nil, !looked.ways.isEmpty { told.append(AgentChange.Look.waysLine(looked.ways)) }
         let written = (header.prefix(1) + told + header.dropFirst() + body).joined(separator: "\n")
         let addressed = AIPage.addressesAI(written)
@@ -150,7 +165,9 @@ extension BrowserToolbox {
             data["scope"] = looked.scope
             data["regions"] = looked.regions
             if looked.unseen > 0 { data["hidden"] = looked.unseen }
+            if let empty { data["empty"] = empty.kind }
             if let needs = looked.needs { data["needs"] = needs }
+            if let elsewhere = looked.elsewhere { data["elsewhere"] = elsewhere }
             if let noted { data["skill"] = noted }
             if !looked.ways.isEmpty { data["ways"] = looked.ways }
             if looked.fresh, arguments["since"] as? Bool == true { data["fresh"] = true }
@@ -178,6 +195,33 @@ extension BrowserToolbox {
         }
     }
 
+    static let sessionCookie = try? NSRegularExpression(pattern: "sess|sid|auth|token|login|logged|user|account|remember|jwt", options: [.caseInsensitive])
+
+    static func signsIn(_ cookie: HTTPCookie, site: String) -> Bool {
+        let domain = cookie.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        guard domain == site || domain.hasSuffix("." + site) else { return false }
+        if providers.values.contains(where: { $0.names.contains(cookie.name) }) { return true }
+        let name = cookie.name
+        return sessionCookie?.firstMatch(in: name, range: NSRange(name.startIndex..., in: name)) != nil
+    }
+
+    func signedInElsewhere(_ tab: Tab) async -> String? {
+        guard tab.agent, browser?.prefs.usesSpaces ?? Shared.prefs.usesSpaces, let url = tab.pageAddress,
+              let site = AgentSites.site(of: url) else { return nil }
+        let mine = tab.web.configuration.websiteDataStore
+        var seen: [WKWebsiteDataStore] = [mine]
+        for space in browser?.spaces ?? Spaces.read() {
+            let store = Spaces.store(for: space.id)
+            guard !seen.contains(where: { $0 === store }) else { continue }
+            seen.append(store)
+            let cookies = await store.httpCookieStore.allCookies()
+            guard cookies.contains(where: { Self.signsIn($0, site: site) }) else { continue }
+            let name = space.name.contains(where: \.isWhitespace) ? "\"\(space.name)\"" : space.name
+            return "signed in in \(space.name): broadway open \(AgentSecrets.shown(url)) --space \(name)"
+        }
+        return nil
+    }
+
     func siteNote(_ tab: Tab, task: UUID?) -> String? {
         guard let url = tab.pageAddress, let host = url.host()?.lowercased(),
               let skill = siteNotes(url).first else { return nil }
@@ -194,7 +238,7 @@ extension BrowserToolbox {
     func look(_ tab: Tab, task: UUID?) async -> AgentChange.Look? {
         guard case .success(let looked) = await walk(tab, ["limit": 40], task: task) else { return nil }
         let regions = looked.regions.compactMap { $0["role"] as? String }
-        var header: [String] = []
+        var header: [String] = looked.elsewhere.map { [$0] } ?? []
         if looked.modal { header.append("A dialog is open, so only it is shown (the page behind it: broadway snapshot --all)") }
         return AgentChange.Look(lines: looked.lines, elements: looked.items, shown: looked.shown, total: looked.total,
                                 regions: regions, needs: looked.needs, ways: looked.ways, header: header)

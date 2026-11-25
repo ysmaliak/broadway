@@ -178,13 +178,28 @@ struct OutputTests {
     @Test func theGuideIsShortAndTeachesTabsAsAChoice() {
         let guide = Help.guideText
 
-        #expect(guide.utf8.count < 4652)
+        #expect(guide.utf8.count < 5516)
         #expect(!guide.contains(";"))
         for stale in ["one working tab", "--new", "Four tabs", "four at most", "tab=$(", "wait --idle", "| grep"] {
             #expect(!guide.contains(stale), "the guide still says \(stale)")
         }
         for taught in ["go moves your tab", "open is for a second page you need at the same time", "broadway batch", "broadway find", "retry_safe", "needs_you", "--nth"] {
             #expect(guide.contains(taught), "the guide lacks \(taught)")
+        }
+    }
+
+    @Test func theGuideTeachesSigningInAndNamesItsTopics() {
+        let guide = Help.guideText
+
+        for taught in ["broadway fill login", "broadway fill code", "--secret-env", "broadway carry", "nothing_kept", "broadway handoff", "after 20 s"] {
+            #expect(guide.contains(taught), "the guide lacks \(taught)")
+        }
+        #expect(!guide.contains("refuse typing. Ask the person"))
+        #expect(Help.guideTopics.map(\.name) == ["secrets", "pictures", "remote"])
+        for topic in Help.guideTopics {
+            #expect(guide.contains(topic.name), "the guide never names \(topic.name)")
+            #expect(!topic.text.contains(";"))
+            #expect(topic.text.utf8.count < 2200)
         }
     }
 

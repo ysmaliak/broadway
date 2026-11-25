@@ -93,6 +93,13 @@ enum AgentWorkTabs {
 
     static func short(_ id: UUID) -> String { String(id.uuidString.prefix(8)).lowercased() }
 
+    static func named(_ given: String?, link: UUID?, in box: BrowserToolbox) -> Tab? {
+        guard let wanted = given?.trimmingCharacters(in: .whitespaces).lowercased(), !wanted.isEmpty else { return nil }
+        let all = box.visible.filter { $0.tab.agent && $0.tab.agentName?.lowercased() == wanted }
+        let mine = all.filter { link != nil && $0.tab.agentTask == link }
+        return (mine.first ?? (all.count == 1 ? all.first : nil))?.tab
+    }
+
     static func note(_ opener: Tab, opened tab: Tab) {
         popups[opener.id, default: Popups()].opened.append(tab.id)
     }
@@ -143,22 +150,34 @@ enum AgentWorkTabs {
         return seen.isEmpty ? tab.title : seen
     }
 
-    static func loaded(_ tab: Tab, cap given: Double? = nil) async -> Bool {
+    static func loaded(_ tab: Tab, cap given: Double? = nil, fresh: Bool = false) async -> Bool {
         let cap = given ?? loadCap
         let end = Date().addingTimeInterval(cap)
-        try? await Task.sleep(for: .milliseconds(min(100, Int(cap * 1000))))
+        if !fresh { try? await Task.sleep(for: .milliseconds(min(100, Int(cap * 1000)))) }
+        var seen = 0
         while Date() < end {
-            if tab.built?.isLoading != true, tab.committed != nil || tab.failure != nil { return true }
-            try? await Task.sleep(for: .milliseconds(100))
+            if tab.built?.isLoading != true, fresh ? arrived(tab) : tab.committed != nil || tab.failure != nil {
+                seen += 1
+                if !fresh || seen >= 2 { return true }
+            } else {
+                seen = 0
+            }
+            try? await Task.sleep(for: .milliseconds(fresh ? 20 : 100))
         }
         return tab.built?.isLoading != true
     }
 
+    static func arrived(_ tab: Tab) -> Bool {
+        tab.failure != nil || ["http", "https"].contains(tab.committed?.scheme?.lowercased() ?? "")
+    }
+
     static func row(_ tab: Tab, current: String?) -> [String: Any] {
         let id = short(tab.id)
-        return ["id": id, "title": title(tab), "url": AgentSecrets.shown(tab.page?.url ?? tab.pageAddress),
-                "working": id == current, "agent": tab.agent, "loading": tab.loading,
-                "front": Browsers.all.contains { $0.active === tab }]
+        var row: [String: Any] = ["id": id, "title": title(tab), "url": AgentSecrets.shown(tab.page?.url ?? tab.pageAddress),
+                                  "working": id == current, "agent": tab.agent, "loading": tab.loading,
+                                  "front": Browsers.all.contains { $0.active === tab }]
+        if let name = tab.agentName { row["name"] = name }
+        return row
     }
 
     static func listing(_ link: UUID?, box: BrowserToolbox, current here: String?) -> ToolOutcome {
@@ -167,7 +186,8 @@ enum AgentWorkTabs {
         let rows = mine.map { row($0.tab, current: here) }
         var lines = rows.map { row in
             let id = row["id"] as? String ?? ""
-            return "\(id == here ? "*" : " ") \(id)  \(AgentChange.cell(row["title"] as? String ?? ""))  \(AgentChange.short(row["url"] as? String ?? ""))"
+            let name = (row["name"] as? String).map { "\(AgentChange.cell($0))  " } ?? ""
+            return "\(id == here ? "*" : " ") \(id)  \(name)\(AgentChange.cell(row["title"] as? String ?? ""))  \(AgentChange.short(row["url"] as? String ?? ""))"
         }
         if rows.isEmpty { lines.append("You have no tabs. Open one with broadway open URL.") }
         let theirs = "\(others) tab\(others == 1 ? "" : "s") of the person's: broadway tabs --all"
@@ -228,8 +248,7 @@ final class AgentSessionBox: AgentToolbox {
     var tools: [ToolSpec] { socket.box.tools }
 
     func call(_ name: String, _ arguments: [String: Any], task: UUID?) async -> ToolOutcome {
-        guard let browser = browser ?? Browsers.front else { return .failure("Broadway has no window open", code: .noWindow) }
-        let said = await socket.session(name, arguments, task: task, browser: browser)
+        let said = await socket.session(name, arguments, task: task, browser: Browsers.agentHome(keeping: browser) ?? Browsers.agentWindow())
         var outcome = said.outcome
         if let used = said.used, outcome.data?["tab"] == nil, outcome.data != nil { outcome.data?["tab"] = used }
         return outcome
@@ -238,9 +257,28 @@ final class AgentSessionBox: AgentToolbox {
 
 extension AgentSocket {
     func session(_ name: String, _ given: [String: Any], task: UUID?, browser: Browser, preferred: String? = nil) async -> (outcome: ToolOutcome, used: String?) {
+        let said = await answer(name, given, task: task, browser: browser, preferred: preferred)
+        guard name != "ask" else { return said }
+        let scrubbed = AgentSecrets.scrub(said.outcome, sealed: AgentSeals.all)
+        AgentClock.mark("scrub again")
+        return (scrubbed, said.used)
+    }
+
+    private func answer(_ name: String, _ given: [String: Any], task: UUID?, browser: Browser, preferred: String?) async -> (outcome: ToolOutcome, used: String?) {
         let link = task
         var arguments = given
         let outside = TaskLedger.shared.entry(link) != nil
+        if name == "tab", let hit = AgentWorkTabs.named(arguments["id"] as? String, link: link, in: box) { arguments["id"] = AgentWorkTabs.short(hit.id) }
+        let naming = name == "open" ? (arguments["name"] as? String)?.trimmingCharacters(in: .whitespaces) : nil
+        if let naming {
+            guard !naming.isEmpty, naming.count <= 40 else { return (.failure("A tab name is 1 to 40 characters", code: .usage), nil) }
+            guard naming.lowercased() != "front" else { return (.failure("front means the person's front tab, so it can't name a tab", code: .usage), nil) }
+            guard !(arguments["urls"] is [Any]) else { return (.failure("--name names one tab, so open one address with it", code: .usage), nil) }
+            if let held = AgentWorkTabs.tabs(of: link, in: box).first(where: { $0.tab.agentName?.lowercased() == naming.lowercased() }) {
+                let id = AgentWorkTabs.short(held.tab.id)
+                return (.failure("Your tab \(id) is named \(naming) already", code: .refused, hint: "Use it with --tab \(naming), or close it first: broadway close --tab \(id)"), nil)
+            }
+        }
         switch name {
         case "tab":
             return (pick(arguments["id"] as? String, link: link), current(link))
@@ -271,13 +309,16 @@ extension AgentSocket {
                 }
             }
         }
+        AgentClock.mark("tab")
         let started = Date()
         var outcome = ToolReply.asking(await box.call(name, arguments, task: task), task: link)
+        AgentClock.mark("called")
         guard !outcome.failed else { return (outcome, used) }
         switch name {
         case "open":
             outcome = await opened(outcome, link: link, started: started)
             used = current(link)
+            if let naming, let id = used, let tab = box.find(["tab": id])?.tab { tab.agentName = naming }
         case "navigate":
             outcome = await went(outcome, tab: used, link: link, started: started)
         case "close":
@@ -287,6 +328,7 @@ extension AgentSocket {
         }
         if let used { outcome = popped(outcome, from: used, link: link) }
         if let notice { outcome = noted(outcome, notice) }
+        AgentClock.mark("rounded off")
         return (outcome, used)
     }
 
@@ -411,7 +453,7 @@ extension AgentSocket {
         guard let id = said["id"] as? String, let found = box.find(["tab": id]) else { return outcome }
         remember(id, link: link)
         let tab = found.tab
-        let done = await AgentWorkTabs.loaded(tab)
+        let done = await AgentWorkTabs.loaded(tab, fresh: true)
         let mine = AgentWorkTabs.tabs(of: link, in: box)
         let same = mine.filter { $0.tab.id != tab.id && AgentAddress.same($0.tab.pageAddress, tab.pageAddress ?? tab.address) }
             .map { AgentWorkTabs.short($0.tab.id) }

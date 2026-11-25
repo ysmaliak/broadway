@@ -2,6 +2,7 @@ import Foundation
 
 final class LineConnection {
     private let fd: Int32
+    let peer: Int32
     private let source: DispatchSourceRead
     private var bytes = Data()
     private var closed = false
@@ -10,8 +11,9 @@ final class LineConnection {
 
     static let longest = 4_000_000
 
-    init(fd: Int32) {
+    init(fd: Int32, peer: Int32 = 0) {
         self.fd = fd
+        self.peer = peer
         _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
         var quiet: Int32 = 1
         setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &quiet, socklen_t(MemoryLayout<Int32>.size))
@@ -72,7 +74,21 @@ final class UnixLineServer {
     private var listener: Int32 = -1
     private var accepting: DispatchSourceRead?
     private var connections: [ObjectIdentifier: LineConnection] = [:]
+    private var bound: FileMark?
+    private var keeping: DispatchSourceTimer?
     var connected: ((LineConnection) -> Void)?
+
+    struct FileMark: Equatable {
+        var device: UInt64
+        var inode: UInt64
+
+        init?(_ path: String) {
+            var info = stat()
+            guard lstat(path, &info) == 0 else { return nil }
+            device = UInt64(info.st_dev)
+            inode = UInt64(info.st_ino)
+        }
+    }
 
     init(path: String) {
         self.path = path
@@ -80,19 +96,64 @@ final class UnixLineServer {
 
     var running: Bool { accepting != nil }
 
+    var holdsPath: Bool { bound != nil && FileMark(path) == bound }
+
     func start() -> Bool {
         guard !running else { return true }
+        guard let fd = listening() else { return false }
+        take(fd)
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + 5, repeating: 5)
+        timer.setEventHandler { [weak self] in self?.keep() }
+        timer.resume()
+        keeping = timer
+        return true
+    }
+
+    func keep() {
+        guard running, !holdsPath, !Self.answering(path), let fd = listening() else { return }
+        accepting?.cancel()
+        take(fd)
+    }
+
+    static func answering(_ path: String) -> Bool {
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+        var address = sockaddr_un()
+        address.sun_family = sa_family_t(AF_UNIX)
+        let room = MemoryLayout.size(ofValue: address.sun_path)
+        guard path.utf8.count < room else { return false }
+        withUnsafeMutablePointer(to: &address.sun_path) { sun in
+            sun.withMemoryRebound(to: CChar.self, capacity: room) { _ = strlcpy($0, path, room) }
+        }
+        return withUnsafePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+        } == 0
+    }
+
+    private func take(_ fd: Int32) {
+        let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: .main)
+        source.setEventHandler { [weak self] in self?.accept() }
+        source.setCancelHandler { close(fd) }
+        source.resume()
+        accepting = source
+        listener = fd
+        bound = FileMark(path)
+    }
+
+    private func listening() -> Int32? {
         let folder = (path as NSString).deletingLastPathComponent
         try? FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
         unlink(path)
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { return false }
+        guard fd >= 0 else { return nil }
         var address = sockaddr_un()
         address.sun_family = sa_family_t(AF_UNIX)
         let room = MemoryLayout.size(ofValue: address.sun_path)
         guard path.utf8.count < room else {
             close(fd)
-            return false
+            return nil
         }
         withUnsafeMutablePointer(to: &address.sun_path) { sun in
             sun.withMemoryRebound(to: CChar.self, capacity: room) { _ = strlcpy($0, path, room) }
@@ -106,25 +167,23 @@ final class UnixLineServer {
         guard bound == 0, chmod(path, 0o600) == 0, listen(fd, 16) == 0 else {
             close(fd)
             unlink(path)
-            return false
+            return nil
         }
         _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
-        let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: .main)
-        source.setEventHandler { [weak self] in self?.accept() }
-        source.setCancelHandler { close(fd) }
-        source.resume()
-        accepting = source
-        listener = fd
-        return true
+        return fd
     }
 
     func stop() {
+        let mine = holdsPath
+        keeping?.cancel()
+        keeping = nil
         accepting?.cancel()
         accepting = nil
         listener = -1
+        bound = nil
         connections.values.forEach { $0.close() }
         connections = [:]
-        unlink(path)
+        if mine { unlink(path) }
     }
 
     private func accept() {
@@ -136,7 +195,10 @@ final class UnixLineServer {
             close(fd)
             return
         }
-        let connection = LineConnection(fd: fd)
+        var pid: pid_t = 0
+        var size = socklen_t(MemoryLayout<pid_t>.size)
+        if getsockopt(fd, SOL_LOCAL, LOCAL_PEERPID, &pid, &size) != 0 { pid = 0 }
+        let connection = LineConnection(fd: fd, peer: pid)
         let key = ObjectIdentifier(connection)
         connections[key] = connection
         let before = connection.onClose

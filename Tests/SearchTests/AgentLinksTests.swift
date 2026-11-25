@@ -103,6 +103,18 @@ final class AgentLinksTests {
         #expect(!(links.link(link.id)?.live ?? true))
     }
 
+    @Test func anOpenMCPConnectionIsNeverEndedForBeingQuiet() {
+        let connection = UUID()
+        let link = links.join(.connection(connection), name: "Remote-probe", at: start)
+        let named = links.join(.named("quiet"), name: "Quiet", at: start)
+
+        let gone = links.sweep(at: start.addingTimeInterval(links.idleLimit * 3))
+
+        #expect(gone == [named.id])
+        #expect(links.link(link.id)?.live == true)
+        #expect(links.link(link.id)?.rest == .quiet)
+    }
+
     @Test func endedCardsLeaveOnlyOnceTheirTabsAreGone() {
         let held = links.join(.named("one"), name: "One", at: start)
         let empty = links.join(.named("two"), name: "Two", at: start)
@@ -218,6 +230,44 @@ final class AgentLinksTests {
         #expect(codex.title == "Codex")
         #expect(links.link(second.id)?.title == "Claude Code 2")
         #expect(third.title == "Claude Code")
+    }
+
+    @Test func aSessionIsHeadedByTheLastPartOfItsFolder() {
+        let first = links.join(.named("a"), name: "Claude Code", at: start, wish: AgentWish(workdir: "/Users/me/Developer/garden"))
+        let second = links.join(.named("b"), name: "Claude Code", at: start, wish: AgentWish(workdir: "/Users/me/Developer/garden"))
+        let other = links.join(.named("c"), name: "Claude Code", at: start, wish: AgentWish(workdir: "/Users/me/Developer/broadway-mac"))
+        let bare = links.join(.named("d"), name: "Claude Code", at: start)
+
+        #expect(first.title == "Claude Code · garden")
+        #expect(second.title == "Claude Code · garden 2")
+        #expect(other.title == "Claude Code · broadway-mac")
+        #expect(bare.title == "Claude Code")
+        #expect(first.needsYouLine == "Claude Code in garden needs you")
+        #expect(bare.needsYouLine == "Claude Code needs you")
+    }
+
+    @Test func aNameThePersonGaveWinsOverTheFolder() {
+        let named = links.join(.named("a"), name: "Reviewer", at: start, wish: AgentWish(workdir: "/Users/me/garden", named: true))
+
+        #expect(named.title == "Reviewer")
+    }
+
+    @Test func aFolderThatArrivesLaterHeadsTheSession() {
+        let link = links.join(.named("a"), name: "Codex", at: start)
+
+        _ = links.join(.named("a"), name: nil, at: start, wish: AgentWish(workdir: "/tmp/garden"))
+
+        #expect(links.link(link.id)?.title == "Codex · garden")
+    }
+
+    @Test func thePointersTagCutsTheFolderInTheMiddleNeverTheName() {
+        let link = links.join(.named("a"), name: "Claude Code", at: start, wish: AgentWish(workdir: "/x/a-very-long-folder-name-for-tests"))
+        let short = links.join(.named("b"), name: "Codex", at: start, wish: AgentWish(workdir: "/x/garden"))
+
+        let tag = link.tag(most: 24)
+
+        #expect(tag == "Claude Code · a-ver…ests")
+        #expect(short.tag(most: 24) == "Codex · garden")
     }
 
     @Test func aRenamedSessionTakesANumberAmongItsNewNames() {

@@ -430,11 +430,34 @@ public enum Setup {
         return steps
     }
 
+    static func sshFinds(shell: String? = Setup.loginShell()) -> Bool {
+        guard let shell, FileManager.default.isExecutableFile(atPath: shell) else { return false }
+        let process = Process()
+        let pipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: shell)
+        process.arguments = ["-c", "command -v broadway"]
+        process.environment = ["HOME": NSHomeDirectory(), "USER": NSUserName(), "LOGNAME": NSUserName(), "SHELL": shell,
+                               "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "SSH_CLIENT": "192.0.2.1 22 22", "SSH_CONNECTION": "192.0.2.1 22 192.0.2.2 22"]
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        process.standardInput = FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return false }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return process.terminationStatus == 0 && !String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    static func loginShell() -> String? {
+        guard let entry = getpwuid(getuid()), let shell = entry.pointee.pw_shell else { return nil }
+        let path = String(cString: shell)
+        return path.isEmpty ? nil : path
+    }
+
     static func onPath(_ folder: String, environment: [String: String]) -> Bool {
         (environment["PATH"] ?? "").split(separator: ":").contains { $0 == folder || $0 == folder + "/" }
     }
 
-    static func checks(paths: Paths, binary: String, environment: [String: String], status: [String: Any]?, running: Bool) -> [Check] {
+    static func checks(paths: Paths, binary: String, environment: [String: String], status: [String: Any]?, running: Bool, overSSH: (() -> Bool)? = nil) -> [Check] {
         var found: [Check] = []
         let inApp = binary.contains(".app/Contents/Helpers/")
         found.append(Check(name: "app", ok: inApp, required: true, detail: inApp ? Place.bundle(of: binary) ?? "" : "this broadway isn't inside Broadway.app: \(binary)",
@@ -448,7 +471,20 @@ public enum Setup {
         let reachable = onPath(folder, environment: environment)
         found.append(Check(name: "path", ok: reachable, required: true, detail: reachable ? "\(folder) is on PATH" : "\(folder) isn't on PATH",
                            fix: reachable ? nil : "fish: fish_add_path ~/.local/bin   zsh or bash: export PATH=\"$HOME/.local/bin:$PATH\""))
-        found.append(Check(name: "running", ok: running, required: false, detail: running ? "Broadway is answering" : "Broadway isn't running. A browser command starts it hidden.", fix: nil))
+        let remote = environment["SSH_CONNECTION"].flatMap { $0.split(separator: " ").first.map(String.init) }
+        if linked, let overSSH {
+            let finds = overSSH()
+            let shell = ((environment["SHELL"] ?? "") as NSString).lastPathComponent
+            let fix = shell == "fish" ? "fish_add_path ~/.local/bin" : shell == "bash" ? "Add export PATH=\"$HOME/.local/bin:$PATH\" to ~/.bashrc" : "Add export PATH=\"$HOME/.local/bin:$PATH\" to ~/.zshenv"
+            found.append(Check(name: "ssh", ok: finds, required: false,
+                               detail: finds ? "ssh to this Mac finds broadway, so ssh MAC broadway COMMAND and ssh MAC broadway mcp work from another machine" : "a command sent over ssh won't find broadway, since ~/.local/bin isn't on the PATH it gets",
+                               fix: finds ? nil : fix))
+        }
+        if let remote { found.append(Check(name: "ssh login", ok: true, required: false, detail: "this is an ssh login from \(remote). Commands reach the Broadway of this user on this Mac, and over ssh they don't start it.", fix: nil)) }
+        let answering = (status?["app"] as? String).flatMap { $0 == Place.bundle(of: binary) ? nil : $0 }
+        let resting = remote == nil ? "Broadway isn't running. A browser command starts it hidden." : "Broadway isn't running, and over ssh a command doesn't start it"
+        found.append(Check(name: "running", ok: running, required: false, detail: running ? answering.map { "Broadway at \($0) is answering" } ?? "Broadway is answering" : resting,
+                           fix: running || remote == nil ? nil : "Run broadway serve to start it hidden and keep it open"))
         if running {
             let agents = status?["agents"] as? Bool == true
             found.append(Check(name: "agents", ok: agents, required: false, detail: agents ? "agents are on" : "agents are off: page commands are refused",
@@ -557,6 +593,14 @@ extension Builtins {
         return .done
     }
 
+    static func calls(_ context: Context) -> Exit {
+        let tally = CallTally.read(CallTally.file(socket: context.place.socket))
+        let console = context.console
+        if !console.json { tally.lines().forEach(console.line) }
+        console.success("doctor", tally.object)
+        return .done
+    }
+
     static let setupCommands: [Builtin] = [
         Builtin(name: "setup", usage: "broadway setup [command] [completions] [claude] [codex] [cursor] [opencode] [gemini] [--refresh]", summary: "Put broadway on your PATH, with completions and agent skills", group: "Setup",
                 details: "Links ~/.local/bin/broadway to this app's copy, writes fish, bash and zsh completions, and installs a skill for Claude Code and Codex where they are present, and for Cursor, opencode and Gemini CLI in their own skills folders when their folders are there. Cursor gets no copy of its own when it already reads broadway's skill in ~/.claude/skills or ~/.codex/skills. The skill is short and sends agents to broadway guide. It also adds a Stop and a SessionEnd hook, in ~/.claude/settings.json and ~/.codex/hooks.json, that run broadway agents idle --hook so the agent's card reads finished when its turn ends, and its session ends and its tabs close when the agent's own session ends. It adds only its own entries and keeps the rest of each file as it was. It leaves files that aren't its own alone. broadway remove undoes it. Broadway runs this by itself when agents are turned on, and again for an agent it finds for the first time. When nothing is at ~/.local/bin/broadway, the run when agents are turned on also links the command there, unless Broadway is running from its disk image or a download folder. It never moves or replaces what is already there.\n--refresh  only rewrite skills broadway wrote that are older than this Broadway, and bring broadway's own hook entries up to date where they are already there. It creates no skill and adds no hook. Broadway runs it at each launch.",
@@ -571,15 +615,19 @@ extension Builtins {
                 examples: ["broadway remove", "broadway remove codex"]) { context, words in
             report(Setup.uninstall(try wanted(words, verb: "remove"), paths: Setup.Paths(home: context.home)), verb: "remove", context: context)
         },
-        Builtin(name: "doctor", usage: "broadway doctor [failures [COUNT]]", summary: "Check each piece of the setup and say what is wrong", group: "Setup",
-                details: "It never starts Broadway. Exits 1 if something broadway can't work without is wrong.\nfailures  print the last steps of failed page loads and downloads that Broadway kept on this Mac, newest last, 100 unless COUNT says otherwise. The log keeps up to 500 lines with no addresses, file names or paths in them, and clearing history, sign-ins or the cache empties it.",
-                examples: ["broadway doctor", "broadway doctor --json", "broadway doctor failures", "broadway doctor failures 20"]) { context, words in
+        Builtin(name: "doctor", usage: "broadway doctor [--calls] [failures [COUNT]]", summary: "Check each piece of the setup and say what is wrong", group: "Setup",
+                details: "It never starts Broadway. Exits 1 if something broadway can't work without is wrong.\nfailures  print the last steps of failed page loads and downloads that Broadway kept on this Mac, newest last, 100 unless COUNT says otherwise. The log keeps up to 500 lines with no addresses, file names or paths in them, and clearing history, sign-ins or the cache empties it.\n--calls  print how often each agent command was called and how often it failed, by error code, counted on this Mac. It keeps no addresses, page text or arguments, and clearing history, sign-ins or the cache empties it.",
+                examples: ["broadway doctor", "broadway doctor --json", "broadway doctor --calls", "broadway doctor failures", "broadway doctor failures 20"]) { context, words in
+            if let first = words.first, ["--calls", "--failures"].contains(first) {
+                if let extra = words.dropFirst().first { throw Failure.usage("doctor --calls doesn't take \(extra)", hint: "broadway doctor --calls --json") }
+                return calls(context)
+            }
             if words.first == "failures" { return try failures(context, words.dropFirst()) }
             let link = context.place.connect()
             var status: [String: Any]?
             if let link, link.send(["op": "status"]) { status = link.object() }
             let checks = Setup.checks(paths: Setup.Paths(home: context.home), binary: context.binary, environment: context.environment,
-                                      status: status, running: status != nil)
+                                      status: status, running: status != nil, overSSH: { Setup.sshFinds() })
             let console = context.console
             if !console.json {
                 let wide = (checks.map(\.name.count).max() ?? 0) + 2

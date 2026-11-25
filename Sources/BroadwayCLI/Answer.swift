@@ -90,6 +90,7 @@ enum Answer {
         found += marked
         if marked.isEmpty, data["nothing"] as? Bool == true { found.append("Nothing on the page changed") }
         found += notes(data)
+        found += errors(data)
         if settled == "capped", !noted(data, "busy", "loading") { found.append(busy(data)) }
         found += shown
         return found
@@ -105,9 +106,15 @@ enum Answer {
     }
 
     static func tail(_ data: [String: Any]) -> [String] {
-        var found = facts(data) + marks(data) + notes(data)
+        var found = facts(data) + marks(data) + notes(data) + errors(data)
         if data["settled"] as? String == "capped", !noted(data, "busy", "loading") { found.append(busy(data)) }
         return found + lookLines(data)
+    }
+
+    static func errors(_ data: [String: Any]) -> [String] {
+        guard let errors = data["errors"] as? [String: Any], let count = errors["count"] as? Int, count > 0, let cursor = errors["cursor"] as? String else { return [] }
+        let listed = (errors["list"] as? [String] ?? []).prefix(3).map { "  \"" + cell($0) + "\"" }
+        return ["! \(count) page error\(count == 1 ? "" : "s"). All of them: broadway console --since \(cursor)"] + listed
     }
 
     static func notes(_ data: [String: Any]) -> [String] {
@@ -148,9 +155,9 @@ enum Answer {
             let kind = dialog["kind"] as? String ?? "page"
             let message = cell(dialog["message"] as? String ?? "")
             if dialog["accepted"] as? Bool == true {
-                found.append("The page said (\(kind), accepted): \"\(message)\"")
+                found.append(kind == "alert" ? "The page showed an alert: \"\(message)\". Broadway closed it." : "The page said (\(kind), accepted): \"\(message)\"")
             } else {
-                found.append("A \(kind) dialog is open: \"\(message)\"")
+                found.append("\(kind.first.map { "aeiou".contains($0) } == true ? "An" : "A") \(kind) dialog is open: \"\(message)\"")
                 switch kind {
                 case "alert": found.append("Close it: broadway dialog accept")
                 case "prompt": found.append("Answer it: broadway dialog accept \"TEXT\", or broadway dialog dismiss")
@@ -191,7 +198,7 @@ enum Answer {
             if index < caps.went { found.append("- @\(element["ref"] as? String ?? "") \(describe(element))") } else { hidden += 1 }
         }
         let texts = (data["text"] as? [[String: Any]] ?? []).map { "~ \"\(cell($0["was"] as? String ?? ""))\" → \"\(cell($0["now"] as? String ?? ""))\"" }
-        let changes = (data["changed"] as? [[String: Any]] ?? []).map(changeLine) + texts
+        let changes = (data["reordered"] as? [String] ?? []).map { "~ " + $0 } + (data["changed"] as? [[String: Any]] ?? []).map(changeLine) + texts
         for (index, line) in changes.enumerated() {
             if index < caps.changed { found.append(line) } else { hidden += 1 }
         }

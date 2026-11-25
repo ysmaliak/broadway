@@ -61,6 +61,10 @@ struct Command: Equatable {
             flags.append(Parameter(["name": "find", "type": "string", "description": "Only the lines holding these words"]))
             findsHere = true
         }
+        if tool == "type", flags.contains(where: { $0.name == "secret-env" }) {
+            flags.append(Parameter(["name": "secret-file", "type": "string", "description": "For a password box: a file holding the secret, its last newline left out"]))
+            flags.append(Parameter(["name": "secret-stdin", "type": "boolean", "description": "For a password box: the secret piped in, its last newline left out. The form for ssh."]))
+        }
     }
 
     var listed: [Parameter] { flags.filter { !$0.unlisted } }
@@ -92,6 +96,10 @@ struct Catalog {
     }
 
     static let older = ["find": "locate", "locate": "find"]
+
+    static func wanted(_ word: String) -> [String] {
+        [word] + (older[word].map { [$0] } ?? [])
+    }
 
     func find(_ word: String) -> Command? {
         if let found = commands.first(where: { $0.name == word || $0.aliases.contains(word) }) { return found }

@@ -34,13 +34,14 @@ import tempfile
 import threading
 import time
 import unittest
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "Tests" / "AgentFieldFixtures"
 sys.path.insert(0, str(FIXTURES))
 
-from sites import Field, multipart, serve  # noqa: E402
+from sites import Field, multipart, serve, swatch  # noqa: E402
 from tasks import BY_NAME, TASKS  # noqa: E402
 
 APP = ROOT / "build" / "Broadway.app"
@@ -60,7 +61,7 @@ ALIASES = {"navigate": "go", "text": "read", "screenshot": "shot", "agent": "age
 LOOKS = {"snapshot", "read", "shot", "locate", "tabs", "tabs list", "tabs show", "page info", "page find", "console", "network",
          "dialog", "agents status", "downloads list", "files list"}
 ACTIONS = {"click", "type", "press", "choose", "fill", "select", "scroll", "hover", "drag", "upload", "download", "go", "open",
-           "close", "resize", "dialog accept", "dialog dismiss", "fill login", "fill details", "fill card", "page back",
+           "close", "resize", "dialog accept", "dialog dismiss", "fill login", "fill code", "fill details", "fill card", "carry", "page back",
            "page forward", "page reload", "tabs close", "tabs new"}
 REFUSED_VERBS = {"setup", "remove", "serve", "mcp", "quit", "completions"}
 FAILURES = [
@@ -68,7 +69,7 @@ FAILURES = [
     ("No such tab", "no_tab"), ("isn't showing a web page", "not_a_page"), ("Timed out", "timeout"),
     ("covers that element", "not_actionable"), ("is hidden", "not_actionable"), ("is disabled", "not_actionable"),
     ("read-only", "not_actionable"), ("not a box", "not_actionable"), ("did not take the text", "not_actionable"),
-    ("never type in password", "refused"), ("can't look at what is in a field", "refused"), ("never takes it elsewhere", "refused"),
+    ("never type in password", "refused"), ("never goes in as plain text", "refused"), ("can't look at what is in a field", "refused"), ("never takes it elsewhere", "refused"),
     ("macOS is asking", "needs_you"), ("the clipboard is the person's", "refused"), ("Nothing was filled", "refused"),
     ("Only tabs an agent", "refused"), ("Nothing was attached", "refused"), ("isn't a web address", "refused"),
     ("isn't one of the keys", "bad_input"), ("gave no answer", "no_answer"), ("nothing to read", "no_answer"),
@@ -763,9 +764,14 @@ def command_world(payload):
             raise RuntimeError(f"the test world did not start: {woke.stderr.strip()}")
         if "login" in task.needs:
             sheet = Path(run, "logins.csv")
-            sheet.write_text(f"url,username,password\n{fernway}/,sam@example.com,{field.password}\n")
+            second = f"{fernway}/,kit@example.com,{field.second_password}\n" if "two_accounts" in task.needs else ""
+            sheet.write_text(f"url,username,password\n{fernway}/,sam@example.com,{field.password}\n{second}")
             bench(world, "import-file", str(sheet))
             sheet.unlink()
+        if "private" in task.needs:
+            made = sv.cmd({"do": "windows", "action": "private"}).get("windows", [])
+            secret = next((row.get("n") for row in made if row.get("private")), None)
+            sv.cmd({"do": "windows", "action": "front", "n": secret})
         guide = subprocess.run([str(BROADWAY), "--socket", world_socket(world), "guide"], capture_output=True, text=True, timeout=30).stdout
         try:
             windows = Windows(sv.pids(), world)
@@ -1535,6 +1541,41 @@ class Checks(unittest.TestCase):
         self.assertFalse(self.verdict("stockroom_most")[0])
         self.field.tally.append(ranked[-1]["name"].lower())
         self.assertTrue(self.verdict("stockroom_most")[0])
+
+    def test_second_account(self):
+        self.field.invoices["FW-1094"] = True
+        self.field.approvers.append({"invoice": "FW-1094", "who": "sam@example.com"})
+        self.field.signins.append({"ok": True, "email": "sam@example.com"})
+        self.assertFalse(self.verdict("second_account")[0])
+        self.field.signins.append({"ok": True, "email": "kit@example.com"})
+        self.assertFalse(self.verdict("second_account")[0])
+        self.field.approvers[:] = [{"invoice": "FW-1094", "who": "kit@example.com"}]
+        self.assertTrue(self.verdict("second_account")[0])
+
+    def test_token_once(self):
+        self.field.linked.append(self.field.token)
+        self.assertFalse(self.verdict("token_once")[0])
+        self.field.token_views = 1
+        self.assertTrue(self.verdict("token_once")[0])
+        self.field.linked.append("cpl_WRONG")
+        self.assertFalse(self.verdict("token_once")[0])
+
+    def test_guide_red(self):
+        self.assertEqual(self.field.guide.count("#d0302b"), 1)
+        self.assertEqual(self.field.guide.index("#d0302b") + 1, self.field.guide_red)
+        picture = swatch("#d0302b")
+        self.assertTrue(picture.startswith(b"\x89PNG"))
+        self.assertEqual(zlib.decompress(picture[picture.index(b"IDAT") + 4:picture.index(b"IEND") - 8]), b"\x00\xd0\x30\x2b")
+        self.field.tally.append(str(self.field.guide_red + 1))
+        self.assertFalse(self.verdict("guide_red")[0])
+        self.field.tally.append(f"Section {self.field.guide_red}")
+        self.assertTrue(self.verdict("guide_red")[0])
+
+    def test_private_note(self):
+        self.field.orders["CL-4452"]["note"] = "Use the back gate."
+        self.assertTrue(self.verdict("private_note")[0])
+        self.field.orders["CL-4453"]["note"] = "Use the back gate"
+        self.assertFalse(self.verdict("private_note")[0])
 
     def test_sentences_name_both_places(self):
         for task in TASKS:

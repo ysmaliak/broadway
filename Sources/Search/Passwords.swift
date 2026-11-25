@@ -537,6 +537,7 @@ final class PasswordsAccountCell: NSTableCellView {
     private let show = PasswordsQuick("Show")
     private let copy = PasswordsQuick("Copy")
     private let forget = PasswordsQuick("Remove", destructive: true)
+    private let used = NSTextField(labelWithString: "")
     private var hovering = false { didSet { if hovering != oldValue { needsLayout = true } } }
     private var area: NSTrackingArea?
 
@@ -551,6 +552,11 @@ final class PasswordsAccountCell: NSTableCellView {
         user.isSelectable = true
         secret.isSelectable = true
         secret.lineBreakMode = .byTruncatingTail
+        used.stringValue = login.agent?.words() ?? ""
+        used.font = .systemFont(ofSize: 11)
+        used.textColor = .tertiaryLabelColor
+        used.lineBreakMode = .byTruncatingTail
+        used.alignment = .right
         self.copy.press = copy
         self.forget.press = forget
         show.press = { [weak self] in
@@ -558,7 +564,7 @@ final class PasswordsAccountCell: NSTableCellView {
             if account.shown { account.conceal() } else { account.reveal() }
         }
         account.changed = { [weak self] in self?.needsLayout = true }
-        for view in [user, secret, show, self.copy, self.forget] as [NSView] { addSubview(view) }
+        for view in [user, secret, used, show, self.copy, self.forget] as [NSView] { addSubview(view) }
         setAccessibilityElement(false)
     }
 
@@ -605,7 +611,14 @@ final class PasswordsAccountCell: NSTableCellView {
         }
         let x = user.frame.maxX + 10
         let secretSize = secret.intrinsicContentSize
-        let limit = quick ? show.frame.minX - KitPageRow.gap : bounds.width
+        used.isHidden = quick || used.stringValue.isEmpty
+        var limit = quick ? show.frame.minX - KitPageRow.gap : bounds.width
+        if !used.isHidden {
+            let usedSize = used.intrinsicContentSize
+            let usedWidth = min(usedSize.width, max(0, bounds.width - x - secretSize.width - KitPageRow.gap))
+            used.frame = kitSnap(NSRect(x: bounds.width - usedWidth, y: (height - usedSize.height) / 2, width: usedWidth, height: usedSize.height))
+            limit = used.frame.minX - KitPageRow.gap
+        }
         secret.frame = kitSnap(NSRect(x: x, y: (height - secretSize.height) / 2, width: max(0, min(secretSize.width, limit - x)), height: secretSize.height))
     }
 }

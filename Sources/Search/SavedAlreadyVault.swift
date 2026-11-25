@@ -11,7 +11,7 @@ extension SavedAlready {
                 return nil
             case .offer(let changed):
                 return Browser.Offer(
-                    login: Login(host: sent.host, user: sent.user, password: sent.password, used: nil, clear: clear),
+                    login: login(for: sent, clear: clear),
                     changed: changed
                 )
             }

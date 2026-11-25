@@ -59,7 +59,7 @@ enum PersonPages {
     }
 
     static func pdf(_ tab: Tab) async throws -> Data {
-        guard await PageSelection.run(tab, AgentPage.shieldScript) as? Bool == true,
+        guard await AgentPage.shield(tab),
               await PageSelection.run(tab, hideForPrint) as? Bool == true else {
             throw PersonRefusal("refused", "That page can't be printed safely")
         }
@@ -120,15 +120,19 @@ enum PersonPages {
             let page = try web(call)
             try leaves(page)
             call.box.acting(page.tab, "Going back")
+            var warned = false
+            if page.tab.agent { warned = await call.box.timed(page.tab, AgentPage.warnsScript, seconds: 1) as? Bool == true }
             page.tab.back()
-            return ["message": "Back"]
+            return warned ? ["message": "Back", "notice": AgentChange.warnedLine] : ["message": "Back"]
         },
         PersonVerb("page", "forward", .arrange, tabbed: true) { call in
             let page = try web(call)
             try leaves(page)
             call.box.acting(page.tab, "Going forward")
+            var warned = false
+            if page.tab.agent { warned = await call.box.timed(page.tab, AgentPage.warnsScript, seconds: 1) as? Bool == true }
             page.tab.forward()
-            return ["message": "Forward"]
+            return warned ? ["message": "Forward", "notice": AgentChange.warnedLine] : ["message": "Forward"]
         },
         PersonVerb("page", "find", .look, tabbed: true) { call in
             let page = try web(call)

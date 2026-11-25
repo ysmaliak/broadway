@@ -16,6 +16,7 @@ final class Link {
 
     let fd: Int32
     var watched = true
+    var forwarded = false
     private var bytes = Data()
     private var looked = 0
     private var limit: Double?
@@ -43,6 +44,11 @@ final class Link {
         var quiet: Int32 = 1
         setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &quiet, socklen_t(MemoryLayout<Int32>.size))
         self.fd = fd
+        var peer: pid_t = 0
+        var size = socklen_t(MemoryLayout<pid_t>.size)
+        if getsockopt(fd, SOL_LOCAL, LOCAL_PEERPID, &peer, &size) == 0, peer > 0, let found = AgentAncestor.process(peer) {
+            forwarded = AgentAncestor.carrier(found.name)
+        }
     }
 
     static func blocked(_ path: String) -> Bool {
@@ -115,6 +121,8 @@ final class Link {
 
     @discardableResult
     func send(_ object: [String: Any]) -> Bool {
+        var object = object
+        if forwarded, let agent = object["agent"] as? [String: Any] { object["agent"] = AgentAncestor.forwarded(agent, host: AgentAncestor.hostName()) }
         guard var data = try? JSONSerialization.data(withJSONObject: object) else { return false }
         data.append(0x0A)
         return sendRaw(data)
@@ -161,6 +169,8 @@ struct Place {
     var world: String?
     var bundle: String?
     var named: Bool
+    var overSSH = false
+    var starting = false
 
     static func home(_ environment: [String: String]) -> String {
         environment["BROADWAY_HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? NSHomeDirectory()
@@ -175,11 +185,12 @@ struct Place {
         let bundle = Self.bundle(of: binary)
         let named = flag ?? environment["BROADWAY_SOCKET"].flatMap { $0.isEmpty ? nil : $0 }
         let support = NSHomeDirectory() + "/Library/Application Support"
-        if let named { return Place(socket: named, wakes: false, world: nil, bundle: bundle, named: true) }
+        let overSSH = environment["SSH_CONNECTION"].map { !$0.isEmpty } == true
+        if let named { return Place(socket: named, wakes: false, world: nil, bundle: bundle, named: true, overSSH: overSSH) }
         if let folder = folder(world: world) {
-            return Place(socket: "\(support)/Broadway (\(folder))/broadway.sock", wakes: bundle != nil, world: folder, bundle: bundle, named: false)
+            return Place(socket: "\(support)/Broadway (\(folder))/broadway.sock", wakes: bundle != nil, world: folder, bundle: bundle, named: false, overSSH: overSSH)
         }
-        return Place(socket: "\(support)/Broadway/broadway.sock", wakes: true, world: nil, bundle: bundle, named: false)
+        return Place(socket: "\(support)/Broadway/broadway.sock", wakes: true, world: nil, bundle: bundle, named: false, overSSH: overSSH)
     }
 
     static func bundle(of binary: String) -> String? {
@@ -195,10 +206,18 @@ struct Place {
 
     func connect() -> Link? { Link(path: socket) }
 
+    func whyNot(boxed: (String) -> Bool = Link.boxed, elsewhere: () -> String? = { Place.runningElsewhere() }) -> Failure? {
+        if let owner = Self.foreignOwner(socket) { return otherUser(owner) }
+        if boxed(socket) { return sandboxed }
+        if overSSH, !starting, let owner = elsewhere() { return otherUser(owner) }
+        guard wakes else { return notRunning }
+        if overSSH, !starting { return notStarted }
+        return nil
+    }
+
     func reach(console: Console?) throws -> Link {
         if let link = connect() { return link }
-        if Link.boxed(socket) { throw sandboxed }
-        guard wakes else { throw notRunning }
+        if let why = whyNot() { throw why }
         console?.progress(console?.err.dim("Starting Broadway…") ?? "")
         let open = Process()
         open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
@@ -216,7 +235,60 @@ struct Place {
 
     var sandboxed: Failure {
         Failure("sandboxed", "A sandbox kept broadway from reaching Broadway",
-                hint: "Run this command outside the sandbox, or let it reach \(socket). In Codex, approve it to run without the sandbox or turn on network access.")
+                hint: "Run this command outside the sandbox, or let it reach \(socket). In Codex, approve running it outside the sandbox, or set sandbox_workspace_write.network_access = true in ~/.codex/config.toml.")
+    }
+
+    var notStarted: Failure {
+        Failure("not_running", "Broadway isn't running, and a command over ssh doesn't start it",
+                hint: "Run broadway serve there to start it hidden and keep it open, or ask the person to open Broadway")
+    }
+
+    func otherUser(_ owner: String) -> Failure {
+        Failure("other_user", "Broadway here belongs to \(owner), another user of this Mac, and only that user can reach it",
+                hint: "Run broadway as \(owner), such as ssh \(owner)@\(AgentAncestor.hostName() ?? "this-mac") broadway status")
+    }
+
+    static func foreignOwner(_ socket: String, owner: (String) -> uid_t? = Place.owner, me: uid_t = getuid(), name: (uid_t) -> String? = Place.userName) -> String? {
+        var path = (socket as NSString).standardizingPath
+        while !path.isEmpty, path != "/" {
+            if let found = owner(path) {
+                guard found != me, found != 0 else { return nil }
+                return name(found) ?? "uid \(found)"
+            }
+            path = (path as NSString).deletingLastPathComponent
+        }
+        return nil
+    }
+
+    static func owner(_ path: String) -> uid_t? {
+        var info = stat()
+        return lstat(path, &info) == 0 ? info.st_uid : nil
+    }
+
+    static func userName(_ uid: uid_t) -> String? {
+        guard let entry = getpwuid(uid), let name = entry.pointee.pw_name else { return nil }
+        return String(cString: name)
+    }
+
+    static func runningElsewhere(apps: () -> [(uid: uid_t, name: String)] = Place.apps, me: uid_t = getuid(), name: (uid_t) -> String? = Place.userName) -> String? {
+        guard let found = apps().first(where: { $0.uid != me && $0.uid != 0 && $0.name == "Broadway" }) else { return nil }
+        return name(found.uid) ?? "uid \(found.uid)"
+    }
+
+    static func apps() -> [(uid: uid_t, name: String)] {
+        let room = proc_listallpids(nil, 0)
+        guard room > 0 else { return [] }
+        var pids = [pid_t](repeating: 0, count: Int(room) + 64)
+        let count = proc_listallpids(&pids, Int32(pids.count * MemoryLayout<pid_t>.size))
+        guard count > 0 else { return [] }
+        return pids.prefix(Int(count)).compactMap { pid in
+            guard pid > 1 else { return nil }
+            var info = proc_bsdshortinfo()
+            let size = Int32(MemoryLayout<proc_bsdshortinfo>.size)
+            guard proc_pidinfo(pid, PROC_PIDT_SHORTBSDINFO, 0, &info, size) == size else { return nil }
+            let command = withUnsafeBytes(of: info.pbsi_comm) { raw in String(decoding: raw.prefix { $0 != 0 }, as: UTF8.self) }
+            return (info.pbsi_uid, command)
+        }
     }
 
     var notRunning: Failure {

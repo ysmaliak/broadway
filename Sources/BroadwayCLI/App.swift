@@ -6,8 +6,7 @@ extension Builtins {
         Builtin(name: "status", usage: "broadway status", summary: "Whether Broadway is running, and what it is doing", group: "Broadway",
                 examples: ["broadway status", "broadway status --json"]) { context, _ in
             guard let link = context.place.connect() else {
-                if Link.boxed(context.place.socket) { throw context.place.sandboxed }
-                throw context.place.wakes ? Failure("not_running", "Broadway isn't running", hint: "Any browser command starts it hidden") : context.place.notRunning
+                throw context.place.whyNot() ?? Failure("not_running", "Broadway isn't running", hint: "Any browser command starts it hidden")
             }
             guard link.send(["op": "status"]), let found = link.object() else { throw Failure("not_running", "Broadway went away") }
             if let failure = Context.failure(found) { throw failure }
@@ -43,6 +42,7 @@ extension Builtins {
                 context.console.success("serve", data)
                 return .done
             }
+            context.place.starting = true
             let link = try context.connection()
             guard link.send(["op": "serve", "person": words.contains("--no-person") ? "none" : "any"]), let reply = link.object() else {
                 throw Failure("not_running", "Broadway went away")

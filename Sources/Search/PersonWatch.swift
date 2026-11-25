@@ -64,7 +64,7 @@ final class PersonWatch {
         var event = fields
         event["event"] = name
         event["at"] = PersonCommands.stamp(Date())
-        connection.send(["ok": true, "data": AgentSecrets.scrub(event, sealed: Set(box.visible.flatMap(\.tab.sealed)))])
+        connection.send(["ok": true, "data": AgentSecrets.scrub(event, sealed: AgentSeals.all)])
     }
 
     private func tabs() -> [String: [String: Any]] {

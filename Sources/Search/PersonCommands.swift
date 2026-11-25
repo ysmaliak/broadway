@@ -196,6 +196,7 @@ enum PersonCommands {
             let reply = await perform(request, browser: browser, socket: socket, channel: channel) {
                 socket.link(for: request, create: connecting, rejoin: noun != "agents" && request["hook"] as? Bool != true, name: named)
             }
+            if request["hook"] as? Bool != true { AgentTally.shared.count(find(noun, verb)?.name ?? AgentTally.other, reply: reply) }
             connection.send(reply)
             connection.close()
         }
@@ -233,8 +234,7 @@ enum PersonCommands {
             call.askedAt = call.tab?.tab.pageAddress
             try await gate(entry, call, request: request, channel: channel)
             let data = try await entry.run(call)
-            let sealed = Set(box.visible.flatMap(\.tab.sealed))
-            return ["ok": true, "data": AgentSecrets.scrub(data, sealed: sealed)]
+            return ["ok": true, "data": AgentSecrets.scrub(data, sealed: AgentSeals.all)]
         } catch let refused as PersonRefusal {
             return failure(refused)
         } catch {
@@ -243,10 +243,10 @@ enum PersonCommands {
     }
 
     static func failure(_ refused: PersonRefusal) -> [String: Any] {
-        var reply = ToolFailure.error(refused.code, refused.message)
+        var reply = ToolFailure.error(refused.code, AgentSecrets.scrub(refused.message, sealed: AgentSeals.all))
         var error = reply["error"] as? [String: Any] ?? [:]
         error["retry_safe"] = true
-        if let hint = refused.hint { error["hint"] = hint }
+        if let hint = refused.hint { error["hint"] = AgentSecrets.scrub(hint, sealed: AgentSeals.all) }
         reply["error"] = error
         return reply
     }
@@ -263,6 +263,7 @@ enum PersonCommands {
                 throw PersonRefusal("handed_back", "The person drove that tab and handed it back. Nothing was done. Look at it again before you go on.")
             }
         }
+        if entry.noun == "fill" { return }
         let site = call.tab.flatMap { AgentSites.site(of: $0.tab.pageAddress) }
         try await approve(kind, call, site: site, request: request, channel: channel)
     }
@@ -318,7 +319,7 @@ enum PersonAsk {
     static let generic = "Run this broadway command?"
 
     static let titles: [String: String] = [
-        "fill login": "Fill your saved sign-in on SITE?",
+        "fill login": "Sign in on SITE?",
         "fill details": "Fill your name, address and phone on SITE?",
         "fill card": "Fill your saved card on SITE?",
         "tabs new": "Open a new tab?",
@@ -391,22 +392,43 @@ enum PersonAsk {
                                 hint: "Tell the person, or run it with --wait-person MIN while they are at Broadway")
         }
         if channel.gone { throw PersonRefusal("needs_you", "Nobody answered in Broadway. Nothing was done.") }
+        let pass = "person|\(act.rawValue)|\(site ?? "")|\(call.line)"
+        if let link = call.link, AgentLinks.shared.takePass(link.id, pass) { return }
         var question = AgentQuestion(kind: .approval(act), title: asked ?? title(for: call, site: site))
         question.tab = call.tab?.tab.id
         question.site = site
         question.quote = AgentQuestion.clean(call.line)
-        question.quoteLabel = call.link.map { "From \($0.name)" } ?? "From a terminal"
+        question.quoteLabel = call.link.map { "From \($0.title)" } ?? "From a terminal"
         question.task = call.link?.id
-        let id = question.id
         channel.send(["event": "asking", "message": "Waiting for your yes in Broadway"])
+        let kept = call.link.flatMap { AgentHeld.shared.entry($0.id, pass) }
+        let id = kept?.question ?? question.id
+        let asking = kept?.asking ?? Task { @MainActor in await AgentDesk.shared.ask(question) }
+        let unseen = kept == nil ? AgentLooking.unseen(for: call.link?.id) : nil
         channel.left = { AgentDesk.shared.take(id, .dropped) }
-        let clock = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(wait))
-            if !Task.isCancelled { AgentDesk.shared.take(id, .dropped) }
-        }
-        let answer = await AgentDesk.shared.ask(question)
-        clock.cancel()
+        let early = AgentPatience.Early()
+        let heard = await AgentPatience.race(asking, seconds: wait, unseen: unseen, early: early)
         channel.left = nil
+        if heard == nil, early.hit, let link = call.link {
+            let held = AgentHeld.shared.hold(link.id, pass, kind: .person, question: id, tab: question.tab, asking: asking)
+            Task { @MainActor in
+                let said = await asking.value
+                guard !held.taken else { return }
+                if said == .yes || said == .always { AgentLinks.shared.givePass(link.id, pass) }
+                if said == .always, let site { AgentSites.shared.set(.always, for: site) }
+                if said == .never, let site { AgentSites.shared.set(.never, for: site) }
+                AgentHeld.shared.release(held)
+            }
+            throw PersonRefusal("needs_you", "Broadway is asking the person: \"\(AgentQuestion.clean(question.title))\". Nothing happens until they answer there. \(ToolReply.awayLine)",
+                                hint: ToolReply.awayHint)
+        }
+        AgentDesk.shared.take(id, .dropped)
+        if let kept, let link = call.link {
+            kept.taken = true
+            _ = AgentLinks.shared.takePass(link.id, pass)
+            AgentHeld.shared.release(kept)
+        }
+        let answer = heard ?? .dropped
         switch answer {
         case .yes:
             return

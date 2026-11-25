@@ -57,6 +57,12 @@ struct GmailAtomTests {
         """
     }
 
+    @Test func aCodeKeepsTheAddressItWasMailedFrom() {
+        let found = GmailAtom.codes(in: feed(entry("Your code is 482913", "Use it to sign in", "2026-11-02T10:10:00Z")), since: since)
+
+        #expect(found.first?.address == "no-reply@acme.example")
+    }
+
     @Test func aCodeInTheSubjectIsFoundWithItsSender() {
         let xml = feed(entry("Your verification code is 482913", "Thanks for signing in", "2026-11-02T10:20:00Z"))
 

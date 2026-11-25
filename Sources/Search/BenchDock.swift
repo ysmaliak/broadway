@@ -8,8 +8,12 @@ enum BenchDock {
         guard Store.testing else { return answer(["error": "dock only works on a --test run"]) }
         let bar = DockBar.shared
         switch request["action"] as? String ?? "state" {
-        case "tile": bar.drivesTile = true
-        case "leave": bar.drivesTile = false
+        case "tile":
+            bar.drivesTile = true
+            AgentBadge.drivesTile = true
+        case "leave":
+            bar.drivesTile = false
+            AgentBadge.drivesTile = false
         case "state": break
         default: return answer(["error": "dock takes state, tile or leave"])
         }
@@ -19,6 +23,8 @@ enum BenchDock {
             "drivesTile": bar.drivesTile,
             "tileSet": bar.tileSet,
             "running": Shared.fetches.dockLoads.count,
+            "badge": AgentBadge.shown ?? "",
+            "badgeLabel": NSApp.dockTile.badgeLabel ?? "",
         ])
     }
 }

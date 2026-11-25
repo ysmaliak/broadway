@@ -204,6 +204,20 @@ final class AgentWorkTabsTests {
         #expect(AgentWorkTabs.tabs(of: link, in: socket.box).count == 1)
     }
 
+    @Test func aTabNameAnAgentGivesStaysOutOfTheSidebar() async throws {
+        let link = session()
+
+        let said = await call("open", ["url": address("/shop"), "name": "inbox"], link)
+        let id = try #require(data(said)["id"] as? String)
+        let tab = try #require(socket.box.find(["tab": id])?.tab)
+        await until { tab.title == "Shop" }
+
+        #expect(tab.agentName == "inbox")
+        #expect(tab.name == nil)
+        #expect(tab.label == "Shop")
+        #expect(socket.box.find(["tab": "inbox"])?.tab === tab)
+    }
+
     @Test func goWithATabStillSendsThatTab() async {
         let link = session()
         let first = await open("/shop", link)

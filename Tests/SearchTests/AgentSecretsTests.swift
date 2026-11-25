@@ -98,6 +98,7 @@ final class AgentSecretsTests {
     }
 
     @Test func fieldValuesLeakThroughNoTool() async throws {
+        let secret = "notes-\(UUID().uuidString.prefix(8))"
         let (tab, id) = try await page("""
         <form>
         <label>Card <input id=a name=card_number></label>
@@ -120,6 +121,16 @@ final class AgentSecretsTests {
         #expect(read.contains(secret) == false)
         #expect(!waited.contains(secret))
         #expect(fishing.failed)
+    }
+
+    @Test func aFieldForTheNameOfATokenTakesTyping() async throws {
+        let (tab, id) = try await page("<label>Token name <input id=t name=token_name aria-label='Token name'></label>")
+
+        let typed = await box.call("type", ["tab": id, "label": "Token name", "text": "garden-gmail-smtp"], task: task)
+        let value = try await tab.web.evaluateJavaScript("document.querySelector('#t').value") as? String
+
+        #expect(!typed.failed, "\(typed.text ?? "")")
+        #expect(value == "garden-gmail-smtp")
     }
 
     @Test func aPasswordBoxThatWasShownStaysSecret() async throws {
@@ -310,7 +321,7 @@ final class AgentSecretsTests {
 
     @Test func signInFillsWithoutSayingThePassword() async throws {
         let (tab, id) = try await page("<form><input name=email autocomplete=username><input id=p type=password></form>")
-        box.logins = { Self.kept($0) }
+        box.logins = { [port = Int(server.port)] in Self.kept($0, port: port) }
         box.loginSecret = { [secret] in Login(host: $0.host, user: $0.user, password: secret, used: nil, clear: true) }
 
         let said = await box.signIn(tab, account: nil)
@@ -384,21 +395,14 @@ final class AgentSecretsTests {
 
         let card = try await filled(id, "card")
         let details = try await filled(id, "details")
-        var call = PersonCall(noun: "fill", verb: "card", arguments: [:], browser: browser, box: box)
-        call.tab = box.find(["tab": id])
-        var refused: PersonRefusal?
-        do { try await PersonCommands.find("fill", "card")?.first?(call) } catch let error as PersonRefusal { refused = error }
 
         for said in [card, details] {
             #expect(said.failed)
             #expect(said.code == "nothing_kept", "\(said.text ?? "")")
             #expect(said.text?.contains("nothing was asked") == true)
         }
-        #expect(refused?.code == "nothing_kept")
-        #expect(refused?.message.contains("no card") == true)
-        #expect(refused?.hint?.isEmpty == false)
         #expect(AgentDesk.shared.pending.isEmpty)
-        #expect(PersonCommands.find("fill", "login")?.first == nil)
+        for verb in ["login", "details", "card"] { #expect(PersonCommands.find("fill", verb)?.first == nil, "\(verb)") }
     }
 
     @Test func aRefusedTouchIDFillsNothing() async throws {
@@ -458,7 +462,7 @@ final class AgentSecretsTests {
         #expect(!(said.text?.contains("APX-7") == true))
     }
 
-    private nonisolated static func kept(_ host: String) -> [Kept] {
-        [Kept(host: host, user: "me@example.com", used: nil, clear: true)]
+    private nonisolated static func kept(_ host: String, port: Int) -> [Kept] {
+        [Kept(host: host, user: "me@example.com", used: nil, clear: true, port: port)]
     }
 }

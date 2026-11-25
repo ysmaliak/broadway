@@ -16,6 +16,24 @@ struct DeveloperTests {
         #expect(refused == [false, false, false])
     }
 
+    @Test func anAgentsTabIsNeverOfferedDeveloperMode() {
+        let developer = Developer()
+        let port = Int.random(in: 40000...49000)
+        let url = URL(string: "http://localhost:\(port)/app")!
+        let agent = Tab(configuration: Web.configuration(space: UUID()))
+        agent.restore(url: url, title: "App")
+        agent.agent = true
+        let mine = Tab(configuration: Web.configuration(space: UUID()))
+        mine.restore(url: url, title: "App")
+
+        developer.arrived(agent, offers: true)
+        let onAgent = developer.offer
+        developer.arrived(mine, offers: true)
+
+        #expect(onAgent == nil)
+        #expect(developer.offer == "localhost:\(port)")
+    }
+
     @Test func portShowsOnlyOnLocalPages() {
         let local = URL(string: "http://localhost:3000/a")
         let remote = URL(string: "https://example.com:8443/a")

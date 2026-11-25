@@ -190,7 +190,7 @@ final class Developer {
     }
 
     func arrived(_ tab: Tab, offers: Bool) {
-        guard offers, !tab.shy, LocalServer.isLocal(tab.pageAddress), let key = LocalServer.key(tab.pageAddress),
+        guard offers, !tab.shy, !tab.agent, LocalServer.isLocal(tab.pageAddress), let key = LocalServer.key(tab.pageAddress),
               servers[key] == nil, !offered.contains(key) else { return }
         offered.insert(key)
         offer = key

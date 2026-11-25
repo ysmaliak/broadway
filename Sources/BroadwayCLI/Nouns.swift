@@ -197,6 +197,8 @@ enum Nouns {
         ]),
         Noun("downloads", "Downloads", group: "Your stuff", [
             Verb("downloads list", "List downloads", columns: ["id", "state", "name", "progress", "path"]),
+            Verb("downloads get <id>", "Give a finished download's file", about: "Without -o it says the file's path. -o FILE copies it, and --out - writes its bytes to standard output, for a run over ssh.",
+                 examples: ["broadway downloads get 1a2b3c4d", "ssh mac broadway downloads get 1a2b3c4d --out - > report.pdf"]),
             Verb("downloads pause <id>", "Pause a download"),
             Verb("downloads resume <id>", "Resume a download"),
             Verb("downloads retry <id>", "Try a failed download again"),
@@ -228,11 +230,12 @@ enum Nouns {
             Verb("live delete <id>", "Remove a live folder"),
         ]),
         Noun("logins", "Sign-ins kept in Broadway", group: "Your stuff", [
-            Verb("logins list [site]", "List sign-ins by site", about: "Site and user name only. Passwords are never shown. broadway fill login uses one.", columns: ["site", "user", "used"]),
+            Verb("logins list [site]", "The person's own list of sign-ins", about: "Agents get person_only. broadway fill login signs in on a page without it.", columns: ["site", "user", "used"]),
         ]),
         Noun("fill", "Fill a form from what Broadway keeps, or with your values: broadway fill '{\"@e4\": \"Sam\"}'", group: "Your stuff", first: nil, [
-            Verb("fill login [--account USER] [--tab ID]", "Sign in on the page", about: "Asks in Broadway every time. Broadway fills the page itself: the password is never shown. Press the page's button afterwards.", examples: ["broadway fill login --tab 1a2b3c4d"]),
-            Verb("fill details [--tab ID]", "Fill the form with your details", about: "Asks in Broadway every time"),
+            Verb("fill login [--account USER] [--tab ID]", "Sign in on the page", about: "Asks in Broadway as the mode says, with the kept accounts on the card. Broadway fills the page, sends it and says what the page wants next. The password is never shown.", examples: ["broadway fill login --tab 1a2b3c4d"]),
+            Verb("fill code [--tab ID]", "Fill the one-time code Gmail received for the page", about: "With Codes from Gmail on, Broadway waits up to 60 s for a code mailed by the page's site after it asked, fills it and sends it. No card after this agent's fill login on the site in the last 5 minutes. The code is never shown.", examples: ["broadway fill code --tab 1a2b3c4d"]),
+            Verb("fill details [--tab ID]", "Fill the form with your details", about: "Your name, address and contact details. Asks in Broadway every time."),
             Verb("fill card [--tab ID]", "Fill the form with your card", about: "Asks in Broadway every time, and needs Touch ID. The number is never shown."),
         ]),
         Noun("page", "The page in a tab", group: "Page", first: "info", [

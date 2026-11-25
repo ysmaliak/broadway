@@ -14,6 +14,17 @@ struct AgentKeyTests {
         #expect(plain.plain && plain.code == 36)
     }
 
+    @Test func arrowsAndPageKeysCarryTheMacsFunctionKeyCharacters() throws {
+        let right = try #require(AgentKey.parse("ArrowRight"))
+        let up = try #require(AgentKey.parse("Shift+ArrowUp"))
+        let end = try #require(AgentKey.parse("End"))
+
+        #expect(right.text == "\u{F703}" && right.flags == [.numericPad, .function])
+        #expect(up.text == "\u{F700}" && up.flags == [.shift, .numericPad, .function])
+        #expect(end.text == "\u{F72B}" && end.flags == .function)
+        #expect(try #require(AgentKey.parse("Enter")).flags == [])
+    }
+
     @Test func unknownKeysAndModifiersAreRefused() {
         #expect(AgentKey.parse("Hyper+q") == nil)
         #expect(AgentKey.parse("F13") == nil)

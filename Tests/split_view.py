@@ -45,7 +45,7 @@ def use(name):
     tag = hashlib.sha1(str(ROOT).encode()).hexdigest()[:8]
     name = re.sub(r"[^a-z0-9-]", "", name.lower())
     suffix = f"{tag}-{RUN}"
-    budget = 103 - len(f"{HOME}/Library/Application Support/Broadway ()/bench.sock".encode())
+    budget = 103 - len(f"{HOME}/Library/Application Support/Broadway ()/broadway.sock".encode())
     if len(f"{name}-{suffix}") > budget:
         digest = hashlib.sha1(name.encode()).hexdigest()[:6]
         name = f"{name[:budget - len(suffix) - 8]}-{digest}"

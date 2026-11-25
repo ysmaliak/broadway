@@ -72,6 +72,10 @@ enum AgentDiagnostics {
     }
 }
 
+extension AgentDiagnostics {
+    static let workerLine = "A service worker controls this page, so the requests it answers itself, from its cache or its own fetches, don't show here"
+}
+
 @MainActor
 final class AgentPageRoom: NSWindow {
     private var hovers = 0

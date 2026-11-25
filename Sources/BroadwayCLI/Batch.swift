@@ -130,7 +130,7 @@ enum Batch {
         }
         let asked: Browse.Asked
         do {
-            asked = try Browse.arguments(command, Array(rest.dropFirst()), tab: globals.tab, tabFlag: globals.tabFlag)
+            asked = try Browse.arguments(command, Array(rest.dropFirst()), tab: globals.tab, tabFlag: globals.tabFlag, secrets: false)
         } catch let failure as Failure {
             throw refuse(failure.message, hint: failure.hint)
         }
@@ -171,6 +171,8 @@ enum Batch {
         guard link.send(context.call("batch", arguments)), let reply = link.object() else {
             throw Failure("not_running", "Broadway went away", hint: "Some steps may have happened, so look before you repeat them", retrySafe: false)
         }
+        Clock.mark("reply")
+        Clock.heard(reply)
         let data = reply["data"] as? [String: Any] ?? [:]
         let failure = Context.failure(reply, reads: false).map { found -> Failure in
             var failure = found

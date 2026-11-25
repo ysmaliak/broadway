@@ -5,6 +5,12 @@ struct SentSignIn: Equatable, Sendable {
     let host: String
     let user: String
     let password: String
+    var port: Int? = nil
+
+    static func port(of page: URL?) -> Int? {
+        guard let page, let port = page.port else { return nil }
+        return port == AgentSignInMatch.defaultPort(page.scheme) ? nil : port
+    }
 }
 
 struct FillMark {
@@ -69,7 +75,11 @@ enum SavedAlready {
 
     static func touched(_ kept: Kept, by sent: SentSignIn, clear: Bool) -> Login {
         let same = kept.host == sent.host && kept.user == sent.user
-        return Login(host: kept.host, user: kept.user, password: sent.password, used: kept.used, clear: same ? clear : kept.clear)
+        return Login(host: kept.host, user: kept.user, password: sent.password, used: kept.used, clear: same ? clear : kept.clear, port: kept.port)
+    }
+
+    static func login(for sent: SentSignIn, clear: Bool) -> Login {
+        Login(host: sent.host, user: sent.user, password: sent.password, used: nil, clear: clear, port: sent.port)
     }
 
     static func verdict(_ sent: SentSignIn, marks: [FillMark?], registrable: (String) -> String = Vault.registrable,

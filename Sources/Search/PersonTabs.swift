@@ -186,7 +186,7 @@ enum PersonTabs {
             return data
         },
         PersonVerb("tabs", "new", .arrange) { call in
-            let browser = call.browser
+            let browser = Browsers.agentWindow(keeping: call.browser)
             let space = try call.string("space").map { try PersonTabs.space(call, $0) }
             let folder = try call.string("folder").map { try PersonFolders.find(call, $0) }
             let url = try call.string("url").map(webAddress)
@@ -319,7 +319,7 @@ enum PersonTabs {
         },
         PersonVerb("windows", "list", .look) { call in
             ["windows": call.box.browsers.enumerated().map { index, browser in
-                ["id": index + 1, "space": browser.space.name, "tabs": browser.tabs.filter(BrowserToolbox.listed).count, "front": browser === Browsers.front] as [String: Any]
+                ["id": index + 1, "space": browser.space.name, "tabs": browser.tabs.filter(BrowserToolbox.listed).count, "front": browser === Browsers.forAgents] as [String: Any]
             }]
         },
         PersonVerb("windows", "new", .arrange) { _ in

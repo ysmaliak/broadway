@@ -333,6 +333,13 @@ extension Browser {
             completionHandler(.cancelAuthenticationChallenge, nil)
             return
         }
+        let asking = tab(for: webView).flatMap { $0.agent ? $0.id : nil }
+        if let asking { AgentSignInBox.hosts[asking] = challenge.protectionSpace.host }
+        let answered = completionHandler
+        let completionHandler: (URLSession.AuthChallengeDisposition, URLCredential?) -> Void = { disposition, credential in
+            if let asking { AgentSignInBox.hosts[asking] = nil }
+            answered(disposition, credential)
+        }
         // A tab behind yours asking for a name and a password would put the
         // question over the page you are looking at, where it would pass for
         // that page's. It waits for its own tab, as a page's questions do.

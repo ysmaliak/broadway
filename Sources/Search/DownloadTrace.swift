@@ -27,6 +27,7 @@ enum DownloadTrace {
     }
 
     static func forget(_ log: FailureLog? = DownloadTrace.disk) {
+        AgentTally.shared.forget()
         guard let log else { return }
         queue.async { log.clear() }
     }

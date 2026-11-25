@@ -26,12 +26,54 @@ public struct AgentAncestor: Equatable {
         var seen: Set<Int32> = []
         while pid > 1, seen.insert(pid).inserted, let found = lookup(pid) {
             let base = (found.name as NSString).lastPathComponent
-            if !passedOver.contains(base.lowercased()), !(base.lowercased() == "node" && lookup(found.parent).map(\.name).map(isAgent) == true) {
+            if !passedOver.contains(head(base)), !(base.lowercased() == "node" && lookup(found.parent).map(\.name).map(isAgent) == true) {
                 return AgentAncestor(pid: pid, started: found.started, name: base)
             }
             pid = found.parent
         }
         return nil
+    }
+
+    public static func head(_ name: String) -> String {
+        let base = (name as NSString).lastPathComponent.lowercased()
+        return base.split(separator: ":").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? base
+    }
+
+    static let launchers: [String: String] = ["sshd": "SSH", "sshd-session": "SSH", "mosh-server": "Mosh",
+                                              "et": "Eternal Terminal", "etserver": "Eternal Terminal", "etterminal": "Eternal Terminal"]
+
+    public static let carriers: Set<String> = ["ssh", "sshd", "sshd-session"]
+
+    public static func carrier(_ name: String) -> Bool {
+        carriers.contains(head(name))
+    }
+
+    public static func forwarded(_ said: [String: Any], host: String?) -> [String: Any] {
+        var out = said
+        out["pid"] = nil
+        out["started"] = nil
+        out["direct"] = false
+        if let host, !host.isEmpty { out["host"] = host }
+        return out
+    }
+
+    public static func hostName() -> String? {
+        var buffer = [CChar](repeating: 0, count: 256)
+        guard gethostname(&buffer, buffer.count) == 0 else { return nil }
+        let name = String(cString: buffer)
+        let short = name.hasSuffix(".local") ? String(name.dropLast(6)) : name
+        return short.isEmpty ? nil : short
+    }
+
+    static func plain(_ name: String) -> String {
+        launchers[head(name)] ?? name
+    }
+
+    public static func remote(environment: [String: String], found: AgentAncestor?) -> (id: String, name: String)? {
+        guard let address = environment["SSH_CONNECTION"]?.split(separator: " ").first.map(String.init), !address.isEmpty else { return nil }
+        let kind: String? = if let found { launchers[head(found.name)] } else { "SSH" }
+        guard let kind, kind != "Eternal Terminal" else { return nil }
+        return ("ssh:\(address)", "\(kind) from \(address)")
     }
 
     static func isAgent(_ name: String) -> Bool {
@@ -59,7 +101,7 @@ public struct AgentAncestor: Equatable {
     static let interpreters: Set<String> = ["node", "bun", "deno"]
 
     public static func named(arguments: [String], path: String?, command: String) -> String {
-        let first = arguments.first.map { ($0 as NSString).lastPathComponent } ?? ""
+        let first = arguments.first.map { ($0.components(separatedBy: ": ").first ?? $0) as NSString }.map(\.lastPathComponent) ?? ""
         let name = !first.isEmpty ? first : path.map { ($0 as NSString).lastPathComponent } ?? command
         guard interpreters.contains(name.lowercased()) else { return name }
         let script = arguments.dropFirst().first { !$0.hasPrefix("-") }?.lowercased() ?? ""
@@ -110,17 +152,44 @@ public struct AgentAncestor: Equatable {
         return nil
     }
 
-    public static func request(environment: [String: String], name flag: String?, agent: String?) -> [String: Any] {
+    public static func request(environment: [String: String], name flag: String?, agent: String?,
+                               walk: () -> AgentAncestor? = current, workdir: (Int32) -> String? = workdir,
+                               cwd: String = FileManager.default.currentDirectoryPath, home: String = NSHomeDirectory()) -> [String: Any] {
         var said: [String: Any] = [:]
         if let id = agent ?? environment["BROADWAY_AGENT"].flatMap({ $0.isEmpty ? nil : $0 }) { said["id"] = id }
-        if let name = flag ?? environment["BROADWAY_AGENT_NAME"].flatMap({ $0.isEmpty ? nil : $0 }) { said["name"] = name }
-        if said["id"] == nil, let session = session(environment) { said["session"] = session }
-        if said["id"] == nil, let found = current() {
-            said["pid"] = Int(found.pid)
-            said["started"] = found.started
-            said["executable"] = found.name
+        let named = flag ?? environment["BROADWAY_AGENT_NAME"].flatMap { $0.isEmpty ? nil : $0 }
+        if let named {
+            said["name"] = named
+            said["named"] = true
         }
-        return said.merging(place(environment: environment, cwd: FileManager.default.currentDirectoryPath)) { old, _ in old }
+        if said["id"] == nil, let session = session(environment) { said["session"] = session }
+        let here = (cwd as NSString).standardizingPath
+        let login = environment["SSH_CONNECTION"] != nil && here == (home as NSString).standardizingPath
+        var works: String? = here.hasPrefix("/") && !login ? here : nil
+        if said["id"] == nil {
+            let found = walk()
+            if said["session"] == nil, let remote = remote(environment: environment, found: found) {
+                said["id"] = named.map { "\(remote.id)/\($0.lowercased())" } ?? remote.id
+                said["name"] = named ?? remote.name
+            } else if let found {
+                said["pid"] = Int(found.pid)
+                said["started"] = found.started
+                said["executable"] = plain(found.name)
+                if let own = workdir(found.pid), own.hasPrefix("/") { works = own }
+            }
+        }
+        if let works { said["workdir"] = works }
+        return said.merging(place(environment: environment, cwd: cwd)) { old, _ in old }
+    }
+
+    public static func workdir(_ pid: Int32) -> String? {
+        var info = proc_vnodepathinfo()
+        let size = Int32(MemoryLayout<proc_vnodepathinfo>.stride)
+        guard proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &info, size) == size else { return nil }
+        let path = withUnsafeBytes(of: info.pvi_cdir.vip_path) { raw in
+            String(decoding: raw.prefix { $0 != 0 }, as: UTF8.self)
+        }
+        return path.isEmpty ? nil : path
     }
 
     public static func place(environment: [String: String], cwd: String, look: (String) -> GitMark? = GitMark.look) -> [String: Any] {

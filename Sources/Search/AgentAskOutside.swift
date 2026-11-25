@@ -80,6 +80,10 @@ final class AgentAskBook {
         asked[session] = (asked[session] ?? []).filter { now.timeIntervalSince($0) < AgentAskOutside.hour } + [now]
     }
 
+    func rejoin(_ session: UUID) {
+        open.insert(session)
+    }
+
     func end(_ session: UUID) {
         open.remove(session)
     }
@@ -98,22 +102,45 @@ extension BrowserToolbox {
         case .success(let found): asked = found
         }
         let session = task
-        if let refused = AgentAskBook.shared.refusal(session) { return refused }
-        AgentAskBook.shared.begin(session)
-        defer { AgentAskBook.shared.end(session) }
-        let tab = find(arguments)?.tab
-        let own = tab.flatMap { $0.agent && $0.agentTask == session ? $0 : nil }
-        var question = AgentQuestion(kind: .choice(asked.choices), title: AgentQuestion.clean(asked.question, limit: AgentAskOutside.questionLimit))
-        question.task = task
-        question.tab = own?.id
-        question.asker = AgentLinks.shared.link(session)?.name ?? "An agent"
+        let signature = Self.signature("ask", arguments)
         let seconds = AgentHandoff.wait(arguments)
-        let mood = own?.agentMood
-        own?.agentMood = .waving
-        let asking = Task { @MainActor in await AgentDesk.shared.ask(question) }
-        let answer = await AgentPatience.race(asking, seconds: seconds)
-        AgentDesk.shared.take(question.id, .dropped)
-        if let own, own.agentMood == .waving { own.agentMood = mood == .waving ? .reading : mood }
+        let held: AgentHeld.Entry
+        let first: Bool
+        if let kept = AgentHeld.shared.entry(session, signature) {
+            AgentAskBook.shared.rejoin(session)
+            held = kept
+            first = false
+        } else {
+            if let refused = AgentAskBook.shared.refusal(session) { return refused }
+            if AgentHeld.shared.pending(session, kind: .ask) != nil {
+                return .failure("Your question still waits for the person. Nothing more was asked.", code: .questionOpen,
+                                hint: "Run the same ask again to wait for its answer")
+            }
+            AgentAskBook.shared.begin(session)
+            let tab = find(arguments)?.tab
+            let own = tab.flatMap { $0.agent && $0.agentTask == session ? $0 : nil }
+            var question = AgentQuestion(kind: .choice(asked.choices), title: AgentQuestion.clean(asked.question, limit: AgentAskOutside.questionLimit))
+            question.task = task
+            question.tab = own?.id
+            question.asker = AgentLinks.shared.link(session)?.title ?? "An agent"
+            let mood = own?.agentMood
+            own?.agentMood = .waving
+            let asking = Task { @MainActor () -> AgentAnswer in
+                let said = await AgentDesk.shared.ask(question)
+                if let own, own.agentMood == .waving { own.agentMood = mood == .waving ? .reading : mood }
+                return said
+            }
+            held = AgentHeld.shared.hold(session, signature, kind: .ask, question: question.id, tab: own?.id, asking: asking)
+            first = true
+        }
+        defer { AgentAskBook.shared.end(session) }
+        let early = AgentPatience.Early()
+        let answer = await AgentPatience.race(held.asking, seconds: seconds, unseen: first ? AgentLooking.unseen(for: session) : nil, early: early)
+        if early.hit, answer == nil {
+            return .failure("The person hasn't answered yet. The question stays up in Broadway.", code: .needsYou, data: ["away": true])
+        }
+        AgentDesk.shared.take(held.question, .dropped)
+        AgentHeld.shared.release(held)
         return AgentAskOutside.answer(answer, choices: asked.choices, seconds: seconds)
     }
 }
@@ -122,15 +149,17 @@ struct AgentCardWords: Equatable {
     var title: String
     var who: String
     var body: String
+    var signer = ""
 }
 
 extension AgentQuestion {
     @MainActor
     var cardWords: AgentCardWords {
-        if let asker { return AgentCardWords(title: "\(asker) asks", who: "", body: title) }
         let link = task.flatMap { AgentLinks.shared.link($0) }
-        return AgentCardWords(title: title, who: link.map(\.name) ?? "",
-                              body: reason.isEmpty ? "" : "The agent says: \(reason)")
+        let signer = link.flatMap { $0.firstQuestion == id ? $0.program?.line(name: $0.name) : nil } ?? ""
+        if let asker { return AgentCardWords(title: "\(asker) asks", who: "", body: title, signer: signer) }
+        return AgentCardWords(title: title, who: link.map(\.title) ?? "",
+                              body: !line.isEmpty ? line : reason.isEmpty ? "" : "The agent says: \(reason)", signer: signer)
     }
 
     var choices: [String] {
@@ -143,6 +172,6 @@ extension AgentDesk {
     static func benchRow(_ question: AgentQuestion) -> [String: Any] {
         let words = question.cardWords
         return ["title": question.title, "quote": question.quote, "label": question.quoteLabel,
-                "card": ["title": words.title, "who": words.who, "body": words.body, "choices": question.choices] as [String: Any]]
+                "card": ["title": words.title, "who": words.who, "body": words.body, "signer": words.signer, "choices": question.choices] as [String: Any]]
     }
 }

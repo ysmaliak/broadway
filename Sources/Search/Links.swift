@@ -46,6 +46,7 @@ final class Links: NSObject, NSApplicationDelegate {
     /// Quitting closes every window on the way out; that isn't a window
     /// closed for good, whose tabs would go (see Browsers.closing).
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        MainActor.assumeIsolated { AgentTally.shared.close() }
         if MainActor.assumeIsolated({ LeaveQuit.shouldWait() }) { return .terminateCancel }
         let waiting = MainActor.assumeIsolated {
             Browsers.quitting = true
@@ -134,6 +135,7 @@ final class Links: NSObject, NSApplicationDelegate {
         // in the middle of it — a Safari export's passwords in the clear
         // among it — goes (Security).
         DispatchQueue.global(qos: .utility).async { ImportFile.sweepScratch() }
+        TemporarySweep.atLaunch()
         Trim.start()
         MemoryPages.start()
         MenuIcons.start()

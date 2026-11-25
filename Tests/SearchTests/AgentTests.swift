@@ -125,7 +125,7 @@ final class AgentTests {
     @Test func toolboxOffersExactlyTheseTools() {
         let names = Set(BrowserToolbox().tools.map(\.name))
 
-        #expect(names == ["tabs", "open", "navigate", "close", "snapshot", "text", "screenshot", "console", "network", "pdf", "hover", "choose", "dialog", "click", "type", "upload", "download", "locate", "fill_form", "drag", "select", "resize", "press", "scroll", "wait", "history", "ask",
+        #expect(names == ["tabs", "open", "navigate", "close", "snapshot", "text", "screenshot", "console", "network", "pdf", "hover", "choose", "dialog", "click", "type", "carry", "upload", "download", "locate", "fill_form", "drag", "select", "resize", "press", "scroll", "wait", "history", "ask",
                                "skills", "skill", "handoff", "tab", "audit", "timings", "styles"])
     }
 
@@ -212,7 +212,7 @@ final class AgentTests {
 
         let names = AgentCatalog.commands(tools).compactMap { $0["name"] as? String }
 
-        #expect(names == ["tabs", "open", "go", "close", "snapshot", "read", "shot", "find", "click", "type", "upload", "download", "fill", "drag", "select", "resize", "press", "scroll", "wait", "history", "ask", "handoff", "tab", "console", "network", "pdf", "hover", "choose", "dialog", "audit", "timings", "styles", "skills", "skill"])
+        #expect(names == ["tabs", "open", "go", "close", "snapshot", "read", "shot", "find", "click", "type", "carry", "upload", "download", "fill", "drag", "select", "resize", "press", "scroll", "wait", "history", "ask", "handoff", "tab", "console", "network", "pdf", "hover", "choose", "dialog", "audit", "timings", "styles", "skills", "skill"])
     }
 
     @Test func aCommandCarriesItsShape() throws {
@@ -221,7 +221,7 @@ final class AgentTests {
         let found = try #require(AgentCatalog.command(tool))
 
         #expect((found["positional"] as? [[String: Any]])?.compactMap { $0["name"] as? String } == ["ref", "text"])
-        #expect((found["flags"] as? [[String: Any]])?.compactMap { $0["name"] as? String } == ["expect", "expect_gone", "expect_url", "final", "frames", "in", "label", "look", "nth", "ref", "replace", "role", "settle", "submit", "target", "text", "words"])
+        #expect((found["flags"] as? [[String: Any]])?.compactMap { $0["name"] as? String } == ["expect", "expect_gone", "expect_url", "final", "frames", "in", "label", "look", "nth", "ref", "replace", "role", "secret-env", "settle", "submit", "target", "text", "words"])
         #expect((found["tabbed"] as? Bool) == true)
         #expect((found["reads"] as? Bool) == false)
     }

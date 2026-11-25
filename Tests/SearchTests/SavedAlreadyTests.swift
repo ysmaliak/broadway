@@ -31,6 +31,21 @@ struct SavedAlreadyTests {
         SavedAlready.verdict(sent, kept: kept, registrable: site, read: keychain.read)
     }
 
+    @Test func aSaveRecordsThePortWhenItIsNotTheSchemesOwn() {
+        #expect(SentSignIn.port(of: URL(string: "http://localhost:3000/login")) == 3000)
+        #expect(SentSignIn.port(of: URL(string: "https://example.com:8443/")) == 8443)
+        #expect(SentSignIn.port(of: URL(string: "https://example.com/")) == nil)
+        #expect(SentSignIn.port(of: URL(string: "https://example.com:443/")) == nil)
+        #expect(SentSignIn.port(of: URL(string: "http://example.com:80/")) == nil)
+        #expect(SentSignIn.port(of: nil) == nil)
+
+        let sent = SentSignIn(host: "localhost", user: "pat", password: "sa-made-up-1", port: 3000)
+        #expect(SavedAlready.login(for: sent, clear: true).port == 3000)
+        #expect(SavedAlready.login(for: SentSignIn(host: "example.com", user: "pat", password: "sa-made-up-1"), clear: false).port == nil)
+        let kept = Kept(host: "localhost", user: "pat", used: nil, clear: true, port: 3000)
+        #expect(SavedAlready.touched(kept, by: sent, clear: true).port == 3000)
+    }
+
     @Test func noNameAndTheSamePasswordKeptIsAlreadySaved() {
         let keychain = Keychain()
         let pat = keychain.keep(kept("id.example.test", "pat"), "sa-made-up-1")

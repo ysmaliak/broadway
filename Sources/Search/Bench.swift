@@ -693,6 +693,7 @@ final class Bench {
             // ⌘Q, on a test run: the app ends the way it does for you, the
             // session and windows.json written on the way out.
             guard Store.testing else { answer(["error": "quit only works on a --test run"]); return }
+            AgentTally.shared.close()
             answer(["quitting": true])
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { NSApp.terminate(nil) }
 
@@ -795,7 +796,7 @@ final class Bench {
                         "space": b.space.name, "tabs": b.tabs.map { $0.address?.absoluteString ?? "" },
                         "spaces": b.spaces.map(\.name),
                         "stores": b.tabs.map { $0.store.identifier?.uuidString ?? "default" },
-                        "private": b.isPrivate, "restorable": b.window?.isRestorable ?? false,
+                        "private": b.isPrivate, "shut": b.shut, "restorable": b.window?.isRestorable ?? false,
                         "shy": b.tabs.map(\.shy), "persistent": b.tabs.map { $0.store.isPersistent },
                         "storeKeys": b.tabs.map { String(UInt(bitPattern: ObjectIdentifier($0.store).hashValue)) },
                         "titles": b.tabs.map(\.title),
@@ -2504,7 +2505,7 @@ final class Bench {
             // Every account this world keeps, by name, without a secret.
             let all = Vault.all()
             let users = all.map(\.user)
-            let used = all.map { ["host": $0.host, "user": $0.user, "used": $0.used?.timeIntervalSince1970 ?? 0] as [String: Any] }
+            let used = all.map { ["host": $0.host, "user": $0.user, "used": $0.used?.timeIntervalSince1970 ?? 0, "port": $0.port ?? 0] as [String: Any] }
             guard let list = browser.suggesting else {
                 answer(["shown": false, "offer": offer, "kept": users.count, "users": users, "used": used].merging(holds) { $1 }); return
             }

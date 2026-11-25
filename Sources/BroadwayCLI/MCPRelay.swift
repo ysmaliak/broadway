@@ -239,7 +239,13 @@ final class MCPRelay {
             }.start()
             return true
         }
-        return toApp(line)
+        switch SecretInput.relay(line, environment: ProcessInfo.processInfo.environment) {
+        case .forward(let fixed): return toApp(fixed)
+        case .answer(let said):
+            write(said)
+            return true
+        case nil: return toApp(line)
+        }
     }
 
     private func send(_ line: Data) -> Bool {

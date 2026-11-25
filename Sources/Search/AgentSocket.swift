@@ -125,6 +125,7 @@ final class AgentSocket {
     private func quitIfIdle() {
         let quiet = Date().timeIntervalSince(lastUsed)
         if AgentIdle.shouldQuit(woken: woken, hidden: NSApp.isHidden, serving: serving, quiet: quiet) {
+            AgentTally.shared.close()
             LeaveQuit.settle()
             NSApp.terminate(nil)
         }
@@ -145,7 +146,9 @@ final class AgentSocket {
     }
 
     func handle(_ request: [String: Any], on connection: LineConnection) {
-        guard let browser = Browsers.front ?? browser else {
+        var request = request
+        if let said = request["agent"] as? [String: Any] { request["agent"] = AgentPeer.trusted(said, peer: connection.peer) }
+        guard let browser = Browsers.agentHome() ?? self.browser ?? (request["op"] as? String == "status" ? nil : Browsers.agentWindow()) else {
             connection.send(["error": "Broadway has no window open"])
             return connection.close()
         }
@@ -162,8 +165,15 @@ final class AgentSocket {
                 return connection.close()
             }
             browser.arrive(url)
-            if !Store.testing { NSApp.activate() }
+            if browser !== Browsers.front { Browsers.show(browser) } else if !Store.testing { NSApp.activate() }
             connection.send(["opened": url.absoluteString])
+            connection.close()
+        case "file", "give":
+            if !browser.prefs.agentsAllowed {
+                connection.send(AgentFerry.failure("agents_off", "Agents are off in Broadway"))
+            } else {
+                connection.send(request["op"] as? String == "file" ? AgentFerry.read(request) : AgentFerry.take(request))
+            }
             connection.close()
         case "mcp":
             var task: UUID?
@@ -192,8 +202,8 @@ final class AgentSocket {
             if let wait = request["wait_person"] as? String { server.environment["BROADWAY_WAIT_PERSON"] = wait }
             if task != nil {
                 server.person = { [weak self, weak browser] tool, arguments in
-                    guard let self, let browser = browser ?? Browsers.front else { return .failure("Broadway has no window open", code: .noWindow) }
-                    return await PersonTools.call(tool, arguments, link: task, browser: browser, socket: self)
+                    guard let self else { return .failure("Broadway has no window open", code: .noWindow) }
+                    return await PersonTools.call(tool, arguments, link: task, browser: Browsers.agentHome(keeping: browser) ?? Browsers.agentWindow(), socket: self)
                 }
             }
             box.browser = browser
@@ -210,6 +220,7 @@ final class AgentSocket {
 
     private func status(_ browser: Browser) -> [String: Any] {
         ["running": true, "version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev",
-         "agents": browser.prefs.agentsAllowed, "hidden": NSApp.isHidden, "serving": serving, "world": Store.world ?? ""]
+         "agents": browser.prefs.agentsAllowed, "hidden": NSApp.isHidden, "serving": serving, "world": Store.world ?? "",
+         "app": Bundle.main.bundlePath, "pid": Int(ProcessInfo.processInfo.processIdentifier)]
     }
 }

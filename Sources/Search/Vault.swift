@@ -21,6 +21,7 @@ struct Login: Identifiable, Equatable, Hashable {
     /// written down, is never handed to a page anyone on the way could have
     /// written.
     var clear = false
+    var port: Int?
 
     var id: String { host + "\u{1}" + user }
 }
@@ -38,8 +39,41 @@ struct Kept: Identifiable, Equatable, Hashable {
     var used: Date?
     /// Kept from a page sent in the clear, over plain http. See `Login`.
     var clear = false
+    var port: Int?
+    var agent: AgentUse?
+    var item: OnePasswordItem?
 
     var id: String { host + "\u{1}" + user }
+}
+
+struct AgentUse: Equatable, Hashable {
+    var agent: String
+    var folder: String?
+    var at: Date
+
+    var stored: String {
+        [agent, folder ?? "", String(at.timeIntervalSince1970)].map { $0.replacingOccurrences(of: "\u{1}", with: " ") }.joined(separator: "\u{1}")
+    }
+
+    init(agent: String, folder: String?, at: Date) {
+        self.agent = agent
+        self.folder = folder.flatMap { $0.isEmpty ? nil : $0 }
+        self.at = at
+    }
+
+    init?(stored: String) {
+        let parts = stored.components(separatedBy: "\u{1}")
+        guard parts.count == 3, !parts[0].isEmpty, let seconds = Double(parts[2]) else { return nil }
+        self.init(agent: parts[0], folder: parts[1], at: Date(timeIntervalSince1970: seconds))
+    }
+
+    func words(now: Date = Date(), calendar: Calendar = .current) -> String {
+        let format = DateFormatter()
+        format.calendar = calendar
+        format.locale = Locale(identifier: "en_GB")
+        format.dateFormat = calendar.isDate(at, equalTo: now, toGranularity: .year) ? "d MMMM HH:mm" : "d MMMM yyyy HH:mm"
+        return "Used by \(agent)" + (folder.map { " in \($0)" } ?? "") + ", " + format.string(from: at)
+    }
 }
 
 enum Vault {
@@ -167,7 +201,7 @@ enum Vault {
     /// keychain read, for the one account picked.
     static func login(_ kept: Kept) -> Login? {
         guard let password = secret(of: kept) else { return nil }
-        return Login(host: kept.host, user: kept.user, password: password, used: kept.used, clear: kept.clear)
+        return Login(host: kept.host, user: kept.user, password: password, used: kept.used, clear: kept.clear, port: kept.port)
     }
 
     /// The account an item is kept under. A sign-in with a password box
@@ -180,17 +214,19 @@ enum Vault {
     }
 
     /// One item without its secret, for the list.
-    private static func kept(from row: [String: Any]) -> Kept? {
+    static func kept(from row: [String: Any]) -> Kept? {
         guard let host = row[kSecAttrServer as String] as? String else { return nil }
         let user = account(of: row)
         let (used, clear) = noted(row)
-        return Kept(host: host, user: user, used: used, clear: clear)
+        let port = (row[kSecAttrPort as String] as? Int).flatMap { $0 > 0 ? $0 : nil }
+        let agent = (row[kSecAttrDescription as String] as? String).flatMap(AgentUse.init(stored:))
+        return Kept(host: host, user: user, used: used, clear: clear, port: port, agent: agent)
     }
 
     // MARK: - writing
 
     @discardableResult
-    static func save(host: String, user: String, password: String, used: Date? = nil, clear: Bool = false) -> Bool {
+    static func save(host: String, user: String, password: String, used: Date? = nil, clear: Bool = false, port: Int? = nil) -> Bool {
         guard !host.isEmpty, !password.isEmpty,
               let data = password.data(using: .utf8)
         else { return false }
@@ -214,6 +250,7 @@ enum Vault {
             kSecAttrProtocol as String: clear ? kSecAttrProtocolHTTP : kSecAttrProtocolHTTPS,
         ]
         if let used { fields[kSecAttrComment as String] = String(used.timeIntervalSince1970) }
+        if let port, port > 0 { fields[kSecAttrPort as String] = port }
 
         let status = SecItemUpdate(identity as CFDictionary, fields as CFDictionary)
         if status == errSecSuccess { return true }
@@ -245,7 +282,17 @@ enum Vault {
 
     /// It was just used to sign in. Lists put it first from now on.
     static func touch(_ login: Login) {
-        save(host: login.host, user: login.user, password: login.password, used: Date(), clear: login.clear)
+        save(host: login.host, user: login.user, password: login.password, used: Date(), clear: login.clear, port: login.port)
+    }
+
+    @discardableResult
+    static func note(_ use: AgentUse, on kept: Kept) -> Bool {
+        SecItemUpdate([
+            kSecClass as String: kSecClassInternetPassword,
+            kSecAttrServer as String: kept.host,
+            kSecAttrAccount as String: kept.user,
+            kSecAttrLabel as String: label,
+        ] as CFDictionary, [kSecAttrDescription as String: use.stored] as CFDictionary) == errSecSuccess
     }
 
     /// Whether the keychain let it go: Remove All… counts only those.

@@ -185,6 +185,7 @@ final class SiteNotifications: NSObject {
 
     /// Clicked: the site's tab in front, and the click to its worker.
     func clicked(_ info: [AnyHashable: Any]) {
+        if info["search.kind"] as? String == "agent" { return AgentNotice.clicked(info) }
         let origin = info["search.origin"] as? String ?? ""
         let key = info["search.key"] as? String
         let from = key.flatMap { stores.removeValue(forKey: $0) }

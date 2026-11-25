@@ -3,8 +3,10 @@ import json
 import random
 import secrets
 import string
+import struct
 import threading
 import time
+import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, urlsplit
 
@@ -34,6 +36,9 @@ SETTING_GROUPS = ["Notifications", "Orders", "Invoices", "Shipping", "Returns", 
 SETTING_WORDS = ["Show a badge", "Email the owner", "Keep a copy", "Round to whole units", "Use the short format",
                  "Ask before changing", "Group by week", "Include drafts", "Send a summary", "Hide closed items"]
 PEOPLE_EMAIL = "sam@example.com"
+SECOND_EMAIL = "kit@example.com"
+SWATCHES = ["#2f6fb3", "#3a8f5c", "#7a7f87", "#c9a227", "#6a4fa3"]
+RED = "#d0302b"
 PRODUCTS = [("tidemark-lp20", "Tidemark LP-20", "Label printers"), ("harrier-label-4", "Harrier Label 4", "Label printers"),
             ("quillon-mini", "Quillon Mini", "Label printers"), ("bracken-tl8", "Bracken TL-8", "Label printers"),
             ("ostrel-duo", "Ostrel Duo", "Label printers"), ("sable-cut-90", "Sable Cut 90", "Shredders"),
@@ -47,6 +52,13 @@ DISPATCH_TO = ["Aldermoor", "Brackwater", "Corrin Bay", "Dunmere", "Garrow", "Lo
 STOCKROOM_SHADES = ["Amber", "Birch", "Cobalt", "Dove", "Ember", "Fern", "Granite", "Heather", "Indigo", "Juniper", "Kelp", "Linen"]
 STOCKROOM_THINGS = ["binder", "clipboard", "desk tray", "folder", "notebook", "pen case", "ruler", "stapler"]
 LEDGER_STATES = ["Paid", "Due", "Paid", "Held"]
+
+
+def swatch(shade):
+    rgb = bytes.fromhex(shade.lstrip("#"))
+    chunk = lambda kind, body: struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body) & 0xFFFFFFFF)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(b"\x00" + rgb)) + chunk(b"IEND", b""))
 
 
 def words(seed, count):
@@ -95,8 +107,17 @@ class Field:
                                                                            "orders", "sales"])}
         self.suppliers = {slug: {"name": name, "email": f"old-{slug}@{slug.replace('-', '')}.example"} for slug, name in SUPPLIERS}
         self.password = f"{token(5).lower()}-{token(5).lower()}-{token(3)}"
+        self.second_password = f"{token(5).lower()}-{token(5).lower()}-{token(3)}"
         self.sessions = set()
+        self.session_people = {}
         self.signins = []
+        self.approvers = []
+        self.token = f"cpl_{token(24)}"
+        self.token_views = 0
+        self.linked = []
+        self.guide = [chooser.choice(SWATCHES) for _ in range(48)]
+        self.guide_red = chooser.randint(12, 44)
+        self.guide[self.guide_red - 1] = RED
         self.invoices = {f"FW-{n}": False for n in range(1088, 1100)}
         self.approvals = []
         self.downloads = []
@@ -196,6 +217,11 @@ class Field:
                 "signins": list(self.signins),
                 "invoices": dict(self.invoices),
                 "approvals": list(self.approvals),
+                "approvers": list(self.approvers),
+                "token": self.token,
+                "token_views": self.token_views,
+                "linked": list(self.linked),
+                "guide_red": self.guide_red,
                 "downloads": list(self.downloads),
                 "hits": len(self.hits),
                 "tally": list(self.tally),
@@ -387,6 +413,15 @@ class Copperline(Handler):
             return self.settings()
         if path == "/tally":
             return self.tally()
+        if path == "/tokens":
+            return self.tokens(False)
+        if path == "/guide":
+            return self.guide()
+        if path.startswith("/swatch/") and path.endswith(".png"):
+            number = path[len("/swatch/"):-len(".png")]
+            if not number.isdigit() or not 1 <= int(number) <= len(field.guide):
+                return False
+            return self.reply(200, swatch(field.guide[int(number) - 1]), "image/png")
         if path == "/ledger":
             return self.ledger()
         if path == "/dispatch":
@@ -422,6 +457,25 @@ class Copperline(Handler):
 <button type="button" onclick="send('/api/tally', {{sum: document.getElementById('sum').value}}, function () {{ document.getElementById('said').textContent = 'Tally saved' }})">Save tally</button>
 <p id="said" role="status" class="ok"></p>"""
         return self.reply(200, copper("Tally", body))
+
+    def tokens(self, made):
+        field = self.field
+        if made:
+            body = f"""<h1>API tokens</h1><p role="status">Here is your new token. Copy it now. It won't be shown again.</p>
+<p><code id="token">{field.token}</code></p><p><a href="/">Back to the dashboard</a></p>"""
+        elif field.token_views:
+            body = """<h1>API tokens</h1><p>A token was made and shown once. It can't be shown again.</p>"""
+        else:
+            body = """<h1>API tokens</h1><p>Make a token so another service can read your stock counts.</p>
+<form action="/tokens" method="post"><button type="submit">Create token</button></form>"""
+        return self.reply(200, copper("API tokens", body))
+
+    def guide(self):
+        sections = "".join(f'<section><h2>Section {n + 1}</h2><p>{words(f"guide-{n}", 12)}.</p>'
+                           f'<img src="/swatch/{n + 1}.png" alt="Swatch" style="width:100%;height:260px;border-radius:8px"></section>'
+                           for n in range(len(self.field.guide)))
+        body = f"""<h1>Brand guide</h1><p class="muted">One swatch per section. Only the picture shows each swatch.</p>{sections}"""
+        return self.reply(200, copper("Brand guide", body))
 
     def ledger(self):
         rows = "".join(f'<tr><td>{row["entry"]}</td><td>{html.escape(row["supplier"])}</td><td>{row["amount"]}</td><td>{row["status"]}</td></tr>'
@@ -736,6 +790,12 @@ function save() {{
 
     def post_page(self, path, query):
         field = self.field
+        if path == "/tokens":
+            self.posted()
+            with field.lock:
+                field.token_views += 1
+                first = field.token_views == 1
+            return self.tokens(first)
         if path.startswith("/api/orders/") and path.endswith("/note"):
             oid = path.split("/")[3]
             data = self.posted()
@@ -843,6 +903,13 @@ class Fernway(Handler):
                 return True
         return False
 
+    def who(self):
+        for part in self.headers.get("cookie", "").split(";"):
+            name, _, value = part.strip().partition("=")
+            if name == "fw_session" and value in self.field.session_people:
+                return self.field.session_people[value]
+        return ""
+
     def get_page(self, path, query):
         field = self.field
         if path == "/":
@@ -860,6 +927,8 @@ class Fernway(Handler):
             return self.reply(200, fern("Import", body))
         if path == "/signin":
             return self.signin_page(query.get("next", "/account/invoices"), "")
+        if path == "/link":
+            return self.link("")
         if path == "/prices":
             rows = "".join(f"<tr><td>{html.escape(item)}</td><td>{price}</td></tr>" for item, price in field.prices.items())
             return self.reply(200, fern("Prices", f"<h1>Trade prices</h1><p>Prices per box, before tax.</p><table><tr><th>Item</th><th>Price</th></tr>{rows}</table>"))
@@ -928,6 +997,13 @@ class Fernway(Handler):
 <table><tr><th>App</th><th>Asks for</th><th></th></tr>{rows}</table>"""
         return self.reply(200, fern("Connections", body))
 
+    def link(self, message):
+        said = f'<p role="status">{html.escape(message)}</p>' if message else ""
+        body = f"""<h1>Link Copperline</h1>{said}<p>Paste a Copperline API token to let Fernway read your stock counts.</p>
+<form action="/link" method="post"><label for="token">Copperline API token</label><br>
+<input id="token" name="token" type="password" autocomplete="off"><br><br><button type="submit">Link</button></form>"""
+        return self.reply(200, fern("Link Copperline", body))
+
     def signin_page(self, after, message):
         warning = f'<p role="alert">{html.escape(message)}</p>' if message else ""
         body = f"""<h1>Sign in to Fernway</h1>{warning}<form action="/signin" method="post"><input type="hidden" name="next" value="{html.escape(after)}">
@@ -940,14 +1016,17 @@ class Fernway(Handler):
         field = self.field
         if path == "/signin":
             data = self.posted()
-            good = data.get("email", "").strip().lower() == PEOPLE_EMAIL and data.get("password", "") == field.password
+            email = data.get("email", "").strip().lower()
+            good = (email == PEOPLE_EMAIL and data.get("password", "") == field.password) or \
+                ("two_accounts" in field.features and email == SECOND_EMAIL and data.get("password", "") == field.second_password)
             field.act("sign_in", True, self.site)
             with field.lock:
-                field.signins.append({"ok": good})
+                field.signins.append({"ok": good, "email": email})
             if not good:
                 return self.signin_page(data.get("next", "/account/invoices"), "That email and password don't match")
             token = secrets.token_hex(12)
             field.sessions.add(token)
+            field.session_people[token] = email
             after = data.get("next", "/account/invoices")
             return self.redirect(after if after.startswith("/") else "/account/invoices", headers=[("set-cookie", f"fw_session={token}; Path=/; HttpOnly")])
         if path.startswith("/account/invoices/") and path.endswith("/approve"):
@@ -958,6 +1037,7 @@ class Fernway(Handler):
                 if iid in field.invoices:
                     field.invoices[iid] = True
                     field.approvals.append(iid)
+                    field.approvers.append({"invoice": iid, "who": self.who()})
             return self.redirect(f"/account/invoices/{iid}")
         if path.startswith("/api/invoices/") and path.endswith("/pay"):
             self.posted()
@@ -979,6 +1059,11 @@ class Fernway(Handler):
                 if slug not in field.grants:
                     field.grants.append(slug)
             return self.json({"ok": True})
+        if path == "/link":
+            value = str(self.posted().get("token", ""))
+            with field.lock:
+                field.linked.append(value)
+            return self.link("Copperline is linked" if value == field.token else "That token isn't one Copperline made")
         if path == "/import":
             kind = self.headers.get("content-type", "")
             files = multipart(self.body(), kind)

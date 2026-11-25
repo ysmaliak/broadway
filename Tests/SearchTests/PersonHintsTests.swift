@@ -85,6 +85,9 @@ struct PersonHintsTests {
         #expect(Setup.skill.contains("set up through the command"))
         #expect(MCPServer.instructions.contains("more_tools finds settings"))
         #expect(Help.mcpInstructions.contains("more_tools finds settings"))
+        #expect(Help.mcpInstructions == MCPServer.instructions)
+        #expect(MCPServer.instructions.contains("fill_login"))
+        #expect(!MCPServer.instructions.contains("never shown or typed"))
     }
 
     @Test func anUnknownSettingPointsAtSettingsFind() {

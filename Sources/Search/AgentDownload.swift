@@ -136,6 +136,8 @@ enum AgentDownloadWatch {
     }
 
     private static var records: [ObjectIdentifier: Record] = [:]
+
+    static var files: [URL] { records.values.compactMap { $0.done ? $0.file : nil } }
     private static var order: [ObjectIdentifier] = []
     private static var expected: [UUID: Expectation] = [:]
 

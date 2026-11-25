@@ -27,6 +27,11 @@ PAGE = b"""<!doctype html><title>Form</title><h1>Sign up</h1><form>
 
 OTHER = b"""<!doctype html><title>Other</title><h1>Elsewhere</h1><p>Nothing to fill here</p>"""
 
+SIGNIN = b"""<!doctype html><title>Sign in</title><form action="/landed" method="get"><input name="email" autocomplete="username">
+<input id="pass" name="pw" type="password" autocomplete="current-password"><button type="submit">Sign in</button></form>"""
+
+LANDED = b"""<!doctype html><title>Home</title><h1>Welcome back</h1>"""
+
 failures = []
 
 
@@ -38,7 +43,7 @@ def check(name, ok, detail=""):
 
 class Page(BaseHTTPRequestHandler):
     def do_GET(self):
-        body = OTHER if self.path.startswith("/other") else PAGE
+        body = OTHER if self.path.startswith("/other") else SIGNIN if self.path.startswith("/signin") else LANDED if self.path.startswith("/landed") else PAGE
         self.send_response(200)
         self.send_header("content-type", "text/html")
         self.send_header("content-length", str(len(body)))
@@ -118,6 +123,37 @@ def reach(client):
     check("only the person may: the same code and hint as the command", mine[0]["isError"] and error.get("code") == "person_only" and error.get("code") == shell.get("code") and error.get("hint") == shell.get("hint"), (error, shell))
 
 
+def signing_in(client, base):
+    port = int(base.rstrip("/").rsplit(":", 1)[1])
+    desk({"do": "agents", "action": "mode", "mode": "auto"})
+    desk({"do": "agents", "action": "logins", "kept": [{"host": "127.0.0.1", "port": port, "user": "sam@example.com", "password": "s3cret-pass-word", "clear": True}]})
+    opened = client.call("open", url=base + "signin")
+    tab = meta(opened[0]).get("id") or meta(opened[0]).get("tab")
+    client.call("wait", tab=tab)
+    look = client.call("snapshot", tab=tab)
+    check("a sign-in wall over MCP names fill_login, not the command", "call fill_login" in look[1] and "broadway fill login" not in look[1], look[1][:600])
+    listed = {tool["name"] for tool in client.rpc("tools/list")["result"]["tools"]}
+    check("fill_login is called before more_tools lists it", "fill_login" not in listed, sorted(listed))
+    thread, box = waiting(client, "fill_login", tab=tab)
+    up = questions()
+    check("fill_login over MCP raises the sign-in card", bool(up) and "sam@example.com" not in json.dumps(box), up)
+    desk({"do": "agents", "action": "answer", "with": "yes"})
+    thread.join(60)
+    said = box.get("said", ({"isError": True}, ""))
+    check("and signs in after the yes, with the password never in the answer", not said[0].get("isError") and "s3cret" not in json.dumps(said), said)
+    check("the page moved on", wait_until(lambda: "landed" in bench("eval", tab, "location.pathname")), bench("eval", tab, "location.pathname"))
+    client.call("close", tab=tab)
+
+
+def wait_until(condition, seconds=10):
+    until = time.time() + seconds
+    while time.time() < until:
+        if condition():
+            return True
+        time.sleep(0.2)
+    return False
+
+
 def setting_up(client):
     found = client.call("more_tools", query="links add")
     check("more_tools finds the new nouns", "links_add" in meta(found[0]).get("added", []), found)
@@ -140,6 +176,19 @@ def setting_up(client):
     settings = {row["id"]: row["value"] for row in client.data("settings_list").get("settings", [])}
     check("the settings read back over MCP", settings.get("look") == "dark" and settings.get("pageZoom") == 110
           and settings.get("newtab.floating") is True and settings.get("bookmarks.bar") is True, {k: settings.get(k) for k in ("look", "pageZoom", "newtab.floating", "bookmarks.bar")})
+    for guarded, value in (("agents.signIn", "true"), ("passwords.onepassword", "true")):
+        alone = client.call("settings_set", setting=guarded, value=value)
+        mixed = client.call("settings_set", setting="newtab.floating", value="false", values=[guarded, value])
+        codes = [meta(alone[0], "error").get("code"), meta(mixed[0], "error").get("code")]
+        check(f"{guarded} is the person's over MCP, alone and beside a setting an agent may change", codes == ["person_only", "person_only"], (codes, alone[1][:300], mixed[1][:300]))
+        read = client.call("settings_get", setting=guarded)
+        print(f"settings_get {guarded}:", json.dumps(meta(read[0])), "|", read[1][:400].replace("\n", " / "))
+    after = {row["id"]: row for row in client.data("settings_list").get("settings", [])}
+    for guarded in ("agents.signIn", "passwords.onepassword"):
+        print(f"settings_list {guarded}:", json.dumps(after.get(guarded)))
+    check("nothing changed beside the refused pair", after.get("newtab.floating", {}).get("value") is True and after.get("agents.signIn", {}).get("value") is False
+          and after.get("passwords.onepassword", {}).get("value") is False, {k: after.get(k) for k in ("newtab.floating", "agents.signIn", "passwords.onepassword")})
+    check("can-set names neither sign-in switch", not any(row["id"] in ("agents.signIn", "passwords.onepassword") for row in can), [row["id"] for row in can])
     keys = {row["id"]: row["key"] for row in client.data("shortcuts_list").get("shortcuts", [])}
     check("the shortcut reads back over MCP", bool(keys.get("view.reload")), keys.get("view.reload"))
     spaces = client.data("spaces_list").get("spaces", [])
@@ -300,6 +349,8 @@ def on(base):
     check("the click landed", "clicked" in listed, listed)
     check("press", not client.call("press", tab=tab["id"], key="Tab")[0]["isError"])
     check("scroll", not client.call("scroll", tab=tab["id"], by=20)[0]["isError"])
+    rolled = client.call("scroll", tab=tab["id"], by="down 300")
+    check("scroll takes a direction and points over MCP", not rolled[0]["isError"] and ("Scrolled" in rolled[1] or "Already at the bottom" in rolled[1]), rolled)
     batched = client.call("batch", tab=tab["id"], steps=[{"tool": "press", "arguments": {"key": "Tab"}}, {"tool": "scroll", "arguments": {"by": 20}}])
     check("batch runs its steps over MCP", not batched[0]["isError"] and meta(batched[0]).get("landed") == [1, 2] and "Ran 2 of 2 steps" in batched[1], batched)
     ran = client.call("run", code='scroll({by: 10}); print("rolled " + (read().text ? "and read" : "and empty"))', tab=tab["id"])
@@ -326,6 +377,7 @@ def on(base):
     bench("close", private)
     reach(client)
     setting_up(client)
+    signing_in(client, base)
     client.close()
 
     task = broadway("say hello")

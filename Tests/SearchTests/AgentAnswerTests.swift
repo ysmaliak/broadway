@@ -123,6 +123,13 @@ struct AgentAnswerTests {
         ])
     }
 
+    @Test func anOpenAlertTakesAn() {
+        let change = AgentChange(tab: "a8b6db94", did: "click", target: .init(ref: "e8", role: "button", name: "Save"),
+                                 settled: .dialog, page: teas,
+                                 dialog: .init(id: "d2", kind: "alert", message: "Saved", site: "shop.example"))
+        #expect(change.lines().contains("An alert dialog is open: \"Saved\""))
+    }
+
     @Test func aNewTabFromThePageIsNamedAndNotTaken() {
         let change = AgentChange(tab: "a8b6db94", did: "click", target: .init(ref: "e3", role: "link", name: "Gift cards"), page: teas,
                                  tabs: .init(opened: [.init(id: "2c4d6e8f", title: "Gift cards", url: "https://shop.example/gift")], working: "a8b6db94"))
@@ -184,6 +191,16 @@ struct AgentAnswerTests {
         let change = AgentChange(tab: "a8b6db94", did: "click", page: teas,
                                  appeared: [.init(ref: "e5", role: "status", name: "one\ntwo")])
         #expect(change.lines().contains("+ @e5 status \"one two\""))
+    }
+
+    @Test func anAlertBroadwayClosedComesBackClosed() throws {
+        var change = basket
+        change.alerted = .init(id: "d3", kind: "alert", message: "Saved", site: "shop.example")
+        let wire = try JSONSerialization.data(withJSONObject: change.object())
+        let back = try #require(JSONSerialization.jsonObject(with: wire) as? [String: Any])
+        let rebuilt = try #require(AgentChange(object: back))
+        #expect(rebuilt.lines() == change.lines())
+        #expect(!rebuilt.lines().contains { $0.contains("dialog is open") })
     }
 
     @Test func theTextComesBackFromTheObjectAlone() throws {

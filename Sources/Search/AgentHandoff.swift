@@ -49,35 +49,58 @@ extension BrowserToolbox {
         if let refused = await gate(.tab, tab: tab, site: site, task: task) { return refused }
         let optional = arguments["optional"] as? Bool ?? false
         let seconds = AgentHandoff.wait(arguments)
-        let before = AgentSecrets.shown(tab.pageAddress)
-        let started = Date()
-        var question = AgentQuestion(kind: .choice(optional ? ["Done", "Skip"] : ["Done"]), title: reason)
-        question.task = task
-        question.tab = tab.id
-        question.site = site
-        question.quoteLabel = "Handed to you"
-        let mood = tab.agentMood
-        tab.agentMood = .waving
-        let asking = Task { @MainActor in await AgentDesk.shared.ask(question) }
-        var ending = AgentHandoff.ending(await AgentPatience.race(asking, seconds: seconds), optional: optional)
-        AgentDesk.shared.take(question.id, .dropped)
+        let signature = Self.signature("handoff", arguments)
+        let held: AgentHeld.Entry
+        let first: Bool
+        if let kept = AgentHeld.shared.entry(task, signature) {
+            held = kept
+            first = false
+        } else {
+            if let other = AgentHeld.shared.pending(task, kind: .handoff), other.tab == tab.id {
+                AgentDesk.shared.take(other.question, .dropped)
+                AgentHeld.shared.release(other)
+            }
+            var question = AgentQuestion(kind: .choice(optional ? ["Done", "Skip"] : ["Done"]), title: reason)
+            question.task = task
+            question.tab = tab.id
+            question.site = site
+            question.quoteLabel = "Handed to you"
+            let mood = tab.agentMood
+            tab.agentMood = .waving
+            let asking = Task { @MainActor () -> AgentAnswer in
+                let said = await AgentDesk.shared.ask(question)
+                if tab.agentMood == .waving { tab.agentMood = mood == .waving ? .reading : mood }
+                return said
+            }
+            held = AgentHeld.shared.hold(task, signature, kind: .handoff, question: question.id, tab: tab.id, asking: asking,
+                                         before: AgentSecrets.shown(tab.pageAddress))
+            held.watcher = AgentSignIn.watch(tab, question: question.id, box: self)
+            first = true
+        }
+        let early = AgentPatience.Early()
+        let answer = await AgentPatience.race(held.asking, seconds: seconds, unseen: first ? AgentLooking.unseen(for: task) : nil, early: early)
+        var ending = AgentHandoff.ending(answer, optional: optional)
+        if early.hit, answer == nil {
+            return .failure("The person hasn't given the tab back yet. The hand-over stays up in Broadway.", code: .needsYou, data: ["away": true])
+        }
+        AgentDesk.shared.take(held.question, .dropped)
+        AgentHeld.shared.release(held)
         if ending == .unanswered, tab.driving {
-            let left = max(0, seconds - Date().timeIntervalSince(started))
+            let left = max(0, seconds - Date().timeIntervalSince(held.started))
             if await AgentDriving.settled(tab, patience: .milliseconds(Int(left * 1000))) { ending = .done }
         }
-        if tab.agentMood == .waving { tab.agentMood = mood == .waving ? .reading : mood }
         guard ending != .unanswered else {
             return .failure("The person didn't give the tab back within \(Int(seconds)) s", code: .needsYou,
                             hint: "Tell the person, then run the same command again")
         }
         tab.handedBack = false
-        let ms = Int(Date().timeIntervalSince(started) * 1000)
+        let ms = Int(Date().timeIntervalSince(held.started) * 1000)
         let now = AgentSecrets.shown(tab.pageAddress)
         let id = String(tab.id.uuidString.prefix(8)).lowercased()
         let change = AgentChange(
             tab: id, did: "handoff",
             said: ending == .skipped ? "The person skipped it, in \(id)" : "The person gave the tab back after \(AgentChange.seconds(ms)) s, in \(id)",
-            ms: ms, page: .init(url: now, title: tab.title, navigated: now != before),
+            ms: ms, page: .init(url: now, title: tab.title, navigated: now != held.before),
             kept: ending == .skipped ? ["skipped": true] : [:])
         return ToolOutcome(text: ToolReply.notice + change.lines().joined(separator: "\n"), data: change.object())
     }

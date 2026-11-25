@@ -44,6 +44,8 @@ Two sessions of the same program are numbered, such as "Claude Code 2".
 
 Each session has a **current tab**: the last tab it opened or named with `broadway tab ID`. A command without `--tab` works there, so two agents working at once don't take each other's tab. `open` always opens another tab, which becomes the current one. `go` moves the current tab. Broadway sets no limit and forces no reuse: the agent keeps as many tabs as the work needs, and closes the ones it is done with (`close`, `close --others`, `close --all`). `open` says when the session already has a tab on the same address.
 
+An agent's tab never opens in a private window, a pop-up or a window that keeps nothing. With such a window in front it opens in the newest ordinary window, and with none open Broadway opens one behind the others. `open` then checks that the agent's next command can find the tab, and answers `no_window` with no id when it can't. `open --name NAME` gives a tab a name that `--tab NAME` takes in place of its id. The name is the agent's own and the person never sees it.
+
 A link or a script in an agent's tab that opens a new window gives a tab of the same session, behind the person's and out of history, never one of the person's. The action's answer names it, and it becomes the current tab only when the agent switches to it. If the person marked that site Never Here, the new tab closes and the answer says so.
 
 Subagents of one agent share its session and its current tab, so each passes `--tab` (or sets `BROADWAY_TAB`) with the id its own `open` gave.
@@ -52,7 +54,7 @@ Subagents of one agent share its session and its current tab, so each passes `--
 
 When a command needs the person's yes, the session is what asks. The question shows on that session's tab, with the command quoted and the agent's name, and its face waves until the person answers. A yes for reading a site holds for the rest of the session. If Broadway is in the background, a notification says which agent needs the person.
 
-A command waits 100 seconds for the answer, which is under Claude Code's default two-minute Bash timeout. Over MCP a connection waits 600 seconds when the client is Claude Code and shows progress, and 15 seconds for other clients, and says at once in the client that it waits for the person. `--wait-person MIN` waits longer and `--no-person` fails at once. When the wait runs out the command exits 3 with `needs_you`, nothing is done, and the question stays up. Each step of a `batch` passes the same checks one by one.
+A command waits 100 seconds for the answer, which is under Claude Code's default two-minute Bash timeout. Over MCP a connection waits 600 seconds when the client is Claude Code and shows progress, and 15 seconds for other clients, and says at once in the client that it waits for the person. `--wait-person MIN` waits longer and `--no-person` fails at once. When the wait runs out the command exits 3 with `needs_you`, nothing is done, and the question stays up. When the person is away from Broadway (another app in front, or the window covered), a command waiting on them answers `needs_you` after 20 seconds and the question stays up. The Dock icon shows how many questions wait, and a notification names the agent and its folder. The same command again waits for that question, or hears the answer given meanwhile. The question of an agent that has gone is removed at once. Each step of a `batch` passes the same checks one by one.
 
 A yes that arrives after the agent stopped waiting is recorded, so the agent's next try goes through. A yes to reading a site or using tabs holds for the rest of the session. A yes to sending, paying, deleting or uploading becomes a pass for that one act, on that site and that target, which the session's next identical step uses within 120 seconds and which is then gone, so one yes never covers a second, different send. A late yes never acts by itself.
 
@@ -70,7 +72,41 @@ A yes that arrives after the agent stopped waiting is recorded, so the agent's n
 - **Never an approval.** A pick opens nothing the gate would have asked about, and the gate still asks its own question when the agent acts. No mode answers a question, Bypass included.
 - **Only the agent asks.** The words come from the agent's call. Nothing a page says raises a question, and the tool tells agents never to ask because a page told them to.
 
-An agent fills a form with saved details through `broadway fill`, which asks the person every time.
+## Signing in and secrets
+
+An agent never reads a password, a card number or a one-time code. Broadway moves each one itself, after the person's yes, and hides it from every answer afterwards.
+
+### Signing in
+
+`broadway fill login` puts up one card, "Sign in on SITE?", with the agent's name and the accounts Broadway keeps for the page. With one account the card says "As NAME". With several, each is a row and a pick is the yes. With none, the card offers Sign In Myself, which hands the tab over.
+
+- **What the agent learns before a yes: nothing.** The question, the `needs_you` text, the MCP progress line and `approvals list` are the same with no account kept, one or several. `logins list` answers an agent with `person_only`.
+- **After the yes** Broadway fills the form, sends it, follows a name step to its password step, and answers "Filled as NAME" with what the page wants now: nothing, the password again, a code, a captcha or a passkey.
+- **Where a sign-in fits.** Only the page's own frame, on the exact host (a leading `www.` aside), port and scheme it was kept for. A sign-in kept with no port fits the scheme's own port, and on this Mac (`localhost`, `127.0.0.1`, `::1`, `*.localhost`) any port. A frame or a pop-up from another site is never filled.
+- **The mode decides how often the card shows.** Ask shows it every time. Auto shows it the first time and offers Always Here for that account on that site. Bypass shows no card when one account fits, and a notice says "Claude Code signed in as NAME" for six seconds. Never Here refuses. Settings › Agents › Always ask before an agent signs in shows the card every time in every mode.
+- **Another space.** When an agent's tab meets a sign-in wall and another space is signed in to that site, the look says so: `signed in in Work: broadway open URL --space Work`.
+- **1Password.** With Settings › Passwords › 1Password on, the card also offers the accounts 1Password keeps for the page, each marked with where it comes from. Broadway reads them through the 1Password command line tool, the password goes from 1Password straight into the page, and Broadway keeps none of it. 1Password asks for Touch ID itself when it is locked.
+- **A record.** Settings › Passwords shows on each sign-in which agent last used it, in which folder and when.
+
+A sign-in box the site shows before its page (HTTP basic sign-in), a captcha and a passkey are the person's: `broadway handoff "Sign in"`.
+
+### One-time codes
+
+`broadway fill code` fills and sends a code that was mailed to the person's Gmail, when Codes from Gmail is on, or one that 1Password keeps for the account the agent just signed in with. Only a code from the site's own sender counts. It asks nothing within five minutes of the same agent's `fill login` on that site, and otherwise follows the mode. A code sent by text or shown in an authenticator app answers `nothing_kept`, and `handoff` is next.
+
+### A secret the agent holds
+
+`broadway type TARGET --secret-env NAME` (or `--secret-file PATH`, `--secret-stdin`, and `secret_env` over MCP) types a value the agent already has, such as an API token, into a password box. The command reads the value where it runs, so it never passes through the agent's own words. A plain box refuses a secret, since it would show in the next look, and a password box refuses plain text, since it would stay in the transcript.
+
+### A value a page shows once
+
+`broadway carry FROM --to TARGET [--to-tab ID]` copies a value from one element, such as a new API key, into a password box of the same tab or another tab of the same agent. It asks the person every time, in every mode, and the answer never holds the value.
+
+### What is sealed
+
+Every value Broadway fills, types as a secret or carries is sealed until Broadway quits: answers show `••••` in its place, in its percent-encoded, JSON and HTML forms too, and shots and PDFs paint over any box or line of text that holds it. A field named for a token's name, label, scope or expiry is an ordinary field. A field for the secret itself is never read.
+
+`broadway fill details` and `broadway fill card` fill the person's address or card and ask every time.
 
 ## What the person decides
 
@@ -82,6 +118,8 @@ All of these are in Settings › Agents, and none of them can be changed from th
   - Auto asks before the Mac, sending, paying, deleting and uploading.
   - Bypass never asks, except before using the Mac. Captchas and passkeys still stop for the person.
 - **Sites.** A site can be marked Always Here or Never Here from a question's answer. Never Here refuses every act on it. Always Here lets everything through except paying.
+- **Always ask before an agent signs in.** Off at first. On, the sign-in card shows every time in every mode.
+- **Sign-ins without asking.** Each Always Here given on a sign-in card is listed under Sites as "Signs in as NAME without asking", and only the person removes it.
 - **Connected agents**, and **the broadway command** for setting it up.
 
 [cli.md](cli.md#who-may-do-what) lists how each command is gated. The MCP tools for spaces, folders, bookmarks, live folders, settings, shortcuts, extensions, shields, permissions, link rules, site shortcuts, Quick Actions and snippets take the same path as their commands, so each is gated exactly as its command is.
@@ -117,6 +155,37 @@ With spaces on and more than one of them, each session has a space of its own, c
 - **Moving.** The session's menu on the card has Move to Space, which moves the tabs the card lists and the session with them. `broadway tabs move TAB --space NAME` moves one tab. An agent's tab can't be dragged or moved from a tab's own menu, as before. Every move of an agent's tab to another space, by any of these paths, takes the session's space with it, and the folder learns it. A tab of a session that already ended still teaches its folder. A private window never teaches.
 - **Telling.** `open`'s answer carries `space`, with the space's name, why it was chosen and how to change it. The first open of a session, and the first after its space changes, also says so in words, with how to change it: "In Personal, matching ~/Projects/personal. Run broadway open URL --space NAME to pick another and keep it for this folder." Broadway picks a sensible space and makes another easy to choose. It refuses only a space that doesn't exist, with the names of those that do.
 - With one space, or spaces off, nothing here applies and an agent opens in the space on screen.
+
+## From another machine
+
+An agent on another machine uses Broadway over ssh: `ssh mac broadway open URL`. Each machine is one session, named "SSH from ADDRESS", and `BROADWAY_AGENT=NAME` before the command keeps several agents of one machine apart. A command over ssh never starts Broadway by itself. It answers `not_running` and names `broadway serve`, which keeps a hidden Broadway open.
+
+- **Files cross as bytes.** `shot --out -`, `shot --tiles --out -` (a tar stream), `pdf --out -` and `downloads get ID --out -` write to standard output, and `upload TARGET --stdin NAME` reads the file from standard input. A secret is piped the same way, into `type TARGET --secret-stdin`.
+- **MCP.** `ssh mac broadway mcp` is the server command. The session lasts as long as the connection, and a new connection from the same machine takes back tabs that were spared.
+- **A forwarded socket.** With `ssh -L` to `broadway.sock` and `BROADWAY_SOCKET` set, the `broadway` program runs on the agent's machine. Broadway tells such a connection from a local one by its origin, sends files across in pieces (25 MB at most), and answers with paths on the agent's machine.
+- **Who is asking.** The first question from a session says who signed the program that asked, read from the connection itself and never from what the program says.
+
+## Pictures
+
+`broadway shot` is one pixel for each point. Points for `click --at X,Y`, `hover --at` and `drag --at … --to`, and boxes from `snapshot --boxes` and `styles`, are in the pixels of the agent's last plain or marked shot of that tab, or of a default shot when it took none, whatever the screen and the page's zoom. `--marks` draws each ref on the picture, `--tiles` gives the whole page window by window in the agent's own tab, `--full` gives one tall picture up to 16,000 points, `--width` and `--scale` change its size, and `--if-changed` gives no picture when the page hardly changed.
+
+## What an answer tells
+
+Every act answers with what changed, so the answer is the proof. Beyond lines that appeared, went or changed, it says:
+
+- **A new order.** A table or list sorted by the act is one line, `~ the rows of NAME are in a new order`.
+- **A blocked window.** A window the page tried to open by itself, and Broadway blocked, is told once in the next answer in that tab, with its address.
+- **An alert.** An alert in the agent's own tab is closed for it, and the answer says what it said. A confirm or a prompt still waits for `broadway dialog`.
+- **Page errors.** Up to three errors the act caused, each quoted. `broadway console` gives all of them.
+- **A redrawn ref.** A ref the page redrew still works when its name was unique, and the answer's first line says so. A delete or a pay whose row changed never moves to another row.
+- **A closed part.** A part of the page in a closed shadow root is noted in the snapshot as closed to reading. `broadway shot` shows it and `broadway click --at X,Y` acts in it.
+- **A service worker.** `network` says when a service worker controls the page, since what the worker answers itself does not show there.
+
+An act waits up to three seconds for a target that is still disabled, hidden or moving, then for half a second of quiet on the page, and says what it waited for. `scroll` moves the page or a box down, up, left or right, and says how far it went and how much is left.
+
+## What Broadway counts
+
+Broadway counts each agent command's calls and failures, by error code, on this Mac. It keeps no addresses, page text or arguments and sends nothing anywhere, and clearing history, sites or the cache empties the count. `broadway doctor --calls` prints it as a table, and `--json` as an object.
 
 ## Watching an agent
 

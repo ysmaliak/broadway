@@ -18,8 +18,8 @@ struct AgentKey: Equatable {
 
     static let named: [String: (code: UInt16, text: String)] = AgentPage.keyCodes.merging([
         "Delete": (117, "\u{F728}"), "Home": (115, "\u{F729}"), "End": (119, "\u{F72B}"), "PageUp": (116, "\u{F72C}"), "PageDown": (121, "\u{F72D}"),
-        "Space": (49, " "),
-    ]) { old, _ in old }
+        "Space": (49, " "), "ArrowLeft": (123, "\u{F702}"), "ArrowRight": (124, "\u{F703}"), "ArrowDown": (125, "\u{F701}"), "ArrowUp": (126, "\u{F700}"),
+    ]) { _, new in new }
 
     static let aliases: [String: String] = [
         "enter": "Enter", "return": "Enter", "esc": "Escape", "escape": "Escape", "tab": "Tab", "space": "Space", "spacebar": "Space",
@@ -63,6 +63,8 @@ struct AgentKey: Equatable {
         if control { flags.insert(.control) }
         if option { flags.insert(.option) }
         if command { flags.insert(.command) }
+        if (123...126).contains(code) { flags.insert(.numericPad) }
+        if text.unicodeScalars.first.map({ (0xF700...0xF8FF).contains($0.value) }) == true { flags.insert(.function) }
         return flags
     }
 
@@ -275,6 +277,8 @@ extension BrowserToolbox {
     func drag(_ tab: Tab, _ arguments: [String: Any], task: UUID?, browser: Browser) async -> ToolOutcome {
         let ref = arguments["ref"] as? String ?? ""
         let given = arguments["to"] as? String ?? ""
+        let pointed = pointAt.removeValue(forKey: tab.id)
+        if let end = Self.spotted(given) { return await drag(tab, ref: ref, from: pointed, to: end, final: arguments["final"] as? String, task: task) }
         var to = AgentTarget.bare(given)
         if !AgentTarget.isRef(given) {
             switch await resolve(AgentTarget(words: given.isEmpty ? nil : given), tab: tab, tool: "drag") {
@@ -294,6 +298,61 @@ extension BrowserToolbox {
         acting(tab, "Dragging")
         await mark(tab, ref: ref, task: task)
         return outcome(await inFrame(tab, ref, AgentPage.dragScript, ["to": AgentRef(to).ref]) as? [String: Any], tab: tab, ref: ref)
+    }
+
+    static func spotted(_ text: String) -> CGPoint? {
+        let parts = text.split(separator: ",").map { Double($0.trimmingCharacters(in: .whitespaces)) }
+        guard parts.count == 2, let x = parts[0], let y = parts[1], x.isFinite, y.isFinite, x >= 0, y >= 0 else { return nil }
+        return CGPoint(x: x, y: y)
+    }
+
+    private func drag(_ tab: Tab, ref: String, from pointed: AgentAim?, to end: CGPoint, final: String?, task: UUID?) async -> ToolOutcome {
+        guard tab.agent, AgentRef(ref).frame == nil else { return .failure("A drag to a point needs a tab of your own and no frame. Use open.", code: .notYours) }
+        var start = pointed?.view
+        if start == nil {
+            let (spotted, failure) = await spot(tab, ref: ref)
+            if let failure { return failure }
+            let zoom = Double(max(tab.web.pageZoom, 0.1))
+            if let x = spotted?["x"] as? Double, let y = spotted?["y"] as? Double { start = CGPoint(x: x * zoom, y: y * zoom) }
+        }
+        guard let start else { return .failure("That element has no place on screen", code: .notActionable) }
+        let picture = pictureScale(tab, task: task)
+        let stop = CGPoint(x: end.x / picture, y: end.y / picture)
+        let zoom = max(tab.web.pageZoom, 0.1)
+        guard let under = await timed(tab, AgentPage.pointScript, ["x": stop.x / zoom, "y": stop.y / zoom], seconds: 5) as? [String: Any] else {
+            return .failure("The page gave no answer", code: .noAnswer)
+        }
+        if let failed = under["failed"] as? String { return .failure(failed, code: under["code"] as? String ?? "not_found") }
+        guard let to = under["ref"] as? String,
+              let found = await inFrame(tab, to, AgentPage.factsScript, ["submit": false]) as? [String: Any] else { return .failure("The page gave no answer", code: .noAnswer) }
+        if found["failed"] != nil { return pageFailure(found, tab: tab, ref: to) }
+        let place = tab.pageAddress
+        let decided = await decide(ActionFacts(found), final: final, tab: tab, task: task)
+        if let refused = decided.refused { return refused }
+        guard tab.pageAddress == place else { return .failure("The page changed while the person was answering, so nothing was dragged. Look again.") }
+        let view = tab.web
+        guard let window = view.window else { return .failure("That page has no view to drag in", code: .unseen) }
+        acting(tab, "Dragging")
+        await mark(tab, ref: ref, task: task)
+        point(tab, ["x": stop.x - 1, "y": stop.y - 1, "width": 2, "height": 2], .click, task: task)
+        let middle = CGPoint(x: (start.x + stop.x) / 2, y: (start.y + stop.y) / 2)
+        let steps: [(NSEvent.EventType, CGPoint)] = [(.leftMouseDown, start), (.leftMouseDragged, middle), (.leftMouseDragged, stop), (.leftMouseUp, stop)]
+        for (type, spot) in steps {
+            let at = view.convert(NSPoint(x: spot.x, y: view.isFlipped ? spot.y : view.bounds.height - spot.y), to: nil)
+            guard let event = NSEvent.mouseEvent(with: type, location: at, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                 windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1,
+                                                 pressure: type == .leftMouseUp ? 0 : 1) else { continue }
+            switch type {
+            case .leftMouseDown: view.mouseDown(with: event)
+            case .leftMouseDragged: view.mouseDragged(with: event)
+            default: view.mouseUp(with: event)
+            }
+            try? await Task.sleep(for: .milliseconds(30))
+        }
+        let what = under["what"] as? String ?? "the page"
+        let begun = pointed.map { "from \(Int(($0.view.x * picture).rounded())),\(Int(($0.view.y * picture).rounded()))" } ?? "@\(ref)"
+        AgentWatchBox.current?.said = "Dragged \(begun) to \(what) at \(Int(end.x.rounded())),\(Int(end.y.rounded()))"
+        return .text("Dragged")
     }
 
     func selectText(_ tab: Tab, _ arguments: [String: Any]) async -> ToolOutcome {
@@ -325,66 +384,30 @@ extension BrowserToolbox {
         return .json(["width": size?["width"] ?? width, "height": size?["height"] ?? height])
     }
 
-    func picture(_ tab: Tab, _ arguments: [String: Any]) async -> ToolOutcome {
-        let ref = arguments["ref"] as? String ?? ""
-        let full = arguments["full"] as? Bool == true
-        guard ref.isEmpty || !full else { return .failure("shot takes a ref or full, not both") }
-        if !ref.isEmpty, AgentRef(ref).frame != nil { return .failure("A picture of one element in a frame is not supported. Take the whole page.") }
-        if full, !tab.agent { return .failure("A full-page picture needs a tab of your own: the person's page is never resized. Use open.") }
-        let configuration = WKSnapshotConfiguration()
-        configuration.afterScreenUpdates = true
-        let web = tab.web
-        let kept = (frame: web.frame, mask: web.autoresizingMask)
-        if !ref.isEmpty {
-            let (spotted, failure) = await spot(tab, ref: ref)
-            if let failure { return failure }
-            let left = spotted?["left"] as? Double ?? 0, top = spotted?["top"] as? Double ?? 0
-            let width = spotted?["width"] as? Double ?? 0, height = spotted?["height"] as? Double ?? 0
-            let bounds = web.bounds
-            var rect = NSRect(x: left, y: web.isFlipped ? top : bounds.height - top - height, width: width, height: height).intersection(bounds)
-            if rect.isEmpty { return .failure("That element is outside the page's view") }
-            rect = rect.integral
-            configuration.rect = rect
-        }
-        guard await PageSelection.run(tab, AgentPage.shieldScript) as? Bool == true else { return .failure("That page can't be pictured safely") }
-        if full, let size = await PageSelection.run(tab, AgentPage.pageSizeScript) as? [String: Any] {
-            let height = min(size["height"] as? Double ?? kept.frame.height, 16_000)
-            web.autoresizingMask = []
-            web.setFrameSize(NSSize(width: kept.frame.width, height: max(height, kept.frame.height)))
-            try? await Task.sleep(for: .milliseconds(300))
-            configuration.rect = web.bounds
-        }
-        let image: NSImage? = await withCheckedContinuation { done in
-            web.takeSnapshot(with: configuration) { image, _ in done.resume(returning: image) }
-        }
-        if full {
-            web.frame = kept.frame
-            web.autoresizingMask = kept.mask
-        }
-        _ = await PageSelection.run(tab, AgentPage.unshieldScript)
-        guard let image, let tiff = image.tiffRepresentation, let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else {
-            return .failure("No picture of that page")
-        }
-        return ToolOutcome(imagePNG: png)
-    }
-
     func settle(_ tab: Tab, _ arguments: [String: Any]) async -> ToolOutcome? {
         let part = arguments["request"] as? String ?? ""
         let idle = arguments["idle"] as? Bool == true
         guard idle || !part.isEmpty else { return nil }
-        let limit = Date().addingTimeInterval(min(arguments["seconds"] as? Double ?? 10, 60))
+        let began = Date()
+        let cap = min(arguments["seconds"] as? Double ?? 10, 60)
+        let limit = began.addingTimeInterval(cap)
         let start = tab.devLog.sequence
         let lately = Date().addingTimeInterval(-10)
         repeat {
             let requests = tab.devLog.entries.filter { $0.kind == .request }
+            var pause = AgentSettleRule.step
             if !part.isEmpty {
                 if let hit = requests.first(where: { ($0.sequence > start || $0.recorded >= lately) && $0.url.contains(part) }) {
                     return .json(["ok": true, "url": AgentSecrets.diagnosticURL(hit.url), "status": hit.status, "failed": hit.failed, "website": true])
                 }
-            } else if !tab.loading, Date().timeIntervalSince(requests.last?.recorded ?? .distantPast) >= 0.5 {
-                return .json(["ok": true, "title": tab.title, "url": AgentSecrets.shown(tab.pageAddress)])
+            } else {
+                let quietFor = Date().timeIntervalSince(requests.last?.recorded ?? .distantPast)
+                if !tab.loading, quietFor >= 0.5 {
+                    return .json(["ok": true, "title": tab.title, "url": AgentSecrets.shown(tab.pageAddress)])
+                }
+                pause = AgentSettleRule.pause(elapsed: Date().timeIntervalSince(began), quietFor: quietFor, busy: 0, navigating: tab.loading, cap: cap)
             }
-            try? await Task.sleep(for: .milliseconds(100))
+            try? await Task.sleep(for: .seconds(pause))
         } while Date() < limit
         return .failure("Timed out waiting. Nothing was repeated.")
     }

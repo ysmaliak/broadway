@@ -51,7 +51,7 @@ enum Completions {
             }
             if first == "batch" { found = [("--from", "run step N and on"), ("--keep-going", "go on after a failure"), ("--tab", "the tab to start in")] }
             if first == "run" { found = [("--timeout", "seconds the script may run"), ("--output-limit", "printed characters"), ("--tab", "the tab to start in")] }
-            if first == "guide" { found = [("mcp", "how MCP clients connect")] }
+            if first == "guide" { found = Help.guideTopics.map { ($0.name, $0.summary) } + [("mcp", "how MCP clients connect")] }
             if first == "completions" { found = [("fish", ""), ("zsh", ""), ("bash", "")] }
             if first == "watch" { found = [("--only", "any of \(Watch.kinds.joined(separator: ","))"), ("--count", "stop after this many"), ("--seconds", "stop after this long")] }
             if ["setup", "remove"].contains(first) { found = Setup.parts.map { ($0, "") } }

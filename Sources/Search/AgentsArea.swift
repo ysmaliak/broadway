@@ -177,6 +177,10 @@ enum AgentsLayout {
         return parts.filter { $0.0 > 0 }.map { "\($0.0) \($0.1)" }.joined(separator: " · ")
     }
 
+    static func said(_ link: AgentLink, _ state: AgentLinkState) -> (title: String, state: AgentLinkState) {
+        (state.attention ? link.asker : link.title, state)
+    }
+
     static func voice(_ sessions: [(title: String, state: AgentLinkState)]) -> Voice {
         let asking = sessions.filter { $0.state.attention }
         if let first = asking.first {
@@ -236,18 +240,18 @@ struct AgentSession: Identifiable, Equatable {
 
 extension AgentLinks {
     static func frontSpace() -> UUID? {
-        guard let front = Browsers.front, front.showsSpaces else { return nil }
+        guard let front = Browsers.forAgents, front.showsSpaces else { return nil }
         return front.spaceID
     }
 
     static func frontSpaceNames() -> [AgentSpaceName]? {
-        guard let front = Browsers.front, front.showsSpaces else { return nil }
+        guard let front = Browsers.forAgents, front.showsSpaces else { return nil }
         return front.spaces.map { AgentSpaceName(id: $0.id, name: $0.name) }
     }
 }
 
 extension Browser {
-    var agentsInFront: Bool { Browsers.front === self || Browsers.front == nil }
+    var agentsInFront: Bool { Browsers.forAgents.map { $0 === self } ?? !keepsNothing }
 
     func agentSessions(links: [AgentLink], front: Bool, in space: UUID? = nil) -> [AgentSession] {
         let shown = space ?? spaceID
@@ -746,7 +750,7 @@ final class AgentsAreaView: NSView {
         let states = shown.map { $0.state(pending: questions) }
         let now = Date()
         watchGreetings(shown, now: now)
-        let voice = AgentsLayout.voice(zip(shown, states).map { ($0.link.title, $1) })
+        let voice = AgentsLayout.voice(zip(shown, states).map { AgentsLayout.said($0.link, $1) })
         let unfolds = AgentsLayout.content(sections) > 0
         let only = shown.count == 1 ? shown.first : nil
         let faces = Set(AgentsLayout.faces(zip(shown, states).map { ($0.id, $1.attention) }))

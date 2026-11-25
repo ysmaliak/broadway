@@ -232,6 +232,34 @@ final class PersonToolsTests {
         #expect(AgentDesk.shared.pending.isEmpty)
     }
 
+    @Test func awayAnEraseAnswersEarlyAndAYesGivenMeanwhileLetsTheNextTryThrough() async throws {
+        let early = AgentLooking.early
+        let seen = AgentLooking.looking
+        AgentLooking.early = 0.4
+        AgentLooking.looking = { false }
+        defer {
+            AgentLooking.early = early
+            AgentLooking.looking = seen
+            AgentHeld.shared.reset()
+        }
+        let link = session()
+        let mcp = server(link)
+        let made = try #require(browser.bookmarks.add(URL(string: "https://example.com/away-\(UUID().uuidString.prefix(6))")!, title: "Away"))
+        marks.append(made.id)
+        let short = PersonCommands.short(made.id)
+
+        let first = await call(mcp, "bookmarks_delete", ["id": short])
+        let up = try #require(AgentDesk.shared.pending.first { $0.task == link })
+        AgentDesk.shared.take(up.id, .yes)
+        try await Task.sleep(for: .milliseconds(200))
+        let second = await call(mcp, "bookmarks_delete", ["id": short])
+
+        #expect(first?["isError"] as? Bool == true)
+        #expect(text(first).contains("They are away from Broadway"), "\(text(first))")
+        #expect(second?["isError"] as? Bool == false, "\(text(second))")
+        #expect(AgentDesk.shared.pending.filter { $0.task == link }.isEmpty)
+    }
+
     @Test func anEraseAsksInAutoModeLikeTheCommand() async throws {
         let link = session()
         let mcp = server(link)
@@ -262,11 +290,105 @@ final class PersonToolsTests {
         #expect(browser.prefs.agentsOn)
     }
 
+    @Test func theSignInSwitchesAreThePersonsOnEveryPath() async throws {
+        keepSetting(Shared.prefs, \.agentsAskSignIn, "agents.signIn")
+        keepSetting(Shared.prefs, \.onePassword, "passwords.onepassword")
+        keepSetting(Shared.prefs, \.floatingNewTab, "newtab.floating")
+        browser.prefs.agentsAskSignIn = true
+        browser.prefs.onePassword = false
+        browser.prefs.floatingNewTab = false
+        let link = session()
+        let mcp = server(link)
+        func shell(_ arguments: [String: Any], verb: String = "set") async -> [String: Any] {
+            await PersonCommands.perform(["noun": "settings", "verb": verb, "arguments": arguments], browser: browser, socket: socket,
+                                         channel: PersonChannel { _ in }) { AgentLinks.shared.link(link) }
+        }
+        var codes: [String] = []
+
+        for (id, value) in [("agents.signIn", "false"), ("passwords.onepassword", "true")] {
+            let alone = await shell(["setting": id, "value": value])
+            let mixed = await shell(["setting": "newtab.floating", "value": "true", "values": [id, value]])
+            let overMCP = await call(mcp, "settings_set", ["setting": id, "value": value])
+            let mixedOverMCP = await call(mcp, "settings_set", ["setting": "newtab.floating", "value": "true", "values": [id, value]])
+            codes += [(alone["error"] as? [String: Any])?["code"] as? String ?? "none", (mixed["error"] as? [String: Any])?["code"] as? String ?? "none",
+                      error(overMCP)["code"] as? String ?? "none", error(mixedOverMCP)["code"] as? String ?? "none"]
+        }
+        let listed = await shell(["can-set": true], verb: "list")
+        let ids = ((listed["data"] as? [String: Any])?["settings"] as? [[String: Any]] ?? []).compactMap { $0["id"] as? String }
+        let read = await call(mcp, "settings_get", ["setting": "agents.signIn"])
+
+        #expect(codes == Array(repeating: "person_only", count: 8), "\(codes)")
+        #expect(browser.prefs.agentsAskSignIn)
+        #expect(!browser.prefs.onePassword)
+        #expect(!browser.prefs.floatingNewTab)
+        #expect(!ids.isEmpty)
+        #expect(!ids.contains("agents.signIn") && !ids.contains("passwords.onepassword"))
+        #expect(read?["isError"] as? Bool == false, "\(read ?? [:])")
+    }
+
+    @Test func keptSignInsAreThePersonsInEveryMode() async {
+        let link = session()
+        var said: [[String: Any]] = []
+        for mode in AgentMode.allCases {
+            browser.prefs.agentMode = mode
+            let shell = await PersonCommands.perform(["noun": "logins", "verb": "list"], browser: browser, socket: socket,
+                                                     channel: PersonChannel { _ in }) { AgentLinks.shared.link(link) }
+            said.append(shell)
+        }
+        let asked = send(server(link), "logins_list")
+        _ = await result(asked)
+        let overMCP = heard.first { $0["id"] as? Int == asked }
+
+        for shell in said {
+            let refused = shell["error"] as? [String: Any] ?? [:]
+            #expect(refused["code"] as? String == "person_only", "\(shell)")
+            #expect((refused["hint"] as? String)?.contains("broadway fill login") == true, "\(shell)")
+            #expect(shell["data"] == nil)
+        }
+        #expect(AgentDesk.shared.pending.isEmpty)
+        #expect(overMCP?["error"] != nil || (overMCP?["result"] as? [String: Any])?["isError"] as? Bool == true, "\(overMCP ?? [:])")
+        #expect(!"\(overMCP ?? [:])".contains("\"logins\""))
+    }
+
     @Test func withAgentsOffNothingAnswers() async {
         let mcp = server(session())
         browser.prefs.agentsOn = false
         let said = await call(mcp, "settings_list")
         #expect(error(said)["code"] as? String == "agents_off")
+    }
+
+    @Test func signingInIsFoundByItsWordsAndStaysOutOfTheFirstList() async throws {
+        let first = server(session()).listed()
+        let names = first.compactMap { $0["name"] as? String }
+        let bytes = try JSONSerialization.data(withJSONObject: ["tools": first], options: []).count
+        var found: [String: [String]] = [:]
+        for words in ["sign in", "login", "password", "code", "card", "address"] {
+            let said = await call(server(session()), MCPServer.moreTools, ["query": words])
+            found[words] = (said?["_meta"] as? [String: Any]).flatMap { $0[MCPServer.dataKey] as? [String: Any] }?["added"] as? [String] ?? []
+        }
+
+        #expect(!names.contains { $0.hasPrefix("fill_") }, "\(names)")
+        #expect(bytes < 5500, "\(bytes)")
+        #expect(found["sign in"]?.contains("fill_login") == true, "\(found)")
+        #expect(found["login"]?.contains("fill_login") == true, "\(found)")
+        #expect(found["password"]?.contains("fill_login") == true, "\(found)")
+        #expect(found["code"]?.contains("fill_code") == true, "\(found)")
+        #expect(found["card"]?.contains("fill_card") == true, "\(found)")
+        #expect(found["address"]?.contains("fill_details") == true, "\(found)")
+        #expect(PersonTools.tool("logins_list") == nil)
+        #expect(PersonTools.tool("logins_give") == nil)
+        #expect(found.values.allSatisfy { !$0.contains { $0.hasPrefix("logins") } }, "\(found)")
+        let give = send(server(session()), "logins_give")
+        _ = await result(give)
+        let gave = heard.first { $0["id"] as? Int == give }
+        #expect(gave?["error"] != nil || (gave?["result"] as? [String: Any])?["isError"] as? Bool == true, "\(gave ?? [:])")
+        #expect(AgentDesk.shared.pending.isEmpty)
+    }
+
+    @Test func fillLoginAnswersWhenCalledBeforeMoreTools() async {
+        let said = await call(server(session()), "fill_login", ["tab": "zzzzzzzz"])
+        #expect(error(said)["code"] as? String != "unknown_tool", "\(said ?? [:])")
+        #expect(said != nil)
     }
 
     @Test func theNounsThatSetBroadwayUpAreReachable() {

@@ -261,10 +261,10 @@ final class PersonCommandsTests {
     }
 
     @Test func fillingAsksWithWhatItFills() {
-        #expect(PersonAsk.title(noun: "fill", verb: "login", site: "shop.example") == "Fill your saved sign-in on shop.example?")
+        #expect(PersonAsk.title(noun: "fill", verb: "login", site: "shop.example") == "Sign in on shop.example?")
         #expect(PersonAsk.title(noun: "fill", verb: "details", site: "shop.example") == "Fill your name, address and phone on shop.example?")
         #expect(PersonAsk.title(noun: "fill", verb: "card", site: "shop.example") == "Fill your saved card on shop.example?")
-        #expect(PersonAsk.title(noun: "fill", verb: "login", site: nil) == "Fill your saved sign-in on this page?")
+        #expect(PersonAsk.title(noun: "fill", verb: "login", site: nil) == "Sign in on this page?")
     }
 
     @Test func commonCommandsAskInTheirOwnWords() {

@@ -397,6 +397,45 @@ final class FormRelay: NSObject, WKScriptMessageHandler {
         // Whether there is still a sign-in on the page. Asked after a
         // password went out, to tell a sign-in that took from one refused.
         hasPassword: function () { return !!pair(); },
+        send: function () {
+          var both = pair();
+          var box = both ? both.pass : named();
+          if (!box) return false;
+          var scope = box.form || (box.closest && box.closest('form'));
+          var button = scope ? scope.querySelector('button[type="submit"], input[type="submit"], button:not([type])') : null;
+          for (var near = box, up = 0; !button && near && up < 5; up++, near = near.parentElement) {
+            var buttons = near.querySelectorAll('button, input[type="submit"], [role="button"]');
+            for (var i = 0; i < buttons.length && i < 20; i++) {
+              var b = buttons[i];
+              var said = ((b.tagName || '').toLowerCase() === 'input' ? b.value : b.textContent) || b.getAttribute('aria-label') || '';
+              said = said.replace(/[^\\p{L}\\s']/gu, ' ').replace(/\\s+/g, ' ').trim().toLowerCase();
+              if (said.length <= 40 && signInButton.test(said)) { button = b; break; }
+            }
+          }
+          if (button) { button.click(); return true; }
+          if (scope && scope.requestSubmit) { scope.requestSubmit(); return true; }
+          return false;
+        },
+        after: function () {
+          var walls = document.querySelectorAll('iframe[src*="recaptcha"],iframe[src*="hcaptcha"],iframe[src*="challenges.cloudflare.com"],iframe[src*="arkoselabs"],iframe[src*="funcaptcha"],.g-recaptcha,.h-captcha,.cf-turnstile,#cf-challenge-running');
+          for (var w = 0; w < walls.length; w++) {
+            var r = walls[w].getBoundingClientRect();
+            var quiet = (walls[w].getAttribute('src') || '').indexOf('size=invisible') >= 0 || walls[w].getAttribute('data-size') === 'invisible';
+            if (!quiet && r.width >= 40 && r.height >= 20) return 'captcha';
+          }
+          var boxes = document.querySelectorAll('input');
+          for (var i = 0; i < boxes.length; i++) {
+            var el = boxes[i], box = el.getBoundingClientRect();
+            if (el.disabled || box.width === 0 || box.height === 0) continue;
+            var called = ((el.getAttribute('autocomplete') || '') + ' ' + (el.name || '') + ' ' + (el.id || '') + ' ' + (el.getAttribute('aria-label') || '') + ' ' + (el.placeholder || '')).toLowerCase();
+            if (el.labels) for (var l = 0; l < el.labels.length; l++) called += ' ' + (el.labels[l].textContent || '').toLowerCase();
+            if (/one-time-code|\\botp\\b|one.?time|verification.?code|security.?code|2fa|two.?factor|authenticator|sms.?code/.test(called)) return 'code';
+          }
+          if (pair()) return 'password';
+          var words = (document.body && document.body.innerText || '').slice(0, 4000).toLowerCase();
+          if (/passkey|security key|use your fingerprint|windows hello|face id|touch id/.test(words)) return 'passkey';
+          return '';
+        },
         strong: function (password) {
           var el = offered && offered.isConnected ? offered : document.activeElement;
           if (fresh(el) === null) return null;

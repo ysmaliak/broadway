@@ -1,0 +1,20 @@
+{
+ "bytes": {
+  "act_article": 304,
+  "act_dashboard": 182,
+  "act_form": 147,
+  "act_shop": 136,
+  "act_table": 144,
+  "guide": 5724,
+  "guide_mcp": 2313,
+  "mcp_instructions": 1442,
+  "mcp_tools_list": 5887,
+  "snapshot_article": 2725,
+  "snapshot_dashboard": 1796,
+  "snapshot_form": 775,
+  "snapshot_shop": 2364,
+  "snapshot_table": 7166
+ },
+ "margin": 0.1,
+ "recorded": "2026-11-25"
+}

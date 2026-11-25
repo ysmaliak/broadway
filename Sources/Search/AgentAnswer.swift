@@ -178,7 +178,10 @@ struct AgentChange {
 
         func object() -> [String: Any] {
             var found: [String: Any] = ["name": name, "state": state]
-            if let path { found["path"] = path }
+            if let path {
+                found["path"] = path
+                if !path.isEmpty { found["id"] = PersonStuff.stableID(path) }
+            }
             return found
         }
     }
@@ -228,12 +231,20 @@ struct AgentChange {
                       needs: object["needs"] as? String, ways: object["ways"] as? [String] ?? [], header: object["header"] as? [String] ?? [])
         }
 
-        static func needsLine(_ needs: String) -> String {
-            switch needs {
-            case "captcha": "needs: a captcha, so run broadway handoff \"Solve the captcha\" and wait, never solving it yourself"
-            case "code": "needs: a one-time code, so run broadway handoff \"Type the code you were sent\", or ask the person for it"
-            default: "needs: a password, so run broadway fill login (Broadway fills it after the person's yes, you never see it)"
+        static func needsLine(_ needs: String, overMCP: Bool = false) -> String {
+            switch (needs, overMCP) {
+            case ("captcha", false): "needs: a captcha, so run broadway handoff \"Solve the captcha\" and wait, never solving it yourself"
+            case ("captcha", true): "needs: a captcha, so call handoff with \"Solve the captcha\" and wait, never solving it yourself"
+            case ("code", false): "needs: a one-time code, so run broadway fill code (Broadway fills a code mailed to Gmail, you never see it). For one sent by text or an app, run broadway handoff \"Type the code you were sent\"."
+            case ("code", true): "needs: a one-time code, so call fill_code (Broadway fills a code mailed to Gmail, you never see it). For one sent by text or an app, call handoff with \"Type the code you were sent\""
+            case (_, false): "needs: a password, so run broadway fill login (Broadway fills it after the person's yes, you never see it)"
+            case (_, true): "needs: a password, so call fill_login (Broadway fills it after the person's yes, you never see it)"
             }
+        }
+
+        static func overMCP(_ text: String) -> String {
+            guard text.contains("needs: ") else { return text }
+            return ["captcha", "code", "password"].reduce(text) { $0.replacingOccurrences(of: needsLine($1), with: needsLine($1, overMCP: true)) }
         }
 
         static func waysLine(_ ways: [String]) -> String {
@@ -272,6 +283,14 @@ struct AgentChange {
     var look: Look?
     var most = false
     var alerted: Dialog?
+    var reordered: [String] = []
+
+    static func reorderLine(_ said: [String: Any]) -> String {
+        let name = cell(said["name"] as? String ?? "")
+        let table = said["table"] as? Bool == true
+        let whole = name.isEmpty ? (table ? "the table" : "the list") : "\"\(name)\""
+        return "the \(said["kind"] as? String ?? "items") of \(whole) are in a new order"
+    }
 
     init(tab: String, did: String, said: String? = nil, same: [String] = [], target: Element? = nil, settled: Settled = .quiet,
          busy: Busy? = nil, ms: Int = 0, page: Page, headings: [String] = [], appeared: [Element] = [], went: [Element] = [],
@@ -314,6 +333,7 @@ struct AgentChange {
         if let look { found["look"] = look.object() }
         if most { found["most"] = true }
         if !notes.isEmpty { found["notes"] = notes }
+        if !reordered.isEmpty { found["reordered"] = reordered }
         if let alerted {
             var said = alerted.object()
             said["accepted"] = true
@@ -344,7 +364,7 @@ struct AgentChange {
             went: (object["went"] as? [Any] ?? []).compactMap { Element(object: $0) },
             changed: (object["changed"] as? [Any] ?? []).compactMap { Changed(object: $0) },
             text: (object["text"] as? [[String: Any]] ?? []).map { TextChange(was: $0["was"] as? String ?? "", now: $0["now"] as? String ?? "") },
-            dialog: dialog.map { Dialog(id: $0["id"] as? String ?? "", kind: $0["kind"] as? String ?? "",
+            dialog: dialog.flatMap { $0["accepted"] as? Bool == true ? nil : Dialog(id: $0["id"] as? String ?? "", kind: $0["kind"] as? String ?? "",
                                         message: $0["message"] as? String ?? "", site: $0["site"] as? String ?? "") },
             tabs: Tabs(opened: (tabs["opened"] as? [[String: Any]] ?? []).map {
                            OpenedTab(id: $0["id"] as? String ?? "", title: $0["title"] as? String ?? "",
@@ -359,6 +379,7 @@ struct AgentChange {
         expect = object["expect"] as? [String: Any]
         look = Look(object: object["look"])
         most = object["most"] as? Bool ?? false
+        reordered = object["reordered"] as? [String] ?? []
         if let said = object["alerted"] as? [String: Any] {
             alerted = Dialog(id: said["id"] as? String ?? "", kind: said["kind"] as? String ?? "alert",
                              message: said["message"] as? String ?? "", site: said["site"] as? String ?? "")
@@ -366,7 +387,7 @@ struct AgentChange {
     }
 
     var nothing: Bool {
-        appeared.isEmpty && went.isEmpty && changed.isEmpty && text.isEmpty && more == 0 && !page.navigated && dialog == nil
+        appeared.isEmpty && went.isEmpty && changed.isEmpty && text.isEmpty && reordered.isEmpty && more == 0 && !page.navigated && dialog == nil
             && alerted == nil && tabs.opened.isEmpty && tabs.closed.isEmpty && download == nil && look == nil && settled != .skipped && settled != .capped
     }
 
@@ -457,11 +478,15 @@ struct AgentChange {
         return "Still busy after \(Self.seconds(ms)) s: \(what). broadway wait to wait longer."
     }
 
+    static func article(_ kind: String) -> String {
+        kind.first.map { "aeiou".contains($0) } == true ? "An" : "A"
+    }
+
     private func facts() -> [String] {
         var found: [String] = []
-        if let alerted { found.append("The page said (alert, accepted): \"\(Self.cell(alerted.message))\"") }
+        if let alerted { found.append(Self.closedAlert(alerted.message)) }
         if let dialog {
-            found.append("A \(dialog.kind) dialog is open: \"\(Self.cell(dialog.message))\"")
+            found.append("\(Self.article(dialog.kind)) \(dialog.kind) dialog is open: \"\(Self.cell(dialog.message))\"")
             switch dialog.kind {
             case "alert": found.append("Close it: broadway dialog accept")
             case "prompt": found.append("Answer it: broadway dialog accept \"TEXT\", or broadway dialog dismiss")
@@ -493,7 +518,7 @@ struct AgentChange {
         for (index, element) in went.enumerated() {
             if index < Self.caps.went { found.append("- @\(element.ref) \(Self.describe(element))") } else { hidden += 1 }
         }
-        let changes = changed.map(Self.changeLine) + text.map { "~ \"\(Self.cell($0.was))\" → \"\(Self.cell($0.now))\"" }
+        let changes = reordered.map { "~ " + $0 } + changed.map(Self.changeLine) + text.map { "~ \"\(Self.cell($0.was))\" → \"\(Self.cell($0.now))\"" }
         for (index, line) in changes.enumerated() {
             if index < Self.caps.changed { found.append(line) } else { hidden += 1 }
         }
@@ -531,6 +556,16 @@ struct AgentChange {
         if let state = element.state, !state.isEmpty { line += " \(state)" }
         return line
     }
+
+    static func errorLines(count: Int, listed: [String], cursor: String) -> [String] {
+        ["! \(count) page error\(count == 1 ? "" : "s"). All of them: broadway console --since \(cursor)"] + listed.map { "  \"" + $0 + "\"" }
+    }
+
+    static func closedAlert(_ message: String) -> String {
+        "The page showed an alert: \"\(cell(message))\". Broadway closed it."
+    }
+
+    static let warnedLine = "The page warned that changes may not be saved. Broadway left it anyway."
 
     static func cell(_ text: String, most: Int = 120) -> String {
         let flat = String(String.UnicodeScalarView(text.unicodeScalars.map { $0.value < 32 || $0.value == 127 ? " " : $0 }))

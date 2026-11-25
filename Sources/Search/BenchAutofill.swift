@@ -88,14 +88,16 @@ extension Bench {
 final class BenchCodes: CodeSource {
     private let text: String
     private let sender: String
+    private let address: String
 
-    init(text: String, sender: String) {
+    init(text: String, sender: String, address: String = "") {
         self.text = text
         self.sender = sender
+        self.address = address
     }
 
     func read(since: Date) async -> CodeRead {
         guard let code = CodeFinder.code(in: text) else { return .nothing }
-        return .found([OneTimeCode(code: code, sender: sender, at: Date())])
+        return .found([OneTimeCode(code: code, sender: sender, at: Date(), address: address)])
     }
 }

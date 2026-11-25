@@ -116,7 +116,7 @@ final class NoticeClock {
     static var looks: @MainActor (NSView?, NSWindow?) -> [Hold] = { NoticeClock.seen($0, $1) }
     static weak var pointerStandIn: NSView?
 
-    init(_ kind: NoticeKind, window: @escaping () -> NSWindow? = { nil }, page: (() -> String?)? = nil,
+    init(_ kind: NoticeKind, window: @escaping () -> NSWindow? = { nil }, page: (() -> String?)? = nil, seconds: TimeInterval? = nil,
          fire: @escaping () -> Void) {
         let now = Self.now()
         self.kind = kind
@@ -124,7 +124,7 @@ final class NoticeClock {
         self.page = page
         startPage = page?()
         self.fire = fire
-        countdown = kind.seconds.map { NoticeCountdown($0, at: now) }
+        countdown = (seconds ?? kind.seconds).map { NoticeCountdown($0, at: now) }
         NoticeClocks.add(self)
     }
 

@@ -18,9 +18,13 @@ extension Bench {
             case "no": pending.first.map { AgentDesk.shared.take($0.id, .no) }
             case let text? where text.hasPrefix("pick "):
                 if let first = pending.first, let number = Int(text.dropFirst(5)) { AgentDesk.shared.take(first.id, .picked(number - 1)) }
+            case "notice":
+                if let first = pending.first { AgentNotice.clicked(["search.kind": "agent", "search.tab": first.tab?.uuidString ?? ""]) }
             default: break
             }
-            answer(["pending": pending.map(AgentDesk.benchRow)])
+            answer(["pending": pending.map(AgentDesk.benchRow), "now": AgentDesk.shared.pending.map(AgentDesk.benchRow),
+                    "tabs": pending.map { $0.tab.map { String($0.uuidString.prefix(8)).lowercased() } ?? "" },
+                    "badge": AgentBadge.shown ?? "", "active": browser.active.map { String($0.id.uuidString.prefix(8)).lowercased() } ?? ""])
         case "visit":
             if let url = (request["text"] as? String).flatMap(URL.init(string:)) {
                 let named = (request["space"] as? String).flatMap { name in browser.spaces.first { $0.name == name }?.id }

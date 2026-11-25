@@ -113,7 +113,10 @@ extension Browser {
         guard let tab = anyTab(for: webView), tab.built === webView else { return completionHandler(true) }
         let closing = tab.leaveClosing.flatMap { $0.view === webView && $0.open ? $0 : nil }
         let why: LeaveWhy = closing != nil ? .closeTab : .navigate
-        guard leaveAnswer(why, for: tab) == .ask else { return completionHandler(true) }
+        guard leaveAnswer(why, for: tab) == .ask else {
+            if tab.agent { tab.agentWarned = true }
+            return completionHandler(true)
+        }
         guard closing != nil || showsNow(tab) else { return completionHandler(true) }
         if tab.leaveQuestion?.open == true { return completionHandler(false) }
         closing?.asked = true

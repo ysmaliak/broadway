@@ -5,22 +5,46 @@ enum Browse {
         var arguments: [String: Any]
         var short = false
         var look = true
+        var secret: String?
     }
 
     static let answerFlags = ["--quiet-answer", "--no-look"]
     static let expectKinds = ["--expect": "text", "--expect-gone": "gone", "--expect-url": "url"]
 
-    static func arguments(_ command: Command, _ words: [String], tab: String?, tabFlag: Bool) throws -> Asked {
+    static func arguments(_ command: Command, _ words: [String], tab: String?, tabFlag: Bool, secrets: Bool = true,
+                          environment: [String: String] = ProcessInfo.processInfo.environment,
+                          file: (String) -> Data? = { FileManager.default.contents(atPath: $0) },
+                          stdin: () -> Data? = SecretInput.piped) throws -> Asked {
         var asked = Asked(arguments: [:])
         var kept: [String] = []
         var literal = false
         var expect: [String: Any]?
+        var secret: (flag: String, value: String)?
         var index = 0
         while index < words.count {
             let word = words[index]
             index += 1
             if !literal, word == "--" { literal = true }
             let parts = word.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+            if !literal, command.tool == "type", SecretInput.flags.contains(parts[0]) {
+                guard secrets else {
+                    throw Failure.usage("\(parts[0]) works on broadway type run as its own command, not in a batch or a script", hint: "Run broadway type TARGET \(parts[0]) on its own")
+                }
+                guard secret == nil else { throw Failure.usage("Give one of --secret-env, --secret-file or --secret-stdin") }
+                if parts[0] == "--secret-stdin" {
+                    guard parts.count == 1 else { throw Failure.usage("--secret-stdin takes no value: pipe the secret in") }
+                    secret = (parts[0], "")
+                    continue
+                }
+                var value = parts.count == 2 ? parts[1] : nil
+                if value == nil, index < words.count {
+                    value = words[index]
+                    index += 1
+                }
+                guard let value, !value.isEmpty else { throw Failure.usage("\(parts[0]) needs a value") }
+                secret = (parts[0], value)
+                continue
+            }
             if !literal, let kind = expectKinds[parts[0]] {
                 guard expect == nil else { throw Failure.usage("Give one of --expect, --expect-gone or --expect-url, not two") }
                 guard !command.reads else { throw Failure.usage("--expect goes on an action, and \(command.name) only reads") }
@@ -48,6 +72,10 @@ enum Browse {
             }
         }
         var arguments = try CommandLineInput.parse(command, kept)
+        if let secret {
+            if arguments["text"] != nil { throw Failure.usage("Give the text or a secret, not both. Nothing was typed.") }
+            asked.secret = try SecretInput.read(secret.flag, secret.value, environment: environment, file: file, stdin: stdin)
+        }
         if !many.isEmpty { arguments["urls"] = many }
         if let expect { arguments["expect"] = expect }
         if !command.reads, asked.short || !asked.look { arguments["look"] = false }
@@ -72,13 +100,27 @@ enum Browse {
     }
 
     static func run(_ command: Command, _ words: [String], called: String, context: Context) throws -> Exit {
-        let asked = try arguments(command, words, tab: context.globals.tab, tabFlag: context.globals.tabFlag)
+        let taken = command.tool == "upload" ? try Given.take(words, context: context) : (words: words, folder: nil)
+        var handed = false
+        defer { if let folder = taken.folder, !handed { try? FileManager.default.removeItem(at: folder) } }
+        let asked = try arguments(command, taken.words, tab: context.globals.tab, tabFlag: context.globals.tabFlag)
         var arguments = asked.arguments
+        if let folder = taken.folder { arguments["given"] = folder.path }
         if context.globals.quiet, !command.reads { arguments["look"] = false }
         let link = try context.connection()
-        guard link.send(context.call(command.tool, arguments)), let reply = link.object() else {
+        if link.forwarded, command.tool == "upload", let paths = arguments["paths"] as? [String], !paths.isEmpty {
+            let shipped = try Carry.send(paths, ask: context.carry)
+            arguments["paths"] = shipped.paths
+            arguments["given"] = shipped.folder
+            if let folder = taken.folder { try? FileManager.default.removeItem(at: folder) }
+        }
+        var request = context.call(command.tool, arguments)
+        if let secret = asked.secret { request["secret"] = secret }
+        guard link.send(request), let reply = link.object() else {
             throw Failure("not_running", "Broadway went away", hint: command.reads ? nil : "It may or may not have happened, so look before you repeat it", retrySafe: command.reads)
         }
+        Clock.mark("reply")
+        Clock.heard(reply)
         if let failure = Context.failure(reply, reads: command.reads) {
             if failure.code == "agents_off", command.tool == "open", let url = arguments["url"] as? String {
                 context.console.progress(context.console.err.dim("Agents are off, so this opens as your own tab"))
@@ -87,20 +129,38 @@ enum Browse {
             }
             throw failure
         }
+        handed = true
         var data = reply["data"] as? [String: Any] ?? [:]
         if command.findsHere, let wanted = arguments["find"] as? String, let text = data["text"] as? String {
             data["text"] = holding(text, wanted)
         }
+        if context.forwarded {
+            if command.tool == "pdf", let path = data["path"] as? String { data["path"] = try context.local(path) }
+            if var rows = data["tiles"] as? [[String: Any]] {
+                let room = try Carry.made()
+                for index in rows.indices {
+                    if let path = rows[index]["path"] as? String { rows[index]["path"] = try context.local(path, into: room) }
+                }
+                data["tiles"] = rows
+            }
+        }
+        if command.tool == "screenshot" { return try Shots.answer(command, data, context: context) }
         if command.tool == "pdf", let path = data["path"] as? String {
-            if let output = context.globals.output {
-                do { try Data(contentsOf: URL(fileURLWithPath: path)).write(to: URL(fileURLWithPath: output), options: .atomic) }
-                catch { throw Failure("failed", "Couldn't write the PDF to \(output)") }
-                data["path"] = output
-            } else if !context.console.json && !context.console.outTTY {
+            if context.globals.output == Shots.stream {
+                if context.console.json { throw Failure.usage("--out - writes the PDF's bytes to standard output, so leave out --json") }
                 do { context.console.raw(try Data(contentsOf: URL(fileURLWithPath: path))) }
                 catch { throw Failure("failed", "Couldn't read the saved PDF") }
                 return .done
             }
+            if let output = context.globals.output {
+                do { try Data(contentsOf: URL(fileURLWithPath: path)).write(to: URL(fileURLWithPath: output), options: .atomic) }
+                catch { throw Failure("failed", "Couldn't write the PDF to \(output)") }
+                data["path"] = output
+            }
+            Shots.say(context, &data, example: "broadway pdf --out - > page.pdf")
+        }
+        if command.tool == "download", let download = data["download"] as? [String: Any], download["path"] != nil, let id = download["id"] as? String {
+            Shots.say(context, &data, example: "broadway downloads get \(id) --out - > \(download["name"] as? String ?? "file")", carried: "broadway downloads get \(id) -o \(download["name"] as? String ?? "file")")
         }
         if data["image"] != nil { try Render.picture(&data, context: context) }
         if context.globals.output != nil, data["path"] == nil { try Render.toFile(command, data, context: context) } else {
@@ -126,13 +186,9 @@ enum Render {
         guard let base64 = data.removeValue(forKey: "image") as? String, let png = Data(base64Encoded: base64) else {
             throw Failure("failed", "The picture didn't arrive")
         }
-        var path = context.globals.output
-        if path == nil, context.console.json || context.console.outTTY {
-            let format = DateFormatter()
-            format.dateFormat = "yyyyMMdd-HHmmss"
-            path = "broadway-shot-\(format.string(from: Date())).png"
-        }
-        guard let path else { return context.console.raw(png) }
+        if context.globals.output == Shots.stream { return context.console.raw(png) }
+        let name = named(Date(), jpeg: data["format"] as? String == "jpeg")
+        let path = try context.globals.output ?? (context.console.outTTY ? name : kept(name, in: Given.root))
         do {
             try png.write(to: URL(fileURLWithPath: path))
         } catch {
@@ -141,15 +197,30 @@ enum Render {
         data["path"] = path
     }
 
+    static func named(_ date: Date, jpeg: Bool) -> String {
+        let format = DateFormatter()
+        format.dateFormat = "yyyyMMdd-HHmmss"
+        return "broadway-shot-\(format.string(from: date)).\(jpeg ? "jpg" : "png")"
+    }
+
+    static func kept(_ name: String, in root: URL) throws -> String {
+        let folder = root.appendingPathComponent("broadway-shot-" + UUID().uuidString)
+        do { try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700]) }
+        catch { throw Failure("failed", "Couldn't make a folder for the picture", hint: error.localizedDescription) }
+        return folder.appendingPathComponent(name).path
+    }
+
     static func file(_ data: inout [String: Any], context: Context) throws {
         guard let base64 = data.removeValue(forKey: "file") as? String, let bytes = Data(base64Encoded: base64) else {
             throw Failure("failed", "The file didn't arrive")
         }
         data["bytes"] = bytes.count
-        var path = context.globals.output
-        if path == nil, context.console.json || context.console.outTTY { path = data["name"] as? String ?? "broadway-file" }
-        data["name"] = nil
-        guard let path else { return context.console.raw(bytes) }
+        if context.globals.output == Shots.stream {
+            data["streamed"] = true
+            return context.console.raw(bytes)
+        }
+        let name = data.removeValue(forKey: "name") as? String ?? "broadway-file"
+        let path = try context.globals.output ?? (context.console.outTTY ? name : kept(name, in: Given.root))
         do {
             try bytes.write(to: URL(fileURLWithPath: path))
         } catch {
@@ -181,9 +252,11 @@ enum Render {
         if let notice = data["notice"] as? String, !notice.isEmpty { console.note(console.err.dim(notice)) }
     }
 
-    static func show(_ command: Command, _ data: [String: Any], context: Context, short: Bool = false, look: Bool = true) {
+    static func show(_ command: Command, _ given: [String: Any], context: Context, short: Bool = false, look: Bool = true) {
         let console = context.console
         guard !console.json else { return }
+        var data = given
+        if context.globals.quiet { data["errors"] = nil }
         notices(data, context: context)
         if command.tool == "open", let opened = data["opened"] as? [[String: Any]], !opened.isEmpty {
             for row in openedLines(opened) { console.line(console.outTTY ? Plain.safe(row) : row) }
@@ -219,7 +292,9 @@ enum Render {
             return
         }
         if let list = rows(in: data) {
-            table(list, columns: command.columns, context: context, tool: command.tool)
+            var columns = command.columns
+            if columns.first == "id", !columns.contains("name"), list.contains(where: { $0["agent"] != nil && $0["name"] is String }) { columns.insert("name", at: 1) }
+            table(list, columns: columns, context: context, tool: command.tool)
             return
         }
         for row in lines(command, data) { console.line(console.outTTY ? Plain.safe(row) : row) }
@@ -346,7 +421,7 @@ enum Render {
 
     static func snapshotLines(_ command: Command, _ data: [String: Any]) -> [String] {
         let elements = data["elements"] as? [[String: Any]] ?? []
-        if var given = data["lines"] as? [String], data["count"] == nil {
+        if var given = data["lines"] as? [String], data["count"] == nil || data["text"] is [[String: Any]] {
             let extra = needs(data)
             given.insert(contentsOf: extra, at: given.isEmpty ? 0 : 1)
             return given
@@ -374,7 +449,7 @@ enum Render {
         switch data["needs"] as? String {
         case "password": found.append("needs: a password, so run broadway fill login (Broadway fills it after the person's yes, you never see it)")
         case "captcha": found.append("needs: a captcha, so run broadway handoff \"Solve the captcha\" and wait, never solving it yourself")
-        case "code": found.append("needs: a one-time code, so run broadway handoff \"Type the code you were sent\", or ask the person for it")
+        case "code": found.append("needs: a one-time code, so run broadway fill code (Broadway fills a code mailed to Gmail, you never see it). For one sent by text or an app, run broadway handoff \"Type the code you were sent\".")
         default: break
         }
         if let ways = data["ways"] as? [String], !ways.isEmpty { found.append("signs in with: " + ways.map(Plain.cell).joined(separator: ", ")) }

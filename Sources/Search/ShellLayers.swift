@@ -537,7 +537,7 @@ final class ShellLowerLayer: ShellLayer {
             shield = nil
         }
         let developing = Developer.shared
-        if let key = developing.offer, key == LocalServer.key(browser.active?.pageAddress) {
+        if let key = developing.offer, key == LocalServer.key(browser.active?.pageAddress), browser.active?.agent != true {
             let notNow = {
                 developing.offer = nil
                 developing.set(key, false)

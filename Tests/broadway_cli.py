@@ -2,6 +2,7 @@
 import json
 import os
 import pty
+import re
 import shutil
 import signal
 import stat
@@ -55,6 +56,28 @@ DETAILS = b"""<!doctype html><title>Details</title><form>
 <input name="address" autocomplete="address-line1"><input name="city" autocomplete="address-level2">
 </form>"""
 
+SECTIONS = b"""<!doctype html><title>Sections</title><h2>Billing address</h2><p>12 Oak Road</p>
+<button type="button" onclick="document.title='billing'">Edit</button>
+<h2>Shipping address</h2><p>4 Elm Street</p>
+<button type="button" onclick="document.title='shipping'">Edit</button>
+<p aria-hidden="true">zebra hidden words</p><p style="opacity:0">zebra faint words</p>"""
+
+COOKIE = b"""<!doctype html><title>Cookie</title><div style="height:1500px"></div>
+<button type="button" onclick="document.title='shown'">Show more</button><div style="height:1500px"></div>
+<div id="onetrust-banner-sdk" style="position:fixed;top:30vh;bottom:0;left:0;right:0;background:#fff">
+<p>We use cookies to make this site work</p><button>Accept all</button><button>Reject all</button><button aria-label="Close">x</button>
+</div>"""
+
+SIZES = b"<!doctype html><title>Sizes</title><select aria-label=\"Size\">" + b"".join(b"<option>Size %d</option>" % n for n in range(1, 26)) + b"</select>"
+
+BLANK = b"<!doctype html><title>Blank</title><body></body>"
+
+SIGNIN = b"""<!doctype html><title>Sign in</title><h1>Sign in</h1>
+<form onsubmit="event.preventDefault(); document.title = 'sent'"><input id="user" name="username" autocomplete="username">
+<input id="pass" name="password" type="password" autocomplete="current-password"><button>Sign in</button></form>"""
+
+PAGES = {"/sections": SECTIONS, "/cookie": COOKIE, "/sizes": SIZES, "/blank": BLANK, "/signin": SIGNIN}
+
 FEED = b"""<?xml version="1.0"?><rss version="2.0"><channel><title>Feed</title>
 <item><title>Item one</title><link>https://example.com/one</link><guid>one</guid></item>
 <item><title>Item two</title><link>https://example.com/two</link><guid>two</guid></item>
@@ -84,7 +107,7 @@ class Page(BaseHTTPRequestHandler):
             return self.attachment()
         if self.path.startswith("/silence.wav"):
             return self.media(SILENCE, "audio/wav")
-        body = SONG if self.path.startswith("/song") else FEED if self.path.startswith("/feed") else DETAILS if self.path.startswith("/details") else SECOND if self.path.startswith("/second") else FORM
+        body = PAGES.get(self.path.split("?")[0]) or (SONG if self.path.startswith("/song") else FEED if self.path.startswith("/feed") else DETAILS if self.path.startswith("/details") else SECOND if self.path.startswith("/second") else FORM)
         self.send_response(200)
         self.send_header("content-type", "text/html")
         self.send_header("content-length", str(len(body)))
@@ -335,6 +358,10 @@ def browsing(base):
     check("an unknown key", envelope("press", "Nope")[1]["error"]["code"] == "bad_input")
     check("scroll by", broadway("scroll", "20").returncode == 0)
     check("scroll back", broadway("scroll", "-20").returncode == 0)
+    down = broadway("scroll", "down", "300")
+    check("scroll down N is one scroll and says where it ended", down.returncode == 0 and ("points" in down.stdout or "Already at the bottom" in down.stdout), down.stdout + down.stderr)
+    _, parsed = envelope("scroll", "down", "300")
+    check("a scroll's data says whether the page has ended", parsed["data"].get("bottom") is True and "below" in parsed["data"], parsed)
 
     renamed = broadway("click", ref("Rename"))
     check("an action's answer says what it changed", "Delete everything" in renamed.stdout, renamed.stdout)
@@ -358,6 +385,8 @@ def browsing(base):
     check("read pipes", grep.stdout.strip() == "1", grep.stdout)
     found = broadway("read", "--find", "price")
     check("read --find gives the lines holding the words", found.returncode == 0 and "price" in found.stdout.lower() and "Sign up" not in found.stdout, found.stdout + found.stderr)
+    close = broadway("read", "--find", "the prise is")
+    check("read --find with no line gives the closest lines", close.returncode == 1 and "Closest lines" in close.stderr and "the price is 12 dollars" in close.stderr, close.stderr)
     check("the website note is said once", read.stderr.count("Website content") == 1 and found.stderr.count("Website content") <= 1, read.stderr + found.stderr)
     both = broadway("batch", "read", "snapshot")
     check("and once for a batch", both.stderr.count("Website content") == 1, both.stderr)
@@ -369,7 +398,12 @@ def browsing(base):
     png = (folder / "page.png").read_bytes()
     check("shot -o", shot.returncode == 0 and png[:4] == b"\x89PNG", shot.stderr)
     raw = broadway("shot", text=False)
-    check("shot on a pipe is the picture", raw.stdout[:4] == b"\x89PNG")
+    named = Path(raw.stdout.decode(errors="replace").strip().splitlines()[0]) if raw.stdout.strip() else Path("-")
+    check("shot on a pipe names its file and writes no picture there", raw.returncode == 0 and raw.stdout[:4] != b"\x89PNG" and named.name.startswith("broadway-shot-") and named.exists(), raw.stdout[:200])
+    if named.name.startswith("broadway-shot-"):
+        named.unlink(missing_ok=True)
+    raw = broadway("shot", "--out", "-", text=False)
+    check("shot --out - is the picture", raw.stdout[:4] == b"\x89PNG")
     _, parsed = envelope("shot", "-o", str(folder / "json.png"))
     check("shot --json has the path, no pixels", parsed["data"]["path"].endswith("json.png") and "image" not in parsed["data"], parsed)
     output = broadway("read", "-o", str(folder / "page.txt"))
@@ -441,6 +475,32 @@ def browsing(base):
     plain = in_terminal(terminal)
     check("NO_COLOR is respected", "\x1b[" not in plain, plain)
     check("a pipe gets no colour", "\x1b[" not in broadway("tabs").stdout)
+
+
+def looking(base):
+    tab = broadway("open", base + "cookie").stdout.strip()
+    broadway("wait", "--tab", tab)
+    covered = broadway("click", "Show more", "--tab", tab)
+    check("a covered click names the cookie notice and its buttons", covered.returncode == 1 and "cookie notice" in covered.stderr and "Reject all" in covered.stderr and "broadway click @e" in covered.stderr, covered.stderr)
+    check("and nothing was clicked or dismissed", "shown" not in broadway("tabs").stdout and "Accept all" in broadway("read", "--tab", tab).stdout)
+    broadway("go", base + "sizes", "--tab", tab)
+    broadway("wait", "--tab", tab)
+    missed = broadway("choose", "Size", "Huge", "--tab", tab)
+    check("choose with no such option lists twenty and counts the rest", missed.returncode == 1 and '"Size 20"' in missed.stderr and '"Size 21"' not in missed.stderr and "5 more" in missed.stderr, missed.stderr)
+    broadway("go", base + "blank", "--tab", tab)
+    broadway("wait", "--tab", tab)
+    empty, parsed = envelope("read", "--tab", tab)
+    check("read on an empty page says so and names wait", empty.returncode == 1 and parsed["error"]["code"] == "no_answer" and "broadway wait" in json.dumps(parsed), parsed)
+    broadway("go", base + "sections", "--tab", tab)
+    broadway("wait", "--tab", tab)
+    found, parsed = envelope("find", "Edit", "--in", "Shipping address", "--tab", tab)
+    check("--in words narrow find to one section", found.returncode == 0 and parsed["data"]["count"] == 1, parsed)
+    both, parsed = envelope("click", "Edit", "--tab", tab)
+    hint = (parsed.get("error") or {}).get("hint") or ""
+    check("several fits say the heading each sits under", both.returncode == 1 and parsed["error"]["code"] == "ambiguous" and 'under "Billing address"' in hint and 'under "Shipping address"' in hint, parsed)
+    clicked = broadway("click", "Edit", "--in", "Shipping address", "--tab", tab)
+    check("--in words act inside that section only", clicked.returncode == 0 and wait_for(lambda: "shipping" in broadway("tabs").stdout, 3), clicked.stdout + clicked.stderr)
+    broadway("close", "--tab", tab)
 
 
 def batching(base):
@@ -526,11 +586,13 @@ def batching(base):
 
 
 def old_task_words():
-    for words in (["task", "say hello"], ["session", "list"], ["plans", "list"], ["tasks", "list"], ["helpers", "list"], ["say hello"], ["buy", "some", "tea"], ["mcp", "--task", "6f1c2d3e-0000-4000-8000-000000000001"]):
+    for words in (["task", "say hello"], ["session", "list"], ["plans", "list"], ["tasks", "list"], ["helpers", "list"], ["say hello"], ["mcp", "--task", "6f1c2d3e-0000-4000-8000-000000000001"]):
         said = broadway(*words)
         lines = said.stderr.strip().splitlines()
         check(f"{' '.join(words)} says Broadway no longer runs tasks", said.returncode == 2 and said.stdout == "" and len(lines) == 1
               and "Broadway no longer runs tasks" in lines[0], said.stdout + said.stderr)
+    typo = broadway("buy", "some", "tea")
+    check("buy some tea is an unknown command, not a task", typo.returncode == 2 and "Unknown command buy" in typo.stderr and "no longer runs tasks" not in typo.stderr, typo.stderr)
     memory = broadway("memory")
     check("memory is simply an unknown command", memory.returncode == 2 and memory.stdout == ""
           and memory.stderr.startswith("broadway: Unknown command memory") and "notes" not in memory.stderr, memory.stderr)
@@ -667,7 +729,7 @@ def with_person(name, answer, *words):
 def yes(name, *words):
     code, parsed, asked, errors = with_person(name, "yes", *words)
     check(name, code == 0 and parsed["ok"], f"{parsed} {errors}")
-    check(f"{name} shows the command and agent", asked and asked[0]["label"] == f"From {AGENT_NAME}" and words[1] in asked[0]["quote"], asked)
+    check(f"{name} shows the command and agent", asked and re.fullmatch(f"From {AGENT_NAME}( \\d+)?", asked[0]["label"]) and words[1] in asked[0]["quote"], asked)
     return parsed["data"] or {}
 
 
@@ -873,6 +935,10 @@ def your_stuff(base):
     check("it landed in the test world", str(FOLDER) in done["path"], done)
     check("files list", any(row["name"] == "file.bin" for row in good("files list", "files", "list")["files"]))
     check("files query", not good("files find", "files", "list", "nothing such")["files"])
+    given = good("downloads get", "downloads", "get", done["id"])
+    check("downloads get gives the path", given.get("path") == done["path"], given)
+    raw = broadway("downloads", "get", done["id"], "--out", "-", text=False)
+    check("downloads get --out - gives the bytes", raw.stdout == Path(done["path"]).read_bytes(), len(raw.stdout))
     yes("downloads forget", "downloads", "forget", done["id"])
     check("the file stays", Path(done["path"]).exists())
     yes("downloads clear", "downloads", "clear")
@@ -947,16 +1013,17 @@ def filling(base):
     csv.write_text(f"url,username,password\nhttp://127.0.0.1/,{SAM},s3cret-pass-word\n")
     bench("import-file", str(csv))
     shutil.rmtree(csv.parent)
-    logins = good("logins list", "logins", "list")
-    check("logins by site", logins["logins"] and logins["logins"][0]["user"] == SAM, logins)
-    check("never a password", "s3cret" not in str(logins))
-    check("a site narrows", not good("logins other", "logins", "list", "nowhere.example")["logins"])
+    kept = no("logins list is the person's", "person_only", "logins", "list")
+    check("no site or user named", SAM not in str(kept) and "127.0.0.1" not in str(kept) and "fill login" in kept["error"].get("hint", ""), kept)
+    port = int(base.rstrip("/").rsplit(":", 1)[1])
+    sv.cmd({"do": "agents", "action": "logins", "kept": [{"host": "127.0.0.1", "port": port, "user": SAM, "password": "s3cret-pass-word", "clear": True}]})
     tab = good("a form", "tabs", "new", base + "signin")["id"]
     broadway("wait", "--tab", tab)
     no("fill login needs a person", "needs_you", "fill", "login", "--tab", tab, "--no-person")
     data = yes("fill login", "fill", "login", "--tab", tab)
     check("no password back", "s3cret" not in str(data), data)
     check("the page got it", "s3cret-pass-word" in bench("eval", tab, "document.getElementById('pass').value"))
+    no("fill code finds no code box on a sign-in page", "not_found", "fill", "code", "--tab", tab)
     no("no value leaks", "refused", "wait", "--selector", 'input[value^="s"]', "--seconds", "1", "--tab", tab)
     covered.discard("wait --selector")
     bench("autofill", "seed")
@@ -981,8 +1048,26 @@ def page_tools(base):
     found = run("page", "find", "price", "--tab", tab)[1]["data"]
     check("page find", found["count"] == 1 and "12 dollars" in found["matches"][0]["text"] and found["website"], found)
     check("find gives elements", broadway("find", "Go", "--tab", tab).returncode == 0)
-    none = broadway("find", "price", "--tab", tab)
-    check("find with no element says so and names read --find", none.returncode == 1 and "No element fits" in none.stderr and "read --find" in none.stderr, none.stderr)
+    texted = broadway("find", "price", "--tab", tab)
+    check("find on words in the page text gives the line and the control near it", texted.returncode == 0 and "No control is named" in texted.stdout and "the price is 12 dollars" in texted.stdout and "near @e" in texted.stdout, texted.stdout + texted.stderr)
+    _, parsed = envelope("find", "price", "--tab", tab)
+    check("find's text lines stay out of elements", parsed["data"]["count"] == 0 and parsed["data"]["elements"] == [] and parsed["data"]["text"][0]["near"]["ref"], parsed)
+    none = broadway("find", "Mark seenn", "--tab", tab)
+    check("find with no element names the closest names", none.returncode == 1 and "No element fits" in none.stderr and "Closest names" in none.stderr and '"Mark seen"' in none.stderr, none.stderr)
+    missed = broadway("click", "Delete drafts", "--tab", tab)
+    check("a click on words that fit nothing names the closest and clicks nothing", missed.returncode == 1 and '"Delete draft"' in missed.stderr and "erased" not in broadway("tabs").stdout, missed.stderr)
+    sections = good("sections", "tabs", "new", base + "sections")["id"]
+    broadway("wait", "--tab", sections)
+    _, parsed = envelope("find", "Edit", "--in", "Shipping address", "--tab", sections)
+    check("--in words work in a tab never shown", parsed.get("ok") and parsed["data"]["count"] == 1, parsed)
+    unseen = broadway("find", "zebra", "--tab", sections)
+    check("find never gives text a person can't see", unseen.returncode == 1 and "hidden words" not in unseen.stdout + unseen.stderr and "faint words" not in unseen.stdout + unseen.stderr, unseen.stdout + unseen.stderr)
+    started = time.time()
+    read = broadway("read", "--tab", tab)
+    check("read in a tab never shown answers at once", read.returncode == 0 and "price" in read.stdout and time.time() - started < 4, (time.time() - started, read.stdout[:200], read.stderr))
+    started = time.time()
+    shot = broadway("snapshot", "--tab", tab)
+    check("snapshot in a tab never shown answers at once", shot.returncode == 0 and "@e" in shot.stdout and time.time() - started < 4, (time.time() - started, shot.stdout[:200], shot.stderr))
     check("find never reaches a box", good("secret", "page", "find", "hunter2", "--tab", tab)["count"] == 0)
     check("nor a card", good("card", "page", "find", "4242", "--tab", tab)["count"] == 0)
     check("--case", good("case", "page", "find", "PRICE", "--case", "--tab", tab)["count"] == 0)
@@ -1022,7 +1107,9 @@ def page_tools(base):
     still = broadway("snapshot", "--tab", tab)
     check("the boxes are as they were", "value hidden" in still.stdout, still.stdout + still.stderr)
     raw = broadway("pdf", "--tab", tab, text=False)
-    check("pdf on a pipe is the file", raw.stdout[:4] == b"%PDF")
+    check("pdf on a pipe names its file and writes no PDF there", raw.returncode == 0 and raw.stdout[:4] != b"%PDF" and b".pdf" in raw.stdout, raw.stdout[:200])
+    raw = broadway("pdf", "--tab", tab, "--out", "-", text=False)
+    check("pdf --out - is the file", raw.stdout[:4] == b"%PDF")
     shutil.rmtree(out.parent)
 
     info = good("site info", "site", "info", "--tab", tab)
@@ -1371,6 +1458,7 @@ def the_rest(base):
     latency()
     help_and_mistakes()
     browsing(base)
+    looking(base)
     batching(base)
     old_task_words()
     setup()

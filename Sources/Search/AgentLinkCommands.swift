@@ -22,7 +22,8 @@ extension AgentSocket {
                 links.watch(found.id, process)
             }
         } else if let connection {
-            found = create ? links.join(.connection(connection), name: named, wish: wish) : links.liveLink(for: .connection(connection))
+            let origin = (said["id"] as? String).flatMap { $0.isEmpty ? nil : $0.lowercased() }
+            found = create ? links.join(.connection(connection), name: named, wish: wish, origin: origin) : links.liveLink(for: .connection(connection))
             if let found, let process, AgentLinks.watchable(said["executable"] as? String, session: nil) { links.watch(found.id, process) }
         } else if let id = (said["id"] as? String)?.lowercased(), !id.isEmpty {
             found = links.liveLink(for: .named(id)) ?? links.live.first { $0.id.uuidString.lowercased().hasPrefix(id) }
@@ -39,9 +40,20 @@ extension AgentSocket {
             }
         }
         guard let found else { return nil }
+        if said["remote"] as? Bool == true || (said["id"] as? String)?.hasPrefix("ssh:") == true { links.setRemote(found.id) }
+        if links.link(found.id)?.remote == false, found.program == nil, let process, links.reading(found.id) {
+            let id = found.id
+            let told = said["executable"] as? String
+            Task.detached {
+                guard let facts = AgentSigner.read(pid: process.pid, started: process.started) else { return }
+                let program = AgentSigner.judge(facts, told: told)
+                await MainActor.run { AgentLinks.shared.sign(id, program) }
+            }
+        }
         if found.folder == nil, let folder = wish.folder { links.give(found.id, folder: folder) }
+        if found.workdir == nil, let workdir = wish.workdir { links.give(found.id, workdir: workdir) }
         if request["hook"] as? Bool != true { links.heard(found.id) }
-        if let named, named != found.name { links.rename(found.id, named) }
+        if let named { links.rename(found.id, named, given: name == nil && wish.named) }
         AgentLinks.open(found)
         if request["person"] as? String == "none" { links.setPatience(found.id, 0) }
         return links.link(found.id) ?? found
@@ -129,11 +141,12 @@ extension AgentLinks {
     func row(_ link: AgentLink) -> [String: Any] {
         let tabs = AgentBoard.allTabs(of: link.id).map(\.tab)
         let state = AgentSession(link: link, tabs: tabs).state(pending: AgentDesk.shared.pending)
-        var row: [String: Any] = ["id": PersonCommands.short(link.id), "name": link.name, "tabs": tabs.count, "status": state.line,
+        var row: [String: Any] = ["id": PersonCommands.short(link.id), "name": link.title, "tabs": tabs.count, "status": state.line,
                                   "state": link.live ? Self.word(state) : (link.ended?.failed == true ? "failed" : "done"),
                                   "connected": PersonCommands.stamp(link.connected)]
         if let summary = link.ended?.summary { row["summary"] = summary }
         if let thread = link.codex { row["codex"] = thread.id }
+        if let program = link.program?.line(name: link.name) { row["program"] = program }
         return row
     }
 }

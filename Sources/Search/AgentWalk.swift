@@ -1,4 +1,5 @@
 import Foundation
+import WebKit
 
 extension AgentPage {
     static let stateScript = """
@@ -6,10 +7,50 @@ extension AgentPage {
     function broadwayState() {
       var st = window.__broadwayRefs;
       if (!st || !st.doc) {
-        st = window.__broadwayRefs = { ids: new WeakMap(), map: {}, said: {}, target: {}, words: {}, tags: {}, seen: {}, next: 1,
+        st = window.__broadwayRefs = { ids: new WeakMap(), map: {}, said: {}, target: {}, words: {}, tags: {}, seen: {}, place: {}, only: {}, next: 1,
           doc: Date.now().toString(36) + Math.random().toString(36).slice(2, 10) };
       }
+      if (!st.place) { st.place = {}; st.only = {}; }
       return st;
+    }
+    function broadwayRowOf(el) {
+      var row = el.parentElement && el.parentElement.closest('li,tr,[role=row],[role=listitem],article,[role=article],[class*="card" i]');
+      return row && row !== document.body && row !== document.documentElement ? row : null;
+    }
+    function broadwayRowName(row) {
+      var label = row.getAttribute('aria-label');
+      if (label) return broadwayFlat(label, 60);
+      var words = '', walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT), n;
+      while ((n = walker.nextNode()) && words.length < 200) {
+        var p = n.parentElement, inside = p && p.closest('a,button,select,textarea,option,script,style,[role=button],[role=link],[aria-hidden=true]');
+        if (!p || (inside && row.contains(inside))) continue;
+        words += ' ' + n.data;
+      }
+      return broadwayFlat(words, 60);
+    }
+    function broadwayPlace(el) {
+      var row = broadwayRowOf(el);
+      if (row) return broadwayRowName(row);
+      for (var up = el, depth = 0, looked = 0; up && up !== document.body && depth < 8; up = up.parentElement, depth++) {
+        for (var s = up.previousElementSibling; s && looked < 40; s = s.previousElementSibling, looked++) {
+          if (/^H[1-6]$/.test(s.tagName) || s.getAttribute('role') === 'heading') return '# ' + broadwayFlat(s.textContent, 60);
+        }
+      }
+      return '';
+    }
+    function broadwayDanger(said) {
+      return /\\b(delete|remove|erase|destroy|discard|trash|pay|buy|purchase|order|checkout|send|submit|transfer|publish|unsubscribe)\\b/i.test(said || '');
+    }
+    function broadwayCounts(rows) {
+      var said = {}, shown = {};
+      for (var i = 0; i < rows.length; i++) {
+        var row = rows[i];
+        if (!row.item || row.landmark) continue;
+        var key = row.item.role + ' ' + (row.label || ''), seenAs = row.item.role + ' ' + row.item.name;
+        said[key] = (said[key] || 0) + 1;
+        shown[seenAs] = (shown[seenAs] || 0) + 1;
+      }
+      return { said: said, shown: shown };
     }
     function broadwayFlat(text, most) { return String(text || '').replace(/\\s+/g, ' ').trim().slice(0, most || 120); }
     function broadwayRead(el, target) { var d = describe(el, target || null); return d.kind + ' ' + d.label; }
@@ -26,9 +67,12 @@ extension AgentPage {
       }
       return ref;
     }
-    function broadwayTell(ref) {
+    function broadwayTell(ref, counts) {
       var st = broadwayState(), el = st.map[ref];
-      if (el) st.said[ref] = broadwayRead(el, st.target[ref]);
+      if (!el) return;
+      st.said[ref] = broadwayRead(el, st.target[ref]);
+      st.place[ref] = broadwayPlace(el);
+      if (counts) st.only[ref] = counts.said[st.said[ref]] === 1;
     }
     function broadwayGet(ref) {
       var st = window.__broadwayRefs;
@@ -36,21 +80,32 @@ extension AgentPage {
       var el = st.map[ref], rebound = false;
       if (!el) return { failed: '@' + ref + ' was never given on this page', code: 'stale_ref', why: 'unknown', doc: st.doc, next: st.next };
       if (!el.isConnected) {
-        var words = st.words[ref] || '', tag = st.tags[ref], twin = null;
-        if (words.length >= 12 && tag) {
+        var words = st.words[ref] || '', tag = st.tags[ref], twin = null, only = st.only[ref] === true;
+        if (tag && (only || words.length >= 12)) {
           var same = document.getElementsByTagName(tag), hits = [];
-          for (var i = 0; i < same.length && hits.length < 2; i++) if (broadwayFlat(same[i].innerText) === words) hits.push(same[i]);
+          for (var i = 0; i < same.length && hits.length < 2; i++) {
+            if (broadwayRead(same[i], null) === st.said[ref] && (only || broadwayFlat(same[i].innerText) === words)) hits.push(same[i]);
+          }
           if (hits.length === 1) twin = hits[0];
         }
-        if (!twin || broadwayRead(twin, null) !== st.said[ref]) return { failed: '@' + ref + ' has left the page', code: 'stale_ref', why: 'gone', doc: st.doc };
+        if (twin && broadwayDanger(st.said[ref]) && st.place[ref] !== undefined && broadwayPlace(twin) !== st.place[ref]) twin = null;
+        if (!twin) return { failed: '@' + ref + ' has left the page', code: 'stale_ref', why: 'gone', doc: st.doc };
+        rebound = broadwayRef(twin, null);
         el = twin;
         st.map[ref] = twin;
         delete st.target[ref];
-        if (!st.ids.get(twin)) st.ids.set(twin, Number(ref.slice(1)));
-        rebound = true;
+        broadwayTell(rebound);
+      } else if (st.place[ref] !== undefined && (st.only[ref] !== true || broadwayDanger(st.said[ref])) && seen(el)) {
+        var where = broadwayPlace(el), was = st.place[ref];
+        if (where !== was) {
+          st.place[ref] = where;
+          var moved = describe(el, st.target[ref] || null);
+          return { failed: '@' + ref + ' ' + moved.kind + ' "' + broadwayFlat(moved.label, 60) + '" was in "' + was.replace(/^# /, '') + '" and is now in "' + where.replace(/^# /, '') + '". Run the same command again to act on it there',
+                   code: 'ref_changed', doc: st.doc };
+        }
       }
       var target = st.target[ref] || null, reading = broadwayRead(el, target);
-      if (st.said[ref] !== reading) {
+      if (st.said[ref] !== reading && seen(el)) {
         st.said[ref] = reading;
         var now = describe(el, target);
         return { failed: '@' + ref + ' now reads ' + now.kind + ' "' + now.label + '". Run the same command again to act on it as it is now',
@@ -126,9 +181,23 @@ extension AgentPage {
         var called = ((b.getAttribute('autocomplete') || '') + ' ' + (b.name || '') + ' ' + (b.id || '') + ' ' + (b.getAttribute('aria-label') || '') + ' ' + (b.placeholder || '')).toLowerCase();
         if (b.labels) for (var l = 0; l < b.labels.length; l++) called += ' ' + (b.labels[l].textContent || '').toLowerCase();
         if (/one-time-code|\\botp\\b|one.?time|verification.?code|security.?code|2fa|two.?factor|authenticator|sms.?code/.test(called)) return 'code';
-        if ((b.type || '').toLowerCase() === 'password' && (b.getAttribute('autocomplete') || '').toLowerCase() !== 'new-password') password++;
+        if ((b.type || '').toLowerCase() !== 'password' || (b.getAttribute('autocomplete') || '').toLowerCase() === 'new-password') continue;
+        if (b.value && window.__broadwaySealed && window.__broadwaySealed.has(b)) continue;
+        if (/token|api.?key|\\bkey\\b|secret/.test(called) && !broadwaySignIn(b)) continue;
+        password++;
       }
       return password === 1 ? 'password' : '';
+    }
+    function broadwaySignIn(box) {
+      if ((box.getAttribute('autocomplete') || '').toLowerCase() === 'current-password') return true;
+      var around = (box.closest('form') || document.body).querySelectorAll('input');
+      for (var i = 0; i < around.length; i++) {
+        var b = around[i], kind = (b.type || '').toLowerCase();
+        if (b === box || kind === 'hidden' || kind === 'password' || !seen(b)) continue;
+        var called = ((b.getAttribute('autocomplete') || '') + ' ' + (b.name || '') + ' ' + (b.id || '') + ' ' + (b.getAttribute('aria-label') || '') + ' ' + (b.placeholder || '')).toLowerCase();
+        if (kind === 'email' || /user|email|e-mail|login|account/.test(called)) return true;
+      }
+      return false;
     }
     function broadwayWays() {
       var forms = Array.prototype.filter.call(document.querySelectorAll('input[type=password],input[type=email],input[autocomplete=username],input[autocomplete=email]'), seen);
@@ -165,12 +234,42 @@ extension AgentPage {
       }
       return '';
     }
+    function broadwayIcon(el) {
+      function clean(t) {
+        t = String(t || '').split(/[#\\/]/).pop().replace(/\\.(svg|png|gif|jpe?g|webp)$/i, '').replace(/^(icons?|ico|ic|i|svg|sprite|glyph)[-_:]/i, '').replace(/[-_]+/g, ' ').trim().toLowerCase();
+        return t.length > 1 && t.length <= 30 && !/^\\d+$/.test(t) ? t : '';
+      }
+      var found = clean(el.getAttribute('data-icon')), inner = el.querySelector('[data-icon]');
+      if (!found && inner) found = clean(inner.getAttribute('data-icon'));
+      var use = el.querySelector('use');
+      if (!found && use) found = clean(use.getAttribute('href') || use.getAttribute('xlink:href'));
+      var title = el.querySelector('svg title');
+      if (!found && title) found = clean(title.textContent);
+      var marks = found ? [] : el.querySelectorAll('i,span,svg,img');
+      for (var i = 0; i < marks.length && i < 6 && !found; i++) {
+        var m = marks[i];
+        if (m.tagName === 'IMG') { found = clean(m.getAttribute('alt')) || clean(m.getAttribute('src')); continue; }
+        if (m.getAttribute('aria-hidden') !== 'true' && m.tagName !== 'I' && m.tagName.toLowerCase() !== 'svg') continue;
+        var names = (m.getAttribute('class') || '').split(/\\s+/);
+        for (var j = 0; j < names.length && !found; j++) {
+          var hit = /^(?:fa|fas|far|fab|bi|icon|icons|ion|ri|mdi|ti|lucide|gg|feather|glyphicon|octicon|codicon|ph|tabler|heroicon)-(.+)$/i.exec(names[j]);
+          if (hit && !/^(solid|regular|light|thin|brands|duotone|lg|sm|xs|xl|\\d+x|fw|spin|pulse|border|inverse|stack|outline|outlined|filled|sharp|round|rounded)$/i.test(hit[1])) found = clean(hit[1]);
+        }
+      }
+      if (!found) found = clean(el.getAttribute('data-testid') || el.getAttribute('data-test-id'));
+      return found;
+    }
     function broadwayItem(el, target, kind, label, ref) {
       var boxed = /^(textbox|searchbox|combobox|slider|spinbutton|checkbox|radio|switch)$/.test(kind);
       var said = label || (kind === 'heading' || broadwayTold.test(kind) ? '' : boxed ? broadwayNearText(el) : nearby(el));
       if (!said && boxed && broadwaySecret(target || el)) said = ((target || el).getAttribute('type') || '').toLowerCase() === 'password' ? 'password field' : 'secret field';
       var subject = target || el;
       var line = '@' + ref + ' ' + kind + ' "' + said + '"', item = { ref: ref, role: kind, name: said };
+      if (!label && !boxed && kind !== 'heading' && !broadwayTold.test(kind)) {
+        var icon = broadwayIcon(el);
+        if (icon) { item.icon = icon; line += ' icon="' + icon.replace(/"/g, "'") + '"'; }
+      }
+      var cut = line.length;
       var secret = broadwaySecret(subject);
       if (/^(textbox|combobox|searchbox|slider|spinbutton)$/.test(kind)) {
         if (secret) { line += ' value hidden'; item.hidden = true; }
@@ -212,8 +311,15 @@ extension AgentPage {
       }
       if (subject.readOnly && kind === 'textbox') { line += ' readonly'; item.readonly = true; }
       if (document.activeElement === subject || (subject.getRootNode && subject.getRootNode().activeElement === subject)) { line += ' focused'; item.focused = true; }
-      if (kind === 'link') { try { item.path = new URL(el.href).pathname; line += ' -> ' + item.path; } catch (e) {} }
-      return { item: item, line: line };
+      if (kind === 'link') {
+        try {
+          var to = new URL(el.href);
+          item.path = to.pathname;
+          if (to.hostname === location.hostname || !/^https?:$/.test(to.protocol)) line += ' -> ' + item.path;
+          else { item.href = to.href; line += ' -> ' + '\u{27EA}' + to.href + '\u{27EB}'; }
+        } catch (e) {}
+      }
+      return { item: item, line: line, cut: cut, bare: !label };
     }
     function broadwayReading(item) {
       var marks = [];
@@ -333,7 +439,8 @@ extension AgentPage {
         if (el === document.body || el === document.documentElement) return false;
         if (!/(auto|scroll)/.test(look.overflowY + ' ' + look.overflowX)) return false;
         var r = el.getBoundingClientRect();
-        return r.width >= 40 && r.height >= 40 && (el.scrollHeight > el.clientHeight + 4 || el.scrollWidth > el.clientWidth + 4);
+        var tall = el.scrollHeight > el.clientHeight + 4 && /(auto|scroll)/.test(look.overflowY), wide = el.scrollWidth > el.clientWidth + 4 && /(auto|scroll)/.test(look.overflowX);
+        return r.width >= 40 && ((tall && r.height >= 40) || (wide && r.height >= 12));
       }
       function visit(el, region, alpha, ground) {
         if (count >= cap || el === o.skip) return;
@@ -360,11 +467,23 @@ extension AgentPage {
           if (mark.role === 'dialog' || mark.role === 'alertdialog') {
             count++;
             rows.push({ el: el, region: region, landmark: true, item: { ref: rref, role: mark.role, name: mark.name } });
+          } else if (scrolls(el, look)) {
+            count++;
+            var lname = broadwayFlat(mark.name || '', 40), lbox = { ref: rref, role: 'scrollable', name: lname, scrolls: true };
+            if (region) lbox.region = region;
+            rows.push({ el: el, region: region, item: lbox, line: '@' + rref + ' scrollable "' + lname.replace(/"/g, "'") + '" scrolls' });
           }
           here = rref;
         } else {
           var target = proxies.get(el) || null, seenAs = describe(el, target), kind = seenAs.kind;
-          if (kind && !fields.test(kind) && !target && !el.hasAttribute('aria-label') && !el.hasAttribute('aria-labelledby') && !el.hasAttribute('title') && broadwayFaint(el, look, alpha, ground)) { unseen++; return; }
+          if (kind && !fields.test(kind) && !target && !el.hasAttribute('aria-label') && !el.hasAttribute('aria-labelledby') && !el.hasAttribute('title') && !el.disabled && el.getAttribute('aria-disabled') !== 'true' && broadwayFaint(el, look, alpha, ground)) { unseen++; return; }
+          if (!kind && el.hasAttribute('data-broadway-closed')) {
+            count++;
+            var cref = broadwayRef(el, null);
+            var shut = { ref: cref, role: 'group', name: '', closed: true };
+            if (here) shut.region = here;
+            rows.push({ el: el, region: here, item: shut, line: '@' + cref + ' group closed to reading: broadway shot shows it, broadway click --at X,Y acts in it' });
+          }
           if (!kind && scrolls(el, look)) {
             count++;
             var sref = broadwayRef(el, null);
@@ -378,7 +497,7 @@ extension AgentPage {
             var ref = broadwayRef(el, target), built = broadwayItem(el, target, kind, seenAs.label, ref);
             if (here) built.item.region = here;
             if (hovers.size && !broadwayTold.test(kind) && kind !== 'heading' && hovered(el)) { built.item.hover = true; built.line += ' opens-on-hover'; }
-            rows.push({ el: el, region: here, item: built.item, line: built.line });
+            rows.push({ el: el, region: here, item: built.item, line: built.line, cut: built.cut, bare: built.bare, label: seenAs.label });
             var opens = kind === 'heading' || kind === 'dropzone' || el.tagName === 'SELECT' || kind === 'textbox' || (kind === 'combobox' && el.tagName !== 'INPUT') || broadwayTold.test(kind);
             if (!opens) return;
           } else if (o.text) {
@@ -425,6 +544,52 @@ extension AgentPage {
       }
       return { appeared: appeared, went: went, changed: changed, more: extra };
     }
+    function broadwayLevel(el) {
+      var tag = /^H([1-6])$/.exec(el.tagName || '');
+      if (tag) return +tag[1];
+      return (el.getAttribute && el.getAttribute('role') === 'heading') ? (+(el.getAttribute('aria-level')) || 2) : 0;
+    }
+    function broadwayScopes(words, targets) {
+      var want = broadwayFlat(words, 200).toLowerCase(), marks = [], scopes = [];
+      if (!want || !document.body) return scopes;
+      function flat(el) { return broadwayFlat(el.innerText || '', 100000).toLowerCase(); }
+      document.querySelectorAll('[aria-label],[aria-labelledby]').forEach(function (el) {
+        if (seen(el) && broadwayFlat(name(el), 200).toLowerCase().indexOf(want) >= 0 && targets.some(function (t) { return el !== t && el.contains(t); })) scopes.push(el);
+      });
+      function dig(el) {
+        var deeper = false;
+        for (var c = el.firstElementChild; c; c = c.nextElementSibling) {
+          if (/^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|TITLE)$/.test(c.tagName) || flat(c).indexOf(want) < 0) continue;
+          deeper = true;
+          if (marks.length < 40) dig(c);
+        }
+        if (!deeper && marks.length < 40) marks.push(el);
+      }
+      if (flat(document.body).indexOf(want) >= 0) dig(document.body);
+      function blocked(up, mark, level) {
+        if (marks.some(function (m) { return m !== mark && up.contains(m) && !m.contains(mark) && !mark.contains(m); })) return true;
+        if (!level) return false;
+        var heads = up.querySelectorAll('h1,h2,h3,h4,h5,h6,[role=heading]');
+        for (var i = 0; i < heads.length; i++) if (heads[i] !== mark && !heads[i].contains(mark) && !mark.contains(heads[i]) && broadwayLevel(heads[i]) <= level) return true;
+        return false;
+      }
+      marks.forEach(function (mark) {
+        var level = broadwayLevel(mark);
+        if (!level) for (var hup = mark.parentElement, d = 0; hup && d < 2 && !level; hup = hup.parentElement, d++) { if (broadwayLevel(hup)) { level = broadwayLevel(hup); mark = hup; } }
+        for (var up = mark; up && up !== document.documentElement; up = up.parentElement) {
+          if (up !== mark && blocked(up, mark, level)) break;
+          if (targets.some(function (t) { return up.contains(t); })) { scopes.push(up); return; }
+        }
+        if (!level) return;
+        for (var s = mark.nextElementSibling; s; s = s.nextElementSibling) {
+          if (broadwayLevel(s) && broadwayLevel(s) <= level) break;
+          var inner = s.querySelectorAll ? s.querySelectorAll('h1,h2,h3,h4,h5,h6,[role=heading]') : [];
+          if (Array.prototype.some.call(inner, function (h) { return broadwayLevel(h) <= level; })) break;
+          scopes.push(s);
+        }
+      });
+      return scopes;
+    }
     function broadwayNear(el) {
       var holder = el.parentElement && el.parentElement.closest('li,[role=listitem],tr,[role=row],article,[role=article],section,[role=region],form,fieldset,[role=group],dialog,[role=dialog],[role=alertdialog],[role=option]');
       if (!holder || holder === document.body) return null;
@@ -444,13 +609,44 @@ extension AgentPage {
 
     static let walkBase = PageSelection.secretCheck + "\n" + naming + stateScript + walkScript
 
+    @MainActor static let closedWorld: WKContentWorld = {
+        let made = WKContentWorld.Configuration()
+        made.allowAccessingClosedShadowRoots = true
+        return WKContentWorld(configuration: made)
+    }()
+
+    static let closedScript = """
+    var found = 0;
+    function mark(root) {
+      var all = root.querySelectorAll('*');
+      for (var i = 0; i < all.length && i < 20000 && found < 200; i++) {
+        var inner = all[i].shadowRoot;
+        if (!inner) continue;
+        if (inner.mode === 'closed') {
+          found++;
+          if (!all[i].hasAttribute('data-broadway-closed')) all[i].setAttribute('data-broadway-closed', '');
+        } else mark(inner);
+      }
+    }
+    if (document.documentElement) mark(document);
+    return found;
+    """
+
+    static func walks(_ script: String) -> Bool {
+        script.components(separatedBy: "broadwayWalk(").count > 2
+    }
+
     static let watchScript = """
 
     function broadwayWatch(texts) {
       var st = broadwayState();
       if (st.watch && st.watch.observer) st.watch.observer.disconnect();
-      var w = st.watch = { last: performance.now(), touched: [], hosts: new Set(), before: new WeakMap(), texts: !!texts };
+      var w = st.watch = { last: performance.now(), touched: [], hosts: new Set(), before: new WeakMap(), texts: !!texts, orders: [] };
       if (texts && document.body) {
+        var lists = document.body.querySelectorAll('tbody,ul,ol,[role=rowgroup],[role=list],[role=listbox]');
+        for (var o = 0; o < lists.length && w.orders.length < 40; o++) {
+          if (lists[o].children.length > 2) w.orders.push({ el: lists[o], kids: [].slice.call(lists[o].children, 0, 2000) });
+        }
         var all = document.body.getElementsByTagName('*');
         for (var i = 0; i < all.length && i < 20000; i++) {
           var el = all[i];
@@ -486,6 +682,36 @@ extension AgentPage {
       });
       w.observer.observe(document, { subtree: true, childList: true, characterData: true, attributes: true });
       return w;
+    }
+    function broadwayOrderName(el) {
+      var t = el.closest('table,[role=table],[role=grid]') || el, said = t.getAttribute('aria-label') || (t.caption && t.caption.textContent) || '';
+      var by = t.getAttribute('aria-labelledby');
+      if (!said && by) { var lb = document.getElementById(by.split(' ')[0]); if (lb) said = lb.textContent; }
+      if (!said) {
+        var hs = document.querySelectorAll('h1,h2,h3,h4,h5,h6,[role=heading]');
+        for (var i = hs.length - 1; i >= 0; i--) if (hs[i].compareDocumentPosition(t) & Node.DOCUMENT_POSITION_FOLLOWING) { said = hs[i].textContent; break; }
+      }
+      return broadwayFlat(said || '', 80);
+    }
+    function broadwayOrders(w) {
+      var out = [];
+      if (!w || !w.orders) return out;
+      for (var i = 0; i < w.orders.length && out.length < 3; i++) {
+        var o = w.orders[i];
+        if (!o.el.isConnected || !broadwayLegible(o.el)) continue;
+        var kids = [].slice.call(o.el.children), last = -1, moved = false, kept = 0;
+        for (var j = 0; j < o.kids.length; j++) {
+          if (o.kids[j].parentElement !== o.el) continue;
+          var at = kids.indexOf(o.kids[j]);
+          kept++;
+          if (at < last) moved = true;
+          last = at;
+        }
+        if (!moved || kept < 3) continue;
+        var rows = o.el.tagName === 'TBODY' || o.el.getAttribute('role') === 'rowgroup';
+        out.push({ kind: rows ? 'rows' : 'items', name: broadwayOrderName(o.el), table: rows });
+      }
+      return out;
     }
     function broadwayTexts(w) {
       var out = [];
@@ -538,14 +764,15 @@ extension AgentPage {
     if (!st.before) {
       out.fresh = true;
     } else {
-      var diff = broadwayDiff(st.before, now, most || 40);
-      diff.appeared.forEach(function (e) { broadwayTell(e.ref); });
-      diff.changed.forEach(function (e) { broadwayTell(e.ref); });
+      var diff = broadwayDiff(st.before, now, most || 40), counts = broadwayCounts(walked.rows);
+      diff.appeared.forEach(function (e) { broadwayTell(e.ref, counts); });
+      diff.changed.forEach(function (e) { broadwayTell(e.ref, counts); });
       out.appeared = diff.appeared;
       out.went = diff.went;
       out.changed = diff.changed;
       out.more = diff.more;
       out.text = broadwayTexts(w);
+      out.reordered = broadwayOrders(w);
       out.total = now.order.length;
       out.counted = diff.appeared.length + diff.went.length + diff.changed.length + diff.more;
     }
@@ -583,9 +810,9 @@ extension AgentPage {
     if (since) {
       var before = who && st.seen[who];
       if (before) {
-        var diff = broadwayDiff(before, now, 40);
-        diff.appeared.forEach(function (e) { broadwayTell(e.ref); });
-        diff.changed.forEach(function (e) { broadwayTell(e.ref); });
+        var diff = broadwayDiff(before, now, 40), sinceCounts = broadwayCounts(whole.rows);
+        diff.appeared.forEach(function (e) { broadwayTell(e.ref, sinceCounts); });
+        diff.changed.forEach(function (e) { broadwayTell(e.ref, sinceCounts); });
         out.since = true;
         out.appeared = diff.appeared;
         out.went = diff.went;
@@ -608,7 +835,7 @@ extension AgentPage {
     });
     var most = Math.max(1, Math.min(limit || 120, 2000));
     var picked = rows.slice(0, most), lines = [], items = [], headed = null;
-    var names = {};
+    var names = {}, counts = broadwayCounts(whole.rows);
     walked.regions.forEach(function (r) { names[r.ref] = r; });
     picked.forEach(function (row) {
       var region = row.region || '';
@@ -618,7 +845,19 @@ extension AgentPage {
       }
       headed = region;
       if (row.text) { lines.push('text "' + row.text.replace(/"/g, "'") + '"'); return; }
-      broadwayTell(row.item.ref);
+      if (row.bare || counts.shown[row.item.role + ' ' + row.item.name] > 1) {
+        var holder = broadwayRowOf(row.el), where = holder ? broadwayRowName(holder) : '';
+        if (where && where !== row.item.name) {
+          row.item.in = where;
+          row.line = row.line.slice(0, row.cut) + ' in="' + where.replace(/"/g, "'") + '"' + row.line.slice(row.cut);
+        }
+      }
+      if (boxes) {
+        var box = row.el.getBoundingClientRect();
+        row.item.box = { x: Math.round(box.left * scale), y: Math.round(box.top * scale), width: Math.round(box.width * scale), height: Math.round(box.height * scale) };
+        row.line += ' box=' + row.item.box.x + ',' + row.item.box.y + ',' + row.item.box.width + ',' + row.item.box.height;
+      }
+      broadwayTell(row.item.ref, counts);
       lines.push(row.line);
       items.push(row.item);
     });
@@ -647,7 +886,11 @@ extension AgentPage {
     if (!el || el === document.documentElement) return { failed: 'Nothing is at that point', code: 'not_found' };
     if (el.tagName === 'IFRAME' || el.tagName === 'FRAME') return { failed: 'That point is inside an embedded frame, so use a ref from broadway snapshot', code: 'not_actionable' };
     var hit = el.closest('button,a[href],input,select,textarea,summary,label,[role=button],[role=link],[role=checkbox],[role=radio],[role=switch],[role=tab],[role=menuitem],[role=option],[role=slider],[contenteditable=true],[onclick],[tabindex]') || el;
-    return { ref: broadwayRef(hit, null) };
+    if (broadwaySecret(el) || broadwaySecret(hit)) return { failed: 'That point is in a password, card or code field, and agents never act there. Ask the person to.', code: 'secret_field' };
+    var told = describe(hit, null);
+    var label = broadwayFlat(told.label || '', 60);
+    var box = hit.getBoundingClientRect();
+    return { ref: broadwayRef(hit, null), what: (told.kind || hit.tagName.toLowerCase()) + (label ? ' "' + label + '"' : ''), dx: x - box.left, dy: y - box.top };
     """
 
     static let resolveScript = walkBase + """
@@ -666,42 +909,67 @@ extension AgentPage {
     if (label) items = items.filter(function (x) { return fields.test(x.item.role) || !!st.target[x.item.ref]; });
     var want = broadwayFlat(words || label || '', 200).toLowerCase();
     var named = function (x) { return (x.item.name || '').toLowerCase(); };
+    var same = function (x) { return named(x) === want || (!!x.item.icon && x.item.icon === want); };
+    var holds = function (x) { return named(x).indexOf(want) >= 0 || (!!x.item.icon && x.item.icon.indexOf(want) >= 0); };
     var hits = items;
     if (want) {
       var pool = items;
       if (prefer && prefer.length) {
         var liked = items.filter(function (x) { return prefer.indexOf(x.item.role) >= 0; });
-        var likedHits = liked.filter(function (x) { return named(x) === want; });
-        if (!likedHits.length) likedHits = liked.filter(function (x) { return named(x).indexOf(want) >= 0; });
+        var likedHits = liked.filter(same);
+        if (!likedHits.length) likedHits = liked.filter(holds);
         if (likedHits.length) pool = liked;
       }
       if (!wanted && !label) {
         var acting = pool.filter(function (x) { return x.item.role !== 'heading' && !broadwayTold.test(x.item.role); });
-        if (acting.some(function (x) { return named(x).indexOf(want) >= 0; })) pool = acting;
+        if (acting.some(holds)) pool = acting;
       }
-      hits = pool.filter(function (x) { return named(x) === want; });
-      if (!hits.length) hits = pool.filter(function (x) { return named(x).indexOf(want) >= 0; });
+      hits = pool.filter(same);
+      if (!hits.length) hits = pool.filter(holds);
+      var parts = want.split(' ').filter(function (p) { return p; });
+      if (!hits.length && parts.length > 1) {
+        hits = pool.filter(function (x) {
+          var holder = broadwayRowOf(x.row.el), bag = (named(x) + ' ' + (x.item.icon || '') + ' ' + (holder ? broadwayRowName(holder) : '')).toLowerCase();
+          return parts.every(function (p) { return bag.indexOf(p) >= 0; });
+        });
+      }
     } else if (!wanted) {
       hits = [];
     }
+    var unscoped = false;
+    if (within) {
+      var scopes = broadwayScopes(within, hits.map(function (x) { return x.row.el; }));
+      hits = hits.filter(function (x) { return scopes.some(function (s) { return s.contains(x.row.el); }); });
+      unscoped = !scopes.length;
+    }
+    var lastHead = '', headOf = new Map();
+    walked.rows.forEach(function (row) {
+      if (!row.item || row.landmark) return;
+      if (row.item.role === 'heading') lastHead = row.item.name; else headOf.set(row.el, lastHead);
+    });
+    var counts = broadwayCounts(walked.rows);
     var out = hits.slice(0, most || 50).map(function (x) {
-      broadwayTell(x.item.ref);
-      var found = { ref: x.item.ref, role: x.item.role, name: x.item.name, near: nearby(x.row.el) };
+      broadwayTell(x.item.ref, inside ? null : counts);
+      var found = { ref: x.item.ref, role: x.item.role, name: x.item.name, near: nearby(x.row.el), in_view: broadwayInView(x.row.el) };
+      if (x.item.icon) found.icon = x.item.icon;
+      var heading = headOf.get(x.row.el);
+      if (heading) found.heading = heading;
       var holder = broadwayNear(x.row.el);
       if (holder) found.within = holder;
       return found;
     });
-    return { doc: st.doc, next: st.next, title: document.title, found: out, count: hits.length };
+    return { doc: st.doc, next: st.next, title: document.title, found: out, count: hits.length, unscoped: unscoped };
     """
 
     static let snapshotArguments: [String: Any] = ["inside": "", "all": false, "text": false, "since": false, "who": "none", "roles": [String](),
-                                                   "find": "", "view": false, "limit": 500]
+                                                   "find": "", "view": false, "limit": 500, "boxes": false]
 
     static let readingScript = walkBase + """
 
     var got = broadwayGet(ref);
     if (got.failed) return got;
-    var d = describe(got.el, got.target);
+    var d = describe(got.el, got.target), said = broadwayState().said[ref] || '';
+    if (!seen(got.el) && said.indexOf(d.kind + ' ') === 0) d.label = said.slice(d.kind.length + 1);
     return { ref: ref, role: d.kind, name: d.label || (d.kind === 'heading' ? '' : nearby(got.el)), rebound: got.rebound, doc: broadwayState().doc };
     """
 

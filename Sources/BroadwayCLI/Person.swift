@@ -51,12 +51,15 @@ enum Person {
         if command.tabbed, let tab = context.globals.tab { arguments["tab"] = tab }
         if verb.fromStdin { arguments["text"] = try source(arguments, context: context) }
         let interactive = isatty(STDIN_FILENO) == 1 && context.console.errTTY && !context.console.json
+        let agent = Context.agent
+        Clock.mark("ancestor")
         var request: [String: Any] = ["op": "do", "noun": noun.name, "verb": verb.name, "arguments": arguments,
-                                      "wait": options.seconds(interactive: interactive), "agent": Context.agent]
+                                      "wait": options.seconds(interactive: interactive), "agent": agent]
         if options.nobody { request["person"] = "none" }
         let link = try context.connection()
         guard link.send(request) else { throw Failure("not_running", "Broadway went away", retrySafe: false) }
         while let reply = link.object() {
+            Clock.mark("reply")
             if reply["event"] as? String == "asking" {
                 context.console.progress(context.console.err.dim(reply["message"] as? String ?? "Waiting for your yes in Broadway"))
                 continue
@@ -83,11 +86,16 @@ enum Person {
         var data = given
         let console = context.console
         do {
+            if context.console.json, context.globals.output == Shots.stream, data["file"] != nil || data["send"] != nil {
+                throw Failure.usage("--out - writes the file's bytes to standard output, so leave out --json")
+            }
             if data["file"] != nil { try Render.file(&data, context: context) }
+            if data["send"] != nil { try Render.sent(&data, context: context) }
         } catch {
             console.failure(command.name, error as? Failure ?? Failure("failed", "\(error)"))
             return
         }
+        if data["streamed"] as? Bool == true { return }
         defer { console.success(command.name, data) }
         guard !console.json else { return }
         if let notice = data["notice"] as? String { console.progress(console.err.dim(notice)) }

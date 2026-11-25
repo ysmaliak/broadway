@@ -2,7 +2,7 @@
 
 A hook is a small program of your own that decides something Broadway would otherwise decide by its own rules: where a link from another app opens, where a finished download goes, and how a site's request for the camera, microphone, location or notifications is answered. A hook can also run every so many minutes.
 
-You add hooks in Settings › Agents › Hooks, at the foot of the page. `Add Hook…` asks what the hook is for, then `Choose Program…` opens the Mac's own open panel. Choosing the file is your approval. Each hook has a switch, the result of its last run, and a menu with `Show in Finder`, `Approve Again` where it applies, and `Remove`.
+You add hooks in Settings › General › Developer › Hooks, at the foot of the page. `Add Hook…` asks what the hook is for, then `Choose Program…` opens the Mac's own open panel. Choosing the file is your approval. Each hook has a switch, the result of its last run, and a menu with `Show in Finder`, `Approve Again` where it applies, and `Remove`.
 
 `broadway hooks list` shows each hook's event, program, switch and last result. Nothing else in the command, MCP, a page or an extension can add a hook or switch one on.
 

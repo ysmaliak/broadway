@@ -42,7 +42,45 @@ extension SettingsPageView {
         section(footer: Self.agentsNote) {
             settingRow("ai.agents")
             settingRow("agents.mode")
-            if let path = AgentCommand.path {
+            settingRow("agents.signIn")
+        }
+        let signIns = AgentSignIns.shared
+        shape { sites.rules.keys.sorted() + signIns.allowed.keys.sorted().flatMap { [$0] + (signIns.allowed[$0] ?? []) } }
+        if !sites.rules.isEmpty || !signIns.allowed.isEmpty {
+            section("Sites") {
+                for site in sites.rules.keys.sorted() {
+                    let never = sites.rules[site] == .never
+                    _ = line(site, never ? "Never Here" : "Always Here", id: "agents.site." + site, control: button("Remove…") { [weak self] in
+                        SettingsQuestion.agentSite(site, never: never).ask(over: self?.window) { sites.set(nil, for: site) }
+                    })
+                }
+                let names = AgentSignInNames.names(for: signIns.allowed)
+                for site in signIns.sites {
+                    for digest in signIns.allowed[site] ?? [] {
+                        let name = names[digest]
+                        _ = line(site, name.map { "Signs in as \($0) without asking" } ?? "Signs in without asking, with a sign-in that is gone",
+                                 id: "agents.signIn." + site + "." + digest, control: button("Remove…") { [weak self] in
+                            SettingsQuestion.agentSite(site, never: false).ask(over: self?.window) { signIns.remove(digest, site: site) }
+                        })
+                    }
+                }
+            }
+        }
+        let connected = links.live.filter { $0.codex == nil }
+        shape { links.live.filter { $0.codex == nil }.map(\.id) }
+        if !connected.isEmpty {
+            section("Connected") {
+                for link in connected {
+                    let tabs = AgentBoard.allTabs(of: link.id).count
+                    let count = tabs == 1 ? "1 tab" : "\(tabs) tabs"
+                    _ = line(link.title, link.program?.detail.map { "\($0) · \(count)" } ?? count, id: "agents.link.\(link.id)", control: button("Disconnect…") { [weak self] in
+                        SettingsQuestion.agent(link.title).ask(over: self?.window) { links.end(link.id, .done(nil)) }
+                    })
+                }
+            }
+        }
+        if let path = AgentCommand.path {
+            section("Command line") {
                 let made = AgentCommand.isSetUp(drafts.setup)
                     ? button("Remove…") { [weak self] in
                         SettingsQuestion.agentCommand.ask(over: self?.window) { self?.runCommand(["remove"], said: "broadway is removed") }
@@ -60,29 +98,6 @@ extension SettingsPageView {
                          })
             }
         }
-        let connected = links.live.filter { $0.codex == nil }
-        shape { links.live.filter { $0.codex == nil }.map(\.id) }
-        if !connected.isEmpty {
-            section("Connected") {
-                for link in connected {
-                    let tabs = AgentBoard.allTabs(of: link.id).count
-                    _ = line(link.name, tabs == 1 ? "1 tab" : "\(tabs) tabs", id: "agents.link.\(link.id)", control: button("Disconnect…") { [weak self] in
-                        SettingsQuestion.agent(link.name).ask(over: self?.window) { links.end(link.id, .done(nil)) }
-                    })
-                }
-            }
-        }
-        shape { sites.rules.keys.sorted() }
-        if !sites.rules.isEmpty {
-            section("Sites") {
-                for site in sites.rules.keys.sorted() {
-                    let never = sites.rules[site] == .never
-                    _ = line(site, never ? "Never Here" : "Always Here", id: "agents.site." + site, control: button("Remove…") { [weak self] in
-                        SettingsQuestion.agentSite(site, never: never).ask(over: self?.window) { sites.set(nil, for: site) }
-                    })
-                }
-            }
-        }
         let setup = AgentSetup.shared
         if drafts.setup.isEmpty { drafts.setupRuns = setup.runs }
         update { [weak self] in
@@ -91,7 +106,6 @@ extension SettingsPageView {
             self?.lookAtSetup()
         }
         if drafts.setup.isEmpty { lookAtSetup() }
-        hooks()
     }
 
     private func lookAtSetup() {

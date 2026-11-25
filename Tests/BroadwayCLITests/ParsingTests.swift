@@ -205,8 +205,19 @@ struct ParsingTests {
         #expect(target["nth"] as? Int == 2)
         #expect(target["in"] as? String == "e30")
         #expect(failure(click, ["Save", "--nth", "0"])?.code == "usage")
-        #expect(failure(click, ["Save", "--in", "main"])?.code == "usage")
+        #expect((try? CommandLineInput.parse(click, ["Save", "--in", "main"]))?["target"] as? [String: String] == ["words": "Save", "in": "main"])
         #expect(failure(click, ["--nth", "2"])?.code == "usage")
+    }
+
+    @Test func inWordsPassWhenTheCommandAlsoListsIn() throws {
+        let ref = parameter("ref", required: true)
+        let clicking = command("click", positional: [ref], flags: [ref, parameter("in")])
+
+        let found = try CommandLineInput.parse(clicking, ["Edit", "--in", "Shipping address"])
+
+        let target = try #require(found["target"] as? [String: Any])
+        #expect(target["words"] as? String == "Edit")
+        #expect(target["in"] as? String == "Shipping address")
     }
 
     @Test func roleAndNameNeedNoWords() throws {
@@ -510,7 +521,7 @@ struct ParsingTests {
 
         #expect(failure(snapshot, ["--in", "Copperline"])?.message == "--in takes a ref like @e30, not Copperline")
         #expect(failure(snapshot, ["--in", "Copperline"])?.hint == "broadway find \"Copperline\" gives its ref")
-        #expect(failure(click, ["Save", "--in", "Copperline"])?.message == "--in takes a ref like @e30, not Copperline")
+        #expect((try? CommandLineInput.parse(click, ["Save", "--in", "Copperline"]))?["target"] as? [String: String] == ["words": "Save", "in": "Copperline"])
         #expect((try? CommandLineInput.parse(snapshot, ["--in", "@e30"]))?["in"] as? String == "@e30")
         #expect((try? CommandLineInput.parse(snapshot, ["--in", "e30"]))?["in"] as? String == "e30")
     }

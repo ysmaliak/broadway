@@ -79,6 +79,7 @@ final class Passkeys: NSObject {
     /// The one on screen, and whom to answer when it ends. A new request
     /// ends the one before, as a page asking twice gets in any browser.
     private var controller: ASAuthorizationController?
+    var busy: Bool { controller != nil }
     /// The page's one-time key for this request's PRF results (see prfReply).
     private var prfKey: P256.KeyAgreement.PublicKey?
     private var token: String?

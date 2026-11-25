@@ -5,7 +5,7 @@ import Foundation
 enum PersonStuff {
     private static func short(_ id: UUID) -> String { PersonCommands.short(id) }
 
-    static func stableID(_ text: String) -> String {
+    nonisolated static func stableID(_ text: String) -> String {
         var hash: UInt64 = 0xcbf2_9ce4_8422_2325
         for byte in text.utf8 {
             hash ^= UInt64(byte)
@@ -122,22 +122,8 @@ enum PersonStuff {
         return ["id": short(entry.id), "name": entry.name, "message": "Done"]
     }
 
-    private static func kept(_ call: PersonCall, _ what: String) async throws {
-        guard let tab = call.tab?.tab, let none = await call.box.nothingKept(tab, what: what) else { return }
-        throw PersonRefusal(none.code ?? ToolCode.nothingKept.rawValue, none.text ?? "", hint: none.hint)
-    }
-
-    private static func filling(_ call: PersonCall, _ work: (Tab) async -> ToolOutcome) async throws -> [String: Any] {
-        let page = try call.page
-        guard !page.tab.asleep, page.tab.isWeb else { throw PersonRefusal("not_a_page", "That tab isn't showing a web page") }
-        guard page.tab.pageAddress == call.askedAt else { throw PersonRefusal("refused", "The page changed, so nothing was filled. Look again.") }
-        let outcome = await work(page.tab)
-        if outcome.failed {
-            let text = outcome.text ?? "That didn't work"
-            throw PersonRefusal(outcome.code ?? ToolFailure.code(text), text, hint: outcome.hint)
-        }
-        return ToolReply.data(outcome)
-    }
+    static let keptSignIns = PersonRefusal("person_only", "Where the person keeps sign-ins is theirs to know. Nothing was listed.",
+                                           hint: "To sign in on a page, run broadway fill login --tab ID. Broadway asks the person and fills it.")
 
     static let verbs: [PersonVerb] = [
         PersonVerb("bookmarks", "list", .look) { call in
@@ -207,6 +193,14 @@ enum PersonStuff {
                  "from": keep.from, "date": PersonCommands.stamp(keep.date), "path": keep.path]
             }
             return ["downloads": going + done]
+        },
+        PersonVerb("downloads", "get", .look) { call in
+            let keep = try finished(call.browser, try call.need("id"))
+            guard keep.stillThere, FileManager.default.isReadableFile(atPath: keep.path) else {
+                throw PersonRefusal("failed", "\(keep.name) is no longer on disk")
+            }
+            let bytes = (try? FileManager.default.attributesOfItem(atPath: keep.path)[.size] as? Int) ?? 0
+            return ["id": stableID(keep.path), "name": keep.name, "path": keep.path, "bytes": bytes, "send": true]
         },
         PersonVerb("downloads", "pause", .arrange) { call in try fetch(call, can: \.canPause) { $0.pauseDownload($1) } },
         PersonVerb("downloads", "resume", .arrange) { call in try fetch(call, can: \.canResume) { $0.resumeDownload($1) } },
@@ -368,20 +362,10 @@ enum PersonStuff {
             LiveFolders.shared.remove(found.id)
             return ["id": short(found.id), "message": "Deleted"]
         },
-        PersonVerb("logins", "list", .look) { call in
-            var kept = Vault.all()
-            if let site = call.string("site")?.lowercased() { kept = kept.filter { $0.host.lowercased().contains(site) } }
-            return ["logins": kept.map { ["site": $0.host, "user": $0.user, "used": PersonCommands.stamp($0.used)] }]
-        },
-        PersonVerb("fill", "login", .person(.signIn), tabbed: true) { call in
-            let account = call.string("account")
-            return try await filling(call) { await call.box.signIn($0, account: account) }
-        },
-        PersonVerb("fill", "details", .person(.address), tabbed: true, first: { try await kept($0, "details") }) { call in
-            try await filling(call) { await call.box.autofill($0, what: "details") }
-        },
-        PersonVerb("fill", "card", .person(.address), tabbed: true, first: { try await kept($0, "card") }) { call in
-            try await filling(call) { await call.box.autofill($0, what: "card") }
-        },
+        PersonVerb("logins", "list", .look, first: { _ in throw keptSignIns }) { _ in throw keptSignIns },
+        PersonVerb("fill", "login", .person(.signIn), tabbed: true) { try await PersonSignIn.run($0) },
+        PersonVerb("fill", "code", .person(.signIn), tabbed: true) { try await PersonCode.run($0) },
+        PersonVerb("fill", "details", .person(.address), tabbed: true) { try await PersonFill.run($0, what: "details") },
+        PersonVerb("fill", "card", .person(.address), tabbed: true) { try await PersonFill.run($0, what: "card") },
     ]
 }

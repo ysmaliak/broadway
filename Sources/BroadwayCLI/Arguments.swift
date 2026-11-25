@@ -44,7 +44,7 @@ struct Globals {
             case "--tab":
                 found.tab = try value()
                 found.tabFlag = true
-            case "-o", "--output": found.output = try value()
+            case "-o", "--output", "--out": found.output = try value()
             case "--timeout":
                 guard let seconds = Double(try value()), seconds > 0, seconds.isFinite else { throw Failure.usage("--timeout is a number of seconds") }
                 found.timeout = seconds
@@ -169,8 +169,7 @@ enum CommandLineInput {
                 guard let nth = Int(value), nth >= 1 else { throw Failure.usage("--nth is a whole number from 1, not \(value)") }
                 target["nth"] = nth
             case "in":
-                guard let ref = ref(value) else { throw inRef(value) }
-                target["in"] = ref
+                target["in"] = ref(value) ?? value
             case "at":
                 target["at"] = try point(value)
             default:
@@ -235,6 +234,17 @@ enum CommandLineInput {
                 waiting.removeAll { $0.name == "ref" }
                 return
             }
+            let ways = ["down", "up", "left", "right"]
+            if command.tool == "scroll", let way = found["by"] as? String, ways.contains(way.lowercased()), let points = Double(word), points.isFinite {
+                found["by"] = "\(way) \(word)"
+                return
+            }
+            if command.tool == "scroll", ways.contains(word.lowercased()), let held = found["by"] as? String, !(ways + ["top", "bottom"]).contains(held.lowercased()),
+               Double(held) == nil, found["ref"] == nil, target["words"] == nil {
+                target["words"] = held
+                found["by"] = word
+                return
+            }
             guard !waiting.isEmpty else {
                 throw Failure.usage("\(command.name) doesn't take \(word)", hint: "Usage: \(command.usage)")
             }
@@ -278,7 +288,7 @@ enum CommandLineInput {
                 } else {
                     guard index < words.count else { throw Failure.usage("--\(flag.name) needs a value") }
                     try unknown(words[index], command)
-                    if flag.name == "in", ref(words[index]) == nil { throw inRef(words[index]) }
+                    if flag.name == "in", command.tool != "locate", target["words"] == nil, ref(words[index]) == nil { throw inRef(words[index]) }
                     found[flag.name] = try coerce(words[index], flag, command: command)
                     index += 1
                 }

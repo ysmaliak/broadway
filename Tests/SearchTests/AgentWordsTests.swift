@@ -122,7 +122,7 @@ final class AgentWordsTests {
 
         #expect(done.failed)
         #expect(done.code == "not_found")
-        #expect(done.hint?.contains("broadway find checkout") == true)
+        #expect(done.hint?.contains("broadway snapshot") == true)
     }
 
     @Test func aRefWhoseWordsChangedIsRefusedOnceThenActsAsItIsNow() async throws {
@@ -455,7 +455,7 @@ final class AgentWordsTests {
         let done = await box.call("click", ["tab": id, "ref": "Keep"], task: task)
 
         #expect(!done.failed)
-        #expect(done.text?.contains("The page said (alert, accepted): \"Saved\"") == true)
+        #expect(done.text?.contains("The page showed an alert: \"Saved\". Broadway closed it") == true)
         #expect((done.data?["dialog"] as? [String: Any])?["accepted"] as? Bool == true)
         #expect(tab.agentDialog == nil)
         let after = try await tab.web.evaluateJavaScript("window.after === true") as? Bool
@@ -540,6 +540,63 @@ final class AgentWordsTests {
         #expect(shot.data?["ways"] as? [String] == ["Google"])
         #expect(shot.data?["needs"] as? String == "password")
         #expect(after.data?["ways"] == nil)
+    }
+
+    @Test func aTokenBoxOutsideASignInSendsNoOneToFillLogin() async throws {
+        let (_, token) = try await page("<form><label>API token <input type=password name=token autocomplete=off></label><button>Save</button></form>")
+        let shot = await box.call("snapshot", ["tab": token], task: task)
+        server.stop()
+        let (_, signIn) = try await page("<form><input aria-label=Email><label>Secret key <input type=password name=key></label><button>Sign in</button></form>")
+        let other = await box.call("snapshot", ["tab": signIn], task: task)
+
+        #expect(shot.data?["needs"] == nil)
+        #expect(shot.text?.contains("fill login") == false)
+        #expect(other.data?["needs"] as? String == "password")
+    }
+
+    @Test func aClosedShadowRootIsNotedOnceAndAMissNamesWhatWorksThere() async throws {
+        let (_, id) = try await page("""
+        <style>i.icon::before{content:"";display:inline-block;width:16px;height:16px}</style>
+        <h1>Widget</h1><div id="spacer" style="height:40px"></div><i class="icon"></i><div style="aspect-ratio:2;width:80px"></div>
+        <table><tr><td>Name</td><td></td></tr></table><div style="position:relative;height:60px"><div style="position:absolute;inset:0"></div></div>
+        <div id="closed"><span>light words</span></div>
+        <script>
+        var c = document.getElementById('closed').attachShadow({mode: 'closed'});
+        c.innerHTML = '<button type="button">Hidden action</button><p>Inside the closed root</p>';
+        </script>
+        """)
+
+        let shot = await box.call("snapshot", ["tab": id], task: task)
+        let missed = await box.call("click", ["tab": id, "target": ["words": "Hidden action"]], task: task)
+        let noted = (shot.plain ?? shot.text ?? "").split(separator: "\n").filter { $0.contains("closed to reading") }
+        let said = "\(missed.text ?? "") \(missed.hint ?? "") \(missed.data ?? [:])"
+
+        #expect(noted.count == 1)
+        #expect(noted.first?.trimmingCharacters(in: .whitespaces).hasPrefix("@") == true)
+        #expect(shot.text?.contains("Hidden action") == false)
+        #expect(missed.failed)
+        #expect(said.contains("closed to reading"))
+        #expect(said.contains("broadway click --at X,Y"))
+    }
+
+    @Test func rowsSortedByAClickAreToldAsANewOrder() async throws {
+        let rows = (0..<12).map { "<tr><td>L-\(100 + $0)</td><td>\(($0 * 37) % 90 + 10)</td></tr>" }.joined()
+        let (_, id) = try await page("<h1>Ledger</h1><table><thead><tr><th><button type=button onclick='sortBy()'>Sort by amount</button></th></tr></thead><tbody>\(rows)</tbody></table><script>function sortBy(){var b=document.querySelector('tbody');var r=[].slice.call(b.rows);r.sort(function(x,y){return parseFloat(y.cells[1].textContent)-parseFloat(x.cells[1].textContent)});r.forEach(function(x){b.appendChild(x)})}</script>")
+
+        let said = await box.call("click", ["tab": id, "ref": "Sort by amount"], task: task)
+
+        #expect(said.text?.contains("~ the rows of \"Ledger\" are in a new order") == true, "\(said.text ?? "") \(said.data ?? [:])")
+    }
+
+    @Test func aRegionThatScrollsIsATargetForScroll() async throws {
+        let (_, id) = try await page("<div role=region aria-label=Strip style='width:240px;overflow-x:auto;white-space:nowrap'><span style='display:inline-block;width:2400px'>Start of a long line</span></div>")
+
+        let shot = await box.call("snapshot", ["tab": id], task: task)
+        let moved = await box.call("scroll", ["tab": id, "target": ["words": "Strip"], "by": "right"], task: task)
+
+        #expect(shot.text?.contains("scrollable \"Strip\" scrolls") == true, "\(shot.text ?? "")")
+        #expect(!moved.failed, "\(moved.text ?? "") \(moved.hint ?? "")")
+        #expect(moved.text?.contains("more to the right") == true, "\(moved.text ?? "")")
     }
 
     @Test func twoPasswordFieldsAreASettingsPageNotASignIn() async throws {
@@ -788,7 +845,6 @@ final class AgentWordsTests {
         #expect(none.failed)
         #expect(none.code == "not_found")
         #expect(none.text?.contains("No element fits \"Bundle margin rebate\"") == true)
-        #expect(none.hint?.contains("broadway read --find bundle") == true)
         #expect(none.hint?.contains("broadway snapshot") == true)
         #expect(roleOnly.code == "not_found")
         #expect(roleOnly.text?.contains("No switch on this page") == true)

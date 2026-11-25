@@ -17,14 +17,19 @@ struct AgentPlace: Equatable {
 struct AgentWish: Equatable {
     var folder: String?
     var space: String?
+    var workdir: String?
+    var named = false
 
-    init(folder: String? = nil, space: String? = nil) {
+    init(folder: String? = nil, space: String? = nil, workdir: String? = nil, named: Bool = false) {
         self.folder = folder.flatMap { $0.isEmpty ? nil : $0 }
         self.space = space.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0.trimmingCharacters(in: .whitespaces) }
+        self.workdir = workdir.flatMap { $0.hasPrefix("/") ? $0 : nil }
+        self.named = named
     }
 
     init(_ said: [String: Any]) {
-        self.init(folder: said["folder"] as? String ?? said["cwd"] as? String, space: said["space"] as? String)
+        self.init(folder: said["folder"] as? String ?? said["cwd"] as? String, space: said["space"] as? String,
+                  workdir: said["workdir"] as? String, named: said["named"] as? Bool == true)
     }
 }
 

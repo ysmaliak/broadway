@@ -80,13 +80,23 @@ struct AnswerTests {
         ])
     }
 
+    @Test func anOpenAlertTakesAn() {
+        var data = basket
+        data["appeared"] = []
+        data["text"] = []
+        data["settled"] = "dialog"
+        data["dialog"] = ["id": "d2", "kind": "alert", "message": "Saved", "site": "shop.example"]
+
+        #expect(Answer.lines(data).contains("An alert dialog is open: \"Saved\""))
+    }
+
     @Test func anAlertThatAnsweredItselfIsReported() {
         var data = basket
         data["appeared"] = []
         data["text"] = []
         data["dialog"] = ["kind": "alert", "message": "Saved", "accepted": true]
 
-        #expect(Answer.lines(data).contains("The page said (alert, accepted): \"Saved\""))
+        #expect(Answer.lines(data).contains("The page showed an alert: \"Saved\". Broadway closed it."))
         #expect(!Answer.lines(data).contains { $0.contains("dialog accept") })
     }
 
