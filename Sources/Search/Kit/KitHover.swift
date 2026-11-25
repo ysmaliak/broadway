@@ -12,6 +12,7 @@ class KitHoverView: NSView {
     private var area: NSTrackingArea?
     var inert = false { didSet { if inert != oldValue { updateTrackingAreas() } } }
     var followsPointer = false
+    var clipsHover = false
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -41,7 +42,8 @@ class KitHoverView: NSView {
     }
 
     private func pointerInside(_ window: NSWindow) -> Bool {
-        bounds.contains(convert(Self.pointer(in: window), from: nil)) && !isHiddenOrHasHiddenAncestor
+        let point = convert(Self.pointer(in: window), from: nil)
+        return bounds.contains(point) && (!clipsHover || visibleRect.contains(point)) && !isHiddenOrHasHiddenAncestor
     }
 
     func endHover() {
