@@ -1259,10 +1259,10 @@ final class MeetingJoinButton: KitButton {
 private final class MeetingJoinWords: NSView {
     private static let gap: CGFloat = 6
     private let mark: KitSymbol
-    private let word = KitLabel("Join", font: .systemFont(ofSize: 13, weight: .semibold), color: .white)
+    private let word = KitLabel("Join", font: .systemFont(ofSize: 13, weight: .bold), color: .white)
 
     init(symbol: String) {
-        mark = KitSymbol(symbol, style: KitSymbol.Style(size: 13, weight: .semibold), tint: .white)
+        mark = KitSymbol(symbol, style: KitSymbol.Style(size: 13, weight: .bold), tint: .white)
         super.init(frame: .zero)
         addSubview(mark)
         addSubview(word)
