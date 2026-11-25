@@ -109,11 +109,12 @@ final class Float {
     /// `still`: the video as it was in its tab, cut out of a picture of the
     /// page (see `still(of:picture:page:)`), shown until the page is laid out
     /// at this window's size.
-    func lift(_ page: NSView, still: NSImage? = nil) {
+    func lift(_ page: NSView, still: NSImage? = nil, shape: NSSize? = nil) {
         guard panel == nil else { return }
         self.page = page
 
         let size = NSSize(width: 440, height: 247)
+        let wanted = Float.usable(shape) ?? size
         let screen = NSScreen.main?.visibleFrame ?? .zero
         // Where it was last, at the size it was, if a screen still shows it;
         // otherwise the bottom right of this one.
@@ -123,6 +124,8 @@ final class Float {
             width: size.width,
             height: size.height
         )
+        let area = NSScreen.screens.map(\.visibleFrame).first { $0.intersects(spot) } ?? screen
+        spot = Float.shaped(spot, to: wanted, in: Float.benchAway == nil ? area : nil)
         if let away = Float.benchAway { spot.origin = away }
 
         let panel = FloatPanel(
@@ -143,7 +146,8 @@ final class Float {
         panel.isReleasedWhenClosed = false
         // The bench's, off every screen, is left out when a probe is hidden.
         panel.canHide = Float.benchAway == nil
-        panel.aspectRatio = size
+        panel.aspectRatio = wanted
+        self.shape = wanted
         // Kept once a move or a resize is over, not on each step of one: at
         // the end of a resize by its edges, as it closes (see drop), and as
         // the app quits with it open, which closes nothing.
@@ -158,7 +162,7 @@ final class Float {
             keep(NSWindow.didEndLiveResizeNotification, panel),
             keep(NSApplication.willTerminateNotification, NSApp),
         ]
-        panel.minSize = NSSize(width: 260, height: 146)
+        panel.minSize = Float.least(for: wanted)
 
         // At the size the window opens at. Built at the default size and
         // then stretched to a remembered one, the page was laid out twice,
@@ -272,7 +276,53 @@ final class Float {
     private func ask() {
         guard let controls else { return }
         let read = controls.rateRead()
-        onProgress? { [weak controls] state in controls?.polled(state, read: read) }
+        onProgress? { [weak self, weak controls] state in
+            controls?.polled(state, read: read)
+            self?.fit(state.shape)
+        }
+    }
+
+    private var shape: NSSize?
+
+    private func fit(_ wanted: NSSize?) {
+        guard let wanted = Float.usable(wanted), let panel, let shape, !panel.inLiveResize,
+              controls?.docked == nil, arriving?.moving != true,
+              abs(wanted.width * shape.height / (wanted.height * shape.width) - 1) > 0.01
+        else { return }
+        self.shape = wanted
+        panel.aspectRatio = wanted
+        panel.minSize = Float.least(for: wanted)
+        let area = Float.benchAway == nil ? (panel.screen ?? NSScreen.main)?.visibleFrame : nil
+        panel.setFrame(Float.shaped(panel.frame, to: wanted, in: area), display: true)
+    }
+
+    nonisolated static func usable(_ shape: NSSize?) -> NSSize? {
+        guard let shape, shape.width.isFinite, shape.height.isFinite, shape.width > 0, shape.height > 0 else { return nil }
+        let ratio = min(max(shape.width / shape.height, 0.25), 4)
+        return NSSize(width: ratio * 1000, height: 1000)
+    }
+
+    nonisolated static func least(for shape: NSSize) -> NSSize {
+        let ratio = shape.width / shape.height
+        return ratio >= 1 ? NSSize(width: 260, height: 260 / ratio) : NSSize(width: 260 * ratio, height: 260)
+    }
+
+    nonisolated static func shaped(_ frame: NSRect, to shape: NSSize, in area: NSRect?) -> NSRect {
+        guard frame.width > 0, frame.height > 0, shape.width > 0, shape.height > 0 else { return frame }
+        let ratio = shape.width / shape.height
+        let least = least(for: shape)
+        var width = max((frame.width * frame.height * ratio).squareRoot(), least.width)
+        if let area { width = max(least.width, min(width, area.width, area.height * ratio)) }
+        let height = width / ratio
+        guard let area else { return NSRect(x: frame.minX, y: frame.maxY - height, width: width, height: height) }
+        let x = frame.midX >= area.midX ? frame.maxX - width : frame.minX
+        let y = frame.midY >= area.midY ? frame.maxY - height : frame.minY
+        return NSRect(
+            x: min(max(x, area.minX), area.maxX - width),
+            y: min(max(y, area.minY), area.maxY - height),
+            width: width,
+            height: height
+        )
     }
 
     private func capture() {
@@ -1523,10 +1573,22 @@ enum Isolate {
       // Studio mode, gives the video the page's whole height and draws the
       // picture in the middle of it, between black bars: scaled whole, the
       // bars took up the little window, and the picture a part of it.
-      var shown = size;
-      if (vw && vh && size[0] && size[1]) {
-        var within = Math.min(size[0] / vw, size[1] / vh);
-        shown = [vw * within, vh * within];
+      function reshape(video) {
+        var fit = size, w = video && video.videoWidth, h = video && video.videoHeight;
+        if (w && h && size[0] && size[1]) {
+          var within = Math.min(size[0] / w, size[1] / h);
+          fit = [w * within, h * within];
+        }
+        if (!fit[0] || !fit[1]) return;
+        var fill = Math.abs(innerWidth * fit[1] / (innerHeight * fit[0]) - 1) < 0.02 ? 'max' : 'min';
+        var text = 'html.office-floating{--office-float-by:' + fill + '(calc(100vw / ' + fit[0] + 'px), calc(100vh / ' + fit[1] + 'px))}';
+        var shape = document.getElementById('office-float-shape');
+        if (!shape) {
+          shape = document.createElement('style');
+          shape.id = 'office-float-shape';
+          (document.head || document.documentElement).appendChild(shape);
+        }
+        if (shape.textContent !== text) shape.textContent = text;
       }
 
       // A landing still waiting for its tab is called off: the page is out
@@ -1569,7 +1631,6 @@ enum Isolate {
         size[0] && size[1] ? [
           '@supports (scale: calc(100vw / 1px)) {',
           'html.office-floating [data-office-float] {',
-          '--office-float-by: min(calc(100vw / ' + shown[0] + 'px), calc(100vh / ' + shown[1] + 'px));',
           'right:auto !important; bottom:auto !important; margin:0 !important; box-sizing:border-box !important;',
           'width:' + size[0] + 'px !important; height:' + size[1] + 'px !important;',
           'min-width:0 !important; min-height:0 !important; transform-origin:0 0 !important;',
@@ -1607,6 +1668,12 @@ enum Isolate {
         'html.office-floating [data-office-float]::-webkit-media-controls {',
         'display:none !important}'
       ].join('');
+      window.__officeFloatShape = function () { reshape(document.querySelector('[data-office-float]')); };
+      if (!window.__officeFloatResizing) {
+        window.__officeFloatResizing = true;
+        addEventListener('resize', function () { if (window.__officeFloatShape) window.__officeFloatShape(); });
+      }
+      reshape(best);
       document.documentElement.classList.add('office-floating');
 
       // The mark has to be defended.
@@ -1621,7 +1688,10 @@ enum Isolate {
       // second, for as long as the page is out.
       clearInterval(window.__officeFloatWatch);
       window.__officeFloatWatch = setInterval(function () {
-        if (document.querySelector('[data-office-float]')) return;
+        if (document.querySelector('[data-office-float]')) {
+          if (window.__officeFloatShape) window.__officeFloatShape();
+          return;
+        }
         var kept = window.__officeFloatKept;
         if (kept && kept.isConnected) { kept.setAttribute('data-office-float', ''); return; }
         var again = null, most = 0;
@@ -1638,7 +1708,7 @@ enum Isolate {
         if (again) again.setAttribute('data-office-float', '');
       }, 250);
 
-      return { floating: true, picture: pic, page: [innerWidth, innerHeight] };
+      return { floating: true, picture: pic, page: [innerWidth, innerHeight], shape: vw && vh ? [vw, vh] : null };
     })();
     """
 
@@ -1747,6 +1817,9 @@ enum Isolate {
         root.classList.remove('office-floating');
         var sheet = document.getElementById('office-float');
         if (sheet) sheet.textContent = '';
+        var shape = document.getElementById('office-float-shape');
+        if (shape) shape.textContent = '';
+        window.__officeFloatShape = null;
         var video = document.querySelector('[data-office-float]');
         if (video) video.removeAttribute('data-office-float');
         settle(video);

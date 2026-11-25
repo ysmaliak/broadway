@@ -83,7 +83,8 @@ extension Isolate {
       });
       return { current: video.currentTime, playing: !video.paused || video.hasAttribute('\(Tempo.holdMark)'), rate: video.playbackRate,
         ranges: ranges(video), live: video.duration === Infinity, captions: captions, chapters: chapters,
-        waiting: state.since === null ? 0 : (performance.now() - state.since) / 1000 };
+        waiting: state.since === null ? 0 : (performance.now() - state.since) / 1000,
+        shape: video.videoWidth && video.videoHeight ? [video.videoWidth, video.videoHeight] : null };
     })();
     """
 

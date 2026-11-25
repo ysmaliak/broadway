@@ -46,6 +46,8 @@ final class FloatTween: NSObject {
         step(CGFloat(seconds))
     }
 
+    var moving: Bool { FloatTween.running.contains(self) }
+
     func finish() {
         guard FloatTween.running.contains(self) else { return }
         link?.invalidate()
