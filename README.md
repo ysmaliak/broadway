@@ -109,6 +109,6 @@ What you can run is everything up to the image: `./build.sh release dmg` makes `
 
 ## License
 
-The code is under the [MIT License](LICENSE), with two copyright lines, Office Commun's for Search and the maintainer's for Broadway. Bundled fonts and frameworks keep their own licences, listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+The code is under the [MIT License](LICENSE), with two copyright lines, Office Commun's for Search and the maintainer's for Broadway. Bundled frameworks keep their own licences, listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 The licence covers the code. It gives no right to use the name Broadway, or its icon as a mark, for another app. If you ship a fork to other people, give it its own name and icon. See [TRADEMARKS.md](TRADEMARKS.md).

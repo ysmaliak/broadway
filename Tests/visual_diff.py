@@ -179,7 +179,6 @@ SURFACES = {
     "onboarding-4": {"surface": {"name": "onboarding", "step": 4}},
     "onboarding-5": {"surface": {"name": "onboarding", "step": 5}},
     "onboarding-6": {"surface": {"name": "onboarding", "step": 6}},
-    "about": {"surface": {"name": "about"}},
     "window": {"window": [{"do": "resize", "width": 1000, "height": 700, "steps": 1}]},
     "column-pale": {"setup": "column", "window": [{"do": "space", "action": "look", "colour": "sky"}], "crop": "column"},
     "column-vivid": {"setup": "column", "window": [{"do": "space", "action": "look", "custom": "3139FB", "intensity": 1}], "crop": "column"},

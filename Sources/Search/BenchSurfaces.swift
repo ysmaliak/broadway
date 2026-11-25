@@ -126,8 +126,6 @@ enum BenchSurfaces {
             return NewTabSurface.make(request)
         case "onboarding":
             return OnboardingSurface.make(request)
-        case "about":
-            return AboutSurface.make(request)
         case _ where SideSurfaces.names.contains(name):
             return SideSurfaces.make(name, request)
         case _ where BenchPages.names.contains(name):

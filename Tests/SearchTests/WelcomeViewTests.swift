@@ -18,19 +18,6 @@ final class WelcomeViewTests {
         browser = nil
     }
 
-    private func placed(_ view: NSView, _ size: NSSize) -> NSWindow {
-        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
-        view.frame = NSRect(origin: .zero, size: size)
-        window.contentView = view
-        window.layoutIfNeeded()
-        return window
-    }
-
-    private func labels(in view: NSView) -> [String] {
-        view.kitSubviews(of: KitLabel.self).map(\.text) + view.kitSubviews(of: KitParagraph.self).map(\.text)
-    }
-
     @Test func confettiIsTheSameForTheSameSeed() {
         let first = Confetti.pieces(seed: 42)
         let again = Confetti.pieces(seed: 42)
@@ -61,16 +48,5 @@ final class WelcomeViewTests {
 
         #expect(abs(start.y - size.height * 0.95) < 0.001)
         #expect(soon.y < start.y)
-    }
-
-    @Test func aboutShowsItsVersionAsSelectableText() throws {
-        let view = AboutView()
-        let window = placed(view, AboutView.size)
-        defer { window.close() }
-
-        let version = try #require(view.kitSubviews(of: NSTextField.self).first { $0.stringValue == AboutWindow.version })
-        #expect(version.isSelectable)
-        #expect(labels(in: view).contains("A quiet browser for wandering the web"))
-        #expect(view.kitSubviews(of: AboutIcon.self).count == 1)
     }
 }

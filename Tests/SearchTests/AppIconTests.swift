@@ -207,22 +207,18 @@ struct AppIconTests {
         #expect(access.takes == "ink, night, day, volt, citrus")
     }
 
-    @Test func theAboutIconFollowsAChangeWhileItIsOpen() throws {
+    @Test func theAboutPanelIsHandedTheIconShownNow() throws {
         _ = NSApplication.shared
         using(try pictures(), baked: .day)
-        AppIconShown.apply(.day)
-        let icon = AboutIcon()
-
         AppIconShown.apply(.volt)
 
+        let options = AboutWindow.options(info: [:], icon: NSApp.applicationIconImage)
+
         let volt = try #require(AppIconShown.picture(.volt))
-        #expect(icon.image?.size == volt.size)
-        #expect(icon.image?.size == tiny)
-
+        #expect((options[.applicationIcon] as? NSImage)?.size == volt.size)
+        #expect(volt.size == tiny)
+        let again = AboutWindow.options(info: [:], icon: NSApp.applicationIconImage)
+        #expect((options[.applicationIcon] as? NSImage) === (again[.applicationIcon] as? NSImage))
         AppIconShown.apply(.day)
-
-        let day = try #require(AppIconShown.picture(.day))
-        #expect(AppIconShown.shown === day)
-        #expect(icon.image?.size == tiny)
     }
 }

@@ -83,25 +83,33 @@ enum BenchWelcome {
                 "level": window?.level.rawValue ?? 0,
             ])
         case "about":
-            if let folder = request["path"] as? String {
-                var saved: [String] = []
-                for dark in [true, false] {
-                    let window = AboutWindow.make()
-                    window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
-                    window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)) - 1)
-                    window.benchShowBehind()
-                    let file = "\(folder)/about-\(dark ? "dark" : "light").png"
-                    if let rep = AboutWindow.picture(window), let data = rep.representation(using: .png, properties: [:]),
-                       (try? data.write(to: URL(fileURLWithPath: file))) != nil {
-                        saved.append(file)
-                    }
-                    window.close()
-                }
-                answer(["saved": saved])
+            AboutWindow.show()
+            guard let panel = AboutWindow.panel ?? AboutWindow.made else {
+                answer(["error": "no about panel among " + NSApp.windows.map {
+                    "\(NSStringFromClass(type(of: $0))) \($0.isVisible) \($0.contentView.map(AboutWindow.texts(in:)) ?? [])"
+                }.joined(separator: " | ")])
                 return
             }
-            let window = AboutWindow.show(behind: true)
-            answer(["window": window.windowNumber, "title": window.title])
+            if !panel.isVisible {
+                panel.hidesOnDeactivate = false
+                panel.benchShowBehind()
+            }
+            if let look = request["look"] as? String {
+                panel.appearance = NSAppearance(named: look == "dark" ? .darkAqua : .aqua)
+            }
+            panel.contentView?.needsDisplay = true
+            panel.displayIfNeeded()
+            let said: [String: Any] = [
+                "window": panel.windowNumber, "title": panel.title, "visible": panel.isVisible,
+                "hidden": NSApp.isHidden, "active": NSApp.isActive, "onScreen": panel.occlusionState.contains(.visible),
+                "panels": AboutWindow.panels.count,
+                "frame": [panel.frame.minX, panel.frame.minY, panel.frame.width, panel.frame.height],
+                "screen": panel.screen.map { [$0.visibleFrame.midX, $0.visibleFrame.midY] } ?? [],
+                "closable": panel.styleMask.contains(.closable), "titled": panel.styleMask.contains(.titled),
+                "texts": panel.contentView.map(AboutWindow.texts(in:)) ?? [],
+            ]
+            if request["close"] as? Bool == true { panel.close() }
+            answer(said)
         case "delight":
             answer([
                 "celebrated": Delight.shared.celebrated.map(\.rawValue),
