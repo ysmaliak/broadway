@@ -96,8 +96,8 @@ def case_back_forward(t):
     sv.page("a")
     press(Y, "y", "cmd")
     h = of("history")[0]["id"]
-    sv.cmd({"do": "ui", "show": "broadway://downloads"}); time.sleep(0.5)
-    d = of("downloads")[0]["id"]
+    sv.cmd({"do": "ui", "show": "broadway://files"}); time.sleep(0.5)
+    d = of("files")[0]["id"]
     t.ok("a third kind: a tab of its own", d != h)
     # In-page links: Settings › Passwords… goes in the same tab (lead).
     sv.cmd({"do": "ui", "settings": True}); time.sleep(0.5)

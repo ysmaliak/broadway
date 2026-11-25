@@ -281,7 +281,7 @@ def once(dark, today):
                 shoot(f"{mode}-20-welcome-{step}", [number])
                 sv.cmd({"do": "surface", "action": "close"})
     if wanted("pages"):
-        for n, url in enumerate(["broadway://history", "broadway://downloads", "broadway://bookmarks", "broadway://files",
+        for n, url in enumerate(["broadway://history", "broadway://bookmarks", "broadway://files",
                                  "http://nothing-here.invalid/", f"http://127.0.0.1:{closed_port()}/"]):
             id = sv.sp("open", url=url)["resultID"]
             time.sleep(3 if url.startswith("http") else 1.5)

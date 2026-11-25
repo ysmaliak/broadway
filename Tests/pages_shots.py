@@ -133,8 +133,6 @@ def empty_round():
         views("newtab")
         show("broadway://history")
         views("history-empty")
-        show("broadway://downloads")
-        views("downloads-empty")
         show("broadway://files")
         views("files-empty")
         show("broadway://bookmarks")
@@ -166,19 +164,6 @@ def filled_round():
             own(clearing=True)
             views("history-clearing")
             own(clearing=False)
-        sv.cmd({"do": "ui", "downloadsStage": "many"})
-        show("broadway://downloads")
-        views("downloads-many")
-        if STATES:
-            views("downloads-hover", hover="KeptLineView", row=1)
-        if wanted("downloads-mixed"):
-            sv.cmd({"do": "ui", "downloadsStage": "running"})
-            time.sleep(0.4)
-            views("downloads-running")
-            sv.cmd({"do": "ui", "downloadsStage": "failed"})
-            time.sleep(0.4)
-            views("downloads-failed")
-            sv.cmd({"do": "ui", "downloadsStage": "many"})
         show("broadway://files")
         views("files-full")
         if STATES:

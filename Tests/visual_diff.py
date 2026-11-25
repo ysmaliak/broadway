@@ -167,7 +167,6 @@ SURFACES = {
     "meeting-alert-faces": {"surface": {"name": "meeting-alert-faces"}},
     "pin-meeting-badges": {"surface": {"name": "pin-meeting-badges"}},
     "history-panel": {"surface": {"name": "history-panel", "pad": 0}},
-    "downloads-panel": {"surface": {"name": "downloads-panel", "pad": 0}},
 
     "newtab": {"surface": {"name": "newtab"}},
     "newtab-pale": {"surface": {"name": "newtab", "space": "paper"}},
