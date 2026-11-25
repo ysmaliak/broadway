@@ -82,7 +82,7 @@ final class AgentLeadTabTests {
     }
 
     private func listed(_ area: AgentsAreaView) -> [NSView] {
-        area.subviews.compactMap { $0 as? NSScrollView }.first?.documentView?.subviews ?? []
+        area.kitSubviews(of: NSScrollView.self).first?.documentView?.subviews ?? []
     }
 
     private func head(_ title: String, in area: AgentsAreaView) throws -> AgentHeadView {
