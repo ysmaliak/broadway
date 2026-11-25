@@ -40,6 +40,7 @@ enum SettingsMetrics {
     static var separator = tone(light: 0xEBEBEB, dark: 0x2F2F2F)
     static let titleFont = NSFont.systemFont(ofSize: 13)
     static let detailFont = NSFont.systemFont(ofSize: 12)
+    static let detailDigitsFont = NSFont.monospacedDigitSystemFont(ofSize: detailFont.pointSize, weight: .regular)
     static let headingFont = NSFont.systemFont(ofSize: 13, weight: .medium)
 }
 
