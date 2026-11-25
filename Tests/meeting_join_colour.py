@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The meeting card's Join button is the system green whether Broadway is in front or not, with nothing outside its capsule.
+"""The meeting card's Join button reads green whether Broadway is in front or not.
 
 Build first (`./build.sh`), then `python3 Tests/meeting_join_colour.py`. A
 test copy shows one fake meeting and puts a copy of its card, in the same

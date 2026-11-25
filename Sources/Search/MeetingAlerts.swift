@@ -866,6 +866,7 @@ final class MeetingAlertShotView: NSView {
             ("glass still", KitGlass(tint: green, interactive: false)),
             ("glass tinted late", late),
             ("fill", KitBox(fill: green, corners: .capsule)),
+            ("system button", Self.systemButton()),
         ]
         for (index, (_, swatch)) in made.enumerated() {
             (swatch as? KitGlass)?.capsule = true
@@ -874,6 +875,14 @@ final class MeetingAlertShotView: NSView {
         }
         swatches = made
         DispatchQueue.main.async { late.tintColor = green }
+    }
+
+    private static func systemButton() -> NSButton {
+        let button = NSButton(title: "Join", target: nil, action: nil)
+        button.bezelStyle = .push
+        button.controlSize = .large
+        button.bezelColor = .systemGreen
+        return button
     }
 
     @available(*, unavailable)
