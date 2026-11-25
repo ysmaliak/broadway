@@ -634,7 +634,7 @@ final class FieldPlaceRowView: NSView {
             }
         } else if !detail.isHidden {
             let room = bounds.width - 20 - 18 - 12 * 3 - 8 - trailingWidth
-            let fits = FieldLine.width(title, scale: kitScale) + 60 < room
+            let fits = item.place != .downloads || FieldLine.width(title, scale: kitScale) + 60 < room
             detail.alphaValue = fits ? 1 : 0
             if fits { items.append(.text(detail)) }
         }
