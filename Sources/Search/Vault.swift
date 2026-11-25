@@ -50,21 +50,27 @@ struct AgentUse: Equatable, Hashable {
     var agent: String
     var folder: String?
     var at: Date
+    var given = false
 
     var stored: String {
-        [agent, folder ?? "", String(at.timeIntervalSince1970)].map { $0.replacingOccurrences(of: "\u{1}", with: " ") }.joined(separator: "\u{1}")
+        ([agent, folder ?? "", String(at.timeIntervalSince1970)] + (given ? ["given"] : [])).map { $0.replacingOccurrences(of: "\u{1}", with: " ") }.joined(separator: "\u{1}")
     }
 
-    init(agent: String, folder: String?, at: Date) {
+    init(agent: String, folder: String?, at: Date, given: Bool = false) {
         self.agent = agent
         self.folder = folder.flatMap { $0.isEmpty ? nil : $0 }
         self.at = at
+        self.given = given
     }
 
     init?(stored: String) {
         let parts = stored.components(separatedBy: "\u{1}")
-        guard parts.count == 3, !parts[0].isEmpty, let seconds = Double(parts[2]) else { return nil }
-        self.init(agent: parts[0], folder: parts[1], at: Date(timeIntervalSince1970: seconds))
+        guard parts.count == 3 || parts.count == 4 && parts[3] == "given", !parts[0].isEmpty, let seconds = Double(parts[2]) else { return nil }
+        self.init(agent: parts[0], folder: parts[1], at: Date(timeIntervalSince1970: seconds), given: parts.count == 4)
+    }
+
+    func notes(over old: AgentUse?) -> Bool {
+        given || old?.given != true
     }
 
     func words(now: Date = Date(), calendar: Calendar = .current) -> String {
@@ -72,7 +78,7 @@ struct AgentUse: Equatable, Hashable {
         format.calendar = calendar
         format.locale = Locale(identifier: "en_GB")
         format.dateFormat = calendar.isDate(at, equalTo: now, toGranularity: .year) ? "d MMMM HH:mm" : "d MMMM yyyy HH:mm"
-        return "Used by \(agent)" + (folder.map { " in \($0)" } ?? "") + ", " + format.string(from: at)
+        return (given ? "Given to \(agent)" : "Used by \(agent)") + (folder.map { " in \($0)" } ?? "") + ", " + format.string(from: at)
     }
 }
 

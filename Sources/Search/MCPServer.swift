@@ -219,6 +219,7 @@ final class MCPServer {
         var said = taken.isEmpty ? "No more tools fit those words" : "Added \(taken.joined(separator: ", ")). They are in your tool list now."
         if !browserLeft.isEmpty { said += "\nAlso there: \(browserLeft.joined(separator: ", "))" }
         if !nounsLeft.isEmpty { said += "\nTools for \(nounsLeft.joined(separator: ", ")), named noun_verb such as bookmarks_add. Give the noun and the verb." }
+        if !PersonGive.mcpWords.isDisjoint(with: words) { said += "\n" + PersonGive.mcpLine }
         return ToolOutcome(text: said, data: ["added": taken, "more": left])
     }
 
@@ -326,6 +327,11 @@ final class MCPServer {
                 let found = more(arguments)
                 AgentTally.shared.count(name, outcome: found)
                 return answer(id, MCPServer.result(found, tool: name))
+            }
+            if PersonGive.mcpNames.contains(name) {
+                let refused = ToolOutcome.failure(PersonGive.mcpLine, code: "person_only", retrySafe: true)
+                AgentTally.shared.count(PersonGive.name, outcome: refused)
+                return answer(id, MCPServer.result(refused, tool: name))
             }
             let noun = nounTool(name)
             guard let tool = noun?.name ?? resolve(name) else {

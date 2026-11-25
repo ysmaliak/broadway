@@ -74,7 +74,7 @@ A yes that arrives after the agent stopped waiting is recorded, so the agent's n
 
 ## Signing in and secrets
 
-An agent never reads a password, a card number or a one-time code. Broadway moves each one itself, after the person's yes, and hides it from every answer afterwards.
+An agent never reads a password, a card number or a one-time code. Broadway moves each one itself, after the person's yes, and hides it from every answer afterwards. The one exception is a password the person hands to a terminal program with `logins give`, which is off until they turn it on (see [What the person decides](#what-the-person-decides)).
 
 ### Signing in
 
@@ -120,6 +120,7 @@ All of these are in Settings › Agents, and none of them can be changed from th
 - **Sites.** A site can be marked Always Here or Never Here from a question's answer. Never Here refuses every act on it. Always Here lets everything through except paying.
 - **Always ask before an agent signs in.** Off at first. On, the sign-in card shows every time in every mode.
 - **Sign-ins without asking.** Each Always Here given on a sign-in card is listed under Sites as "Signs in as NAME without asking", and only the person removes it.
+- **Let agents ask for a saved password.** Off until the person turns it on. A password never leaves Broadway except this way: `broadway logins give SITE` run on its own in a terminal on the Mac that runs Broadway, after the person's yes on a card in every mode, Bypass included, and Touch ID, every time. Never over MCP, in a batch or a script, or over ssh. The sign-in then shows who it was given to in Settings › Passwords.
 - **Connected agents**, and **the broadway command** for setting it up.
 
 [cli.md](cli.md#who-may-do-what) lists how each command is gated. The MCP tools for spaces, folders, bookmarks, live folders, settings, shortcuts, extensions, shields, permissions, link rules, site shortcuts, Quick Actions and snippets take the same path as their commands, so each is gated exactly as its command is.

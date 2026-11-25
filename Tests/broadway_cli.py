@@ -1015,6 +1015,8 @@ def filling(base):
     shutil.rmtree(csv.parent)
     kept = no("logins list is the person's", "person_only", "logins", "list")
     check("no site or user named", SAM not in str(kept) and "127.0.0.1" not in str(kept) and "fill login" in kept["error"].get("hint", ""), kept)
+    given = no("logins give is off until the person turns it on", "person_only", "logins", "give", "127.0.0.1")
+    check("and its hint names the switch", "Let agents ask for a saved password" in given["error"].get("hint", ""), given)
     port = int(base.rstrip("/").rsplit(":", 1)[1])
     sv.cmd({"do": "agents", "action": "logins", "kept": [{"host": "127.0.0.1", "port": port, "user": SAM, "password": "s3cret-pass-word", "clear": True}]})
     tab = good("a form", "tabs", "new", base + "signin")["id"]

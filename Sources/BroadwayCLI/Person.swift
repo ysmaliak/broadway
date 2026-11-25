@@ -50,6 +50,7 @@ enum Person {
         if context.globals.tabFlag, !command.tabbed, noun.name != "agents" { throw Failure.usage("\(command.name) doesn't work on a tab, so leave out --tab") }
         if command.tabbed, let tab = context.globals.tab { arguments["tab"] = tab }
         if verb.fromStdin { arguments["text"] = try source(arguments, context: context) }
+        if Give.applies(noun, verb) { try Give.check(arguments, json: context.console.json, output: context.globals.output, environment: ProcessInfo.processInfo.environment) }
         let interactive = isatty(STDIN_FILENO) == 1 && context.console.errTTY && !context.console.json
         let agent = Context.agent
         Clock.mark("ancestor")
@@ -65,6 +66,10 @@ enum Person {
                 continue
             }
             if let failure = Context.failure(reply, reads: false) { throw failure }
+            if Give.applies(noun, verb) {
+                Give.present(reply["data"] as? [String: Any] ?? [:], arguments: arguments, context: context)
+                return .done
+            }
             present(command, reply["data"] as? [String: Any] ?? [:], context: context)
             return .done
         }

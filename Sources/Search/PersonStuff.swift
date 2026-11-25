@@ -363,6 +363,7 @@ enum PersonStuff {
             return ["id": short(found.id), "message": "Deleted"]
         },
         PersonVerb("logins", "list", .look, first: { _ in throw keptSignIns }) { _ in throw keptSignIns },
+        PersonGive.verb,
         PersonVerb("fill", "login", .person(.signIn), tabbed: true) { try await PersonSignIn.run($0) },
         PersonVerb("fill", "code", .person(.signIn), tabbed: true) { try await PersonCode.run($0) },
         PersonVerb("fill", "details", .person(.address), tabbed: true) { try await PersonFill.run($0, what: "details") },

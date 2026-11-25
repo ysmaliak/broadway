@@ -180,7 +180,8 @@ enum PersonCommands {
         return ToolReply.data(outcome)
     }
 
-    static func handle(_ request: [String: Any], browser: Browser, socket: AgentSocket, on connection: LineConnection) {
+    static func handle(_ asked: [String: Any], browser: Browser, socket: AgentSocket, on connection: LineConnection) {
+        let request = PersonGive.stamp(asked, peer: connection.peer)
         let noun = request["noun"] as? String ?? ""
         let verb = request["verb"] as? String ?? ""
         let channel = PersonChannel { [weak connection] event in connection?.send(event) }
@@ -194,7 +195,7 @@ enum PersonCommands {
             let connecting = noun == "agents" && verb == "connect"
             let named = connecting ? (arguments["name"] as? String).flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 } : nil
             let reply = await perform(request, browser: browser, socket: socket, channel: channel) {
-                socket.link(for: request, create: connecting, rejoin: noun != "agents" && request["hook"] as? Bool != true, name: named)
+                socket.link(for: request, create: connecting || PersonGive.creates(request, on: browser.prefs.agentsGivePasswords), rejoin: noun != "agents" && request["hook"] as? Bool != true, name: named)
             }
             if request["hook"] as? Bool != true { AgentTally.shared.count(find(noun, verb)?.name ?? AgentTally.other, reply: reply) }
             connection.send(reply)
@@ -234,7 +235,7 @@ enum PersonCommands {
             call.askedAt = call.tab?.tab.pageAddress
             try await gate(entry, call, request: request, channel: channel)
             let data = try await entry.run(call)
-            return ["ok": true, "data": AgentSecrets.scrub(data, sealed: AgentSeals.all)]
+            return ["ok": true, "data": entry.name == PersonGive.name ? data : AgentSecrets.scrub(data, sealed: AgentSeals.all)]
         } catch let refused as PersonRefusal {
             return failure(refused)
         } catch {

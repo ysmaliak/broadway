@@ -156,7 +156,7 @@ extension AgentQuestion {
     @MainActor
     var cardWords: AgentCardWords {
         let link = task.flatMap { AgentLinks.shared.link($0) }
-        let signer = link.flatMap { $0.firstQuestion == id ? $0.program?.line(name: $0.name) : nil } ?? ""
+        let signer = link.flatMap { $0.firstQuestion == id || signs ? $0.program?.line(name: $0.name) : nil } ?? ""
         if let asker { return AgentCardWords(title: "\(asker) asks", who: "", body: title, signer: signer) }
         return AgentCardWords(title: title, who: link.map(\.title) ?? "",
                               body: !line.isEmpty ? line : reason.isEmpty ? "" : "The agent says: \(reason)", signer: signer)

@@ -71,9 +71,9 @@ struct SettingsIndexTests {
         #expect(SettingsIndex.find("get to know").isEmpty)
         #expect(SettingsIndex.find("keep an eye").isEmpty)
         #expect(SettingsIndex.find("default plan").isEmpty)
-        #expect(SettingsIndex.items(in: "agents").map(\.id) == ["ai.agents", "agents.mode", "agents.signIn"])
+        #expect(SettingsIndex.items(in: "agents").map(\.id) == ["ai.agents", "agents.mode", "agents.signIn", "agents.give"])
         #expect(Set(SettingsIndex.items.filter { $0.group == "agents" }.map(\.id))
-            == ["ai.agents", "agents.mode", "agents.signIn", "agents.connected", "agents.sites", "ai.command"])
+            == ["ai.agents", "agents.mode", "agents.signIn", "agents.give", "agents.connected", "agents.sites", "ai.command"])
     }
 
     @Test func noSettingsWordingHasASemicolon() {

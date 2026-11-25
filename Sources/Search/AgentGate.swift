@@ -250,6 +250,7 @@ struct AgentQuestion: Identifiable, Equatable {
     var line = ""
     var yesWord: String?
     var offersAlways = true
+    var signs = false
     var shown = Date()
 
     var keyDelay: TimeInterval {

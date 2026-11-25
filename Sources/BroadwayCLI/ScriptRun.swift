@@ -149,6 +149,10 @@ enum ScriptRun {
         guard Date() <= state.deadline else {
             return state.end(["code": "deadline", "message": "The script ran past its \(Answer.seconds(Int(state.seconds * 1000))) s", "retry_safe": false, "step": n])
         }
+        if Give.scriptNames.contains(name) {
+            state.outcome.steps = n
+            return state.end(["code": "person_only", "message": Give.alone, "hint": Give.aloneHint, "retry_safe": true, "step": n])
+        }
         let said = words(name, given)
         state.outcome.steps = n
         if let moved = moved(name, said, n: n, state: state) {
@@ -240,7 +244,7 @@ enum ScriptRun {
         context.setObject(call, forKeyedSubscript: "__broadway_call" as NSString)
         context.setObject(say, forKeyedSubscript: "__broadway_print" as NSString)
         context.setObject(sleep, forKeyedSubscript: "sleep" as NSString)
-        context.evaluateScript(prelude)?.call(withArguments: [names])
+        context.evaluateScript(prelude)?.call(withArguments: [names + Give.scriptNames])
         watch(context, state: state)
         let result = context.evaluateScript(code)
         if let ended = state.ended {

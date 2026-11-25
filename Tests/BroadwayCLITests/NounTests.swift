@@ -26,7 +26,7 @@ struct NounTests {
     @Test func theGuideTeachesDropdowns() {
         #expect(Help.guideText.contains("broadway choose TARGET VALUE"))
         #expect(Help.guideText.contains("broadway read --find"))
-        #expect(Help.guideText.utf8.count < 5516)
+        #expect(Help.guideText.utf8.count < 5724)
     }
 
     @Test func aVerbIsFoundAfterItsNoun() throws {

@@ -202,6 +202,7 @@ enum Help {
     - Paste, copy and cut are refused. There is no eval.
     - Never send the person's tab elsewhere. broadway:// pages are the person's only.
     - Sandboxed (Codex): ask for this command to run outside the sandbox.
+    - A program in your terminal needs a password the person keeps: broadway logins give SITE --password-only, once they turn it on. They say yes with Touch ID each time. Pass the output straight to the program.
 
     ## When the person is needed
     - A step that sends, pays, deletes, uploads, or that the mode asks about, waits up to 100 s for their yes. needs_you: tell them what you asked, then run the same command again. It comes after 20 s when they are away, and the question stays up. --no-person fails at once.

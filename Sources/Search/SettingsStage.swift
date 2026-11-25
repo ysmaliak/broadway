@@ -58,6 +58,7 @@ enum SettingsStageMap {
         "ai.agents": .spot(.agents),
         "agents.mode": .spot(.agents),
         "agents.signIn": .spot(.agents),
+        "agents.give": .spot(.agents),
         "ai.command": .spot(.agents),
         "agents.clients": .spot(.agents),
 

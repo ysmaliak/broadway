@@ -106,6 +106,7 @@ extension SettingsPageView {
             row(id, control: toggle(id, get: { IntegrationNow.on }, set: { Store.settings.set($0, forKey: IntegrationNow.key) }))
         case "ai.agents", "agents.mode": agentRow(id)
         case "agents.signIn": flag(id, \.agentsAskSignIn)
+        case "agents.give": flag(id, \.agentsGivePasswords)
         case let id where Browser.Clearing(rawValue: id) != nil: dangerRow(id)
         default: return linkRow(id)
         }

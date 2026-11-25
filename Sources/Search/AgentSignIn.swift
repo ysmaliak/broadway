@@ -221,7 +221,7 @@ enum PersonSignIn {
         let link = call.link
         AgentSignInRecord.note(link?.id, site: AgentSites.site(of: place) ?? place.host()?.lowercased() ?? "")
         let used = AgentUse(agent: link?.name ?? "An agent", folder: link?.folder.map { ($0 as NSString).lastPathComponent }, at: Date())
-        if !fromOnePassword { _ = await Vault.off { Vault.note(used, on: kept) } }
+        if !fromOnePassword, used.notes(over: kept.agent) { _ = await Vault.off { Vault.note(used, on: kept) } }
         if told { (call.tab?.browser ?? call.browser).announce("\(link?.name ?? "An agent") signed in as \(kept.user)", seconds: 6) }
         var look: AgentChange.Look?
         var now = state

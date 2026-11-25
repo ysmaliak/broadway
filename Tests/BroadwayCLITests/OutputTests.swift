@@ -178,7 +178,7 @@ struct OutputTests {
     @Test func theGuideIsShortAndTeachesTabsAsAChoice() {
         let guide = Help.guideText
 
-        #expect(guide.utf8.count < 5516)
+        #expect(guide.utf8.count < 5724)
         #expect(!guide.contains(";"))
         for stale in ["one working tab", "--new", "Four tabs", "four at most", "tab=$(", "wait --idle", "| grep"] {
             #expect(!guide.contains(stale), "the guide still says \(stale)")

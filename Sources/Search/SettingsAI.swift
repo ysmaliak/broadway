@@ -43,6 +43,7 @@ extension SettingsPageView {
             settingRow("ai.agents")
             settingRow("agents.mode")
             settingRow("agents.signIn")
+            settingRow("agents.give")
         }
         let signIns = AgentSignIns.shared
         shape { sites.rules.keys.sorted() + signIns.allowed.keys.sorted().flatMap { [$0] + (signIns.allowed[$0] ?? []) } }

@@ -353,6 +353,7 @@ The **C** column is how the command is gated. The classes are explained under [W
 | `live statuses ID STATUS...` | A | a Linear assigned, created or cycle folder shows only the named statuses: `triage`, `backlog`, `todo`, `progress`. Backlog is out until named |
 | `live delete ID` | E | |
 | `logins list [SITE]` | R | refused for agents with `person_only`, naming no site or user. To sign in on a page, run `fill login` |
+| `logins give SITE [--account USER] [--password-only]` | P | hands a saved password to a program in a terminal that asks for one, such as `asc web auth login --password "$(broadway logins give appleid.apple.com --password-only)"`. Off until the person turns on Settings › Agents › Let agents ask for a saved password, and `person_only` while it is off, saying nothing about what is kept. Then Broadway asks on a card in every mode, Bypass included, with the accounts as rows when several are kept, and with Touch ID or the Mac's password after a yes. When no sign-in is kept for SITE itself, one kept for another host of the same site is offered with its host named on the card. Nothing is kept for a later call. The user name and the password come on standard output only, as two lines, as JSON with `--json`, or the password alone with `--password-only`, with no line end when it goes to a pipe. Never over MCP, and refused with `person_only` over ssh or a forwarded socket. Whatever reads the output can read the password, the agent that ran it included. The person sees "Given to AGENT" on the sign-in in Settings › Passwords |
 | `fill login [--account USER]`, `fill code`, `fill details`, `fill card` | P | Broadway fills the page itself. Nothing secret comes back. `fill login` also sends the form, follows a name step to its password step, and says what the page wants next. `fill code` fills a one-time code that Gmail received, or that 1Password keeps when Settings › Passwords › 1Password is on, and sends it |
 
 ### Page and site
@@ -475,14 +476,14 @@ A row with no control of its own (a button, a list, a note) reads as such and re
 - Every reply passes through the same secret filter as the browser tools, so a saved card number can't come back in a page title, and every address shown is scrubbed the same way.
 - Private windows have no ids, no counts and no events.
 - Commands that work in a page mark the tab as an agent's, so its visits stay out of history.
-- Sign-ins give the site, the user name and when it was used. A password never leaves Broadway.
+- Sign-ins give the site, the user name and when it was used. A password leaves Broadway only through `logins give`, in a terminal on the Mac that runs Broadway, with the person's switch on, their yes and Touch ID each time.
 - Every erase looks its target up before it asks, so nobody is asked about something that isn't there.
 
 ## Left out on purpose
 
 | What | Why |
 | --- | --- |
-| Reading or changing passwords, cards, addresses, codes or passkeys | they are secrets |
+| Reading or changing passwords, cards, addresses, codes or passkeys, except a password the person gives with `logins give` | they are secrets |
 | Answering approvals, site rules, the switch and the mode | an agent would be approving itself |
 | Granting site permissions, allowing an extension in private windows | the person answers those in Broadway |
 | Clearing cookies and cache | it signs out of everything |

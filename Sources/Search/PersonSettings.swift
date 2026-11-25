@@ -120,6 +120,7 @@ enum PersonSettings {
         "agents.connected": SettingAccess(bar: .always, instead: "broadway agents list reads them"),
         "agents.mode": SettingAccess(bar: .always, read: { $0.agentMode.rawValue }),
         "agents.signIn": SettingAccess(bar: .always, read: { $0.agentsAskSignIn }),
+        "agents.give": SettingAccess(bar: .always, read: { $0.agentsGivePasswords }),
         "agents.sites": SettingAccess(bar: .always, instead: "broadway agents status reads them"),
         "agents.hooks": SettingAccess(bar: .always, instead: "broadway hooks list reads them"),
         "ai.agents": held(\.agentsOn),

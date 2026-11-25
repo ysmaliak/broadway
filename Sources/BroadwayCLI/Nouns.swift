@@ -231,6 +231,7 @@ enum Nouns {
         ]),
         Noun("logins", "Sign-ins kept in Broadway", group: "Your stuff", [
             Verb("logins list [site]", "The person's own list of sign-ins", about: "Agents get person_only. broadway fill login signs in on a page without it.", columns: ["site", "user", "used"]),
+            Verb("logins give <site> [--account USER] [--password-only]", "Hand a saved password to a program in a terminal that asks for one", about: "Only once the person turns on Settings › Agents › Let agents ask for a saved password. Broadway asks the person on a card and with Touch ID every time. The user name and the password come on standard output only, never over MCP or ssh. --password-only prints the password alone, with no line end when it goes to a pipe.", examples: ["asc web auth login --password \"$(broadway logins give appleid.apple.com --password-only)\"", "broadway logins give github.com --account sam@example.com --json"]),
         ]),
         Noun("fill", "Fill a form from what Broadway keeps, or with your values: broadway fill '{\"@e4\": \"Sam\"}'", group: "Your stuff", first: nil, [
             Verb("fill login [--account USER] [--tab ID]", "Sign in on the page", about: "Asks in Broadway as the mode says, with the kept accounts on the card. Broadway fills the page, sends it and says what the page wants next. The password is never shown.", examples: ["broadway fill login --tab 1a2b3c4d"]),

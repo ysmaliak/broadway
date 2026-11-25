@@ -684,6 +684,9 @@ final class Preferences {
     var agentsAskSignIn: Bool {
         didSet { store.set(agentsAskSignIn, forKey: "agents.signIn") }
     }
+    var agentsGivePasswords: Bool {
+        didSet { store.set(agentsGivePasswords, forKey: "agents.give") }
+    }
 
     /// Two pages share one place in the tab row.
     /// Always on since the Settings rework (Drice, 24 Oct 2026): it only
@@ -832,6 +835,7 @@ final class Preferences {
         agentMode = AgentMode.read(store.string(forKey: "agents.mode"), bypassConsent: AgentConsent.bypassGiven)
         agentsOn = store.bool(forKey: "agents.on") && AgentConsent.given
         agentsAskSignIn = store.bool(forKey: "agents.signIn")
+        agentsGivePasswords = store.bool(forKey: "agents.give")
         commandBar = false
         nowRows = true
         nextMeeting = store.bool(forKey: "meetings.next")

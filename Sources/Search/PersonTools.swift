@@ -51,7 +51,7 @@ enum PersonTools {
     static let leftOut: [String: String] = [
         "space": "not asked for", "tabs": "not asked for", "groups": "not asked for", "split": "not asked for",
         "windows": "not asked for", "downloads": "not asked for", "files": "not asked for", "history": "not asked for",
-        "logins": "the person's: where they keep sign-ins is never listed to an agent", "page": "not asked for",
+        "logins": "the person's: where they keep sign-ins is never listed to an agent, and a password given over MCP would land in the model's context", "page": "not asked for",
         "site": "not asked for", "skills": "not asked for", "replies": "not asked for", "now": "not asked for",
         "agents": "not asked for", "approvals": "not asked for", "hooks": "not asked for",
         "complete": "Broadway's own completion of a shell's words, not a command an agent runs",

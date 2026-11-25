@@ -21,6 +21,17 @@ struct ScriptRunTests {
         ["ok": false, "error": ["code": code, "message": message, "retry_safe": true]]
     }
 
+    @Test func aScriptCannotGiveAPassword() {
+        for code in [#"logins_give("example.com")"#, #"give("example.com")"#] {
+            let fake = Fake()
+            let outcome = ScriptRun.run(code: "try { " + code + " } catch (e) { print(e.code) }\nprint(\"after\")", send: fake.send)
+
+            #expect(fake.sent.isEmpty, "\(code)")
+            #expect(outcome.error?["code"] as? String == "person_only", "\(code): \(String(describing: outcome.error))")
+            #expect(!outcome.printed.contains("after"), "\(code)")
+        }
+    }
+
     @Test func aScriptLoopsAndBranchesOnAnswers() {
         let fake = Fake { name, _, n in
             if name == "find" { return ["ok": true, "data": ["count": n >= 5 ? 1 : 0, "elements": n >= 5 ? [["ref": "e42", "name": "Moss Oolong"]] : []]] }

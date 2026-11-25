@@ -120,6 +120,9 @@ enum Batch {
             throw refuse("only --tab may be given to a step", hint: "Give --json, --world and --timeout to batch itself")
         }
         guard let name = rest.first else { throw refuse("a step needs a command") }
+        if Give.asked(rest) {
+            throw Failure("person_only", "Step \(line.n): \(Give.alone)", hint: Give.aloneHint, data: ["step": line.n, "line": line.text])
+        }
         let command = catalog.find(name)
         let known = command.map { [$0.name] + $0.aliases } ?? [name]
         guard known.contains(where: allowed.contains) || allowed.contains(name) else {

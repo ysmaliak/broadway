@@ -100,6 +100,9 @@ enum SettingsIndex {
         .init(id: "agents.signIn", group: "agents", icon: "key", title: "Always ask before an agent signs in",
               detail: "When off, Auto asks once per account on a site, and Bypass only asks which account", keys: ["agents.signIn"],
               words: ["sign in", "sign-in", "log in", "login", "password", "account", "fill login", "agent", "ask", "bypass", "auto"]),
+        .init(id: "agents.give", group: "agents", icon: "key.horizontal", title: "Let agents ask for a saved password",
+              detail: "An agent that gets a password can read it. Broadway asks with Touch ID every time.", keys: ["agents.give"],
+              words: ["password", "give", "hand", "terminal", "logins give", "agent", "touch id", "secret", "credential"]),
         .init(id: "agents.connected", group: "agents", icon: "person.2.wave.2", title: "Connected agents",
               detail: "Claude Code, Codex and scripts using Broadway, each with a card at the foot of the sidebar",
               words: ["agent mode", "connected", "disconnect", "claude code", "codex", "session", "agents area"], kind: .note, findOnly: true),
@@ -579,6 +582,9 @@ extension SettingsIndex {
         case "passwords.fill":
             guard let on = value as? Bool else { return false }
             prefs.fillsAndSavesPasswords = on
+        case "agents.give":
+            guard let on = value as? Bool else { return false }
+            prefs.agentsGivePasswords = on
         case "downloads.ask":
             guard let on = value as? Bool else { return false }
             prefs.asksWhereToSave = on

@@ -25,6 +25,14 @@ struct BatchTests {
         }
     }
 
+    @Test func aBatchLineCannotGiveAPassword() {
+        let line = Batch.Line(n: 1, text: "logins give example.com --password-only", words: ["logins", "give", "example.com", "--password-only"])
+        let refused = failure { try Batch.step(line, catalog: catalog) }
+
+        #expect(refused?.code == "person_only")
+        #expect(refused?.message.contains("never as a step") == true, "\(String(describing: refused?.message))")
+    }
+
     @Test func stepsSplitLikeAShell() throws {
         #expect(try Batch.words(#"click "Add to basket" --nth 1"#) == ["click", "Add to basket", "--nth", "1"])
         #expect(try Batch.words(#"type 'It'\''s' x"#) == ["type", "It's", "x"])

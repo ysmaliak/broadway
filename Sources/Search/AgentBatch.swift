@@ -54,6 +54,9 @@ enum AgentBatch {
             guard let object = item as? [String: Any] else { return refuse("a step is an object with tool and arguments", index + 1) }
             let n = object["n"] as? Int ?? index + 1
             let asked = object["tool"] as? String ?? ""
+            if PersonGive.mcpNames.contains(asked) {
+                return .failure(Refusal(code: "person_only", message: "Step \(n): \(PersonGive.mcpLine)", step: n))
+            }
             guard allowed.contains(asked) || names[asked] != nil else {
                 return refuse("\(asked.isEmpty ? "a step without a tool" : asked) can't be a batch step", n)
             }
