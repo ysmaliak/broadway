@@ -426,6 +426,7 @@ final class FieldBarView: NSView {
     private let actions: KitGlassKey
     private let goHint = FieldHint("Open", keys: "↩")
     var held = false { didSet { if held != oldValue, !held { needsLayout = true } } }
+    private var fetchWatch: AnyCancellable?
 
     init(browser: Browser, menu: FieldMenu) {
         self.browser = browser
@@ -444,6 +445,9 @@ final class FieldBarView: NSView {
             key.grounded = true
             addSubview(key)
         }
+        fetchWatch = kitObserve(initial: false, distinct: true, { [weak browser] in
+            browser?.pickedOffer?.placed?.fetch?.entry.state
+        }) { [weak self] _ in self?.needsLayout = true }
     }
 
     @available(*, unavailable)

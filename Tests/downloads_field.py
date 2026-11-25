@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import split_view as sv  # noqa: E402
+import split_view as sv
 
 ROOT = Path(__file__).resolve().parents[1]
 CODES = {"d": 2, "o": 31, "w": 13, "n": 45, "l": 37, "x": 7, "p": 35, "r": 15, "t": 17, "s": 1}
@@ -206,7 +206,7 @@ def going_again():
 
 def paused_now():
     s = drawn()
-    return s if s["returnWord"] in ("Resume", "Retry") else None
+    return s if s["returnWord"] in ("Resume", "Retry") and s["barWord"] == s["returnWord"] else None
 
 
 def kept_quick():
@@ -235,7 +235,7 @@ def case_live(tab, tabs):
 
     press("p", ["cmd"])
     held = until(paused_now, 8)
-    t.ok("⌘P pauses it and Return offers to go on", bool(held), drawn()["returnWord"])
+    t.ok("⌘P pauses it and the bar's Return key says it will go on", bool(held), (drawn()["returnWord"], drawn()["barWord"]))
     if held:
         word = held["returnWord"]
         paused = row(held, "slow.bin")
@@ -244,6 +244,8 @@ def case_live(tab, tabs):
         going = until(going_again, 8)
         t.ok(f"Return on it says {word} and sets it going again in the same list", bool(going) and drawn()["place"] == "downloads",
              row(drawn(), "slow.bin"))
+        s = until(lambda: (lambda s: s if s["barWord"] == "Open" else None)(drawn()), 4) or drawn()
+        t.ok("going again, the bar's Return key is back to a quiet Open", s["barWord"] == "Open" and s["idle"], (s["barWord"], s["idle"]))
 
     press("x", ["ctrl"])
     gone = until(lambda: not row(drawn(), "slow.bin"), 8)

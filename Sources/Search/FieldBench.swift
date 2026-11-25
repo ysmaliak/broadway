@@ -240,6 +240,7 @@ extension Bench {
                 return said
             }, "built": box?.kitSubviews(of: FieldRowSlot.self).filter { $0.superview != nil }.count ?? 0,
                "idle": browser.returnIsIdle, "returnWord": browser.pickedOffer?.placed?.returnWord ?? "",
+               "barWord": box?.kitSubviews(of: FieldBarView.self).first?.benchWord ?? "",
                "downloadsTab": browser.pageTab(.downloads) != nil, "tabs": browser.tabs.count]))
         case "rowmenu":
             guard let item = browser.pickedOffer?.placed, let view = browser.window?.contentView,
