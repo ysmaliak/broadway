@@ -23,9 +23,9 @@ struct ProgressDigitsTests {
             #expect(FetchEntry.bytes(round).count == FetchEntry.bytes(next).count, "\(FetchEntry.bytes(round)) \(FetchEntry.bytes(next))")
         }
         let total: Int64 = 150_000_000
-        let before = FetchEntry.bench("report.pdf", .downloading, done: 9_900_000, total: total)
-        let even = FetchEntry.bench("report.pdf", .downloading, done: 10_000_000, total: total)
-        let after = FetchEntry.bench("report.pdf", .downloading, done: 10_100_000, total: total)
+        let before = FetchEntry.bench("report.pdf", .downloading, done: 10_900_000, total: total)
+        let even = FetchEntry.bench("report.pdf", .downloading, done: 11_000_000, total: total)
+        let after = FetchEntry.bench("report.pdf", .downloading, done: 11_100_000, total: total)
         #expect(before.sizeText.count == even.sizeText.count)
         #expect(even.sizeText.count == after.sizeText.count)
         #expect(FetchEntry.bench("clip.mov", .downloading, done: 48_000_000, total: 0).sizeText.count
