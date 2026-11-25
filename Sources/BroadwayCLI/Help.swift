@@ -295,7 +295,7 @@ enum Help {
     MCP from another machine: use ssh mac broadway mcp as the server command. The session lasts as long as the connection.
 
     With a forwarded socket the broadway program runs on your machine:
-        ssh -N -L ./b.sock:'/Users/USER/Library/Application Support/Broadway/broadway.sock' mac
+        ssh -N -L ./b.sock:"$(ssh mac 'echo $HOME')/Library/Application Support/Broadway/broadway.sock" mac
         BROADWAY_SOCKET=./b.sock broadway tabs
     Paths in answers are then on your machine, and upload PATH sends the file, 25 MB at most.
     """
