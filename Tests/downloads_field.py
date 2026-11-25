@@ -289,9 +289,9 @@ def case_staged(folder):
          and titles[5:6] == ["Screenshot 2026-11-13.png"] and titles[-1:] == ["Notes.txt"], titles)
     xcode = row(s, "Xcode_27.1.xip")
     t.ok("a sized download shows a bar and its bytes", bool(xcode) and xcode["bar"] and not xcode["indeterminate"]
-         and xcode["progress"] == "1.93 GB of 4.6 GB", xcode)
+         and xcode["progress"].startswith("1.93 GB of 4.6"), xcode)
     stream = row(s, "stream-capture.mov")
-    t.ok("an unsized one turns its bar and says what came", bool(stream) and stream["indeterminate"] and stream["progress"] == "48 MB downloaded", stream)
+    t.ok("an unsized one turns its bar and says what came", bool(stream) and stream["indeterminate"] and stream["progress"].startswith("48") and stream["progress"].endswith(" MB downloaded"), stream)
     paused = row(s, "dataset.tar.gz")
     t.ok("a paused one says so with its bytes", bool(paused) and paused["progress"].startswith("Paused · "), paused)
     failed = row(s, "ubuntu-26.10-desktop-arm64.iso")

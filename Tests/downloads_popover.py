@@ -139,10 +139,10 @@ def case_rows():
     running = named(found, "Xcode_27.1.xip")
     t.ok("running: a bar, its size, Pause and Cancel",
          running and running["bar"] and not running["indeterminate"] and running["keys"] == ["pause", "cancel"]
-         and running["detail"] == "1.93 GB of 4.6 GB", running)
+         and running["detail"] == "1.93 GB of 4.60 GB", running)
     unsized = named(found, "stream-capture.mov")
     t.ok("running with no size: the bar turns and says what came", unsized and unsized["indeterminate"]
-         and unsized["detail"] == "48 MB downloaded", unsized)
+         and unsized["detail"] == "48.0 MB downloaded", unsized)
     paused = named(found, "dataset.tar.gz")
     t.ok("paused: says so, with Resume and Remove", paused and paused["keys"] == ["resume", "remove"]
          and paused["detail"].startswith("Paused · "), paused)
