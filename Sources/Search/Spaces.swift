@@ -100,7 +100,15 @@ enum Spaces {
         return icons.min { worn[$0, default: 0] < worn[$1, default: 0] } ?? "briefcase"
     }
 
-    private static var file: URL { Store.file("spaces.json") }
+    static var file: URL { Store.file("spaces.json") }
+
+    static func listed(at file: URL = Spaces.file) -> Set<UUID>? {
+        guard let data = try? Data(contentsOf: file),
+              let saved = try? JSONDecoder().decode([Space].self, from: data), !saved.isEmpty else { return nil }
+        return Set(saved.map(\.id) + [Space.firstID])
+    }
+
+    @MainActor static var listRead = listed() != nil
 
     static func read() -> [Space] {
         let saved = (try? Data(contentsOf: file)).flatMap { try? JSONDecoder().decode([Space].self, from: $0) } ?? []
@@ -128,7 +136,10 @@ enum Spaces {
         guard let data = try? JSONEncoder().encode(spaces) else { return }
         try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: file, options: .atomic)
-        MainActor.assumeIsolated { known = Dictionary(spaces.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a }) }
+        MainActor.assumeIsolated {
+            known = Dictionary(spaces.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            listRead = true
+        }
         // Every window's list follows (see Browser.init).
         NotificationCenter.default.post(name: changed, object: spaces)
     }

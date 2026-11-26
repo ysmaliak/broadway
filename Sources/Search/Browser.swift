@@ -2458,8 +2458,12 @@ final class Browser: NSObject {
             if prefs.usesSpaces, spaces.contains(where: { $0.id == record.space }) { spaceID = record.space }
             if usesFiles {
                 for (key, row) in record.rows {
-                    guard let space = UUID(uuidString: key), spaces.contains(where: { $0.id == space }) else { continue }
-                    Session.write(now: true, space: space, row)
+                    guard let space = UUID(uuidString: key) else { continue }
+                    if spaces.contains(where: { $0.id == space }) {
+                        Session.write(now: true, space: space, row)
+                    } else if !Spaces.listRead {
+                        Browser.keepUnlisted(row, in: space)
+                    }
                 }
                 self.record.rows = [:]
             }
@@ -3103,6 +3107,9 @@ extension Browser {
     /// ones, and those saved but not brought up this time.
     func allRows() -> [String: Session.Shape] {
         var rows: [String: Session.Shape] = [:]
+        if !Spaces.listRead, !usesFiles {
+            rows = record.rows.filter { key, _ in !spaces.contains { $0.id.uuidString == key } }
+        }
         for space in spaces {
             let saved = readRow(space.id)
             if !saved.tabs.isEmpty { rows[space.id.uuidString] = saved }
@@ -3132,7 +3139,18 @@ extension Browser {
         for space in spaces {
             Session.write(now: true, space: space.id, rows[space.id.uuidString] ?? Session.Shape(tabs: [], active: 0))
         }
+        if !Spaces.listRead {
+            for (key, row) in rows where !spaces.contains(where: { $0.id.uuidString == key }) {
+                guard let space = UUID(uuidString: key) else { continue }
+                Browser.keepUnlisted(row, in: space)
+            }
+        }
         record.rows = [:]
+    }
+
+    static func keepUnlisted(_ row: Session.Shape, in space: UUID) {
+        guard !row.tabs.isEmpty, Session.read(space: space).tabs.isEmpty else { return }
+        Session.write(now: true, space: space, row)
     }
 
     func leaveFiles() {

@@ -415,7 +415,7 @@ final class History {
     }
 
     func placeOldVisits(for browser: Browser) {
-        guard hasUnplaced, !browser.isPrivate else { return }
+        guard hasUnplaced, !browser.isPrivate, !browser.prefs.usesSpaces || Spaces.listRead else { return }
         let spaces = browser.prefs.usesSpaces ? browser.spaces.map(\.id) : [Space.firstID]
         guard spaces.count > 1 else { return placeOldVisits(in: spaces, held: [:]) }
         placeOldVisits(in: spaces, held: History.held(

@@ -78,15 +78,20 @@ final class SignInKeeper {
         self.shelf = shelf
     }
 
-    func launch(keeping spaces: [Space]) {
+    func launch(keeping spaces: [Space]?) {
         watch(Store.websites, as: Space.firstID)
-        let keys = Set([Space.firstID] + spaces.filter { !$0.isFirst && $0.sharesSignIns != true }.map(\.id))
         let shelf = shelf
         queue.async {
-            for account in shelf.accounts() where !keys.contains(where: { $0.uuidString == account }) {
+            for account in Self.outgoing(shelf.accounts(), keeping: spaces) {
                 shelf.remove(account)
             }
         }
+    }
+
+    nonisolated static func outgoing(_ accounts: [String], keeping spaces: [Space]?) -> [String] {
+        guard let spaces else { return [] }
+        let keys = Set([Space.firstID] + spaces.filter { !$0.isFirst && $0.sharesSignIns != true }.map(\.id))
+        return accounts.filter { account in !keys.contains { $0.uuidString == account } }
     }
 
     func watch(_ store: WKWebsiteDataStore, as key: UUID) {

@@ -720,7 +720,7 @@ enum LiveMerge {
 @MainActor
 @Observable
 final class LiveFolders {
-    static let shared = LiveFolders()
+    static let shared = LiveFolders(file: Store.file("live-folders.json"), housing: Spaces.listRead ? Set(Spaces.known.keys) : nil)
     @ObservationIgnored var every: @MainActor () -> TimeInterval = { Shared.prefs.liveEvery.interval }
     @ObservationIgnored private var paced: AnyCancellable?
     static let hold: TimeInterval = 1.6
@@ -789,30 +789,38 @@ final class LiveFolders {
     @ObservationIgnored private(set) var foreign: [Data] = []
     @ObservationIgnored var foreignIDs: Set<UUID> = []
     @ObservationIgnored private var lastSaved: [LiveFolder]?
+    @ObservationIgnored private(set) var waiting: [LiveFolder] = []
+    @ObservationIgnored private let file: URL
+    @ObservationIgnored private let housing: Set<UUID>?
     var lost = false
 
-    private static var file: URL { Store.file("live-folders.json") }
-
-    private init() { load() }
+    init(file: URL, housing: Set<UUID>?) {
+        self.file = file
+        self.housing = housing
+        load()
+    }
 
     private func load() {
         guard !loaded else { return }
         loaded = true
         retired = Set((Store.settings.stringArray(forKey: LiveFolders.retiredKey) ?? []).compactMap(UUID.init(uuidString:)))
-        guard let data = try? Data(contentsOf: LiveFolders.file) else {
+        guard let data = try? Data(contentsOf: file) else {
             Store.settings.set(true, forKey: LiveFolders.againKey)
             return
         }
         guard let read = LiveFile.read(data, retiredKinds: LiveFolders.retiredKinds) else {
-            Store.quarantine(LiveFolders.file)
+            Store.quarantine(file)
             lost = true
             return
         }
         let saved = read.kept, gone = read.retired
         foreign = read.foreign
         foreignIDs = read.foreignIDs
-        lastSaved = LiveFolders.woken(saved)
-        folders = LiveFolders.housed(LiveFolders.woken(saved), in: Set(Spaces.known.keys))
+        let woke = LiveFolders.woken(saved)
+        let housed = LiveFolders.housing(woke, in: housing)
+        folders = housed.shown
+        waiting = housed.waiting
+        lastSaved = housing == nil ? folders + waiting : woke
         save()
         if !gone.isEmpty {
             retired.formUnion(gone)
@@ -821,17 +829,19 @@ final class LiveFolders {
         }
         if !Store.settings.bool(forKey: LiveFolders.namedKey) {
             Store.settings.set(true, forKey: LiveFolders.namedKey)
-            let renamed = LiveFolders.renamed(saved)
-            if renamed != saved {
+            let renamed = LiveFolders.renamed(folders), renamedWaiting = LiveFolders.renamed(waiting)
+            if renamed != folders || renamedWaiting != waiting {
                 folders = renamed
+                waiting = renamedWaiting
                 save()
             }
         }
         if !Store.settings.bool(forKey: LiveFolders.againKey) {
             Store.settings.set(true, forKey: LiveFolders.againKey)
-            let moved = LiveFolders.reviewingAgain(folders)
-            if moved != folders {
+            let moved = LiveFolders.reviewingAgain(folders), movedWaiting = LiveFolders.reviewingAgain(waiting)
+            if moved != folders || movedWaiting != waiting {
                 folders = moved
+                waiting = movedWaiting
                 save()
             }
         }
@@ -884,10 +894,11 @@ final class LiveFolders {
     }
 
     private func save() {
-        guard folders != lastSaved else { return }
-        lastSaved = folders
-        let folders = folders, foreign = foreign
-        Disk.write(LiveFolders.file) { LiveFile.written(folders, foreign: foreign) }
+        let all = folders + waiting
+        guard all != lastSaved else { return }
+        lastSaved = all
+        let foreign = foreign
+        Disk.write(file) { LiveFile.written(all, foreign: foreign) }
     }
 
     private func change(_ id: UUID, _ edit: (inout LiveFolder) -> Void) {
@@ -946,6 +957,13 @@ final class LiveFolders {
 
     static func housed(_ folders: [LiveFolder], in spaces: Set<UUID>) -> [LiveFolder] {
         folders.filter { spaces.contains($0.space) }
+    }
+
+    static func housing(_ folders: [LiveFolder], in spaces: Set<UUID>?) -> (shown: [LiveFolder], waiting: [LiveFolder]) {
+        guard let spaces else {
+            return (housed(folders, in: [Space.firstID]), folders.filter { $0.space != Space.firstID })
+        }
+        return (housed(folders, in: spaces), [])
     }
 
     func rename(_ id: UUID, to name: String) { change(id) { $0.name = name } }
