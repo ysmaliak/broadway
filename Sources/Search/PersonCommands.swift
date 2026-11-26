@@ -380,6 +380,10 @@ enum PersonAsk {
         return title(noun: call.noun, verb: call.verb, site: site)
     }
 
+    static func yesWord(_ act: AgentAct, title: String) -> String? {
+        act == .delete && title.hasPrefix("Remove ") ? "Remove" : nil
+    }
+
     static func title(noun: String, verb: String, site: String?) -> String {
         guard let words = titles["\(noun) \(verb)"] else { return generic }
         return words.replacingOccurrences(of: "SITE", with: site ?? "this page")
@@ -396,6 +400,7 @@ enum PersonAsk {
         let pass = "person|\(act.rawValue)|\(site ?? "")|\(call.line)"
         if let link = call.link, AgentLinks.shared.takePass(link.id, pass) { return }
         var question = AgentQuestion(kind: .approval(act), title: asked ?? title(for: call, site: site))
+        question.yesWord = yesWord(act, title: question.title)
         question.tab = call.tab?.tab.id
         question.site = site
         question.quote = AgentQuestion.clean(call.line)

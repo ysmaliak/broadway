@@ -10,7 +10,7 @@ struct ExtensionRowDetailTests {
     @Test func anExtensionNotYetLoadedWhileBroadwayStartsThemSaysStarting() {
         let detail = ExtensionsLogic.detail(item, nil, Extensions.shared, starting: true, updateTrouble: nil)
 
-        #expect(detail == "Version 2 · Chrome Web Store · Starting")
+        #expect(detail == "Version 2 · Chrome Web Store · starting")
     }
 
     @Test func anExtensionStillNotLoadedOnceStartedSaysItCouldNotStart() {
@@ -51,6 +51,6 @@ struct ExtensionRowDetailTests {
 
         let detail = ExtensionsLogic.detail(off, nil, Extensions.shared, starting: false, updateTrouble: "The extension's signature doesn't hold up")
 
-        #expect(detail == "Version 2 · Chrome Web Store · Couldn't update: The extension's signature doesn't hold up")
+        #expect(detail == "Version 2 · Chrome Web Store · couldn't update: The extension's signature doesn't hold up")
     }
 }

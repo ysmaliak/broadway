@@ -12,7 +12,7 @@ enum OpenRouterModels {
 }
 
 enum OpenRouterTrouble: Error, LocalizedError, Equatable {
-    case refused, noCredit, busy, unreachable, nonsense, testRun
+    case refused, noCredit, busy, gone, down, unreachable, nonsense, testRun
 
     var errorDescription: String? { words }
 
@@ -21,6 +21,8 @@ enum OpenRouterTrouble: Error, LocalizedError, Equatable {
         case .refused: return "OpenRouter turned this key down"
         case .noCredit: return "Your OpenRouter account is out of credit"
         case .busy: return "OpenRouter asked Broadway to slow down"
+        case .gone: return "OpenRouter no longer has the model Broadway uses"
+        case .down: return "OpenRouter couldn't answer just now"
         case .unreachable: return "Broadway couldn't reach OpenRouter"
         case .nonsense: return "OpenRouter's answer made no sense"
         case .testRun: return "A test run never calls OpenRouter"
@@ -32,7 +34,9 @@ enum OpenRouterTrouble: Error, LocalizedError, Equatable {
         case 200..<300: return nil
         case 401, 403: return .refused
         case 402: return .noCredit
-        case 408, 429, 502, 503, 504, 524: return .busy
+        case 404: return .gone
+        case 429: return .busy
+        case 408, 500...599: return .down
         default: return .nonsense
         }
     }

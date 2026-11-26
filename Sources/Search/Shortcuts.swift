@@ -92,10 +92,11 @@ struct KeyCombo: Codable, Hashable {
             KeyCombo("`"), KeyCombo("`", shift: true), KeyCombo("f", control: true),
             KeyCombo("space"), KeyCombo("space", command: false, control: true),
             KeyCombo("space", option: true), KeyCombo("space", command: false, option: true, control: true),
-            KeyCombo("[", shift: true), KeyCombo("]", shift: true), KeyCombo("left"), KeyCombo("right"),
-            KeyCombo("v", shift: true, option: true),
         ]
         if system.contains(combo) { return "macOS uses this key" }
+        if [KeyCombo("[", shift: true), KeyCombo("]", shift: true)].contains(combo) { return "Switching tabs uses this key" }
+        if [KeyCombo("left"), KeyCombo("right")].contains(combo) { return "Back and Forward use this key" }
+        if combo == KeyCombo("v", shift: true, option: true) { return "Paste and Match Style uses this key" }
         if combo.key == "escape" { return "Escape and Tab can't be shortcuts" }
         if combo.key == "tab", combo.command || !(combo.control || combo.option) { return "Escape and Tab can't be shortcuts" }
         let digit = combo.key.count == 1 && ("1"..."9").contains(combo.key)

@@ -469,12 +469,12 @@ final class DecisionsStub: URLProtocol {
         (401, OpenRouterTrouble.refused),
         (402, OpenRouterTrouble.noCredit),
         (403, OpenRouterTrouble.refused),
-        (404, OpenRouterTrouble.nonsense),
+        (404, OpenRouterTrouble.gone),
         (400, OpenRouterTrouble.nonsense),
         (429, OpenRouterTrouble.busy),
-        (500, OpenRouterTrouble.nonsense),
-        (503, OpenRouterTrouble.busy),
-        (524, OpenRouterTrouble.busy),
+        (500, OpenRouterTrouble.down),
+        (503, OpenRouterTrouble.down),
+        (524, OpenRouterTrouble.down),
     ])
     func aRefusedRequestSaysWhyWithoutTheKey(status: Int, expected: OpenRouterTrouble) async throws {
         let host = "status-\(status).test"

@@ -33,6 +33,18 @@ final class KeyBoxTests {
         #expect(first.label != "Type a shortcut")
     }
 
+    @Test func aListeningBoxWritesInTheInkOfItsDarkPill() {
+        let first = box("view.reload")
+        let words = first.kitSubviews(of: KitLabel.self).first
+        first.listen()
+
+        #expect(words?.color == KitPill.ink(.primary))
+
+        first.stop()
+        #expect(words != nil)
+        #expect(words?.color != KitPill.ink(.primary))
+    }
+
     @Test func startingAnotherBoxStopsTheFirst() {
         let first = box("view.reload")
         let second = box("tabs.duplicate")

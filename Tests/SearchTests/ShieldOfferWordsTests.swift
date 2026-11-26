@@ -12,10 +12,16 @@ struct ShieldOfferWordsTests {
         #expect(ShieldOfferView.words(blockers: ["Example Blocker"]) == "Page not working? Example Blocker still blocks here. Pause it from its own button.")
     }
 
-    @Test func severalBlockingExtensionsAreAllNamed() {
+    @Test func twoBlockingExtensionsAreBothNamed() {
+        let words = ShieldOfferView.words(blockers: ["First Blocker", "Second Blocker"])
+
+        #expect(words == "Page not working? First Blocker and Second Blocker still block here. Pause them from their own buttons.")
+    }
+
+    @Test func threeOrMoreBlockingExtensionsAreCountedSoTheOfferStaysOneLine() {
         let words = ShieldOfferView.words(blockers: ["First Blocker", "Second Blocker", "Third Blocker"])
 
-        #expect(words == "Page not working? First Blocker, Second Blocker and Third Blocker still block here. Pause them from their own buttons.")
+        #expect(words == "Page not working? 3 extensions still block here. Pause them from their own buttons.")
     }
 
     @Test func anExtensionWithAnEnabledRulesetBlocks() {

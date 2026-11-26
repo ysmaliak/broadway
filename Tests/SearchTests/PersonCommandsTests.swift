@@ -73,6 +73,13 @@ final class PersonCommandsTests {
         #expect(PersonAsk.title(noun: "spaces", verb: "delete", site: nil) == "Delete a space?")
     }
 
+    @Test func aQuestionThatAsksToRemoveAnswersWithRemove() {
+        #expect(PersonAsk.yesWord(.delete, title: PersonAsk.title(noun: "bookmarks", verb: "delete", site: nil)) == "Remove")
+        #expect(PersonAsk.yesWord(.delete, title: PersonAsk.title(noun: "live", verb: "delete", site: nil)) == "Remove")
+        #expect(PersonAsk.yesWord(.delete, title: PersonAsk.title(noun: "spaces", verb: "delete", site: nil)) == nil)
+        #expect(PersonAsk.yesWord(.send, title: "Remove a folder?") == nil)
+    }
+
     @Test func shieldsUpdateWaitsAndSaysWhyTheListsCouldNotBeFetched() async throws {
         let lists = ShieldLists.shared
         let before = lists.sources

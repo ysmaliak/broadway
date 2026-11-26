@@ -29,9 +29,11 @@ final class ShieldOfferView: AskLine {
 
     static func words(blockers: [String]) -> String {
         guard let last = blockers.last else { return "Page not working?" }
-        guard blockers.count > 1 else { return "Page not working? \(last) still blocks here. Pause it from its own button." }
-        let names = blockers.dropLast().joined(separator: ", ") + " and " + last
-        return "Page not working? \(names) still block here. Pause them from their own buttons."
+        switch blockers.count {
+        case 1: return "Page not working? \(last) still blocks here. Pause it from its own button."
+        case 2: return "Page not working? \(blockers[0]) and \(last) still block here. Pause them from their own buttons."
+        default: return "Page not working? \(blockers.count) extensions still block here. Pause them from their own buttons."
+        }
     }
 
     private func allow() {

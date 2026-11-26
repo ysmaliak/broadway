@@ -51,8 +51,8 @@ enum ExtensionsLogic {
 
     static func detail(_ item: Installed, _ context: WKWebExtensionContext?, _ extensions: Extensions, starting: Bool, updateTrouble: String?) -> String {
         var parts = ["Version \(item.version)", item.fromStore ? "Chrome Web Store" : folder(item)]
-        if item.enabled, context == nil { parts.append(starting ? "Starting" : "couldn't start") }
-        if let updateTrouble { parts.append("Couldn't update: \(updateTrouble)") }
+        if item.enabled, context == nil { parts.append(starting ? "starting" : "couldn't start") }
+        if let updateTrouble { parts.append("couldn't update: \(updateTrouble)") }
         if extensions.newTabPageID == item.id { parts.append("shows in new tabs") }
         if context?.hasAccessToPrivateData == true { parts.append("allowed in private windows") }
         if let errors = context.map(Extensions.errors(of:)), !errors.isEmpty { parts.append("\(errors.count) warning\(errors.count == 1 ? "" : "s")") }

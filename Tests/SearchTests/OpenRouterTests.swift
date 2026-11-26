@@ -224,7 +224,7 @@ final class OpenRouterTests {
     }
 
     @Test func troubleIsSaidInPlainWordsAndNeverRepeatsTheServer() async {
-        let answers: [(Int, OpenRouterTrouble)] = [(401, .refused), (403, .refused), (402, .noCredit), (429, .busy), (503, .busy), (500, .nonsense)]
+        let answers: [(Int, OpenRouterTrouble)] = [(401, .refused), (403, .refused), (402, .noCredit), (429, .busy), (404, .gone), (503, .down), (500, .down), (400, .nonsense)]
         for (status, trouble) in answers {
             let stub = OpenRouterStub { _, _ in (status, ["error": ["code": status, "message": "sk-or-bad-SECRET leaked"]]) }
             await #expect(throws: trouble) { try await stub.client.check(key: "sk-or-bad-SECRET") }
@@ -236,6 +236,16 @@ final class OpenRouterTests {
         await #expect(throws: OpenRouterTrouble.nonsense) {
             _ = try await empty.client.chat(key: "sk-or-good-1", model: "m", system: "", prompt: "")
         }
+    }
+
+    @Test func aModelThatIsGoneAndOpenRouterFailingHaveWordsOfTheirOwn() {
+        #expect(OpenRouterTrouble.of(status: 404)?.words == "OpenRouter no longer has the model Broadway uses")
+        for status in [408, 500, 502, 503, 504, 524] {
+            #expect(OpenRouterTrouble.of(status: status)?.words == "OpenRouter couldn't answer just now")
+        }
+        #expect(OpenRouterTrouble.of(status: 429)?.words == "OpenRouter asked Broadway to slow down")
+        #expect(OpenRouterTrouble.of(status: 422)?.words == "OpenRouter's answer made no sense")
+        #expect(AIGroupWords.keyLine(state: .saved, trouble: OpenRouterTrouble.gone.words) == OpenRouterTrouble.gone.words)
     }
 
     @Test func aKeyIsCheckedBeforeItIsKeptAndRemovingItForgetsIt() async {
@@ -422,10 +432,10 @@ final class OpenRouterTests {
             (decider.reason(status: 403), .refused),
             (decider.reason(status: 402), .noCredit),
             (decider.reason(status: 429), .busy),
-            (decider.reason(status: 503), .busy),
-            (decider.reason(status: 404), .nonsense),
+            (decider.reason(status: 503), .down),
+            (decider.reason(status: 404), .gone),
             (decider.reason(status: 400), .nonsense),
-            (decider.reason(status: 500), .nonsense),
+            (decider.reason(status: 500), .down),
             (OpenRouterDecider.reason(URLError(.notConnectedToInternet)), .unreachable),
             (ProviderError.failed("The answer from \(OpenRouterModels.grouping) couldn't be read"), .nonsense),
         ]
@@ -526,7 +536,7 @@ final class OpenRouterTests {
         #expect(AIGroupWords.keyLine(state: .saved, trouble: "Your OpenRouter account is out of credit")
                 == "Your OpenRouter account is out of credit")
         #expect(AIGroupWords.stepLine(mac: true)
-                == "OpenRouter sorts and names your folders. Only tab titles, site names and searches are sent. It costs a fraction of a cent a folder on your account, and the key stays in this Mac's Keychain.")
+                == "OpenRouter sorts and names your folders. Only tab titles, site names, folder names and searches are sent. It costs a fraction of a cent a folder on your account, and the key stays in this Mac's Keychain.")
         let row = SettingsIndex.item("groups.openrouter")
         #expect(row?.detail == "Add your own key and OpenRouter names folders. The key stays in this Mac's Keychain.")
         #expect(row?.title == "OpenRouter key")

@@ -687,6 +687,11 @@ final class OnboardingTests {
         #expect(onboarding.step == .key)
     }
 
+    @Test func theKeyStepNamesFolderNamesAmongWhatIsSent() {
+        #expect(AIGroupWords.stepLine(mac: true).contains("Only tab titles, site names, folder names and searches are sent."))
+        #expect(AIGroupWords.stepLine(mac: false).contains("Only tab titles, site names, folder names and searches go to OpenRouter."))
+    }
+
     @Test func onAMacWithoutAppleIntelligenceTheKeyIsWhatTurnsOnFolders() {
         let line = AIGroupWords.stepLine(mac: false)
 

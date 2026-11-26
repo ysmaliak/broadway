@@ -183,7 +183,7 @@ final class KeyBoxView: KitBroadwayButton {
             needsLayout = true
         }
         words.font = .systemFont(ofSize: 12, weight: store.isChanged(id) ? .semibold : .regular)
-        words.color = listening || store.key(for: id) != nil ? .labelColor : .secondaryLabelColor
+        words.color = listening ? KitPill.ink(.primary) : store.key(for: id) != nil ? .labelColor : .secondaryLabelColor
         look = .pill(listening ? .primary : .secondary)
         setAccessibilityLabel(spoken ?? text)
     }

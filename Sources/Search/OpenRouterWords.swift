@@ -26,9 +26,9 @@ enum AIGroupWords {
 
     static func stepLine(mac: Bool) -> String {
         if !mac {
-            return "A key is what turns on folders on this Mac. Only tab titles, site names and searches go to OpenRouter. It costs a fraction of a cent a folder on your account, and the key stays in this Mac's Keychain."
+            return "A key is what turns on folders on this Mac. Only tab titles, site names, folder names and searches go to OpenRouter. It costs a fraction of a cent a folder on your account, and the key stays in this Mac's Keychain."
         }
-        return "OpenRouter sorts and names your folders. Only tab titles, site names and searches are sent. It costs a fraction of a cent a folder on your account, and the key stays in this Mac's Keychain."
+        return "OpenRouter sorts and names your folders. Only tab titles, site names, folder names and searches are sent. It costs a fraction of a cent a folder on your account, and the key stays in this Mac's Keychain."
     }
 
     static let getKey = "Get a Key"

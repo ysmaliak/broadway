@@ -98,6 +98,15 @@ final class ShortcutTests {
         #expect(KeyCombo.reserved(KeyCombo("d")) == nil)
     }
 
+    @Test func aKeyBroadwayHandlesByHandNamesTheCommandThatUsesIt() {
+        #expect(KeyCombo.reserved(KeyCombo("[", shift: true)) == "Switching tabs uses this key")
+        #expect(KeyCombo.reserved(KeyCombo("]", shift: true)) == "Switching tabs uses this key")
+        #expect(KeyCombo.reserved(KeyCombo("left")) == "Back and Forward use this key")
+        #expect(KeyCombo.reserved(KeyCombo("right")) == "Back and Forward use this key")
+        #expect(KeyCombo.reserved(KeyCombo("v", shift: true, option: true)) == "Paste and Match Style uses this key")
+        #expect(KeyCombo.reserved(KeyCombo("v")) == "macOS uses this key")
+    }
+
     @Test func resetToDefaultSaysWhichCommandItTookTheKeyFrom() {
         let store = ShortcutStore()
         store.assign(KeyCombo("d"), to: "view.reload")
