@@ -24,7 +24,7 @@ enum PersonGroups {
                 throw PersonRefusal("refused", "Grouping tabs automatically is off", hint: "Turn it on with broadway settings open ai.groups")
             }
             guard settings.deciding != nil else {
-                throw PersonRefusal("refused", "Grouping tabs needs Apple Intelligence on this Mac")
+                throw PersonRefusal("refused", AIGroupWords.needs)
             }
         }) { call in
             let outcome = await AIGroups.shared.grouper(for: call.browser).regroup()

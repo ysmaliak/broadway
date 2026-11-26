@@ -133,7 +133,7 @@ Nothing it writes is read.
 6. The program is started by itself, by its path, with no shell, no arguments, a small fixed environment and your home as its folder.
 7. A `permission` hook is bound to the program as it was when you approved it. Broadway keeps a hash of the file. If the file has changed, the hook doesn't run, and its row says `Changed since you approved it` with `Approve Again` in its menu. Broadway runs a copy of exactly the bytes it checked, so the file can't be swapped between the check and the run. A permission program that looks up its own path finds that copy, in a folder of Broadway's own, and not the file you chose. Other kinds of hook run as the file stands.
 8. A hook can only narrow or choose among what you could do by hand. It can't allow what Settings forbids for every site, such as notifications when Settings › Privacy turns them off, and it can't answer for a site you have already answered for.
-9. A hook can't hold Broadway up. After its second, or its thirty, Broadway does what it would have done with no hook. Three time-outs or crashes in a row switch the hook off, and its row says why. Turning it back on starts the count again.
+9. A hook can't hold Broadway up. After its second, or its thirty, Broadway does what it would have done with no hook. Three time-outs, crashes or failed starts in a row switch the hook off, and its row says why. Turning it back on starts the count again.
 10. In a test world hooks come from that world's own file and run only programs inside that world's folder.
 
 Programs on your Mac that can already write your files can also write `hooks.json`, the same as any of Broadway's settings files. Broadway doesn't sign the file.

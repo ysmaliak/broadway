@@ -20,6 +20,11 @@ struct HookOutcome: Equatable, Sendable {
         case .signalled, .timedOut, .notStarted: true
         }
     }
+
+    var started: Bool {
+        if case .notStarted = end { return false }
+        return true
+    }
 }
 
 enum HookRunner {

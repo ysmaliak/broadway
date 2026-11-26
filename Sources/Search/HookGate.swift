@@ -127,7 +127,7 @@ enum HookGate {
             case (_, .wrong(let why)): problem = why
             default: break
             }
-            book.note(hook.id, HookResult(at: now, problem: problem, said: outcome.complaint), missed: outcome.missed)
+            book.note(hook.id, HookResult(at: now, problem: problem, said: outcome.complaint), missed: outcome.missed, started: outcome.started)
             return reading
         }
     }

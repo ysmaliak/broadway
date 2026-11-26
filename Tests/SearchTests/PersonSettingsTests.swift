@@ -94,6 +94,21 @@ final class PersonSettingsTests {
         #expect(refused?.hint == "broadway history clear")
     }
 
+    @Test func readingGroupingSaysWhatItsRowSays() async throws {
+        let entry = try #require(PersonCommands.find("settings", "get"))
+        let key = OpenRouterKey.shared
+        key.use("sk-or-example-1")
+        defer { key.use(nil) }
+
+        let groups = try await entry.run(call("get", ["setting": "ai.groups"]))
+        let openRouter = try await entry.run(call("get", ["setting": "groups.openrouter"]))
+
+        #expect(groups["detail"] as? String == AIGroups.shared.sends)
+        #expect(openRouter["detail"] as? String == AIGroupWords.keyLine(state: key.state, trouble: key.trouble, remoteDecides: AIGroups.shared.remoteDecides))
+        #expect(groups["detail"] as? String != SettingsIndex.item("ai.groups")?.detail)
+        #expect(openRouter["detail"] as? String != SettingsIndex.item("groups.openrouter")?.detail)
+    }
+
     @Test func readingOneSettingSaysTheSameAsTheList() async throws {
         let entry = try #require(PersonCommands.find("settings", "get"))
 

@@ -106,7 +106,7 @@ enum PersonPages {
             data["zoom"] = Int((page.tab.zoom * 100).rounded())
             data["asleep"] = page.tab.asleep
             data["translated"] = page.tab.translation?.to ?? ""
-            data["shields"] = !Shield.shared.isPaused(on: page.tab.pageAddress?.host()) && call.browser.prefs.shielded
+            data["shields"] = !Shield.shared.isPaused(on: call.browser.curtain.host(of: page.tab.pageAddress)) && call.browser.prefs.shielded
             return data
         },
         PersonVerb("page", "reload", .arrange, tabbed: true) { call in
@@ -186,7 +186,7 @@ enum PersonPages {
             let page = try call.page
             let host = call.browser.curtain.host(of: page.tab.pageAddress)
             return ["site": host ?? "", "zoom": Int((page.tab.zoom * 100).rounded()), "hidden": call.browser.curtain.veils(on: host).count,
-                    "shields": !Shield.shared.isPaused(on: page.tab.pageAddress?.host()) && call.browser.prefs.shielded,
+                    "shields": !Shield.shared.isPaused(on: call.browser.curtain.host(of: page.tab.pageAddress)) && call.browser.prefs.shielded,
                     "permissions": permissions(of: page.tab.pageAddress)]
         },
         PersonVerb("site", "hide", .arrange, tabbed: true) { call in

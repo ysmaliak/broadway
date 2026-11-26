@@ -114,10 +114,10 @@ All of these are in Settings › Agents, and none of them can be changed from th
 
 - **Let agents use Broadway.** Off until the person turns it on.
 - **Agents ask first: Ask, Auto or Bypass.**
-  - Ask asks before tabs, the Mac, signing in, sending, paying, deleting and uploading.
-  - Auto asks before the Mac, sending, paying, deleting and uploading.
+  - Ask asks before tabs, the Mac, signing in, sending, paying, giving access to an account, deleting and uploading.
+  - Auto asks before the Mac, sending, paying, giving access to an account, deleting and uploading.
   - Bypass never asks, except before using the Mac. Captchas and passkeys still stop for the person.
-- **Sites.** A site can be marked Always Here or Never Here from a question's answer. Never Here refuses every act on it. Always Here lets everything through except paying.
+- **Sites.** A site can be marked Always Here or Never Here from a question's answer. Never Here refuses every act on it. Always Here lets everything through except paying and giving access to an account.
 - **Always ask before an agent signs in.** Off at first. On, the sign-in card shows every time in every mode.
 - **Sign-ins without asking.** Each Always Here given on a sign-in card is listed under Sites as "Signs in as NAME without asking", and only the person removes it.
 - **Let agents ask for a saved password.** Off until the person turns it on. A password never leaves Broadway except this way: `broadway logins give SITE` run on its own in a terminal on the Mac that runs Broadway, after the person's yes on a card in every mode, Bypass included, and Touch ID, every time. Never over MCP, in a batch or a script, or over ssh. The sign-in then shows who it was given to in Settings › Passwords.

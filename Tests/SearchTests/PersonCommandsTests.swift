@@ -31,6 +31,48 @@ final class PersonCommandsTests {
         PersonCall(noun: "tabs", verb: "list", arguments: arguments, browser: browser, box: box)
     }
 
+    @Test func shieldsOnDropsWwwAndSaysWhenTheSiteWasNotPaused() async throws {
+        Shield.shared.pause("shop.example", true)
+        defer { Shield.shared.pause("shop.example", false) }
+        let on = try #require(PersonCommands.find("shields", "on"))
+        let asked = PersonCall(noun: "shields", verb: "on", arguments: ["host": "WWW.Shop.Example"], browser: browser, box: box)
+
+        let first = try await on.run(asked)
+        let again = try await on.run(asked)
+
+        #expect(!Shield.shared.isPaused(on: "shop.example"))
+        #expect(first["site"] as? String == "shop.example")
+        #expect(first["message"] as? String == "On for shop.example")
+        #expect(again["message"] as? String == "Already on for shop.example")
+    }
+
+    @Test func pageInfoReadsASitesBlockingWithoutWww() async throws {
+        let tab = Tab(configuration: Web.configuration(space: browser.spaceID))
+        tab.restore(url: URL(string: "https://www.shop.example/basket")!, title: "Basket")
+        browser.showRow(browser.tabs + [tab], active: tab.id)
+        keepSetting(Shared.prefs, \.shielded, "shield")
+        browser.prefs.shielded = true
+        let info = try #require(PersonCommands.find("page", "info"))
+        var asked = PersonCall(noun: "page", verb: "info", arguments: [:], browser: browser, box: box)
+        asked.tab = (tab, browser)
+
+        let before = try await info.run(asked)
+        Shield.shared.pause("shop.example", true)
+        defer { Shield.shared.pause("shop.example", false) }
+        let paused = try await info.run(asked)
+
+        #expect(before["shields"] as? Bool == true)
+        #expect(paused["shields"] as? Bool == false)
+    }
+
+    @Test func removingAsksWithTheMenusVerbInSentenceCase() {
+        #expect(PersonAsk.title(noun: "bookmarks", verb: "delete", site: nil) == "Remove a bookmark?")
+        #expect(PersonAsk.title(noun: "folders", verb: "delete", site: nil) == "Remove a folder?")
+        #expect(PersonAsk.title(noun: "live", verb: "delete", site: nil) == "Remove a live folder?")
+        #expect(PersonAsk.title(noun: "extensions", verb: "remove", site: nil) == "Remove an extension?")
+        #expect(PersonAsk.title(noun: "spaces", verb: "delete", site: nil) == "Delete a space?")
+    }
+
     @Test func noVerbIsListedTwice() {
         let names = PersonCommands.table.map(\.name)
         #expect(names.count == Set(names).count)

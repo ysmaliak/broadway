@@ -205,9 +205,50 @@ final class SetupTests {
         let short = "model = \"o3\"\n[mcp_servers.broadway]\ncommand = \"broadway\"\ntool_timeout_sec = 60\n"
         let long = "[mcp_servers.broadway]\ntool_timeout_sec = 1200\n"
 
-        #expect(Setup.codexTimeout(missing) == "[mcp_servers.broadway]\ntool_timeout_sec = 900\ncommand = \"broadway\"\nargs = [\"mcp\"]\n\n[mcp_servers.other]\ntool_timeout_sec = 10\n")
-        #expect(Setup.codexTimeout(short) == "model = \"o3\"\n[mcp_servers.broadway]\ncommand = \"broadway\"\ntool_timeout_sec = 900\n")
+        #expect(Setup.codexTimeout(missing) == "[mcp_servers.broadway]\ntool_timeout_sec = 900  # written by broadway setup\ncommand = \"broadway\"\nargs = [\"mcp\"]\n\n[mcp_servers.other]\ntool_timeout_sec = 10\n")
+        #expect(Setup.codexTimeout(short) == "model = \"o3\"\n[mcp_servers.broadway]\ncommand = \"broadway\"\ntool_timeout_sec = 900  # written by broadway setup, was 60\n")
         #expect(Setup.codexTimeout(long) == nil)
         #expect(Setup.codexTimeout("[mcp_servers.other]\ncommand = \"x\"\n") == nil)
+        #expect(Setup.codexTimeout(Setup.codexTimeout(short) ?? "") == nil)
+    }
+
+    @Test func removeTakesBackOnlyTheCodexTimeoutSetupWrote() {
+        let missing = "[mcp_servers.broadway]\ncommand = \"broadway\"\n\n[mcp_servers.other]\ntool_timeout_sec = 10\n"
+        let short = "[mcp_servers.broadway]\ncommand = \"broadway\"\ntool_timeout_sec = 60\n"
+        let edited = "[mcp_servers.broadway]\ntool_timeout_sec = 1200  # written by broadway setup, was 60\n"
+        let older = "[mcp_servers.broadway]\ntool_timeout_sec = 900\n"
+
+        #expect(Setup.codexTimeoutTaken(Setup.codexTimeout(missing) ?? "") == missing)
+        #expect(Setup.codexTimeoutTaken(Setup.codexTimeout(short) ?? "") == short)
+        #expect(Setup.codexTimeoutTaken(edited) == nil)
+        #expect(Setup.codexTimeoutTaken(older) == "[mcp_servers.broadway]\n")
+        #expect(Setup.codexTimeoutTaken("[mcp_servers.other]\ntool_timeout_sec = 900\n") == nil)
+    }
+
+    @Test func setupAndRemoveWriteThroughALinkedZshrcAndCodexConfig() throws {
+        let files = FileManager.default
+        let dotfiles = home.appendingPathComponent("dotfiles")
+        try files.createDirectory(at: dotfiles, withIntermediateDirectories: true)
+        try files.createDirectory(atPath: paths.codex, withIntermediateDirectories: true)
+        let zshrc = dotfiles.appendingPathComponent("zshrc").path
+        let config = dotfiles.appendingPathComponent("config.toml").path
+        let shell = "export EDITOR=vi\n"
+        let codex = "[mcp_servers.broadway]\ncommand = \"broadway\"\ntool_timeout_sec = 60\n"
+        try Data(shell.utf8).write(to: URL(fileURLWithPath: zshrc))
+        try Data(codex.utf8).write(to: URL(fileURLWithPath: config))
+        try files.createSymbolicLink(atPath: paths.zshrc, withDestinationPath: zshrc)
+        try files.createSymbolicLink(atPath: paths.codexConfig, withDestinationPath: config)
+
+        _ = Setup.install(["completions", "codex"], paths: paths, binary: binary)
+        let linkedShell = try String(contentsOfFile: zshrc, encoding: .utf8)
+        let linkedCodex = try String(contentsOfFile: config, encoding: .utf8)
+        _ = Setup.uninstall(["completions", "codex"], paths: paths)
+
+        #expect(linkedShell.contains(Setup.opening))
+        #expect(linkedCodex.contains("tool_timeout_sec = 900"))
+        #expect(try files.destinationOfSymbolicLink(atPath: paths.zshrc) == zshrc)
+        #expect(try files.destinationOfSymbolicLink(atPath: paths.codexConfig) == config)
+        #expect(try String(contentsOfFile: zshrc, encoding: .utf8) == shell)
+        #expect(try String(contentsOfFile: config, encoding: .utf8) == codex)
     }
 }

@@ -355,6 +355,16 @@ enum PersonSettings {
         }
     }
 
+    static func shown(_ item: SettingsItem) -> String {
+        switch item.id {
+        case "ai.groups": return AIGroups.shared.sends
+        case "groups.openrouter":
+            let key = OpenRouterKey.shared
+            return AIGroupWords.keyLine(state: key.state, trouble: key.trouble, remoteDecides: AIGroups.shared.remoteDecides)
+        default: return item.detail
+        }
+    }
+
     private static func item(_ call: PersonCall) throws -> SettingsItem {
         let id = try call.need("setting")
         guard let found = SettingsIndex.item(id) else {
@@ -424,7 +434,7 @@ enum PersonSettings {
         },
         PersonVerb("settings", "get", .look) { call in
             let found = try item(call)
-            let data: [String: Any] = ["id": found.id, "title": found.title, "detail": found.detail, "page": found.page.rawValue, "value": value(found, call.browser.prefs, shown: true)]
+            let data: [String: Any] = ["id": found.id, "title": found.title, "detail": shown(found), "page": found.page.rawValue, "value": value(found, call.browser.prefs, shown: true)]
             return data.merging(about(found.id)) { mine, _ in mine }
         },
         PersonVerb("settings", "set", .arrange, first: { _ = try planned($0) }) { call in
@@ -526,7 +536,9 @@ enum PersonSettings {
              "sites": Shield.shared.paused.sorted().map { ["site": $0] }]
         },
         PersonVerb("shields", "on", .arrange) { call in
-            let host = try call.need("host").lowercased()
+            let typed = try call.need("host").lowercased().trimmingCharacters(in: .whitespaces)
+            let host = typed.hasPrefix("www.") ? String(typed.dropFirst(4)) : typed
+            guard Shield.shared.isPaused(on: host) else { return ["site": host, "message": "Already on for \(host)"] }
             Shield.shared.pause(host, false)
             return ["site": host, "message": "On for \(host)"]
         },

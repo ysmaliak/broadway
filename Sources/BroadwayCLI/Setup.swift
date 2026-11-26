@@ -153,17 +153,42 @@ public enum Setup {
 
     static func codexTimeout(_ config: String) -> String? {
         var lines = config.components(separatedBy: "\n")
-        guard let header = lines.firstIndex(where: { ["[mcp_servers.broadway]", "[mcp_servers.\"broadway\"]"].contains($0.trimmingCharacters(in: .whitespaces)) }) else { return nil }
-        let end = lines[(header + 1)...].firstIndex { $0.trimmingCharacters(in: .whitespaces).hasPrefix("[") } ?? lines.count
-        let wanted = "tool_timeout_sec = \(codexToolTimeout)"
-        if let found = lines[(header + 1)..<end].firstIndex(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("tool_timeout_sec") }) {
-            let value = lines[found].split(separator: "=", maxSplits: 1).last.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+        guard let entry = codexEntry(lines) else { return nil }
+        let wanted = "tool_timeout_sec = \(codexToolTimeout)  # \(mark)"
+        if let found = timeoutLine(lines, in: entry) {
+            let value = timeoutValue(lines[found])
             guard (Double(value) ?? 0) < Double(codexToolTimeout) else { return nil }
-            lines[found] = wanted
+            lines[found] = wanted + ", was \(value)"
         } else {
-            lines.insert(wanted, at: header + 1)
+            lines.insert(wanted, at: entry.header + 1)
         }
         return lines.joined(separator: "\n")
+    }
+
+    static func codexTimeoutTaken(_ config: String) -> String? {
+        var lines = config.components(separatedBy: "\n")
+        guard let entry = codexEntry(lines), let found = timeoutLine(lines, in: entry),
+              timeoutValue(lines[found]) == String(codexToolTimeout) else { return nil }
+        if let was = lines[found].range(of: "# \(mark), was ") {
+            lines[found] = "tool_timeout_sec = " + lines[found][was.upperBound...].trimmingCharacters(in: .whitespaces)
+        } else {
+            lines.remove(at: found)
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private static func codexEntry(_ lines: [String]) -> (header: Int, end: Int)? {
+        guard let header = lines.firstIndex(where: { ["[mcp_servers.broadway]", "[mcp_servers.\"broadway\"]"].contains($0.trimmingCharacters(in: .whitespaces)) }) else { return nil }
+        return (header, lines[(header + 1)...].firstIndex { $0.trimmingCharacters(in: .whitespaces).hasPrefix("[") } ?? lines.count)
+    }
+
+    private static func timeoutLine(_ lines: [String], in entry: (header: Int, end: Int)) -> Int? {
+        lines[(entry.header + 1)..<entry.end].firstIndex { $0.trimmingCharacters(in: .whitespaces).hasPrefix("tool_timeout_sec") }
+    }
+
+    private static func timeoutValue(_ line: String) -> String {
+        let setting = line.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? line
+        return setting.split(separator: "=", maxSplits: 1).last.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
     }
 
     static func version(binary: String) -> String? {
@@ -307,7 +332,9 @@ public enum Setup {
         steps.append(script)
         if script.done, let content = text(paths.zshrc) {
             let changed = adding(block: zshBlock(paths: paths), to: content)
-            if changed != content { try? put(changed, at: paths.zshrc) }
+            if changed != content, (try? through(changed, at: paths.zshrc)) == nil {
+                steps[steps.count - 1] = Step(part: "zsh", done: false, path: paths.zshrc, note: "couldn't write it")
+            }
         }
         return steps
     }
@@ -322,7 +349,7 @@ public enum Setup {
             steps.append(write(skill(for: part, made: madeSkills(file)), at: file, part: part))
             steps.append(addHooks(part, paths: paths))
             if part == "codex", let config = text(paths.codexConfig), let changed = codexTimeout(config) {
-                let done = (try? put(changed, at: paths.codexConfig)) != nil
+                let done = (try? through(changed, at: paths.codexConfig)) != nil
                 steps.append(Step(part: part, done: done, path: paths.codexConfig, note: done ? "gave broadway's MCP entry a \(codexToolTimeout) s tool timeout" : "couldn't write it"))
             }
         }
@@ -413,7 +440,9 @@ public enum Setup {
             steps.append(take(paths.zsh, part: "zsh"))
             if let content = text(paths.zshrc) {
                 let changed = removing(from: content)
-                if changed != content { try? put(changed, at: paths.zshrc) }
+                if changed != content, (try? through(changed, at: paths.zshrc)) == nil {
+                    steps[steps.count - 1] = Step(part: "zsh", done: false, path: paths.zshrc, note: "couldn't write it")
+                }
             }
         }
         if wanted.contains("claude") {
@@ -423,6 +452,10 @@ public enum Setup {
         if wanted.contains("codex") {
             steps.append(takeSkill(paths.codexSkill, part: "codex"))
             steps.append(takeHooks("codex", paths: paths))
+            if let config = text(paths.codexConfig), let changed = codexTimeoutTaken(config) {
+                let done = (try? through(changed, at: paths.codexConfig)) != nil
+                steps.append(Step(part: "codex", done: done, path: paths.codexConfig, note: done ? "took back the tool timeout setup gave broadway's MCP entry" : "couldn't write it"))
+            }
         }
         for part in others where wanted.contains(part) {
             steps.append(takeSkill(paths.skill(part), part: part))

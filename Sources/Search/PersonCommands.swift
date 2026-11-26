@@ -336,7 +336,7 @@ enum PersonAsk {
         "page translate": "Translate this page?",
         "page original": "Show this page untranslated?",
         "bookmarks add": "Add a bookmark?",
-        "bookmarks delete": "Delete a bookmark?",
+        "bookmarks delete": "Remove a bookmark?",
         "bookmarks open": "Open a bookmark?",
         "history delete": "Delete pages from your history?",
         "history clear": "Clear your history?",
@@ -369,8 +369,8 @@ enum PersonAsk {
         "extensions remove": "Remove an extension?",
         "permissions reset": "Reset a site's permissions?",
         "skills delete": "Delete a skill?",
-        "live delete": "Delete a Live Folder?",
-        "folders delete": "Delete a folder?",
+        "live delete": "Remove a live folder?",
+        "folders delete": "Remove a folder?",
         "folders close": "Close a folder's tabs?",
     ]
 

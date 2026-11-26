@@ -13,6 +13,11 @@ private final class FakeReader: ReplyReader {
     }
 }
 
+@MainActor
+private final class Asked {
+    var count = 0
+}
+
 @Suite(.sharedWorld, .timeLimit(.minutes(5)))
 @MainActor
 final class EyeOnThingsTests {
@@ -119,6 +124,19 @@ final class EyeOnThingsTests {
         let tab = quiet.benchOpen(URL(string: "https://mail.example/t")!)
 
         #expect(!tab.canBeRead)
+    }
+
+    @Test func theReaderLooksForALiveWindowEachTimeItReads() async {
+        let url = URL(string: "https://mail.example/t")!
+        let asked = Asked()
+        let reader = TabReplyReader { asked.count += 1; return nil }
+
+        let first = await reader.text(of: url)
+        let second = await reader.text(of: url)
+
+        #expect(first == nil)
+        #expect(second == nil)
+        #expect(asked.count == 2)
     }
 
     @Test func agentsOffStopsTheChecks() async {

@@ -164,6 +164,18 @@ final class HookFileTests {
         #expect(lab.book.misses[hook.id] == 0)
     }
 
+    @Test func aHookThatCantStartIsSwitchedOffForThatReason() throws {
+        let hook = try lab.add(.link, lab.program("links", "echo '{}'"))
+        let outcome = HookOutcome(end: .notStarted("Permission denied"))
+
+        for _ in 0..<HookBook.missesAllowed {
+            lab.book.note(hook.id, HookResult(at: Date(), problem: "Couldn't start: Permission denied"), missed: outcome.missed, started: outcome.started)
+        }
+
+        #expect(lab.book.hook(hook.id)?.on == false)
+        #expect(lab.book.hook(hook.id)?.off == "Switched off because it couldn't start")
+    }
+
     @Test func removingAHookTakesItOutOfTheFile() throws {
         let hook = try lab.add(.link, lab.program("links", "echo '{}'"))
 

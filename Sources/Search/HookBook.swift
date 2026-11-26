@@ -117,6 +117,7 @@ final class HookBook {
     static let fileVersion = 1
     static let missesAllowed = 3
     static let switchedOff = "Switched off after three time-outs or crashes in a row"
+    static let couldntStart = "Switched off because it couldn't start"
     static let changedWords = "Changed since you approved it"
 
     private(set) var entries: [HookEntry] = []
@@ -209,7 +210,7 @@ final class HookBook {
         save()
     }
 
-    func note(_ id: UUID, _ result: HookResult, missed: Bool) {
+    func note(_ id: UUID, _ result: HookResult, missed: Bool, started: Bool = true) {
         results[id] = result
         guard hook(id) != nil else { return }
         if missed {
@@ -219,7 +220,7 @@ final class HookBook {
                 misses[id] = 0
                 change(id) {
                     $0.on = false
-                    $0.off = HookBook.switchedOff
+                    $0.off = started ? HookBook.switchedOff : HookBook.couldntStart
                 }
             }
         } else {

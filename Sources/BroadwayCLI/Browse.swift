@@ -518,18 +518,19 @@ enum Render {
         if let command, !cappedTools.contains(command.tool) { return text }
         let split = cut(text)
         guard split.rest else { return text }
-        let folder = ((context.place.socket as NSString).deletingLastPathComponent as NSString).appendingPathComponent("Agent Downloads/Long answers")
         let format = DateFormatter()
         format.dateFormat = "yyyyMMdd-HHmmss"
-        let path = (folder as NSString).appendingPathComponent("\(command?.name ?? "answer")-\(format.string(from: Date()))-\(getpid()).txt")
-        do {
-            try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
-            try Data(text.utf8).write(to: URL(fileURLWithPath: path), options: .atomic)
-        } catch {
-            return text
-        }
+        guard let path = try? long(text, named: "\(command?.name ?? "answer")-\(format.string(from: Date()))-\(getpid()).txt", in: Given.root) else { return text }
         let kilobytes = (text.utf8.count - split.shown.utf8.count + 1023) / 1024
         return split.shown + "… \(kilobytes) KB more, the whole answer is in \(path)\n"
+    }
+
+    static func long(_ text: String, named name: String, in root: URL) throws -> String {
+        let folder = root.appendingPathComponent("broadway-long-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+        let path = folder.appendingPathComponent(name).path
+        try Data(text.utf8).write(to: URL(fileURLWithPath: path), options: .atomic)
+        return path
     }
 
     static func table(_ rows: [[String: Any]], columns given: [String], context: Context, tool: String? = nil) {

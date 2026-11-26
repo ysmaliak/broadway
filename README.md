@@ -67,7 +67,6 @@ The `Tests/*.py` probes drive a real `build/Broadway.app` in a hidden test world
 `broadway` drives the browser from a terminal, for you, your scripts and coding agents. Set it up from Settings, or run `Broadway.app/Contents/Helpers/broadway setup`, then:
 
 ```sh
-broadway "find the cheapest flight to Lisbon"
 broadway open https://example.com
 broadway snapshot
 broadway click @e3

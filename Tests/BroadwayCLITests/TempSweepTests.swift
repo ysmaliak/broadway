@@ -56,6 +56,25 @@ struct TempSweepTests {
         #expect(files.fileExists(atPath: second.deletingLastPathComponent().path))
     }
 
+    @Test func aLongAnswerIsKeptInATemporaryFolderThatBothSweepsTake() throws {
+        let root = files.temporaryDirectory.appendingPathComponent("sweep-long-" + UUID().uuidString)
+        try files.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? files.removeItem(at: root) }
+
+        let path = URL(fileURLWithPath: try Render.long("page text\n", named: "text-20261124-225946-42.txt", in: root))
+        let folder = path.deletingLastPathComponent()
+        let fresh = TempSweep.sweep(TempSweep.commandLine, in: root)
+        try files.setAttributes([.modificationDate: Date().addingTimeInterval(-3 * 86400)], ofItemAtPath: folder.path)
+        let old = TempSweep.sweep(TempSweep.made, in: root)
+
+        #expect(folder.deletingLastPathComponent().path == root.path)
+        #expect(folder.lastPathComponent.hasPrefix("broadway-long-"))
+        #expect(path.lastPathComponent == "text-20261124-225946-42.txt")
+        #expect(fresh.isEmpty)
+        #expect(old == [folder.lastPathComponent])
+        #expect(!files.fileExists(atPath: path.path))
+    }
+
     @Test func theCommandLineSweepsOnlyTheFoldersItMakes() throws {
         let root = files.temporaryDirectory.appendingPathComponent("sweep-\(UUID().uuidString)")
         try files.createDirectory(at: root, withIntermediateDirectories: true)
@@ -68,7 +87,7 @@ struct TempSweepTests {
         #expect(!files.fileExists(atPath: carried.path))
         #expect(files.fileExists(atPath: pdf.path))
         #expect(TempSweep.made.contains("broadway-carried-"))
-        #expect(TempSweep.commandLine == ["broadway-carried-", "broadway-shot-"])
+        #expect(TempSweep.commandLine == ["broadway-carried-", "broadway-shot-", "broadway-long-"])
     }
 
     @Test func theCommandLineSweepsAtMostOnceADay() throws {

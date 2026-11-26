@@ -173,7 +173,7 @@ enum Nouns {
         ]),
         Noun("groups", "Tab groups Broadway made with AI in the space on screen", group: "Spaces and tabs", [
             Verb("groups list", "List the AI groups", columns: ["id", "emoji", "name", "tabs", "renamed"]),
-            Verb("groups regroup", "Group the space's loose tabs now", about: "Runs on this Mac with Apple Intelligence. Folders you made are never touched."),
+            Verb("groups regroup", "Group the space's loose tabs now", about: "Runs with Apple Intelligence on this Mac or with your OpenRouter key. Folders you made are never touched."),
         ]),
         Noun("split", "Split View", group: "Spaces and tabs", [
             Verb("split list", "List the pairs", columns: ["id", "left", "right", "axis", "front"]),

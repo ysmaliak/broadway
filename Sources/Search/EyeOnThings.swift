@@ -48,14 +48,14 @@ protocol ReplyReader: AnyObject {
 
 @MainActor
 final class TabReplyReader: ReplyReader {
-    private weak var browser: Browser?
+    private let window: @MainActor () -> Browser?
 
-    init(browser: Browser) {
-        self.browser = browser
+    init(window: @escaping @MainActor () -> Browser? = { Browsers.primary }) {
+        self.window = window
     }
 
     func text(of url: URL) async -> String? {
-        guard let browser else { return nil }
+        guard let browser = window() else { return nil }
         let tab = browser.benchOpen(url)
         tab.agent = true
         Bench.shared.house(tab)
@@ -87,6 +87,7 @@ final class ReplyWatches {
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private weak var browser: Browser?
     @ObservationIgnored private var checking = false
+    @ObservationIgnored private var begun = false
     @ObservationIgnored var reader: ReplyReader?
 
     private(set) var watches: [ReplyWatch] = []
@@ -114,12 +115,13 @@ final class ReplyWatches {
 
     func begin(for browser: Browser) {
         self.browser = browser
-        if reader == nil { reader = TabReplyReader(browser: browser) }
+        begun = true
+        if reader == nil { reader = TabReplyReader() }
         startClock()
     }
 
     private func startClock() {
-        guard timer == nil, browser != nil, !watches.isEmpty else { return }
+        guard timer == nil, begun, !watches.isEmpty else { return }
         let made = Timer(timeInterval: Self.every, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
@@ -145,7 +147,7 @@ final class ReplyWatches {
 
     func check(now: Date = Date()) async {
         guard !checking, let reader else { return }
-        if let browser, !browser.prefs.agentsAllowed { return }
+        if let browser = browser ?? Browsers.primary, !browser.prefs.agentsAllowed { return }
         checking = true
         defer { checking = false }
         watches.removeAll { now.timeIntervalSince($0.replied ?? $0.started) > ($0.replied == nil ? Self.lasts : Self.rowLasts) }

@@ -1,8 +1,8 @@
 import Foundation
 
 public enum TempSweep {
-    public static let made = ["broadway-tiles-", "broadway-pdf-", "broadway-stdin-", "broadway-carried-", "broadway-shot-"]
-    public static let commandLine = ["broadway-carried-", "broadway-shot-"]
+    public static let made = ["broadway-tiles-", "broadway-pdf-", "broadway-stdin-", "broadway-carried-", "broadway-shot-", "broadway-long-"]
+    public static let commandLine = ["broadway-carried-", "broadway-shot-", "broadway-long-"]
     public static let age: TimeInterval = 86400
 
     @discardableResult
