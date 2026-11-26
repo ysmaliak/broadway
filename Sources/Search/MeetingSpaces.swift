@@ -331,7 +331,7 @@ extension Browser {
             return (self, spaceID)
         }
         guard showsSpaces else {
-            open(link, foreground: true, from: active)
+            open(link, foreground: true)
             return (self, spaceID)
         }
         let world = Browsers.linkWorld(from: self, rules: LinkRules.shared.rules)
@@ -346,7 +346,7 @@ extension Browser {
         MeetingSpaceMemory.shared.lastChoice = chosen.reason
         if chosen.reason == .current { MeetingSpaceMemory.shared.fell(link, into: spaceID) }
         guard chosen.space != spaceID else {
-            open(link, foreground: true, from: active)
+            open(link, foreground: true)
             return (self, spaceID)
         }
         let decision = LinkDecision(url: link, place: .space(chosen.space, folder: nil), rule: nil, steps: [], background: false)
