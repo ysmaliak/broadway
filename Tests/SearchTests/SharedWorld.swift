@@ -149,11 +149,12 @@ enum SessionWorld {
         Browser.nextEra()
         let folder = Store.folder
         let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
-        for name in names where files.contains(name) || (name.hasPrefix("session") && name.hasSuffix(".json")) {
+        for name in names where files.contains(name) || (name.hasPrefix("session") && (name.hasSuffix(".json") || name.hasSuffix(".plist"))) {
             Disk.remove(folder.appendingPathComponent(name))
         }
         Disk.drain()
         Pins.unload()
+        SessionStates.unload()
         Spaces.known = [Space.firstID: Space.first()]
         Spaces.current = Space.firstID
         Store.settings.removeObject(forKey: "space.current")

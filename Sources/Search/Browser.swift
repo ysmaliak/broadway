@@ -2934,6 +2934,7 @@ extension Browser {
             for space in Array(parked.keys) { pinsChanged(in: space) }
         }
         writeRow(spaceID, session(tabs, active: activeID, groups: tabGroups, splits: splits), now: now)
+        SessionStates.keep(tabs, space: spaceID, from: self, now: now)
     }
 
     // MARK: - pins, the same in every window
@@ -3369,7 +3370,8 @@ extension Browser {
                 trim: tab.trimWords,
                 live: tab.liveKey,
                 icon: tab.customIcon,
-                video: Resume.armed(tab.videoSpot, for: url)
+                video: Resume.armed(tab.videoSpot, for: url),
+                state: url.scheme?.hasPrefix("http") == true ? tab.stateKey : nil
             ))
         }
         // The tab you were on isn't kept — a private one: the one kept just
@@ -3412,6 +3414,8 @@ extension Browser {
     func writeSession(now: Bool, space: UUID, row: Parked) {
         let groups = row.groups ?? readRow(space).groups
         writeRow(space, session(row.tabs, active: row.active, groups: groups, splits: row.splits), now: now)
+        guard !keepsNothing else { return }
+        SessionStates.keep(row.tabs, space: space, from: self, now: now)
     }
 
     /// The session written a moment from now, for other files.
@@ -3432,6 +3436,8 @@ extension Browser {
     /// quit, before there is a process left to finish the wait on its behalf.
     func flushSession() {
         writeSession(now: true)
+        guard !keepsNothing else { return }
+        for (space, row) in parked { SessionStates.keep(row.tabs, space: space, from: self, now: true) }
     }
 
     // MARK: - tabs
@@ -5826,6 +5832,7 @@ extension Browser {
     private func restoreRow(_ saved: Session.Shape, space: UUID, groups: [TabGroup]) -> Parked {
         var row: [Tab] = []
         var bySavedIndex: [Int: Tab] = [:]
+        let states = keepsNothing ? [:] : SessionStates.read(space: space, naming: saved)
         for (savedIndex, entry) in saved.tabs.enumerated() {
             // An empty page is never written; the first builds of Split View
             // on main wrote one for an empty half.
@@ -5837,7 +5844,9 @@ extension Browser {
             let url = prefs.pinsGoHome ? home ?? saved : saved
             let tab = makeTab(space: space)
             prepare(tab)
-            tab.restore(url: url, title: url == saved ? entry.title : url.host ?? "", name: entry.name)
+            tab.restore(url: url, title: url == saved ? entry.title : url.host ?? "", name: entry.name,
+                        state: url == saved ? SessionStates.state(for: entry, in: states) : nil)
+            if let key = entry.state { tab.stateKey = key }
             tab.cameBack = true
             // Never later than now: a clock set wrong once would keep the tab forever.
             if let touched = entry.touched { tab.touch(at: min(touched, Date())) }

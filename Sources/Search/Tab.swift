@@ -806,6 +806,7 @@ final class Tab: Identifiable {
     /// — the back list, the page, where it was scrolled to — handed to the
     /// view built to wake it, so it opens exactly where this one was left.
     @ObservationIgnored private var memory: Any?
+    @ObservationIgnored var stateKey = UUID().uuidString
     /// The last picture of that page, compressed, for the moment it wakes.
     @ObservationIgnored private var picture: Data?
     /// That picture, over the stage while the page is rebuilt underneath it:
@@ -1581,7 +1582,7 @@ final class Tab: Identifiable {
 
     /// Brought back from the last session: everything the row needs to draw it,
     /// and nothing fetched.
-    func restore(url: URL, title: String, name: String? = nil) {
+    func restore(url: URL, title: String, name: String? = nil, state: Data? = nil) {
         if let own = InternalPage(url: url) {
             self.name = name
             if own.kind != .downloads { show(own) }
@@ -1592,7 +1593,19 @@ final class Tab: Identifiable {
         self.name = name
         lead(url, known: TitleSource.best(named: title) ?? knowsTitle?(url))
         pending = url
+        if let state, !shy { memory = state }
         adoptIcon()
+    }
+
+    var keptState: (url: URL, state: Data)? {
+        guard !shy, !bench, held == nil else { return nil }
+        if let pending {
+            guard pending.scheme?.hasPrefix("http") == true, let kept = memory as? Data else { return nil }
+            return (pending, kept)
+        }
+        guard let built, !built.isLoading, let url = built.url, url.scheme?.hasPrefix("http") == true,
+              let kept = built.interactionState as? Data else { return nil }
+        return (url, kept)
     }
 
     /// True for a tab that has a place and an address but is holding no page —
@@ -1814,6 +1827,7 @@ final class Tab: Identifiable {
         // the folder it may read, and showed nothing.
         if let state, !url.isFileURL {
             view.interactionState = state
+            if view.backForwardList.currentItem == nil { view.open(url) }
         } else {
             view.open(url)
         }
