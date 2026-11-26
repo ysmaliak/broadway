@@ -778,11 +778,7 @@ final class PanelEdgeHandle: KitHoverView {
             self.pill.fill = self.lit ? KitColor.muted : KitColor.faint
         }
         if animated, !Motion.reduced {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.18
-                context.allowsImplicitAnimation = true
-                apply()
-            }
+            NSAnimationContext.kit(Motion.kitEdge, implicit: true, apply)
         } else {
             apply()
         }

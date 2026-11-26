@@ -218,7 +218,7 @@ final class KitChoice: NSView {
             label.font = .systemFont(ofSize: KitChoice.font, weight: on ? .medium : .regular)
             label.opacity = opacity
             symbol?.opacity = opacity
-            fill.fill = pressed ? NSColor(white: dark ? 1 : 0, alpha: dark ? 0.14 : 0.08) : nil
+            fill.fill = pressed ? KitWash.plate.color(dark: dark) : nil
             needsLayout = true
         }
 

@@ -290,10 +290,7 @@ final class NewTabPageView: KitFlippedView {
             view.frame = frame
             return
         }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = duration
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            context.allowsImplicitAnimation = true
+        NSAnimationContext.kit(curve, implicit: true) {
             view.frame = frame
         }
     }
@@ -389,16 +386,7 @@ final class NewTabPageView: KitFlippedView {
     }
 
     private func shake() {
-        guard !Motion.reduced, let layer = glass.layer else { return }
-        let steps = 60
-        let travel = (0...steps).map { Double($0) / Double(steps) }
-        let wobble = CAKeyframeAnimation(keyPath: "transform.translation.x")
-        wobble.values = travel.map { sin($0 * .pi * 6) * 7 * (1 - $0) }
-        wobble.keyTimes = travel.map { NSNumber(value: $0) }
-        wobble.duration = 0.5
-        wobble.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        wobble.isAdditive = true
-        layer.add(wobble, forKey: "shake")
+        glass.layer?.kitShake()
     }
 
     private func inked() {

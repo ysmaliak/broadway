@@ -731,7 +731,7 @@ final class SettingsPopUp: NSView {
     }
 
     private func paint() {
-        circle.fill = kitDark ? NSColor(white: 1, alpha: 0.1) : NSColor(white: 0, alpha: 0.064)
+        circle.fill = KitWash.control.color(dark: kitDark)
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {

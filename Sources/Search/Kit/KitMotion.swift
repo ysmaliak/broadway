@@ -34,6 +34,22 @@ enum KitCurve: Equatable {
 
     var animates: Bool { self != .none }
 
+    var seconds: TimeInterval {
+        switch self {
+        case .none: 0
+        case .spring(let spring): spring.animation("opacity", from: 0, to: 1).settlingDuration
+        case .easeOut(let duration), .easeInOut(let duration): duration
+        }
+    }
+
+    var timing: CAMediaTimingFunction? {
+        switch self {
+        case .none: nil
+        case .spring, .easeOut: CAMediaTimingFunction(name: .easeOut)
+        case .easeInOut: CAMediaTimingFunction(name: .easeInEaseOut)
+        }
+    }
+
     func animation(_ keyPath: String, from: Any?, to: Any?, velocity: Double = 0) -> CAAnimation? {
         switch self {
         case .none: return nil
@@ -43,7 +59,7 @@ enum KitCurve: Equatable {
             basic.fromValue = from
             basic.toValue = to
             basic.duration = duration
-            basic.timingFunction = CAMediaTimingFunction(name: { if case .easeOut = self { return .easeOut } else { return .easeInEaseOut } }())
+            basic.timingFunction = timing
             return basic
         }
     }
@@ -51,6 +67,8 @@ enum KitCurve: Equatable {
 
 extension Motion {
     static let reducedFade: TimeInterval = 0.2
+    static let quick: TimeInterval = 0.12
+    static let edge: TimeInterval = 0.18
 
     static func staysUnderReduce(_ animation: CAAnimation) -> Bool {
         if let group = animation as? CAAnimationGroup { return (group.animations ?? []).allSatisfy(staysUnderReduce) }
@@ -63,9 +81,11 @@ extension Motion {
     static var kitSettle: KitCurve { reduced ? .none : light ? .easeOut(0.16) : .spring(.settle) }
     static var kitRoll: KitCurve { reduced ? .none : light ? .easeOut(0.16) : .spring(.roll) }
     static var kitCover: KitCurve { reduced ? .none : light ? .easeOut(0.2) : .spring(.cover) }
-    static var kitQuick: KitCurve { reduced ? .none : .easeOut(0.12) }
-    static var kitEdge: KitCurve { reduced ? .none : .easeOut(0.18) }
-    static var kitSlide: KitCurve { reduced ? .none : .easeOut(pane) }
+    static var kitQuick: KitCurve { reduced ? .none : .easeOut(quick) }
+    static var kitEdge: KitCurve { reduced ? .none : .easeOut(edge) }
+    static var kitSlide: KitCurve { reduced ? .none : .easeOut(slide) }
+    static var kitFade: KitCurve { .easeOut(reduced ? slide : quick) }
+    static var paneTiming: CAMediaTimingFunction { CAMediaTimingFunction(controlPoints: 0.22, 1, 0.36, 1) }
 
     static func kitFold(out: Bool) -> KitCurve {
         let fold = fold(out: out)
@@ -93,13 +113,35 @@ extension CALayer {
         let transition = CATransition()
         transition.type = type
         transition.subtype = subtype
-        switch curve {
-        case .spring(let spring): transition.duration = spring.animation("opacity", from: 0, to: 1).settlingDuration
-        case .easeOut(let duration), .easeInOut(let duration): transition.duration = duration
-        case .none: return
-        }
+        transition.duration = curve.seconds
         transition.timingFunction = CAMediaTimingFunction(name: .easeOut)
         add(transition, forKey: kCATransition)
+    }
+}
+
+extension CALayer {
+    func kitShake() {
+        guard !Motion.reduced else { return }
+        let steps = 60
+        let travel = (0...steps).map { Double($0) / Double(steps) }
+        let shake = CAKeyframeAnimation(keyPath: "transform.translation.x")
+        shake.values = travel.map { sin($0 * .pi * 6) * 7 * (1 - $0) }
+        shake.keyTimes = travel.map { NSNumber(value: $0) }
+        shake.duration = 0.5
+        shake.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        shake.isAdditive = true
+        add(shake, forKey: "shake")
+    }
+}
+
+extension NSAnimationContext {
+    static func kit(_ curve: KitCurve, implicit: Bool = false, _ changes: () -> Void, done: (() -> Void)? = nil) {
+        runAnimationGroup({ context in
+            context.duration = curve.seconds
+            context.timingFunction = curve.timing
+            context.allowsImplicitAnimation = implicit
+            changes()
+        }, completionHandler: done)
     }
 }
 

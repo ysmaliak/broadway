@@ -194,8 +194,7 @@ final class FullScreenEscape {
         fading = true
         fades += 1
         let fade = fades
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.2
+        NSAnimationContext.kit(Motion.kitEdge) {
             panel.animator().alphaValue = 0
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
@@ -313,8 +312,7 @@ final class FullScreenEscape {
         panel.place(over: window)
         // A child is ordered in with its window, and kept above it.
         if panel.parent !== window { window.addChildWindow(panel, ordered: .above) }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = Motion.reduced ? 0 : 0.15
+        NSAnimationContext.kit(Motion.kitSlide) {
             panel.animator().alphaValue = 1
         }
         // The pill is never focused, so VoiceOver is told what it says.

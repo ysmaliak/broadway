@@ -417,7 +417,7 @@ final class CallFloat {
     static let size = NSSize(width: 340, height: 214)
     static let stage = NSEdgeInsets(top: 8, left: 8, bottom: 58, right: 8)
     static let radius: CGFloat = 14
-    private static let spotKey = "call.spot"
+    private static let kept = KitKeptFrame(key: "call.spot")
 
     private(set) var status = CallButtons.Status()
     @ObservationIgnored private(set) weak var tab: Tab?
@@ -451,14 +451,7 @@ final class CallFloat {
             backing: .buffered,
             defer: false
         )
-        panel.level = KeepOnTop.panelLevel
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.backgroundColor = .clear
-        panel.isOpaque = false
-        panel.hasShadow = true
-        panel.isReleasedWhenClosed = false
-        panel.hidesOnDeactivate = false
-        panel.canHide = false
+        panel.kitFloat(shadow: true)
         panel.acceptsMouseMovedEvents = true
         panel.keys = { [weak self] event in self?.key(event) ?? false }
 
@@ -513,9 +506,11 @@ final class CallFloat {
         self.corners = corners
         quiet = 0
         tick()
-        ticking = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        let ticking = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
+        RunLoop.main.add(ticking, forMode: .common)
+        self.ticking = ticking
         return true
     }
 
@@ -544,16 +539,13 @@ final class CallFloat {
     private func spot(for size: NSSize, window: NSWindow?) -> NSPoint {
         if Store.testing { return NSPoint(x: -20000, y: -20000) }
         let screen = window?.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
-        if let kept = Store.settings.array(forKey: Self.spotKey) as? [Double], kept.count == 2 {
-            let origin = NSPoint(x: kept[0], y: kept[1])
-            if NSScreen.screens.contains(where: { $0.visibleFrame.contains(origin) }) { return origin }
-        }
+        if let kept = Self.kept.frame { return kept.origin }
         return NSPoint(x: screen.maxX - size.width - 24, y: screen.minY + 24)
     }
 
     private func keepSpot() {
         guard let panel, !Store.testing else { return }
-        Store.settings.set([Double(panel.frame.minX), Double(panel.frame.minY)], forKey: Self.spotKey)
+        Self.kept.keep(panel.frame)
     }
 
     private func tick() {
@@ -663,9 +655,11 @@ final class CallFloat {
         end()
         owner?.keepUnseen(tab)
         awayWatch?.invalidate()
-        awayWatch = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        let awayWatch = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.watchAway() }
         }
+        RunLoop.main.add(awayWatch, forMode: .common)
+        self.awayWatch = awayWatch
     }
 
     private func watchAway() {
@@ -790,13 +784,11 @@ final class CallFloat {
                 moved?()
                 return
             }
-            NSAnimationContext.runAnimationGroup({ context in
-                context.duration = time
-                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            NSAnimationContext.kit(.easeInOut(time)) {
                 window.animator().setFrame(NSRect(origin: target, size: window.frame.size), display: true)
-            }, completionHandler: { [weak self] in
+            } done: { [weak self] in
                 MainActor.assumeIsolated { self?.moved?() }
-            })
+            }
         }
     }
 }

@@ -1421,11 +1421,9 @@ final class BookmarkScroll: NSScrollView {
         let top = min(max(0, inDocument.midY - visible / 2), max(0, document.frame.height - visible))
         let target = NSPoint(x: 0, y: top)
         if animated, !Motion.reduced {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.2
-                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            NSAnimationContext.kit(Motion.kitEdge) {
                 contentView.animator().setBoundsOrigin(target)
-            } completionHandler: { [weak self] in
+            } done: { [weak self] in
                 guard let self else { return }
                 MainActor.assumeIsolated { self.reflectScrolledClipView(self.contentView) }
             }

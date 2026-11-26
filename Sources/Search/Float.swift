@@ -141,16 +141,9 @@ final class Float {
         )
         // Above every ordinary window, this app's and everyone else's, and
         // present on whichever desktop you happen to be looking at.
-        panel.level = KeepOnTop.panelLevel
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.kitFloat(shadow: Float.shadowed)
         panel.isMovableByWindowBackground = true
-        panel.backgroundColor = .clear
-        panel.isOpaque = false
-        panel.hasShadow = Float.shadowed
         panel.acceptsMouseMovedEvents = true
-        panel.isReleasedWhenClosed = false
-        // The bench's, off every screen, is left out when a probe is hidden.
-        panel.canHide = false
         panel.aspectRatio = wanted
         self.shape = wanted
         // Kept once a move or a resize is over, not on each step of one: at
@@ -347,18 +340,10 @@ final class Float {
     /// The window's last place and size, kept across closing it and quitting,
     /// and given back only while a screen still shows most of it.
     private static var remembered: NSRect? {
-        get {
-            guard let text = Store.settings.string(forKey: "float.frame") else { return nil }
-            let frame = NSRectFromString(text)
-            let shown = NSScreen.screens.contains {
-                let seen = $0.visibleFrame.intersection(frame)
-                return seen.width * seen.height > 0.6 * frame.width * frame.height
-            }
-            return frame.width > 100 && shown ? frame : nil
-        }
+        get { KitKeptFrame(key: "float.frame").frame.flatMap { $0.width > 100 ? $0 : nil } }
         set {
             guard benchAway == nil else { return }
-            Store.settings.set(newValue.map(NSStringFromRect), forKey: "float.frame")
+            KitKeptFrame(key: "float.frame").keep(newValue)
         }
     }
 
@@ -460,12 +445,11 @@ final class Float {
     private func uncover() {
         guard let cover else { return }
         self.cover = nil
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.12
+        NSAnimationContext.kit(Motion.kitFade) {
             cover.animator().alphaValue = 0
-        }, completionHandler: {
+        } done: {
             cover.removeFromSuperview()
-        })
+        }
     }
 
     /// The video's picture, cut out of a picture of its whole page. `picture`

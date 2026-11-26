@@ -883,8 +883,7 @@ private final class PaneQuestionField: KitHoverView, NSTextFieldDelegate {
     private func paint(animated: Bool) {
         let dark = kitDark
         let lit = hovering || focused
-        let base = dark ? 0.075 : 0.055
-        let fill = NSColor(white: dark ? 1 : 0, alpha: base + (lit ? 0.03 : 0))
+        let fill = KitWash.track.color(dark: dark, plus: lit ? 0.03 : 0)
         if animated { ground.layer?.kitTransition(Motion.kitQuick) }
         ground.fill = fill
     }

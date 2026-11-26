@@ -121,7 +121,7 @@ final class DropPaneView: NSView {
             wait = Motion.pane
         } else {
             fade(layer, from: layer.presentation()?.opacity ?? 1, to: 0)
-            wait = Motion.reduced ? 0.15 : 0.12
+            wait = Motion.kitFade.seconds
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + wait, execute: done)
     }
@@ -129,11 +129,11 @@ final class DropPaneView: NSView {
     func land(done: @escaping () -> Void) {
         guard let layer, !leaving else { return }
         leaving = true
-        let hold: TimeInterval = Motion.reduced ? 0 : 0.12
+        let hold = Motion.kitQuick.seconds
         DispatchQueue.main.asyncAfter(deadline: .now() + hold) { [weak self] in
             guard let self, let layer = self.layer else { return done() }
             fade(layer, from: layer.presentation()?.opacity ?? 1, to: 0)
-            DispatchQueue.main.asyncAfter(deadline: .now() + (Motion.reduced ? 0.15 : 0.12), execute: done)
+            DispatchQueue.main.asyncAfter(deadline: .now() + Motion.kitFade.seconds, execute: done)
         }
     }
 
@@ -145,7 +145,7 @@ final class DropPaneView: NSView {
         slide.fromValue = from
         slide.toValue = to
         slide.duration = Motion.pane
-        slide.timingFunction = CAMediaTimingFunction(controlPoints: 0.22, 1, 0.36, 1)
+        slide.timingFunction = Motion.paneTiming
         layer.add(slide, forKey: "slide")
         CATransaction.commit()
     }
@@ -154,12 +154,7 @@ final class DropPaneView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         layer.opacity = value
-        let ease = CABasicAnimation(keyPath: "opacity")
-        ease.fromValue = from
-        ease.toValue = value
-        ease.duration = Motion.reduced ? 0.15 : 0.12
-        ease.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        layer.add(ease, forKey: "fade")
+        if let ease = Motion.kitFade.animation("opacity", from: from, to: value) { layer.add(ease, forKey: "fade") }
         CATransaction.commit()
     }
 }

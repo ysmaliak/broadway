@@ -325,20 +325,7 @@ final class OmniboxView: NSView {
     }
 
     private func shake() {
-        guard !Motion.reduced else { return }
-        let steps = 90
-        let travel = (0...steps).map { step -> CGFloat in
-            let t = CGFloat(step) / CGFloat(steps)
-            return sin(t * .pi * 6) * 7 * (1 - t)
-        }
-        for view in [glass, panel, edge] as [NSView] {
-            let shake = CAKeyframeAnimation(keyPath: "transform.translation.x")
-            shake.values = travel
-            shake.duration = 0.5
-            shake.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            shake.isAdditive = true
-            view.layer?.add(shake, forKey: "shake")
-        }
+        for view in [glass, panel, edge] as [NSView] { view.layer?.kitShake() }
     }
 
     var benchLine: NSImage? {

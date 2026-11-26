@@ -530,9 +530,7 @@ final class FileChoiceCardView: NSView {
         if rect.minY < visible.minY { origin.y = rect.minY } else if rect.maxY > visible.maxY { origin.y = rect.maxY - visible.height }
         guard origin != visible.origin else { return }
         if animated, !Motion.reduced {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.12
-                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            NSAnimationContext.kit(Motion.kitQuick) {
                 clip.animator().setBoundsOrigin(origin)
             }
         } else {

@@ -2476,9 +2476,7 @@ extension SidePageView {
         if Store.testing || !Motion.kitSettle.animates {
             clip.scroll(to: target)
         } else {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.25
-                context.allowsImplicitAnimation = true
+            NSAnimationContext.kit(Motion.kitEdge, implicit: true) {
                 clip.animator().setBoundsOrigin(target)
             }
         }

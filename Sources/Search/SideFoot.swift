@@ -487,9 +487,7 @@ final class SpaceSpotView: KitHoverView {
         let over = hovering
         guard case .space = kind else { return }
         lit.hovering = over
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = Motion.reduced ? 0 : 0.15
-            context.allowsImplicitAnimation = true
+        NSAnimationContext.kit(Motion.kitSlide, implicit: true) {
             wash.animator().alphaValue = over ? 0.08 : 0
         }
     }

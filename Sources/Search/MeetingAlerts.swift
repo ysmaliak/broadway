@@ -477,13 +477,8 @@ final class MeetingAlertPanel {
             stack = made
             let panel = Lifted(contentRect: NSRect(x: 0, y: 0, width: 10, height: 10),
                                styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-            panel.level = KeepOnTop.panelLevel
-            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
-            panel.backgroundColor = .clear
-            panel.isOpaque = false
-            panel.hasShadow = false
-            panel.isReleasedWhenClosed = false
-            panel.hidesOnDeactivate = false
+            panel.kitFloat(shadow: false, hidesWithApp: true)
+            panel.collectionBehavior.insert(.ignoresCycle)
             panel.becomesKeyOnlyIfNeeded = true
             panel.isExcludedFromWindowsMenu = true
             panel.title = "Meeting alert"

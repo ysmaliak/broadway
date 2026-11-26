@@ -222,10 +222,10 @@ enum KitPill {
     static func fill(_ kind: KitButton.Kind, dark: Bool, lit: Bool = false, pressed: Bool = false) -> NSColor {
         if kind == .primary {
             let shift: CGFloat = pressed ? -0.1 : lit ? 0.05 : 0
-            return NSColor(white: dark ? 1 : 0, alpha: (dark ? 0.9 : 0.86) + shift)
+            return KitWash.controlInk.color(dark: dark, plus: shift)
         }
         let shift: CGFloat = pressed ? 0.06 : lit ? 0.035 : 0
-        return NSColor(white: dark ? 1 : 0, alpha: (dark ? 0.1 : 0.063) + shift)
+        return KitWash.control.color(dark: dark, plus: shift)
     }
 
     static func ink(_ kind: KitButton.Kind) -> NSColor {

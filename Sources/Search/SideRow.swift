@@ -793,23 +793,15 @@ final class TabRowView: KitHoverView {
             if switching, !Motion.reduced, !hoverGround.isHidden { handHoverToSlab() }
             if switching, !Motion.calm {
                 liveGround.alphaValue = 1
-                let fade = CABasicAnimation(keyPath: "opacity")
-                fade.fromValue = 0
-                fade.toValue = 1
-                fade.duration = 0.12
-                fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                liveGround.layer?.add(fade, forKey: "arrive")
+                if let fade = Motion.kitQuick.animation("opacity", from: 0, to: 1) { liveGround.layer?.add(fade, forKey: "arrive") }
                 guard !pressed else { return }
-                let grow = CABasicAnimation(keyPath: "transform")
                 let middle = CGPoint(x: liveGround.bounds.midX, y: liveGround.bounds.midY)
                 var small = CATransform3DMakeTranslation(middle.x, middle.y, 0)
                 small = CATransform3DScale(small, SwitchFade.scale, SwitchFade.scale, 1)
                 small = CATransform3DTranslate(small, -middle.x, -middle.y, 0)
-                grow.fromValue = NSValue(caTransform3D: small)
-                grow.toValue = NSValue(caTransform3D: CATransform3DIdentity)
-                grow.duration = 0.12
-                grow.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                liveGround.layer?.add(grow, forKey: "grow")
+                if let grow = Motion.kitQuick.animation("transform", from: NSValue(caTransform3D: small), to: NSValue(caTransform3D: CATransform3DIdentity)) {
+                    liveGround.layer?.add(grow, forKey: "grow")
+                }
             } else if switching {
                 liveGround.layer?.kitAnimate("opacity", to: 1, curve: .easeOut(0.14))
             }
@@ -1514,16 +1506,7 @@ final class TabRowView: KitHoverView {
     }
 
     private func shake() {
-        guard !Motion.reduced, let layer else { return }
-        let shake = CAKeyframeAnimation(keyPath: "transform.translation.x")
-        let steps = 30
-        shake.values = (0...steps).map { step -> CGFloat in
-            let travel = CGFloat(step) / CGFloat(steps)
-            return sin(travel * .pi * 6) * 7 * (1 - travel)
-        }
-        shake.duration = 0.5
-        shake.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        layer.add(shake, forKey: "shake")
+        layer?.kitShake()
     }
 
     private func give(_ down: Bool) {

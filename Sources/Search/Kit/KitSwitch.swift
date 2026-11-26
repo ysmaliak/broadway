@@ -75,13 +75,9 @@ final class KitSwitch: KitHoverView {
     }
 
     static func colors(on: Bool, dark: Bool, lit: Bool) -> (track: NSColor, knob: NSColor) {
-        let lift: CGFloat = lit ? 0.04 : 0
-        if on {
-            return dark ? (NSColor(white: 1, alpha: 0.88 + lift), NSColor(white: 0.12, alpha: 1))
-                : (NSColor(white: 0, alpha: 0.86 + lift), NSColor.white)
-        }
-        return dark ? (NSColor(white: 1, alpha: 0.16 + lift), NSColor(white: 0.85, alpha: 1))
-            : (NSColor(white: 0, alpha: 0.12 + lift), NSColor.white)
+        let track = (on ? KitWash.controlInk : KitWash.controlOff).color(dark: dark, plus: lit ? 0.04 : 0)
+        guard dark else { return (track, NSColor.white) }
+        return (track, NSColor(white: on ? 0.12 : 0.85, alpha: 1))
     }
 
     static func size(small: Bool) -> NSSize { small ? NSSize(width: 28, height: 16) : NSSize(width: 34, height: 20) }

@@ -479,9 +479,7 @@ final class StackedColumnView: NSView {
         let clip = scroll.contentView
         let target = clip.constrainBoundsRect(NSRect(origin: NSPoint(x: 0, y: y), size: clip.bounds.size)).origin
         if animated, !Motion.reduced {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.32
-                context.allowsImplicitAnimation = true
+            NSAnimationContext.kit(Motion.kitEdge, implicit: true) {
                 clip.animator().setBoundsOrigin(target)
             }
         } else {

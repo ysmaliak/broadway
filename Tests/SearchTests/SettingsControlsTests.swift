@@ -117,7 +117,7 @@ struct SettingsControlsTests {
         toggle.set(false, animated: false)
         let off = try #require(toggle.shownTrack.flatMap(NSColor.init(cgColor:)))
 
-        #expect(abs(on.alphaComponent - (dark ? 0.88 : 0.86)) < 0.001)
+        #expect(abs(on.alphaComponent - (dark ? 0.9 : 0.86)) < 0.001)
         #expect(abs(off.alphaComponent - (dark ? 0.16 : 0.12)) < 0.001)
         #expect(abs(KitSwitch.colors(on: false, dark: dark, lit: true).track.alphaComponent - off.alphaComponent - 0.04) < 0.001)
         #expect(KitSwitch.colors(on: true, dark: dark, lit: false).knob.whiteComponent == (dark ? 0.12 : 1))

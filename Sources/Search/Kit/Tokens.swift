@@ -271,7 +271,11 @@ enum Motion {
 
     static var calm: Bool { reduced || light }
 
-    static var pane: TimeInterval { reduced ? 0 : 0.16 }
+    static let slide: TimeInterval = 0.16
+
+    static var pane: TimeInterval { reduced ? 0 : slide }
+
+    static var fieldOutSeconds: Double? { reduced ? nil : 0.2 }
 
     static var spaceResponse: Double { light ? 0.16 : 0.22 }
 

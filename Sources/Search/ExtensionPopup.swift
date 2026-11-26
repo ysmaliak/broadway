@@ -121,8 +121,7 @@ final class ExtensionPopup: NSObject, WKUIDelegate, WKNavigationDelegate {
         shown = true
         stage.places = true
         web.frame = stage.bounds
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.12
+        NSAnimationContext.kit(Motion.kitFade) {
             web.animator().alphaValue = 1
         }
     }

@@ -87,8 +87,7 @@ final class KitField: KitHoverView, NSTextFieldDelegate {
     private func paint(animated: Bool) {
         let dark = kitDark
         let lit = (hovering || editing) && isEnabled
-        let base = dark ? 0.075 : 0.055
-        let wanted = NSColor(white: dark ? 1 : 0, alpha: base + (lit ? 0.03 : 0))
+        let wanted = KitWash.track.color(dark: dark, plus: lit ? 0.03 : 0)
         guard wanted != ground.fill else { return }
         if animated { ground.layer?.kitTransition(Motion.kitQuick) }
         ground.fill = wanted

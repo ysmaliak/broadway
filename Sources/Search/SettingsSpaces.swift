@@ -36,7 +36,7 @@ extension Space {
             if swatch.count > 1, let wash = NSGradient(colors: swatch.map(\.color)) {
                 wash.draw(in: plate, angle: -45)
             } else {
-                (swatch.first?.color ?? NSColor(white: dark ? 1 : 0, alpha: dark ? 0.14 : 0.08)).setFill()
+                (swatch.first?.color ?? KitWash.plate.color(dark: dark)).setFill()
                 plate.fill()
             }
             NSColor(white: dark ? 1 : 0, alpha: 0.14).setStroke()

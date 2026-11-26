@@ -571,8 +571,7 @@ final class PaneStage: NSView {
                 edge.alphaValue = quiet ? 1 : 0
             } else {
                 for (view, on) in [(cue as NSView, lit), (edge, quiet)] where (view.alphaValue == 1) != on {
-                    NSAnimationContext.runAnimationGroup { context in
-                        context.duration = Motion.reduced ? 0 : 0.12
+                    NSAnimationContext.kit(Motion.kitQuick) {
                         view.animator().alphaValue = on ? 1 : 0
                     }
                 }
@@ -1087,16 +1086,14 @@ extension PaneStage {
             }
             let dim: CGFloat = next.lifted && !carried ? 0.78 : 1
             if slots[index].alphaValue != dim {
-                NSAnimationContext.runAnimationGroup { context in
-                    context.duration = Motion.reduced ? 0 : 0.16
+                NSAnimationContext.kit(Motion.kitSlide) {
                     slots[index].animator().alphaValue = dim
                 }
             }
         }
         let rule: CGFloat = next.lifted ? 0 : 1
         if divider.alphaValue != rule {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = Motion.reduced ? 0 : 0.12
+            NSAnimationContext.kit(Motion.kitQuick) {
                 divider.animator().alphaValue = rule
             }
         }
@@ -1346,24 +1343,20 @@ extension PaneStage {
         if case .enter(let id) = move, let index = tabs.firstIndex(where: { $0.id == id }), index < slots.count {
             let slot = slots[index]
             slot.alphaValue = 0
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = reduced ? 0.15 : Motion.pane
-                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            NSAnimationContext.kit(reduced ? Motion.kitFade : Motion.kitSlide) {
                 slot.animator().alphaValue = 1
             }
         }
         if case .enter = move, !divider.isHidden {
             divider.alphaValue = 0
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = reduced ? 0 : 0.12
+            NSAnimationContext.kit(Motion.kitQuick) {
                 divider.animator().alphaValue = 1
             }
         }
         let fade = { [weak self] in
-            NSAnimationContext.runAnimationGroup({ context in
-                context.duration = reduced ? 0.15 : 0.12
+            NSAnimationContext.kit(Motion.kitFade, {
                 for (view, _) in moving { view.animator().alphaValue = 0 }
-            }, completionHandler: { [weak self] in
+            }, done: { [weak self] in
                 MainActor.assumeIsolated {
                     for (view, _) in moving { view.removeFromSuperview() }
                     self?.pictures.removeAll { view in moving.contains { $0.0 === view } }
@@ -1379,7 +1372,7 @@ extension PaneStage {
         }
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = Motion.pane
-            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.22, 1, 0.36, 1)
+            context.timingFunction = Motion.paneTiming
             context.allowsImplicitAnimation = true
             for (view, end) in moving {
                 if let end {

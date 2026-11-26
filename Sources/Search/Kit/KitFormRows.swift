@@ -480,11 +480,7 @@ final class KitTrackField: KitHoverView, NSTextFieldDelegate {
 
     private func paint() {
         let lit = (hovering || focused) && isEnabled
-        track.fill = NSColor(name: nil) { appearance in
-            let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            let base = dark ? 0.075 : 0.055
-            return NSColor(white: dark ? 1 : 0, alpha: base + (lit ? 0.03 : 0))
-        }
+        track.fill = KitWash.track.color(plus: lit ? 0.03 : 0)
         track.layer?.kitTransition(Motion.kitQuick)
     }
 

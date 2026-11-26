@@ -121,10 +121,7 @@ final class SplitTabItemView: KitHoverView {
             close.layer?.kitAnimate("opacity", to: Swift.Float(wanted ? 1 : 0), curve: animated ? Motion.kitQuick : .none, key: "shown")
             needsLayout = true
             if animated {
-                NSAnimationContext.runAnimationGroup { context in
-                    context.duration = 0.12
-                    context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                    context.allowsImplicitAnimation = true
+                NSAnimationContext.kit(Motion.kitQuick, implicit: true) {
                     layoutSubtreeIfNeeded()
                 }
             }
@@ -374,13 +371,10 @@ final class SplitChipView: KitHoverView {
         guard state.focused != lit, let layer = slab.layer else { return }
         lit = state.focused
         if lit, arriving, !Motion.calm {
-            layer.kitAnimate("opacity", to: Swift.Float(1), curve: .easeOut(0.12), key: "live")
-            let scale = CABasicAnimation(keyPath: "transform")
-            scale.fromValue = NSValue(caTransform3D: centred(layer, 0.98))
-            scale.toValue = NSValue(caTransform3D: CATransform3DIdentity)
-            scale.duration = 0.12
-            scale.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            layer.add(scale, forKey: "liveScale")
+            layer.kitAnimate("opacity", to: Swift.Float(1), curve: Motion.kitQuick, key: "live")
+            if let scale = Motion.kitQuick.animation("transform", from: NSValue(caTransform3D: centred(layer, 0.98)), to: NSValue(caTransform3D: CATransform3DIdentity)) {
+                layer.add(scale, forKey: "liveScale")
+            }
         } else if lit {
             let curve: KitCurve = arriving && !Motion.reduced ? .easeOut(0.14) : animated ? Motion.kitQuick : .none
             layer.kitAnimate("opacity", to: Swift.Float(1), curve: curve, key: "live")

@@ -194,9 +194,7 @@ final class CallSizing: NSObject, NSWindowDelegate {
             panel.setFrame(frame, display: true)
             return
         }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = time
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        NSAnimationContext.kit(.easeInOut(time)) {
             panel.animator().setFrame(frame, display: true)
         }
     }
