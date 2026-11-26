@@ -25,6 +25,7 @@ window number (WindowCapture.swift), never a region of the display, into
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -43,6 +44,7 @@ sys.path.insert(0, str(ROOT / "Tests"))
 import split_view as sv  # noqa: E402
 import pr_rows as pr  # noqa: E402
 
+FADE = float(re.search(r"static let titleLine: CGFloat = (\d+)", (ROOT / "Sources/Search/Kit/Tokens.swift").read_text()).group(1))
 OUT = ROOT / ".context" / "shots" / LABEL
 CAPTURE = ROOT / ".context" / "shots" / "capture"
 SIDEBAR = 260
@@ -153,7 +155,7 @@ def judge(samples, ids=None):
                 found["slid"] += 1
             limit = r.get("talkShownX", r["talkX"]) - 2 if talk else r["width"] - REST["fromEnd"]
             over = min(ink, r["shown"][1]) - limit
-            full = min(ink, r["shown"][0]) - (limit - (28 if ink > limit + 0.5 else 0))
+            full = min(ink, r["shown"][0]) - (limit - (FADE if ink > limit + 0.5 else 0))
             bad = None
             if over > 0.5 or full > 0.5:
                 found["under"] += 1

@@ -47,6 +47,7 @@ final class RowTitleView: NSView {
     var tone = KitTone.title { didSet { if tone != oldValue { title.color = tone.base; title.opacity = tone.opacity } } }
     var ink: KitInk = .flat { didSet { if ink != oldValue { title.ink = ink; restLine.ink = ink } } }
     private(set) var reserve: CGFloat = 0
+    var spill: CGFloat = 0 { didSet { if spill != oldValue { needsLayout = true } } }
 
     private let title = KitLabel()
     private let restLine = KitLabel()
@@ -140,13 +141,14 @@ final class RowTitleView: NSView {
             restLine.isHidden = !on
             restLine.alphaValue = restShown ? 1 : 0
         }
+        if spill > 0 { needsLayout = true }
     }
 
     override func layout() {
         super.layout()
         let height = bounds.height
         title.kitSetFrame(NSRect(x: 0, y: 0, width: max(bounds.width, natural), height: height))
-        restLine.kitSetFrame(NSRect(x: 0, y: 0, width: bounds.width, height: height))
+        restLine.kitSetFrame(NSRect(x: 0, y: 0, width: max(0, bounds.width - spill), height: height))
         updateMask()
     }
 
@@ -165,10 +167,11 @@ final class RowTitleView: NSView {
 
     private func updateMask() {
         let room = bounds.width
-        let wanted = natural > room - reserve + 0.5
+        let kept = on && !hovering ? max(reserve, spill) : reserve
+        let wanted = RowTitleFade.fades(natural: natural, room: room, reserve: kept, spill: spill)
         let fadeWidth: CGFloat = wanted ? TitleFadeWidth.width : 0
-        let solid = max(0, room - reserve - fadeWidth)
-        let clearFrom = max(solid, room - reserve)
+        let solid = max(0, room - kept - fadeWidth)
+        let clearFrom = max(solid, room - kept)
         func at(_ x: CGFloat) -> NSNumber { NSNumber(value: Double(room > 0 ? min(1, max(0, x / room)) : 1)) }
         let locations = [NSNumber(value: 0), at(solid), at(clearFrom), NSNumber(value: 1)]
         let animate = fadeAnimated && Motion.kitQuick.animates && (wanted != fades || (mask.locations ?? []) != locations)
@@ -197,13 +200,14 @@ final class RowTitleView: NSView {
 }
 
 enum TitleFadeWidth {
-    static let width: CGFloat = 28
+    static let width: CGFloat = RowTitleFade.width
 }
 
 final class BylineView: NSView {
     var item: LiveItem? { didSet { if item != oldValue { rebuild() } } }
     var stateTint: NSColor? { didSet { if stateTint != oldValue { tinted() } } }
     var reserve: CGFloat = 0 { didSet { if reserve != oldValue { needsLayout = true } } }
+    var spill: CGFloat = 0 { didSet { if spill != oldValue { needsLayout = true } } }
     private var sweepWait: CFTimeInterval?
     private var was: (text: String, color: NSColor, opacity: Double)?
     private var wasDot = ""
@@ -366,7 +370,7 @@ final class BylineView: NSView {
         place(state, state.intrinsicContentSize.width)
         let room = bounds.width
         let end = max(0, room - reserve)
-        let fades = natural > end + 0.5 && room > 0
+        let fades = room > 0 && RowTitleFade.fades(natural: natural, room: room, reserve: reserve, spill: spill)
         let start = fades ? max(0, (end - TitleFadeWidth.width) / room) : 1
         fade.frame = bounds
         let locations: [NSNumber] = [0, NSNumber(value: Double(start)), NSNumber(value: Double(fades ? end / max(1, room) : 1))]
@@ -870,6 +874,13 @@ final class TabRowView: KitHoverView {
         return window != nil && !pooled && Motion.kitQuick.animates
     }
 
+    private var titleWaits: Bool {
+        guard window != nil, !pooled, Motion.kitQuick.animates, titleToEnd.isFinite else { return false }
+        let close = Metrics.closeSquare(state.height) + Metrics.closeInset(state.height) + talkRoom
+        return RowTitleFade.clears(natural: title.natural, room: title.frame.width, kept: title.reserve,
+                                   reserve: RowTitleFade.reserve(closeFromEnd: close, toEnd: titleToEnd), spill: title.spill)
+    }
+
     private static let sliding = "slide"
     private static let revealing = "reveal"
 
@@ -919,7 +930,7 @@ final class TabRowView: KitHoverView {
         let stays = marked && comers.count < (dot ? 1 : 0) + (now.talk ? 1 : 0) + (call ? 1 : 0)
         let swapped = comers == [unseenDot] && before?.hovering == true && room == title.reserve
         let leads = still && !comers.isEmpty && !stays && room != title.reserve && Motion.kitQuick.animates
-            && RowTitleFade.fades(natural: title.natural, room: title.frame.width, reserve: room)
+            && RowTitleFade.fades(natural: title.natural, room: title.frame.width, reserve: room, spill: title.spill)
         let settles = !same || (marked && !leads && (room != title.reserve || !comers.isEmpty))
         title.keep(room, sweeps: marked ? leads : same)
         if settles { title.settleFade() } else if leads { title.sweepFade() }
@@ -1172,8 +1183,9 @@ final class TabRowView: KitHoverView {
         closeZone.takes = state.interactive
         let closes = hovering && !editing
         if closeSpot.isHidden == closes {
-            let waits = closes && talkWaits
-            closeReadyAt = Self.clock() + (waits ? RowSweep.wait : 0)
+            let held = closes && talkWaits
+            let waits = held || (closes && titleWaits)
+            closeReadyAt = Self.clock() + (held ? RowSweep.wait : 0)
             closeSpot.layer?.removeAnimation(forKey: Self.revealing)
             if waits, let fade = Motion.kitQuick.animation("opacity", from: 0, to: 1) {
                 closeSpot.layer?.add(RowSweep.held(fade, after: RowSweep.wait), forKey: Self.revealing)
@@ -1365,7 +1377,7 @@ final class TabRowView: KitHoverView {
         }
         let innerEnd = ends.isEmpty ? trailing + 8 - 8 : trailing
         let lead: CGFloat = Self.iconLead
-        let tail: CGFloat = status || peeking ? 0 : 10
+        let tail: CGFloat = status || peeking ? 0 : RowTitleFade.whole
         var cursor = x + lead
         if speaker {
             speakerSpot.kitSetFrame(NSRect(x: cursor + (SideLook.rowMark - square) / 2, y: inset, width: square, height: square))
@@ -1406,11 +1418,14 @@ final class TabRowView: KitHoverView {
             let bylineHeight = SideLook.bylineLine
             let stack = lineHeight + (byline.isHidden ? 0 : bylineHeight)
             let top = ((height - stack) / 2)
-            title.kitSetFrame(NSRect(x: cursor, y: top, width: titleWidth, height: lineHeight))
-            titleToEnd = width - (cursor + titleWidth)
+            let spill = ends.isEmpty ? RowTitleFade.spill(height: height) : 0
+            title.spill = spill
+            title.kitSetFrame(NSRect(x: cursor, y: top, width: titleWidth + spill, height: lineHeight))
+            titleToEnd = width - (cursor + titleWidth + spill)
             settleEnd(for: tab, room: RowTitleFade.reserve(closeFromEnd: [closeFromEnd, callFromEnd].compactMap { $0 }.max(), toEnd: titleToEnd))
             if !byline.isHidden {
-                byline.kitSetFrame(NSRect(x: cursor, y: top + lineHeight, width: titleWidth, height: bylineHeight))
+                byline.spill = spill
+                byline.kitSetFrame(NSRect(x: cursor, y: top + lineHeight, width: titleWidth + spill, height: bylineHeight))
                 byline.keep(title.reserve, sweeps: talkSlide != nil, after: talkSlide ?? 0)
             }
         }
@@ -1655,16 +1670,25 @@ enum TalkPlace {
 }
 
 enum RowTitleFade {
-    static let width: CGFloat = 28
+    static let width: CGFloat = SideLook.titleLine
+    static let whole: CGFloat = 10
     static let lead: CFTimeInterval = 0.12
+
+    static func edge(height: CGFloat) -> CGFloat { Metrics.closeInset(height) }
+
+    static func spill(height: CGFloat) -> CGFloat { max(0, whole - edge(height: height)) }
 
     static func reserve(closeFromEnd: CGFloat?, toEnd: CGFloat) -> CGFloat {
         guard let closeFromEnd, toEnd.isFinite else { return 0 }
         return max(0, closeFromEnd + 2 - toEnd)
     }
 
-    static func fades(natural: CGFloat, room: CGFloat, reserve: CGFloat) -> Bool {
-        natural > room - reserve + 0.5
+    static func fades(natural: CGFloat, room: CGFloat, reserve: CGFloat, spill: CGFloat = 0) -> Bool {
+        natural > room - max(reserve, spill) + 0.5
+    }
+
+    static func clears(natural: CGFloat, room: CGFloat, kept: CGFloat, reserve: CGFloat, spill: CGFloat = 0) -> Bool {
+        reserve > kept && fades(natural: natural, room: room, reserve: reserve, spill: spill)
     }
 
     static let callGap: CGFloat = 6
