@@ -382,6 +382,7 @@ final class UpdateFlow {
         let wanted = intent
         intent = .none
         dropped = nil
+        trouble = nil
         if pressed || wanted == .install {
             pressed = false
             phase = .idle

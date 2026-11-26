@@ -354,6 +354,22 @@ struct SettingsIndexTests {
         #expect(defaults.object(forKey: SettingsCut.lowPowerKey) as? Bool == false)
     }
 
+    @Test func showWhereLinksGoAndFlickTheFloatingVideoAreOnWhateverWasStoredBefore() {
+        Store.settings.set(false, forKey: "links.show")
+        Store.settings.set(false, forKey: "float.flicks")
+        defer {
+            Store.settings.removeObject(forKey: "links.show")
+            Store.settings.removeObject(forKey: "float.flicks")
+        }
+
+        let prefs = Preferences()
+
+        #expect(prefs.showsLinks)
+        #expect(prefs.floatFlicks)
+        #expect(SettingsCut.fixed.contains("links.show"))
+        #expect(SettingsCut.fixed.contains("float.flicks"))
+    }
+
     @Test(arguments: [false, true])
     func useAISwitchedOffKeepsAgentsAndGroupingOff(groupsWereOn: Bool) {
         let (defaults, name) = store()

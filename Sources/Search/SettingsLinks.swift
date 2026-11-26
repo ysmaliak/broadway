@@ -143,7 +143,7 @@ extension SettingsWindow {
     static func showLinkRule(_ id: UUID) {
         guard let browser = Browsers.front ?? Browsers.all.first else { return }
         browser.openSettings(.links)
-        DispatchQueue.main.async { browser.settingsRule = id }
+        DispatchQueue.main.async { SettingsWindow.shared.listener(for: browser).settingsRule = id }
     }
 }
 

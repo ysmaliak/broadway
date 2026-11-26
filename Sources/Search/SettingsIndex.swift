@@ -198,7 +198,7 @@ enum SettingsIndex {
               title: "Broadway", detail: "The version you have, and when Broadway last looked for a newer one",
               words: ["version", "build", "update", "check now", "check for updates", "last checked", "about", "sparkle"]),
         .init(id: "updates.check", group: "updates", icon: "arrow.triangle.2.circlepath",
-              title: "Check for updates automatically", detail: "Once a day, from broadwaybrowser.com",
+              title: "Check for updates automatically", detail: "Every four hours, from broadwaybrowser.com",
               keys: ["SUEnableAutomaticChecks"], words: ["update", "automatic updates", "check for updates", "new version"]),
         .init(id: "updates.install", group: "updates", icon: "arrow.down.app",
               title: "Install updates automatically", detail: "Downloaded in the background and installed when you quit",

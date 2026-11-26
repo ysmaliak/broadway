@@ -290,10 +290,11 @@ final class History {
     /// Somewhere another browser has been. Counted as it was counted there,
     /// so a site visited daily for a year outranks one seen once — the day
     /// you switch, the field already knows you.
-    func take(_ url: URL, title: String, count: Int, last: Date) {
-        guard History.isWeb(url), let url = History.kept(url) else { return }
+    @discardableResult
+    func take(_ url: URL, title: String, count: Int, last: Date) -> Bool? {
+        guard History.isWeb(url), let url = History.kept(url) else { return nil }
         let key = History.identity(for: url)
-        guard !key.isEmpty else { return }
+        guard !key.isEmpty else { return nil }
         if var seen = visits[key] {
             // The larger of the two, not their sum: the same browser brought
             // in again must not count every visit twice.
@@ -301,11 +302,12 @@ final class History {
             if last > seen.last { seen.last = last }
             if seen.title.isEmpty { seen.title = title }
             visits[key] = seen
-        } else {
-            let visit = Visit(url: url.absoluteString, key: key, title: title, count: min(max(count, 0), History.mostVisits), last: last)
-            visits[key] = visit
-            remember(visit, url: url)
+            return false
         }
+        let visit = Visit(url: url.absoluteString, key: key, title: title, count: min(max(count, 0), History.mostVisits), last: last)
+        visits[key] = visit
+        remember(visit, url: url)
+        return true
     }
 
     /// After a batch of `take`s.

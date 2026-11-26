@@ -11,6 +11,15 @@ struct UpdatesTests {
 
     private var released: [String: Any] { [UpdateFeed.addressKey: address, UpdateFeed.signatureKey: key] }
 
+    @Test func theAutomaticCheckRowSaysTheIntervalReleaseBuildsUse() throws {
+        let build = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("build.sh")
+        let script = try String(contentsOf: build, encoding: .utf8)
+
+        #expect(script.contains("<key>SUScheduledCheckInterval</key><integer>14400</integer>"))
+        #expect(SettingsIndex.item("updates.check")?.detail == "Every four hours, from broadwaybrowser.com")
+    }
+
     @Test func aFeedNeedsItsAddressAndItsKey() {
         let whole = released
         let noKey: [String: Any] = [UpdateFeed.addressKey: address]

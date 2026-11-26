@@ -20,6 +20,20 @@ final class HookFileTests {
         return file
     }
 
+    @Test func aFileBroadwayCannotReadKeepsTheAddHookSheetOpenAndSaysSo() throws {
+        let book = HookBook(file: lab.folder.appendingPathComponent("unread.json"))
+        let bundle = lab.folder.appendingPathComponent("Tool.app", isDirectory: true)
+        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+        HookSettings.open = false
+        defer { HookSettings.open = false }
+
+        let trouble = HookSheet.add(bundle, event: .link, minutes: 15, book: book)
+
+        #expect(trouble == "Broadway couldn't read that file")
+        #expect(book.hooks.isEmpty)
+        #expect(!HookSettings.open)
+    }
+
     @Test func theFileGivesBackItsHooksInTheirOrder() throws {
         let first = UUID()
         let second = UUID()

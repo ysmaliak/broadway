@@ -470,7 +470,9 @@ extension SettingsPageView {
             check?.isEnabled = offered ? flow.canInstall && !flow.phase.busy : updates.canCheck
             check?.superview?.needsLayout = true
         }
-        row("updates.version", control: check, detail: { updates.line }).detail.font = SettingsMetrics.detailDigitsFont
+        let made = row("updates.version", control: check, detail: { updates.line })
+        made.detail.font = SettingsMetrics.detailDigitsFont
+        update { [weak made] in made?.detail.toolTip = UpdateWords.help(updates.flow) }
     }
 
     private func updatesSection() {

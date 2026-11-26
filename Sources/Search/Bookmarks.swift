@@ -367,9 +367,9 @@ final class Bookmarks {
         var added = 0, already = 0
         var ids: [Bookmark.ID] = []
         if roots.isEmpty {
-            roots = nodes
-            added = Bookmarks.count(nodes)
-            ids = Bookmarks.ids(nodes)
+            var merged: [Bookmark] = []
+            Bookmarks.merge(nodes, into: &merged, added: &added, already: &already, ids: &ids)
+            roots = merged
             Store.settings.set(name, forKey: Bookmarks.topKey)
         } else if intoTop(nodes, from: name) {
             Bookmarks.merge(nodes, into: &roots, added: &added, already: &already, ids: &ids)

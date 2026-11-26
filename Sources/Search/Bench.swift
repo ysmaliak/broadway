@@ -1737,10 +1737,10 @@ final class Bench {
             }
             if what.contains("history") {
                 let places = source.places(profile: profile)
-                for place in places { browser.history.take(place.url, title: place.title, count: place.count, last: place.last) }
+                let added = places.filter { browser.history.take($0.url, title: $0.title, count: $0.count, last: $0.last) == true }.count
                 browser.history.settle()
                 out["places"] = places.count
-                ImportRecords.note(source.name, places: places.count)
+                ImportRecords.note(source.name, places: added)
             }
             if what.contains("passwords") {
                 let outcome = Result { try source.read(profile: profile) }

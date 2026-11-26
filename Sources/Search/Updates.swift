@@ -79,8 +79,14 @@ enum UpdateWords {
         case .downloading where flow.pressed: return downloading(flow.progress)
         case .installing where flow.pressed: return installing
         case .failed: return flow.trouble.map { "\(failed) · \($0)" } ?? failed
-        default: return flow.found.map { available($0.version) }
+        default:
+            if let found = flow.found { return available(found.version) }
+            return flow.trouble != nil && !flow.card ? checkFailed : nil
         }
+    }
+
+    @MainActor static func help(_ flow: UpdateFlow) -> String? {
+        status(flow) == checkFailed ? flow.trouble : nil
     }
 
     static func checked(_ last: Date?, now: Date = Date(), calendar: Calendar = .current) -> String {

@@ -80,6 +80,10 @@ struct KeyCombo: Codable, Hashable {
     /// Mac. Tab with ⌃ or ⌥ is a key like another: ⌃Tab is the recent-tabs
     /// switcher's until it is given to something else, as in Arc.
     static func isReserved(_ combo: KeyCombo) -> Bool {
+        reserved(combo) != nil
+    }
+
+    static func reserved(_ combo: KeyCombo) -> String? {
         let system: Set<KeyCombo> = [
             KeyCombo("q"), KeyCombo("q", option: true), KeyCombo("q", control: true),
             KeyCombo("q", shift: true), KeyCombo("q", shift: true, option: true),
@@ -88,11 +92,14 @@ struct KeyCombo: Codable, Hashable {
             KeyCombo("`"), KeyCombo("`", shift: true), KeyCombo("f", control: true),
             KeyCombo("space"), KeyCombo("space", command: false, control: true),
             KeyCombo("space", option: true), KeyCombo("space", command: false, option: true, control: true),
+            KeyCombo("[", shift: true), KeyCombo("]", shift: true), KeyCombo("left"), KeyCombo("right"),
+            KeyCombo("v", shift: true, option: true),
         ]
-        if system.contains(combo) || combo.key == "escape" { return true }
-        if combo.key == "tab", combo.command || !(combo.control || combo.option) { return true }
+        if system.contains(combo) { return "macOS uses this key" }
+        if combo.key == "escape" { return "Escape and Tab can't be shortcuts" }
+        if combo.key == "tab", combo.command || !(combo.control || combo.option) { return "Escape and Tab can't be shortcuts" }
         let digit = combo.key.count == 1 && ("1"..."9").contains(combo.key)
-        return digit && !combo.option && !combo.shift && combo.command && !combo.control
+        return digit && !combo.option && !combo.shift && combo.command && !combo.control ? "Tabs 1 to 9 use this key" : nil
     }
 
     /// Keys an extension never has, wherever Search's own commands are:
@@ -458,9 +465,15 @@ final class ShortcutStore {
 
     func clear(_ id: String) { set(nil, for: id) }
 
-    func reset(_ id: String) {
-        if let key = defaultKey(for: id) { assign(key, to: id) }
-        else { set(nil, for: id) }
+    @discardableResult
+    func reset(_ id: String) -> (id: String, title: String)? {
+        guard let key = defaultKey(for: id) else {
+            set(nil, for: id)
+            return nil
+        }
+        let other = owner(of: key, except: id)
+        assign(key, to: id)
+        return other
     }
 
     func resetAll() {

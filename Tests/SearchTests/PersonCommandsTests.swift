@@ -165,6 +165,21 @@ final class PersonCommandsTests {
         browser.prefs.floatingNewTab = was
     }
 
+    @Test func sitesKeepTrueMeansCrossSiteTrackingIsPrevented() throws {
+        let access = try #require(PersonSettings.table["sites.keep"])
+        let was = browser.prefs.keepsSignIns
+        defer { browser.prefs.keepsSignIns = was }
+
+        browser.prefs.keepsSignIns = true
+        #expect((access.read(browser.prefs) as? Bool) == false)
+        #expect(PersonSettings.refusal("sites.keep", value: "true") == nil)
+        #expect((access.write?(browser.prefs, "true")) == true)
+
+        #expect(browser.prefs.keepsSignIns == false)
+        #expect((access.read(browser.prefs) as? Bool) == true)
+        #expect(PersonSettings.refusal("sites.keep", value: "false")?.code == "person_only")
+    }
+
     @Test func aMadeUpValueIsNotWritten() throws {
         #expect((PersonSettings.table["look"]?.write?(browser.prefs, "plaid")) == false)
         #expect((PersonSettings.table["pageZoom"]?.write?(browser.prefs, "9000")) == false)

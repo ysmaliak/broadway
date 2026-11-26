@@ -43,10 +43,17 @@ enum ShortcutsList {
         prefs.peekClick = .shift
     }
 
-    static func menu(store: ShortcutStore, id: String) -> NSMenu {
+    static func resetToDefault(store: ShortcutStore, id: String) -> String? {
+        guard let other = store.reset(id), let key = store.key(for: id) else { return nil }
+        return "\(key.display) moved from \(other.title)"
+    }
+
+    static func menu(store: ShortcutStore, id: String, announce: @escaping (String) -> Void = { _ in }) -> NSMenu {
         KitMenu.make([
             .action("Clear Shortcut", enabled: store.key(for: id) != nil) { store.clear(id) },
-            .action("Reset to Default", enabled: store.isChanged(id)) { store.reset(id) },
+            .action("Reset to Default", enabled: store.isChanged(id)) {
+                if let moved = resetToDefault(store: store, id: id) { announce(moved) }
+            },
         ])
     }
 }
@@ -55,10 +62,12 @@ final class ShortcutLineView: NSView, KitFits {
     let store: ShortcutStore
     let id: String
     private let line: KitFormLine
+    private weak var browser: Browser?
 
     init(browser: Browser, store: ShortcutStore, id: String, title: String, detail: String? = nil) {
         self.store = store
         self.id = id
+        self.browser = browser
         line = KitFormLine(title, detail: detail, controls: [KeyBoxView(browser: browser, store: store, id: id)])
         line.firstLine = 1
         super.init(frame: .zero)
@@ -73,7 +82,9 @@ final class ShortcutLineView: NSView, KitFits {
 
     func kitHeight(width: CGFloat) -> CGFloat { line.kitHeight(width: width) }
 
-    override func menu(for event: NSEvent) -> NSMenu? { ShortcutsList.menu(store: store, id: id) }
+    override func menu(for event: NSEvent) -> NSMenu? {
+        ShortcutsList.menu(store: store, id: id) { [weak self] in self?.browser?.announce($0) }
+    }
 }
 
 final class ShortcutsResetRow: NSView, KitFits {
@@ -113,6 +124,8 @@ final class KeyBoxView: KitBroadwayButton {
     private let holder: KitFlippedView
     private var listening = false { didSet { refresh() } }
     private var monitor: Any?
+    private var resigned: NSObjectProtocol?
+    private static weak var current: KeyBoxView?
     private var note: String? { didSet { refresh() } }
     private var taking: KeyCombo? { didSet { refresh() } }
     private var watch: AnyCancellable?
@@ -177,14 +190,34 @@ final class KeyBoxView: KitBroadwayButton {
 
     func listen() {
         guard !listening else { return stop() }
+        if let other = KeyBoxView.current, other !== self { other.stop() }
+        KeyBoxView.current = self
         listening = true
         note = nil
         taking = nil
         store.recording = true
-        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            MainActor.assumeIsolated { self?.take(event) }
-            return nil
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
+            let swallowed = MainActor.assumeIsolated { self?.swallows(event) ?? false }
+            return swallowed ? nil : event
         }
+        if let window {
+            resigned = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.stop() }
+            }
+        }
+    }
+
+    func swallows(_ event: NSEvent) -> Bool {
+        guard let window, event.window === window else {
+            stop()
+            return false
+        }
+        guard event.type == .keyDown else {
+            if !bounds.contains(convert(event.locationInWindow, from: nil)) { stop() }
+            return false
+        }
+        take(event)
+        return true
     }
 
     func take(_ event: NSEvent) {
@@ -196,7 +229,7 @@ final class KeyBoxView: KitBroadwayButton {
         }
         guard let combo = KeyCombo(event: event) else { return }
         guard combo.isUsable else { return say("Add ⌘, ⌥ or ⌃") }
-        guard !KeyCombo.isReserved(combo) else { return say("Can't be changed") }
+        if let reason = KeyCombo.reserved(combo) { return say(reason) }
         guard id != Command.recentTabs || combo.control || combo.option || combo.command
         else { return say("Hold ⌃, ⌥ or ⌘ with it") }
         guard !id.hasPrefix("ext:") || combo.key.count == 1 else { return say("Not for an extension") }
@@ -220,8 +253,11 @@ final class KeyBoxView: KitBroadwayButton {
 
     func stop() {
         if let monitor { NSEvent.removeMonitor(monitor) }
+        if let resigned { NotificationCenter.default.removeObserver(resigned) }
+        if KeyBoxView.current === self { KeyBoxView.current = nil }
         let was = listening
         monitor = nil
+        resigned = nil
         listening = false
         note = nil
         taking = nil

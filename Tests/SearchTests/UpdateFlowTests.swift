@@ -48,6 +48,28 @@ struct UpdateFlowTests {
         flow.cycleEnded()
     }
 
+    @Test func aCheckThatFailsByItselfShowsInTheUpdatesLineWithItsReasonAsHelp() {
+        let (flow, _) = made()
+
+        flow.failed("The feed couldn't be reached")
+
+        #expect(!flow.card)
+        #expect(UpdateWords.status(flow) == "Couldn't check for updates")
+        #expect(UpdateWords.help(flow) == "The feed couldn't be reached")
+        #expect(UpdateWords.line(version: "Version 0.1 (1)", runs: true, status: UpdateWords.status(flow), last: nil)
+            == "Version 0.1 (1) · Couldn't check for updates")
+    }
+
+    @Test func aLaterCheckThatFindsNothingClearsTheFailedCheckFromTheUpdatesLine() {
+        let (flow, _) = made()
+        flow.failed("The feed couldn't be reached")
+
+        flow.notFound()
+
+        #expect(UpdateWords.status(flow) == nil)
+        #expect(UpdateWords.help(flow) == nil)
+    }
+
     @Test func anUpdateFoundWithQuietInstallsOffIsOfferedAndLeftAlone() {
         let (flow, engine) = made()
         var replies: [UpdateChoice] = []

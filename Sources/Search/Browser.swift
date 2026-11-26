@@ -1427,27 +1427,35 @@ final class Browser: NSObject {
     /// with the sites it was told never to ask about. Saving one already
     /// kept updates it, so bringing the same in again adds nothing twice.
     /// Returns how many were kept.
-    func keep(_ found: Chromium.Found) -> Int {
-        var kept = 0
-        for login in found.logins
-        where Vault.save(host: login.host, user: login.user, password: login.password, used: login.used, clear: login.clear) {
-            kept += 1
+    func keep(_ found: Chromium.Found) -> (kept: Int, here: Int) {
+        let held = Set(Vault.all().map(\.id))
+        var kept = 0, here = 0
+        for login in found.logins {
+            let saved = Vault.save(host: login.host, user: login.user, password: login.password, used: login.used, clear: login.clear)
+            if held.contains(login.id) {
+                here += 1
+            } else if saved {
+                kept += 1
+            }
         }
         var never = Vault.never
         found.never.forEach { never.insert($0) }
         Vault.never = never
         relist()
-        return kept
+        return (kept, here)
     }
 
     /// The same, said as it lands.
     func took(_ outcome: Result<Chromium.Found, Error>, from name: String) {
         switch outcome {
         case .success(let found):
-            let kept = keep(found)
+            let (kept, here) = keep(found)
             ImportRecords.note(name, passwords: kept)
             let locked = found.undecrypted > 0 ? ", \(found.undecrypted) couldn't be decrypted" : ""
-            announce((kept == 0 ? "Nothing new in \(name)" : kept == 1 ? "1 password from \(name)" : "\(kept) passwords from \(name)") + locked)
+            let landed = kept == 0 ? (here == 0 ? "Nothing new in \(name)" : "Every password from \(name) was already here")
+                : here == 0 ? (kept == 1 ? "1 password from \(name)" : "\(kept) passwords from \(name)")
+                : (kept == 1 ? "1 new password from \(name), \(here) already here" : "\(kept) new passwords from \(name), \(here) already here")
+            announce(landed + locked)
         case .failure(Chromium.Trouble.noPassphrase):
             announce("\(name) didn't give up its keychain key", kind: .error)
         case .failure(Mozilla.Trouble.primaryPassword):
@@ -1459,16 +1467,21 @@ final class Browser: NSObject {
 
     /// The other browser's history, into this one's. Off the main thread for
     /// the reading; the merge itself is a moment.
-    func takePlaces(from source: ImportSource, profile: String? = nil, then done: @escaping (Int) -> Void) {
+    func takePlaces(from source: ImportSource, profile: String? = nil, then done: @escaping (_ added: Int, _ already: Int) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             let places = source.places(profile: profile)
             DispatchQueue.main.async {
+                var added = 0, already = 0
                 for place in places {
-                    self.history.take(place.url, title: place.title, count: place.count, last: place.last)
+                    switch self.history.take(place.url, title: place.title, count: place.count, last: place.last) {
+                    case true?: added += 1
+                    case false?: already += 1
+                    case nil: break
+                    }
                 }
                 self.history.settle()
-                ImportRecords.note(source.name, places: places.count)
-                done(places.count)
+                ImportRecords.note(source.name, places: added)
+                done(added, already)
             }
         }
     }
@@ -1505,6 +1518,10 @@ final class Browser: NSObject {
         let cancelled: Bool
     }
 
+    static func inTheClear(_ said: String, file: URL) -> String {
+        said.fullStopped + " \(file.lastPathComponent) holds your passwords in the clear, so delete it now."
+    }
+
     @discardableResult
     func takeFile(_ url: URL) async -> FileTake {
         guard !Browser.fileImportTerminating, fileImport == nil else { return FileTake(said: "An import is already running", bookmarks: 0, already: 0, places: 0, kept: 0, skipped: 0, cancelled: false) }
@@ -1525,7 +1542,6 @@ final class Browser: NSObject {
             if fileImport?.id == id { fileImport = nil; fileImportControl = nil }
         }
         var added = 0, already = 0, places = 0, kept = 0, skipped = 0
-        var safari = false
         var failed = false
         var mergedBookmarks = false
         do {
@@ -1535,7 +1551,6 @@ final class Browser: NSObject {
                     catch { continuation.resume(throwing: error) }
                 }
             }
-            safari = found.fromSafari
             try control.checkCancellation()
             let name = found.fromSafari ? "Safari" : url.deletingPathExtension().lastPathComponent
             if !found.bookmarks.isEmpty {
@@ -1604,9 +1619,7 @@ final class Browser: NSObject {
         }
         else if failed { said = said.isEmpty ? "That file couldn't be read" : "Import stopped after " + said }
         else if said.isEmpty { said = mergedBookmarks ? "Bookmark folders imported" : "Nothing to bring in from that file" }
-        if safari, kept > 0 {
-            said = "\(said.fullStopped) The exported file holds your passwords in the clear, so delete it now."
-        }
+        if kept > 0 { said = Browser.inTheClear(said, file: url) }
         return FileTake(said: said, bookmarks: added, already: already, places: places, kept: kept, skipped: skipped, cancelled: control.isCancelled)
     }
 

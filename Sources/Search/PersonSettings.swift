@@ -247,7 +247,7 @@ enum PersonSettings {
         "shortcuts": row("broadway shortcuts list"),
         "sidebar.button": flag(\.sideButton),
         "sidebar.selected": flag(\.selectedShortcut),
-        "sites.keep": flag(\.keepsSignIns, .turningOff),
+        "sites.keep": onOff(.turningOff, read: { !$0.keepsSignIns }, apply: { $0.keepsSignIns = !$1 }),
         "space.look": row("broadway spaces colour SPACE COLOUR"),
         "spaces.stacked": flag(\.stackedSpaces),
         "tabs.close.after": settable(takes: TabLife.allCases.map { "\($0.rawValue)" }.joined(separator: ", ") + " hours", read: { $0.tabLife.rawValue },

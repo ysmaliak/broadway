@@ -254,6 +254,7 @@ enum Chromium {
         /// keychain handed over: said, not passed over in silence, so an
         /// import that brought nothing says why.
         var undecrypted = 0
+        var lockedProfiles = 0
     }
 
     /// The passwords of one profile, or of all of them when `profile` is
@@ -720,7 +721,12 @@ enum Mozilla {
                 }
             }
             var seen = Set<String>()
-            return out.filter { seen.insert($0.path).inserted }.sorted { a, b in
+            var same = Set<NSObject>()
+            return out.filter { file in
+                guard seen.insert(file.path).inserted else { return false }
+                guard let id = (try? file.resourceValues(forKeys: [.fileResourceIdentifierKey]))?.fileResourceIdentifier as? NSObject else { return true }
+                return same.insert(id).inserted
+            }.sorted { a, b in
                 let da = (try? a.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
                 let db = (try? b.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
                 return da > db
@@ -1025,6 +1031,7 @@ enum Mozilla {
         var seen = Set<String>()
         var readAny = false
         var locked = false
+        var lockedProfiles = 0
         var undecrypted = 0
 
         for file in source.files(only: profile) {
@@ -1036,7 +1043,11 @@ enum Mozilla {
             else { continue }
             let key: [UInt8]
             do { key = try masterKey(in: key4) }
-            catch Trouble.primaryPassword { locked = true; continue }
+            catch Trouble.primaryPassword {
+                locked = true
+                lockedProfiles += 1
+                continue
+            }
             catch { continue }
             readAny = true
             guard let data = try? Data(contentsOf: store),
@@ -1073,7 +1084,7 @@ enum Mozilla {
         // nothing else to bring: a second, open profile still gives its own.
         if !readAny && locked { throw Trouble.primaryPassword }
         guard readAny else { throw Trouble.unreadable }
-        return Chromium.Found(logins: logins, never: never, skipped: skipped, undecrypted: undecrypted)
+        return Chromium.Found(logins: logins, never: never, skipped: skipped, undecrypted: undecrypted, lockedProfiles: lockedProfiles)
     }
 
     /// How much there is to bring, from the files alone, as Chromium's

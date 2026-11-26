@@ -176,6 +176,19 @@ final class ImportModel {
         return "\(what), \(record.date.formatted(.dateTime.day().month()))"
     }
 
+    static func counted(_ added: Int, already: Int, _ one: String) -> String {
+        guard already > 0 else { return added == 1 ? "1 \(one)" : "\(added.formatted()) \(one)s" }
+        return added == 1 ? "1 new \(one), \(already.formatted()) already here" : "\(added.formatted()) new \(one)s, \(already.formatted()) already here"
+    }
+
+    static func leftOut(_ profiles: Int, from name: String) -> String {
+        guard profiles > 0 else { return "" }
+        let what = profiles == 1
+            ? " 1 profile with a primary password was left out. Export its passwords from \(name) as a CSV and bring that in."
+            : " \(profiles.formatted()) profiles with a primary password were left out. Export their passwords from \(name) as a CSV and bring that in."
+        return "." + what
+    }
+
     static func ruleLines(added: Int, leftOut: Int) -> [Said] {
         var lines: [Said] = []
         if added > 0 { lines.append(Said(ok: true, text: added == 1 ? "1 link rule" : "\(added.formatted()) link rules")) }
@@ -293,13 +306,14 @@ final class ImportModel {
                 DispatchQueue.main.async {
                     switch outcome {
                     case .success(let found):
-                        let kept = browser.keep(found)
+                        let (kept, here) = browser.keep(found)
                         ImportRecords.note(source.name, passwords: kept)
                         let skipped = found.skipped > 0 ? ", \(found.skipped.formatted()) skipped with no address" : ""
                         let locked = found.undecrypted > 0
                             ? ", and \(found.undecrypted.formatted()) couldn't be decrypted with \(source.name)'s key" : ""
                         said[0] = Said(ok: kept > 0 || found.undecrypted == 0,
-                                       text: (kept == 1 ? "1 password" : "\(kept.formatted()) passwords") + skipped + locked)
+                                       text: ImportModel.counted(kept, already: here, "password") + skipped + locked
+                                           + ImportModel.leftOut(found.lockedProfiles, from: source.name))
                     case .failure(Chromium.Trouble.noPassphrase):
                         said[0] = Said(ok: false, text: "macOS didn't hand over \(source.name)'s key. Allow it and try again.")
                     case .failure(Mozilla.Trouble.primaryPassword):
@@ -322,8 +336,8 @@ final class ImportModel {
         }
         if places {
             group.enter()
-            browser.takePlaces(from: source, profile: profile) { count in
-                said[2] = Said(ok: true, text: count == 1 ? "1 place" : "\(count.formatted()) places")
+            browser.takePlaces(from: source, profile: profile) { added, already in
+                said[2] = Said(ok: true, text: ImportModel.counted(added, already: already, "place"))
                 group.leave()
             }
         }

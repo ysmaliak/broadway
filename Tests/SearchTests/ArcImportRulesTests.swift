@@ -185,4 +185,12 @@ struct ArcImportRulesTests {
         #expect(ImportModel.ruleLines(added: 0, leftOut: 1).map(\.text) == ["1 rule left out because Broadway has no place for it"])
         #expect(ImportModel.ruleLines(added: 0, leftOut: 0).isEmpty)
     }
+
+    @MainActor @Test func aProfileLeftOutForItsPrimaryPasswordIsNamedAfterTheCounts() {
+        #expect(ImportModel.leftOut(0, from: "Firefox") == "")
+        #expect(ImportModel.leftOut(1, from: "Firefox")
+            == ". 1 profile with a primary password was left out. Export its passwords from Firefox as a CSV and bring that in.")
+        #expect(ImportModel.leftOut(2, from: "Zen")
+            == ". 2 profiles with a primary password were left out. Export their passwords from Zen as a CSV and bring that in.")
+    }
 }

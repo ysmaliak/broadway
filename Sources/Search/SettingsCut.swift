@@ -13,7 +13,7 @@ enum SettingsCut {
         "swipe.history",
         "commandbar", "autoscroll", "fullscreen.escapeTwice",
         "passkeys", "passkeys.for", "passkeys.entitled",
-        "sidebar.icons", "ai.defaultView", "ai",
+        "sidebar.icons", "ai.defaultView", "ai", "links.show", "float.flicks",
     ]
 
     nonisolated static let lowPowerKey = "motion.light"

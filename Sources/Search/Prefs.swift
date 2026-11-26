@@ -846,9 +846,8 @@ final class Preferences {
         PageView.holdsHistory = history
         // On for everyone who never touched these three switches (Drice,
         // 27 Sep 2026); a choice made before stands.
-        let flicks = store.object(forKey: "float.flicks") as? Bool ?? true
-        floatFlicks = flicks
-        Float.flicks = flicks
+        floatFlicks = true
+        Float.flicks = true
         floatsAway = true
         floatsOnLeave = Store.testing ? store.object(forKey: "float.leave") as? Bool ?? true : true
         panelSite = store.string(forKey: "panel.site") ?? ""
@@ -861,9 +860,8 @@ final class Preferences {
         pinsPeek = keepsSite
         bookmarksBar = store.bool(forKey: "bookmarks.bar")
         alwaysShowsDownloads = true
-        let links = store.object(forKey: "links.show") as? Bool ?? true
-        showsLinks = links
-        HoveredLink.on = links
+        showsLinks = true
+        HoveredLink.on = true
         let dusk = store.bool(forKey: "pages.dusk")
         darkensPages = dusk
         Dusk.shared.on = dusk

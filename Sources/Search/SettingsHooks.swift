@@ -148,16 +148,30 @@ enum HookSheet {
             }
         }
         menu.setAccessibilityIdentifier("hooks.sheet.for")
+        var trouble: String?
         sheet.live { HookWords.picks[at].0 == .permission ? HookWords.warning : nil }
+        sheet.live { trouble }
         sheet.finish(save: HookWords.choose) {
+            trouble = nil
             let pick = HookWords.picks[at]
             guard let program = choose(over: sheet.panel) else { return false }
-            book.add(pick.0, program: program, minutes: pick.1 ?? 15)
-            HookSettings.open = true
-            return true
+            trouble = add(program, event: pick.0, minutes: pick.1 ?? 15, book: book)
+            guard trouble != nil else { return true }
+            DispatchQueue.main.async { [weak sheet] in
+                guard let panel = sheet?.panel else { return }
+                panel.layoutIfNeeded()
+                panel.setContentSize(panel.contentView?.fittingSize ?? panel.frame.size)
+            }
+            return false
         }
         shown = sheet.panel
         sheet.show(over: window)
+    }
+
+    static func add(_ program: URL, event: HookEvent, minutes: Int, book: HookBook) -> String? {
+        guard book.add(event, program: program, minutes: minutes) != nil else { return "Broadway couldn't read that file" }
+        HookSettings.open = true
+        return nil
     }
 
     static func choose(over panel: NSWindow) -> URL? {
@@ -167,6 +181,7 @@ enum HookSheet {
         open.canChooseDirectories = false
         open.allowsMultipleSelection = false
         open.resolvesAliases = true
+        open.treatsFilePackagesAsDirectories = true
         open.prompt = "Choose"
         open.message = "Choose a program of your own. Broadway runs it by itself, with no shell."
         guard open.runModal() == .OK, let url = open.url else { return nil }

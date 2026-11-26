@@ -79,6 +79,37 @@ final class ShortcutTests {
         #expect(store.key(for: Command.recentTabs) == controlTab)
     }
 
+    @Test func keysBroadwayHandlesByHandAreReserved() {
+        #expect(KeyCombo.isReserved(KeyCombo("[", shift: true)))
+        #expect(KeyCombo.isReserved(KeyCombo("]", shift: true)))
+        #expect(KeyCombo.isReserved(KeyCombo("left")))
+        #expect(KeyCombo.isReserved(KeyCombo("right")))
+        #expect(KeyCombo.isReserved(KeyCombo("v", shift: true, option: true)))
+        #expect(Command.all.allSatisfy { $0.defaultKey.map { !KeyCombo.isReserved($0) } ?? true })
+    }
+
+    @Test func aReservedKeySaysWhoseItIs() {
+        #expect(KeyCombo.reserved(KeyCombo("q")) == "macOS uses this key")
+        #expect(KeyCombo.reserved(KeyCombo("c")) == "macOS uses this key")
+        #expect(KeyCombo.reserved(KeyCombo("1")) == "Tabs 1 to 9 use this key")
+        #expect(KeyCombo.reserved(KeyCombo("escape", command: false)) == "Escape and Tab can't be shortcuts")
+        #expect(KeyCombo.reserved(KeyCombo("tab")) == "Escape and Tab can't be shortcuts")
+        #expect(KeyCombo.reserved(KeyCombo("tab", command: false, control: true)) == nil)
+        #expect(KeyCombo.reserved(KeyCombo("d")) == nil)
+    }
+
+    @Test func resetToDefaultSaysWhichCommandItTookTheKeyFrom() {
+        let store = ShortcutStore()
+        store.assign(KeyCombo("d"), to: "view.reload")
+
+        let said = ShortcutsList.resetToDefault(store: store, id: "tabs.duplicate")
+
+        #expect(said == "⌘D moved from Reload Page")
+        #expect(store.key(for: "view.reload") == nil)
+        #expect(ShortcutsList.resetToDefault(store: store, id: "view.reload") == nil)
+        store.resetAll()
+    }
+
     @Test func conflictsWithSpaceKeysUseExistingReassignmentAndReset() {
         let store = ShortcutStore()
         let original = KeyCombo("2", command: false, control: true)

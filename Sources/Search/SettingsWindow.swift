@@ -42,14 +42,44 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         return window
     }
 
+    func listener(for browser: Browser) -> Browser {
+        split?.browser ?? browser
+    }
+
+    static func hand(_ browser: Browser, to target: Browser) {
+        guard target !== browser else { return }
+        if let asked = browser.settingsAsked {
+            target.settingsAsked = asked
+            browser.settingsAsked = nil
+        }
+        if let drill = browser.settingsDrill {
+            target.settingsDrill = drill
+            browser.settingsDrill = nil
+        }
+        if let typed = browser.settingsTyped {
+            target.settingsTyped = typed
+            browser.settingsTyped = nil
+        }
+        if let rule = browser.settingsRule {
+            target.settingsRule = rule
+            browser.settingsRule = nil
+        }
+        if let space = browser.settingsLanguages {
+            target.settingsLanguages = space
+            browser.settingsLanguages = nil
+        }
+    }
+
     func open(_ browser: Browser, section: String?) {
         if let window {
+            let target = listener(for: browser)
+            Self.hand(browser, to: target)
             if let section, let detail = SettingsDetail.named(section) {
-                browser.settingsPage = detail.page
-                browser.settingsDrill = detail
+                target.settingsPage = detail.page
+                target.settingsDrill = detail
             } else if let section, let page = SettingsPage.named(section) {
-                browser.settingsPage = page
-                browser.settingsAsked = page
+                target.settingsPage = page
+                target.settingsAsked = page
             }
             window.makeKeyAndOrderFront(nil)
             return
@@ -245,7 +275,7 @@ final class SettingsSplit: NSSplitViewController {
     let rail = SettingsRail()
     let page: SettingsPageView
     let tab: Bool
-    private let browser: Browser
+    let browser: Browser
     private let bar = SettingsTabBar()
     private(set) lazy var pane = SettingsStagePane(paper: paper, bar: tab ? bar : nil)
     private var watching: Set<AnyCancellable> = []
