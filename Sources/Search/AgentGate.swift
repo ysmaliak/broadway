@@ -245,6 +245,7 @@ struct AgentQuestion: Identifiable, Equatable {
     var site: String?
     var quote = ""
     var quoteLabel = "The page says"
+    var named = ""
     var reason = ""
     var asker: String?
     var line = ""
@@ -398,6 +399,7 @@ final class AgentCardView: NSView {
     private let who = KitLabel("", font: .systemFont(ofSize: 11, weight: .medium), color: KitColor.muted)
     private let count = KitLabel("", font: .systemFont(ofSize: 11), color: KitColor.faint)
     private let signer = KitLabel("", font: .systemFont(ofSize: 11), color: KitColor.muted)
+    private let named = AgentCardView.oneLine()
     private let quote = AgentCardView.wrapping(lines: 2)
     private let reason = AgentCardView.wrapping(lines: 3)
     private var buttons: [NSView] = []
@@ -427,7 +429,7 @@ final class AgentCardView: NSView {
         super.init(frame: NSRect(x: 0, y: 0, width: Self.widest, height: 100))
         glass.hold(stage)
         addSubview(glass)
-        for view in [title, who, count, signer, quote, reason] as [NSView] { stage.addSubview(view) }
+        for view in [title, who, count, signer, named, quote, reason] as [NSView] { stage.addSubview(view) }
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
     }
@@ -485,6 +487,8 @@ final class AgentCardView: NSView {
         signer.isHidden = words.signer.isEmpty
         count.text = "1 of \(desk.pending.count)"
         count.isHidden = desk.pending.count <= 1
+        named.stringValue = question.named
+        named.isHidden = question.named.isEmpty
         quote.stringValue = question.quote.isEmpty ? "" : "\(question.quoteLabel): “\(question.quote)”"
         quote.isHidden = question.quote.isEmpty
         reason.stringValue = words.body
@@ -545,6 +549,15 @@ final class AgentCardView: NSView {
         return field
     }
 
+    static func oneLine() -> NSTextField {
+        let field = NSTextField(labelWithString: "")
+        field.font = .systemFont(ofSize: 12)
+        field.textColor = KitColor.glassMuted
+        field.maximumNumberOfLines = 1
+        field.lineBreakMode = .byTruncatingMiddle
+        return field
+    }
+
     private func height(of field: NSTextField, width: CGFloat) -> CGFloat {
         ceil(field.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: width, height: .greatestFiniteMagnitude)).height ?? 0)
     }
@@ -553,6 +566,7 @@ final class AgentCardView: NSView {
         let inner = width - Self.pad * 2
         var height = Self.pad + 18
         if !signer.isHidden { height += 16 }
+        if !named.isHidden { height += 8 + self.height(of: named, width: inner + 4) }
         if !quote.isHidden { height += 8 + self.height(of: quote, width: inner + 4) }
         if !reason.isHidden { height += 8 + self.height(of: reason, width: inner + 4) }
         if !choices.isEmpty { height += 8 + CGFloat(choices.count) * (AgentChoiceRow.height + 4) }
@@ -601,7 +615,7 @@ final class AgentCardView: NSView {
             signer.frame = stage.kitSnap(NSRect(x: Self.pad + 26, y: y + 1, width: min(FieldLine.width(signer, scale: scale), max(0, inner - 26)), height: 15))
             y += 16
         }
-        for label in [quote, reason] where !label.isHidden {
+        for label in [named, quote, reason] where !label.isHidden {
             y += 8
             let h = self.height(of: label, width: inner + 4)
             label.frame = NSRect(x: Self.pad - 2, y: y, width: inner + 4, height: h)

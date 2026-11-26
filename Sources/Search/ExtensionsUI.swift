@@ -224,7 +224,7 @@ final class ExtensionRowView: NSView, KitFits {
     override func menu(for event: NSEvent) -> NSMenu? { KitMenu.make(ExtensionsLogic.actions(item, context, extensions, over: window)) }
 }
 
-final class StoreOfferView: NSView {
+final class StoreOfferView: NSView, BarShrinks {
     var busy: Bool { didSet { if busy != oldValue { refresh() } } }
     var onAdd: (() -> Void)?
 
@@ -267,6 +267,9 @@ final class StoreOfferView: NSView {
 
     private var trailing: NSSize { busy ? NSSize(width: 10, height: 10) : add.intrinsicContentSize }
 
+    var leastWidth: CGFloat { 16 + symbol.intrinsicContentSize.width + 12 + 12 + trailing.width + 10 }
+    var barWords: String? { words.text }
+
     override var intrinsicContentSize: NSSize {
         let words = words.intrinsicContentSize
         let symbol = symbol.intrinsicContentSize
@@ -283,8 +286,9 @@ final class StoreOfferView: NSView {
         symbol.frame = kitSnap(NSRect(x: x, y: mid - symbolSize.height / 2, width: symbolSize.width, height: symbolSize.height))
         x += symbolSize.width + 12
         let wordsSize = words.intrinsicContentSize
-        words.frame = kitSnap(NSRect(x: x, y: mid - wordsSize.height / 2, width: wordsSize.width, height: wordsSize.height))
-        x += wordsSize.width + 12
+        let wordsWidth = min(wordsSize.width, max(0, bounds.width - leastWidth))
+        words.frame = kitSnap(NSRect(x: x, y: mid - wordsSize.height / 2, width: wordsWidth, height: wordsSize.height))
+        x += wordsWidth + 12
         let size = trailing
         let box = kitSnap(NSRect(x: x, y: mid - size.height / 2, width: size.width, height: size.height))
         add.frame = box

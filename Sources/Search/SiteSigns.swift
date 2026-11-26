@@ -170,6 +170,7 @@ final class SiteWrapLabel: NSView {
     var text: String { didSet { if text != oldValue { changed() } } }
     var font: NSFont { didSet { if font != oldValue { changed() } } }
     var color: NSColor { didSet { if color != oldValue { needsDisplay = true } } }
+    var oneLine = false { didSet { if oneLine != oldValue { changed() } } }
 
     init(_ text: String, font: NSFont, color: NSColor) {
         self.text = text
@@ -200,7 +201,7 @@ final class SiteWrapLabel: NSView {
 
     private func attributed(_ color: NSColor) -> NSAttributedString {
         let paragraph = NSMutableParagraphStyle()
-        paragraph.lineBreakMode = .byWordWrapping
+        paragraph.lineBreakMode = oneLine ? .byTruncatingTail : .byWordWrapping
         paragraph.lineBreakStrategy = .standard
         return NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color, .paragraphStyle: paragraph])
     }
@@ -214,6 +215,7 @@ final class SiteWrapLabel: NSView {
     override var intrinsicContentSize: NSSize { measure(width: .greatestFiniteMagnitude) }
 
     override func draw(_ dirtyRect: NSRect) {
-        attributed(KitInk.flat.onGlass(kitOnGlass).color(color, dark: kitDark)).draw(with: bounds, options: [.usesLineFragmentOrigin])
+        attributed(KitInk.flat.onGlass(kitOnGlass).color(color, dark: kitDark))
+            .draw(with: bounds, options: oneLine ? [.usesLineFragmentOrigin, .truncatesLastVisibleLine] : [.usesLineFragmentOrigin])
     }
 }

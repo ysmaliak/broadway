@@ -63,7 +63,7 @@ class QuestionView: NSView {
     }
 }
 
-class AskLine: QuestionView {
+class AskLine: QuestionView, BarShrinks {
     let symbol: KitSymbol?
     let question: SiteWrapLabel
     var keySpacing: CGFloat = SurfaceLook.keyGap
@@ -79,6 +79,7 @@ class AskLine: QuestionView {
     init(symbol: String?, text: String, trailing: CGFloat) {
         self.symbol = symbol.map { KitSymbol($0, style: KitSymbol.Style(size: 11, weight: .medium), tint: KitColor.muted) }
         question = QuestionView.text(text)
+        question.oneLine = true
         super.init(radius: 20, leading: 16, trailing: trailing, vertical: 9)
         if let symbol = self.symbol { body.addSubview(symbol) }
         body.addSubview(question)
@@ -91,26 +92,33 @@ class AskLine: QuestionView {
     private var lead: CGFloat { symbol == nil ? 0 : symbolSize.width + 12 }
     private var keyHeight: CGFloat { keys.map(\.intrinsicContentSize.height).max() ?? 0 }
 
+    var wraps = false { didSet { question.oneLine = !wraps } }
+    var leastWidth: CGFloat { leading + trailing + lead + 12 + buttonsRow(keys, spacing: keySpacing) }
+    var barWords: String? { wraps ? nil : question.text }
+
     override func arrange(_ width: CGFloat?, place: Bool) -> NSSize {
         let textWidth = QuestionView.width(question)
         let lineHeight = QuestionView.height(question, width: .greatestFiniteMagnitude)
         let actions = buttonsRow(keys, spacing: keySpacing)
-        let wide = lead + textWidth + 12 + actions
-        if width == nil || width! >= wide - 0.01 {
-            let height = max(lineHeight, keyHeight, symbolSize.height)
-            if place {
-                if let symbol { put(symbol, NSRect(x: 0, y: (height - symbolSize.height) / 2, width: symbolSize.width, height: symbolSize.height)) }
-                put(question, NSRect(x: lead, y: (height - lineHeight) / 2, width: textWidth, height: lineHeight))
-                var x = lead + textWidth + 12
-                for key in keys {
-                    let size = key.intrinsicContentSize
-                    put(key, NSRect(x: x, y: (height - size.height) / 2, width: size.width, height: size.height))
-                    x += size.width + keySpacing
-                }
-            }
-            return NSSize(width: wide, height: height)
+        if wraps, let width, width < lead + textWidth + 12 + actions - 0.01 {
+            return wrapped(width, textWidth: textWidth, actions: actions, place: place)
         }
-        let width = width!
+        let shown = width.map { min(textWidth, max(0, $0 - lead - 12 - actions)) } ?? textWidth
+        let height = max(lineHeight, keyHeight, symbolSize.height)
+        if place {
+            if let symbol { put(symbol, NSRect(x: 0, y: (height - symbolSize.height) / 2, width: symbolSize.width, height: symbolSize.height)) }
+            put(question, NSRect(x: lead, y: (height - lineHeight) / 2, width: shown, height: lineHeight))
+            var x = lead + shown + 12
+            for key in keys {
+                let size = key.intrinsicContentSize
+                put(key, NSRect(x: x, y: (height - size.height) / 2, width: size.width, height: size.height))
+                x += size.width + keySpacing
+            }
+        }
+        return NSSize(width: lead + shown + 12 + actions, height: height)
+    }
+
+    private func wrapped(_ width: CGFloat, textWidth: CGFloat, actions: CGFloat, place: Bool) -> NSSize {
         let wrap = min(textWidth, max(1, width - lead))
         let textHeight = QuestionView.height(question, width: wrap)
         let top = max(textHeight, symbolSize.height)
@@ -152,6 +160,7 @@ final class CaptureQuestionView: AskLine {
         self.browser = browser
         self.ask = ask
         super.init(symbol: CaptureQuestionView.symbol(ask), text: CaptureQuestionView.words(ask), trailing: 9)
+        wraps = true
         refresh()
     }
 

@@ -107,11 +107,18 @@ final class ContentView: NSView {
             guard let self, let spot = stageHost.paneSpot else { return nil }
             return stageHost.convert(spot, to: lowerHost)
         }
+        upperHost.paneSpot = { [weak self] in
+            guard let self, let spot = stageHost.paneSpot else { return nil }
+            return stageHost.convert(spot, to: upperHost)
+        }
         lowerHost.agentCard = { [weak self] in
             guard let self, let card = stageHost.agentCard else { return nil }
             return stageHost.convert(card, to: lowerHost)
         }
-        stageHost.onSpot = { [weak self] in self?.lowerHost.needsLayout = true }
+        stageHost.onSpot = { [weak self] in
+            self?.lowerHost.needsLayout = true
+            self?.upperHost.needsLayout = true
+        }
         watch()
     }
 

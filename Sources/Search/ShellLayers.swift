@@ -236,24 +236,33 @@ final class BarStack: KitFlippedView {
         place(animated: false)
     }
 
-    static func centre(_ width: CGFloat, pane: CGRect?, across: CGFloat) -> CGFloat {
-        guard let pane, width <= pane.width else { return across / 2 }
-        return pane.midX
+    static let margin = Metrics.cardGap
+
+    static func area(_ page: CGRect?, in bounds: CGRect) -> CGRect {
+        guard let page, page.width > 0 else { return bounds }
+        return page
     }
 
-    static func fitted(_ size: CGSize, view: NSView, pane: CGRect?) -> CGSize {
-        guard let pane, let shrinks = view as? BarShrinks else { return size }
-        let room = pane.width - 2 * Metrics.cardGap
-        guard size.width > room else { return size }
-        return CGSize(width: max(shrinks.leastWidth, room), height: size.height)
+    static func fitted(_ view: NSView, room: CGFloat) -> CGSize {
+        if let question = view as? QuestionView { return question.fit(room) }
+        if let shrinks = view as? BarShrinks {
+            let natural = shrinks.intrinsicContentSize
+            return CGSize(width: min(natural.width, max(room, shrinks.leastWidth)), height: natural.height)
+        }
+        return size(view, width: room)
     }
 
     private func place(animated: Bool) {
         var y = bounds.height - bottom
         for bar in bars.reversed() {
-            let size = Self.fitted(Self.size(bar.view, width: bounds.width), view: bar.view, pane: bar.pane)
+            let area = Self.area(bar.pane ?? page, in: bounds)
+            let size = Self.fitted(bar.view, room: area.width - 2 * Self.margin)
             y -= size.height
-            let x = Self.centre(size.width, pane: bar.pane ?? page, across: bounds.width) - size.width / 2
+            let x = area.midX - size.width / 2
+            if let shrinks = bar.view as? BarShrinks, let words = shrinks.barWords {
+                bar.view.toolTip = shrinks.cutsOwnWords || size.width < shrinks.intrinsicContentSize.width - 0.5 ? words : nil
+                bar.view.setAccessibilityLabel(words)
+            }
             let frame = kitSnap(CGRect(x: x, y: y, width: size.width, height: size.height))
             let was = bar.view.frame
             let key = ObjectIdentifier(bar.view)
@@ -280,7 +289,7 @@ final class BarStack: KitFlippedView {
 }
 
 @MainActor
-final class CapsuleNote: KitFlippedView {
+final class CapsuleNote: KitFlippedView, BarShrinks {
     private let glass = KitGlass.floating(capsule: true)
     private let inside = KitFlippedView()
     let label: KitLabel
@@ -305,11 +314,18 @@ final class CapsuleNote: KitFlippedView {
 
     static let widest: CGFloat = 420
 
+    private var trailingWidth: CGFloat {
+        guard shownTrailing, let trailing else { return 0 }
+        return 8 + ceil(trailing.measure(width: .greatestFiniteMagnitude).width)
+    }
+
+    var leastWidth: CGFloat { 30 + trailingWidth }
+    var barWords: String? { label.text }
+    var cutsOwnWords: Bool { ceil(label.measure(width: .greatestFiniteMagnitude).width) > Self.widest }
+
     override var intrinsicContentSize: NSSize {
         let text = label.measure(width: .greatestFiniteMagnitude)
-        var width = min(ceil(text.width), Self.widest)
-        if shownTrailing, let trailing { width += 8 + ceil(trailing.measure(width: .greatestFiniteMagnitude).width) }
-        return NSSize(width: width + 30, height: ceil(text.height) + 18)
+        return NSSize(width: min(ceil(text.width), Self.widest) + leastWidth, height: ceil(text.height) + 18)
     }
 
     override func layout() {
@@ -317,7 +333,7 @@ final class CapsuleNote: KitFlippedView {
         glass.frame = bounds
         inside.frame = glass.bounds
         let text = label.measure(width: .greatestFiniteMagnitude)
-        label.frame = kitSnap(CGRect(x: 15, y: 9, width: min(ceil(text.width), Self.widest), height: ceil(text.height)))
+        label.frame = kitSnap(CGRect(x: 15, y: 9, width: min(ceil(text.width), Self.widest, max(0, bounds.width - leastWidth)), height: ceil(text.height)))
         if let trailing {
             trailing.isHidden = !shownTrailing
             let size = trailing.measure(width: .greatestFiniteMagnitude)
@@ -385,6 +401,12 @@ final class AnnouncementView {
 @MainActor
 protocol BarShrinks: NSView {
     var leastWidth: CGFloat { get }
+    var barWords: String? { get }
+    var cutsOwnWords: Bool { get }
+}
+
+extension BarShrinks {
+    var cutsOwnWords: Bool { false }
 }
 
 @MainActor
@@ -596,6 +618,7 @@ final class ShellLowerLayer: ShellLayer {
 @MainActor
 final class ShellUpperLayer: ShellLayer {
     let browser: Browser
+    var paneSpot: (() -> CGRect?)?
     private let stack = BarStack()
     private let announcement: AnnouncementView
     private let newTabs: NewTabsNoticeView
@@ -631,6 +654,7 @@ final class ShellUpperLayer: ShellLayer {
     override func layout() {
         super.layout()
         stack.frame = bounds
+        stack.page = paneSpot?()
         announcement.sync()
         newTabs.sync()
         var bars: [BarStack.Bar] = []

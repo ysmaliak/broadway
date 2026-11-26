@@ -162,7 +162,7 @@ enum PersonConfig {
             LinkRules.shared.move(found.id, to: position - 1)
             return ["id": short(found.id), "position": position, "message": "Moved"]
         },
-        PersonVerb("links", "delete", .erase, first: { _ = try rule($0) }) { call in
+        PersonVerb("links", "delete", .erase, first: { _ = try rule($0) }, names: { LinkRouter.words(try rule($0).match) }) { call in
             let found = try rule(call)
             LinkRules.shared.remove(found.id)
             return ["id": short(found.id), "message": "Deleted"]
@@ -175,7 +175,10 @@ enum PersonConfig {
             call.browser.prefs.keywords.append(made)
             return ["keyword": made.keyword, "site": made.name, "message": "\(made.keyword) searches \(made.name)"]
         },
-        PersonVerb("keywords", "delete", .erase, first: { _ = try keyword($0) }) { call in
+        PersonVerb("keywords", "delete", .erase, first: { _ = try keyword($0) }, names: { call in
+            let found = try keyword(call)
+            return PersonAsk.line(found.keyword, PersonAsk.host(found.template.replacingOccurrences(of: "%s", with: "")))
+        }) { call in
             let found = try keyword(call)
             call.browser.prefs.keywords.removeAll { $0.id == found.id }
             return ["keyword": found.keyword, "message": "Deleted"]
@@ -211,7 +214,7 @@ enum PersonConfig {
         },
         PersonVerb("actions", "delete", .erase, first: { call in
             guard QuickActions.shared.canDelete(try action(call).id) else { throw PersonRefusal("refused", "That Quick Action can't be deleted") }
-        }) { call in
+        }, names: { try action($0).name }) { call in
             let found = try action(call)
             guard QuickActions.shared.delete(found.id, history: call.browser.history) else {
                 throw PersonRefusal("refused", "That Quick Action can't be deleted")
@@ -232,7 +235,10 @@ enum PersonConfig {
             if let problem = SnippetStore.shared.save(found) { throw PersonRefusal.usage(problem) }
             return ["keyword": found.keyword, "title": found.title, "message": "Renamed"]
         },
-        PersonVerb("snippets", "delete", .erase, first: { _ = try snippet($0) }) { call in
+        PersonVerb("snippets", "delete", .erase, first: { _ = try snippet($0) }, names: { call in
+            let found = try snippet(call)
+            return PersonAsk.line(found.title, found.keyword)
+        }) { call in
             let found = try snippet(call)
             if let trouble = SnippetStore.shared.delete(found.id) { throw PersonRefusal("failed", trouble) }
             return ["keyword": found.keyword, "message": "Deleted"]

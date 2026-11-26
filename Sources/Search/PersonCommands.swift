@@ -118,16 +118,19 @@ struct PersonVerb {
     var tabbed = false
     var softer: (@MainActor (PersonCall) -> PersonClass?)?
     var first: (@MainActor (PersonCall) async throws -> Void)?
+    var names: (@MainActor (PersonCall) throws -> String?)?
     var run: PersonHandler
 
     init(_ noun: String, _ verb: String, _ kind: PersonClass, tabbed: Bool = false, softer: (@MainActor (PersonCall) -> PersonClass?)? = nil,
-         first: (@MainActor (PersonCall) async throws -> Void)? = nil, run: @escaping PersonHandler) {
+         first: (@MainActor (PersonCall) async throws -> Void)? = nil, names: (@MainActor (PersonCall) throws -> String?)? = nil,
+         run: @escaping PersonHandler) {
         self.noun = noun
         self.verb = verb
         self.kind = kind
         self.tabbed = tabbed
         self.softer = softer
         self.first = first
+        self.names = names
         self.run = run
     }
 
@@ -374,6 +377,24 @@ enum PersonAsk {
         "folders close": "Close a folder's tabs?",
     ]
 
+    static func named(_ call: PersonCall) -> String {
+        guard let found = PersonCommands.find(call.noun, call.verb)?.names, let name = try? found(call) else { return "" }
+        return AgentQuestion.clean(name, limit: 400)
+    }
+
+    static func line(_ parts: String?...) -> String {
+        parts.compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    static func host(_ address: String?) -> String? {
+        guard let address, let host = URL(string: address)?.host() else { return nil }
+        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+    }
+
+    static func count(_ number: Int, _ one: String, _ many: String) -> String {
+        "\(number) \(number == 1 ? one : many)"
+    }
+
     static func title(for call: PersonCall, site: String?) -> String {
         let more = call.strings("values").count / 2
         if call.noun == "settings", call.verb == "set", more > 0 { return "Change \(more + 1) settings?" }
@@ -405,6 +426,7 @@ enum PersonAsk {
         question.site = site
         question.quote = AgentQuestion.clean(call.line)
         question.quoteLabel = call.link.map { "From \($0.title)" } ?? "From a terminal"
+        question.named = named(call)
         question.task = call.link?.id
         channel.send(["event": "asking", "message": "Waiting for your yes in Broadway"])
         let kept = call.link.flatMap { AgentHeld.shared.entry($0.id, pass) }

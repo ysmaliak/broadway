@@ -486,7 +486,10 @@ enum PersonSettings {
             store.assign(combo, to: found.id)
             return ["id": found.id, "key": combo.display, "notice": other.map { "Taken from \($0.title)" } ?? ""]
         },
-        PersonVerb("shortcuts", "clear", .arrange) { call in
+        PersonVerb("shortcuts", "clear", .arrange, names: { call in
+            let found = try command(call)
+            return PersonAsk.line(found.title, ShortcutStore.shared.key(for: found.id)?.display)
+        }) { call in
             let found = try command(call)
             ShortcutStore.shared.clear(found.id)
             return ["id": found.id, "message": "No key now"]
@@ -525,7 +528,7 @@ enum PersonSettings {
             Extensions.shared.reload(found.id)
             return ["id": found.id, "message": "Reloaded"]
         },
-        PersonVerb("extensions", "remove", .erase, first: { _ = try installed($0) }) { call in
+        PersonVerb("extensions", "remove", .erase, first: { _ = try installed($0) }, names: { try installed($0).name }) { call in
             let found = try installed(call)
             Extensions.shared.remove(found.id)
             return ["id": found.id, "message": "Removed"]

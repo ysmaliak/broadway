@@ -39,7 +39,7 @@ struct ExtensionAskedGrantTests {
         defer { Extensions.shared.answerForTests = previous }
         Extensions.clicked[id] = Date()
         let reply = try await ExtensionShims.answer([
-            "api": "permissions.afterClick", "args": [["cookies"], ["https://example.com/*"]],
+            "api": "permissions.ask", "args": [[], ["cookies"], ["https://example.com/*"], false],
         ], from: first, owner: Extensions.shared) as? [String: Any]
         #expect((reply?["value"] as? Bool) == true)
         _ = try await ExtensionShims.answer([

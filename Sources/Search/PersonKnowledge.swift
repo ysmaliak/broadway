@@ -37,7 +37,7 @@ enum PersonKnowledge {
         },
         PersonVerb("skills", "delete", .erase, first: { call in
             guard !(try skill(call)).builtIn else { throw PersonRefusal("refused", "A built-in skill can't be deleted") }
-        }) { call in
+        }, names: { try skill($0).name }) { call in
             let found = try skill(call)
             SkillStore.shared.delete(found)
             return ["message": "Deleted"]

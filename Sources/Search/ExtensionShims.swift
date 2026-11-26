@@ -2911,7 +2911,7 @@ enum ExtensionShims {
           unknown: list.filter((p) => !webkit.has(p) && !ours.has(p) && !named.has(p)),
         });
         const p = chrome.permissions;
-        const contains = p.contains.bind(p), request = p.request.bind(p), getAll = p.getAll.bind(p), remove = p.remove.bind(p);
+        const contains = p.contains.bind(p), getAll = p.getAll.bind(p), remove = p.remove.bind(p);
         const granted = () => native("permissions.granted", []).then((list) => new Set([...declared, ...(list || [])]));
         const withCb = (f) => (arg, callback) => {
           const pr = f(arg || {});
@@ -2933,23 +2933,11 @@ enum ExtensionShims {
           return theirs.length || origins.length ? contains({ permissions: theirs, origins }) : true;
         }));
         put(p, "request", withCb(async ({ permissions = [], origins = [] }) => {
+          const active = (() => { try { return !!navigator.userActivation.isActive; } catch (e) { return false; } })();
           const { theirs, mine, unknown } = split(permissions);
           if (unknown.length || extensionPages(origins)) return false;
-          if (mine.length) {
-            const have = await granted();
-            const missing = mine.filter((m) => !have.has(m));
-            if (missing.length && !(await native("permissions.request", [missing]))) return false;
-          }
-          if (!theirs.length && !origins.length) return true;
-          // Already given (<all_urls> as *://*/*): nothing to ask again.
-          if (await Promise.resolve(contains({ permissions: theirs, origins: websites(origins) })).catch(() => false)) return true;
-          // Asked from a click on the extension's button: when filling in
-          // the tab it was given (mend) cost WebKit the click, Search
-          // knows it was one and asks the same question.
-          const given = await Promise.resolve(request({ permissions: theirs, origins })).catch((e) =>
-            /user gesture/i.test(String(e && e.message)) ? native("permissions.afterClick", [theirs, origins]) : Promise.reject(e));
-          if (given) await native("permissions.keep", [theirs, origins]).catch(() => {});
-          return given;
+          if (!mine.length && !theirs.length && !origins.length) return true;
+          return native("permissions.ask", [mine, theirs, origins, active]);
         }));
         put(p, "getAll", (callback) => {
           const pr = (async () => {
@@ -4507,73 +4495,11 @@ enum ExtensionShims {
         // MARK: permissions Search grants itself
         case "permissions.granted":
             return Store.settings.stringArray(forKey: "extensions.granted.\(id)") ?? []
-        case "permissions.request":
-            let wanted = (first as? [String]) ?? []
-            // As in Chrome: only what the manifest named, as a permission or
-            // an optional one. What was agreed to at install still describes
-            // the extension; it can't ask later for something it never named.
-            let manifest = context.webExtension.manifest
-            let named = Set(((manifest["permissions"] as? [Any] ?? []) + (manifest["optional_permissions"] as? [Any] ?? [])).compactMap { $0 as? String })
-            guard wanted.allSatisfy(named.contains) else {
-                throw Unsupported(what: "Only permissions specified in the manifest may be requested.")
-            }
-            // Those Chrome grants without a word, having nothing to warn of.
-            let silent: Set<String> = ["tabGroups", "sidePanel", "offscreen", "idle", "power", "fontSettings", "search",
-                                       "system.cpu", "system.memory", "system.display", "favicon"]
-            let names = Extensions.abilities(named: wanted.filter { !silent.contains($0) })
-            let yes = wanted.allSatisfy(silent.contains) ? true : await owner.ask(more: names, context: context)
-            guard yes else { return false }
-            let had = Store.settings.stringArray(forKey: "extensions.granted.\(id)") ?? []
-            Store.settings.set(Array(Set(had + wanted)).sorted(), forKey: "extensions.granted.\(id)")
-            return true
-        case "permissions.afterClick":
-            // permissions.request for WebKit's own permissions and sites,
-            // made from a click on the extension's button whose moment
-            // WebKit lost while the shim filled in the tab it was given
-            // (see `mend`). Only within seconds of that click, once, and
-            // only what the manifest names, asked as WebKit would ask it.
-            // A click or key in one of the extension's own pages counts too
-            // (its options page in a tab, its popup): Chrome treats that as
-            // the user gesture, and WebKit loses it as soon as the page
-            // awaits anything before calling permissions.request.
-            let when = [Extensions.clicked[id], Extensions.touched[id]].compactMap { $0 }.max()
-            guard let when, Date().timeIntervalSince(when) < 10 else {
-                throw Unsupported(what: "Invalid call to permissions.request(). Must be called during a user gesture.")
-            }
-            Extensions.clicked[id] = nil
-            Extensions.touched[id] = nil
-            let found = context.webExtension
-            let wanted = ((first as? [String]) ?? []).map { WKWebExtension.Permission(rawValue: $0) }
-            let origins = ((args.dropFirst().first as? [String]) ?? []).compactMap { try? WKWebExtension.MatchPattern(string: $0) }
-                .filter { !Extensions.withheld($0) }
-            let named = found.requestedPermissions.union(found.optionalPermissions)
-            // Sites as the manifest names them, optional ones included —
-            // which allRequestedMatchPatterns leaves out.
-            let places = Set(found.allRequestedMatchPatterns.union(found.optionalPermissionMatchPatterns).map(\.string))
-            guard wanted.allSatisfy(named.contains), origins.allSatisfy({ places.contains($0.string) }) else {
-                throw Unsupported(what: "Only permissions specified in the manifest may be requested.")
-            }
-            let missing = wanted.filter { context.permissionStatus(for: $0) != .grantedExplicitly }
-            let unreached = origins.filter { pattern in
-                let status = context.permissionStatus(for: pattern)
-                if status == .grantedExplicitly || status == .grantedImplicitly { return false }
-                if status == .deniedExplicitly || status == .deniedImplicitly { return true }
-                if context.deniedPermissionMatchPatterns.keys.contains(where: { !$0.matchesAllHosts && $0.matches(pattern) }) { return true }
-                // WebKit can report a named pattern as requested even when a wildcard grants it.
-                return !context.currentPermissionMatchPatterns.contains { granted in
-                    granted.scheme == pattern.scheme && granted.path == pattern.path && granted.matches(pattern)
-                }
-            }
-            guard !missing.isEmpty || !unreached.isEmpty else { return true }
-            let every = unreached.contains { $0.matchesAllHosts || $0.matchesAllURLs }
-            let sites = every ? "every website" : unreached.map(\.string).sorted().joined(separator: ", ")
-            let question = unreached.isEmpty ? "asks for more access" : "wants to read and change \(sites)"
-            let detail = missing.isEmpty ? "Until you remove the extension" : Extensions.abilities(named: missing.map(\.rawValue))
-            guard await owner.ask(question, detail: detail, context: context) else { return false }
-            for permission in missing { context.setPermissionStatus(.grantedExplicitly, for: permission) }
-            for pattern in unreached { context.setPermissionStatus(.grantedExplicitly, for: pattern) }
-            Extensions.fence(context)
-            return true
+        case "permissions.ask":
+            return try await ExtensionRequest.ask(
+                mine: (first as? [String]) ?? [], theirs: (args.dropFirst().first as? [String]) ?? [],
+                sites: (args.dropFirst(2).first as? [String]) ?? [], gesture: args.dropFirst(3).first as? Bool ?? false,
+                context: context, owner: owner)
         case "permissions.removeWebsites":
             // What fence() keeps of <all_urls> once it is given back, and
             // <all_urls> itself: both, and exactly those, so a host the

@@ -171,7 +171,7 @@ extension AgentQuestion {
 extension AgentDesk {
     static func benchRow(_ question: AgentQuestion) -> [String: Any] {
         let words = question.cardWords
-        return ["title": question.title, "quote": question.quote, "label": question.quoteLabel,
+        return ["title": question.title, "quote": question.quote, "label": question.quoteLabel, "named": question.named,
                 "card": ["title": words.title, "who": words.who, "body": words.body, "signer": words.signer, "choices": question.choices] as [String: Any]]
     }
 }

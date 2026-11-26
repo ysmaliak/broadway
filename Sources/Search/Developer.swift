@@ -640,7 +640,8 @@ final class OfferBarView: KitFlippedView, BarShrinks, KitOnGlass {
         NSSize(width: ends + label.intrinsicContentSize.width + buttonsWidth, height: SurfaceLook.bar)
     }
 
-    var leastWidth: CGFloat { ends + 120 + buttonsWidth }
+    var leastWidth: CGFloat { ends + buttonsWidth }
+    var barWords: String? { text }
 
     override func layout() {
         super.layout()

@@ -25,6 +25,12 @@ final class ShellStageLayer: ShellLayer {
     }
     var agentCard: CGRect? { ai.cardFrame.map { ai.convert($0, to: self) } }
 
+    override func setFrameOrigin(_ newOrigin: NSPoint) {
+        let moved = newOrigin != frame.origin
+        super.setFrameOrigin(newOrigin)
+        if moved { onSpot?() }
+    }
+
     init(browser: Browser) {
         self.browser = browser
         let corner = browser.asCards ? Metrics.pageRadius : 0

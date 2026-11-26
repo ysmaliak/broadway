@@ -49,13 +49,13 @@ struct ExtensionSiteGrantTests {
         defer { browser.closeAll() }
         Extensions.clicked[compact.uniqueIdentifier] = Date()
         let reply = try await ExtensionShims.answer([
-            "api": "permissions.afterClick", "args": [[], [named.string]],
+            "api": "permissions.ask", "args": [[], [], [named.string], false],
         ], from: compact, owner: Extensions.shared) as? [String: Any]
         #expect((reply?["value"] as? Bool) == true, "an existing wildcard grant must not ask again: \(String(describing: reply))")
         #expect(compact.grantedPermissionMatchPatterns.count == 3)
         Extensions.clicked[compact.uniqueIdentifier] = Date()
         let refused = try await ExtensionShims.answer([
-            "api": "permissions.afterClick", "args": [[], ["https://unrelated.invalid/*"]],
+            "api": "permissions.ask", "args": [[], [], ["https://unrelated.invalid/*"], false],
         ], from: compact, owner: Extensions.shared) as? [String: Any]
         #expect((refused?["error"]) != nil)
         #expect(!compact.hasAccess(to: URL(string: "https://unrelated.invalid/")!))
@@ -65,7 +65,7 @@ struct ExtensionSiteGrantTests {
         defer { Extensions.shared.answerForTests = previousAnswer }
         Extensions.clicked[compact.uniqueIdentifier] = Date()
         let denied = try await ExtensionShims.answer([
-            "api": "permissions.afterClick", "args": [[], [named.string]],
+            "api": "permissions.ask", "args": [[], [], [named.string], false],
         ], from: compact, owner: Extensions.shared) as? [String: Any]
         #expect((denied?["value"] as? Bool) == false, "a denied subdomain must not inherit approval")
         #expect(!compact.hasAccess(to: URL(string: "https://news.example.com/article")!))

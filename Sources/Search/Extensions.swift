@@ -1447,19 +1447,20 @@ final class Extensions: NSObject {
         var out: [String] = []
         // Leaving out what Search itself added to the manifest.
         let added = searchAdded(in: folder), declared = declaredPermissions(in: folder)
-        let patterns = found.allRequestedMatchPatterns
-        if patterns.contains(where: { $0.matchesAllHosts || $0.matchesAllURLs }) {
-            out.append("Read and change everything on every website")
-        } else if !patterns.isEmpty {
-            let hosts = patterns.compactMap(\.host).filter { !$0.isEmpty }
-            out.append("Read and change what's on " + (hosts.prefix(4).joined(separator: ", ")) + (hosts.count > 4 ? " and \(hosts.count - 4) more" : ""))
-        }
+        if let sites = siteSentence(found.allRequestedMatchPatterns) { out.append(sites) }
         for (permission, sentence) in Extensions.words where found.requestedPermissions.contains(permission) && !added.contains(permission.rawValue) {
             out.append(sentence)
         }
         // Chrome's own, which Search answers itself.
         for (name, sentence) in Extensions.searchAnswered where declared.contains(name) { out.append(sentence) }
         return out
+    }
+
+    static func siteSentence(_ patterns: some Collection<WKWebExtension.MatchPattern>) -> String? {
+        if patterns.contains(where: { $0.matchesAllHosts || $0.matchesAllURLs }) { return "Read and change everything on every website" }
+        let hosts = Array(Set(patterns.compactMap(\.host).filter { !$0.isEmpty })).sorted()
+        guard !hosts.isEmpty else { return nil }
+        return "Read and change what's on " + hosts.prefix(4).joined(separator: ", ") + (hosts.count > 4 ? " and \(hosts.count - 4) more" : "")
     }
 
     static let words: [WKWebExtension.Permission: String] = [
@@ -1507,12 +1508,6 @@ final class Extensions: NSObject {
         )
     }
 
-    /// An extension asking, through permissions.request, for one of the
-    /// permissions Search answers itself.
-    func ask(more names: String, context: WKWebExtensionContext) async -> Bool {
-        await ask("asks for more access", detail: names, context: context)
-    }
-
     /// Recording the screen: asked once, naming the extension; the Mac's own
     /// picker still asks what to share, every time.
     func ask(capture context: WKWebExtensionContext) async -> Bool {
@@ -1538,6 +1533,7 @@ final class Extensions: NSObject {
     var answerForTests: Bool?
     /// What was asked, for the bench.
     private(set) var asked: [String] = []
+    private(set) var askedDetails: [String] = []
 
     static func questionAlert(_ title: String, detail: String, icon: NSImage?, yes: String, no: String, updating: Bool) -> NSAlert {
         let alert = Ask.question(title, detail: detail, confirm: yes, cancel: no, returnCancels: updating, destructive: false)
@@ -1554,6 +1550,7 @@ final class Extensions: NSObject {
         let task = Task { @MainActor [weak self] () -> Bool in
             _ = await before?.value
             self?.asked.append(title)
+            self?.askedDetails.append(detail)
             if Store.testing, let answer = self?.answerForTests { return answer }
             let alert = Extensions.questionAlert(title, detail: detail, icon: icon, yes: yes, no: no, updating: updating)
             let escape = updating ? Ask.escapeCancels(alert) : nil
@@ -1607,7 +1604,7 @@ final class Extensions: NSObject {
     /// When you last clicked each extension's button or its line in the
     /// menu: a permissions.request made from that click is one you asked
     /// for, even once WebKit no longer sees the click (see
-    /// ExtensionShims, "permissions.afterClick").
+    /// ExtensionRequest).
     static var clicked: [String: Date] = [:]
     /// The same, kept: permissions.request uses up `clicked`, and a
     /// recording started from the button counts it for a minute (see
@@ -1834,6 +1831,7 @@ extension Extensions: WKWebExtensionControllerDelegate {
     }
 
     func webExtensionController(_ controller: WKWebExtensionController, promptForPermissions permissions: Set<WKWebExtension.Permission>, in tab: (any WKWebExtensionTab)?, for extensionContext: WKWebExtensionContext) async -> (Set<WKWebExtension.Permission>, Date?) {
+        if let said = ExtensionRequest.recent(extensionContext.uniqueIdentifier, permissions: permissions) { return said ? (permissions, nil) : ([], nil) }
         let detail = Extensions.abilities(named: permissions.map(\.rawValue))
         return await ask("asks for more access", detail: detail, context: extensionContext) ? (permissions, nil) : ([], nil)
     }
@@ -1853,9 +1851,11 @@ extension Extensions: WKWebExtensionControllerDelegate {
         // Extension pages and files are never given, so never asked about.
         let wanted = matchPatterns.filter { !Extensions.withheld($0) }
         guard !wanted.isEmpty else { return ([], nil) }
-        let all = wanted.contains { $0.matchesAllHosts || $0.matchesAllURLs }
-        let what = all ? "every website" : wanted.map(\.string).sorted().joined(separator: ", ")
-        guard await ask("wants to read and change \(what)", detail: "Until you remove the extension", context: extensionContext) else { return ([], nil) }
+        if let said = ExtensionRequest.recent(extensionContext.uniqueIdentifier, sites: Set(wanted.map(\.string))) {
+            if said { DispatchQueue.main.async { Extensions.fence(extensionContext) } }
+            return said ? (wanted, nil) : ([], nil)
+        }
+        guard await ask("asks for more access", detail: ExtensionRequest.words(names: [], sites: Array(wanted)), context: extensionContext) else { return ([], nil) }
         // Given only once this returns: fenced again right after.
         DispatchQueue.main.async { Extensions.fence(extensionContext) }
         return (wanted, nil)

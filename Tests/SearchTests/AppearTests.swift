@@ -178,14 +178,15 @@ struct BarStackTests {
         #expect(bar.frame.midX == 300)
     }
 
-    @Test func aBarWiderThanItsPaneCentresOnTheWindow() {
+    @Test func aBarWiderThanItsPaneStillCentresOnThePane() {
         let (window, stack) = stage()
         defer { window.close() }
         let bar = Block()
+        let pane = CGRect(x: 280, y: 0, width: 120, height: 300)
 
-        stack.show([.init(view: bar, kind: .note, pane: CGRect(x: 280, y: 0, width: 120, height: 300))])
+        stack.show([.init(view: bar, kind: .note, pane: pane)])
         stack.layoutSubtreeIfNeeded()
 
-        #expect(bar.frame.midX == stack.bounds.midX)
+        #expect(bar.frame.midX == pane.midX)
     }
 }

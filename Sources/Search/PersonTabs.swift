@@ -174,7 +174,7 @@ enum PersonTabs {
         },
         PersonVerb("spaces", "delete", .erase, first: { call in
             guard !(try space(call, try call.need("space"))).isFirst else { throw PersonRefusal("refused", "The first space can't be deleted") }
-        }) { call in
+        }, names: { try space($0, try $0.need("space")).name }) { call in
             let found = try space(call, try call.need("space"))
             call.browser.deleteSpace(found.id)
             return ["space": found.name, "message": "Deleted \(found.name)"]
@@ -448,7 +448,10 @@ enum PersonFolders {
             for named in call.strings("tab") { call.browser.move(try PersonTabs.onScreen(call, named).tab, toGroup: nil) }
             return ["message": "Out of their folders"]
         },
-        PersonVerb("folders", "delete", .arrange) { call in
+        PersonVerb("folders", "delete", .arrange, names: { call in
+            let folder = try find(call, try call.need("folder"))
+            return PersonAsk.line(folder.name, PersonAsk.count(call.browser.tabs(in: folder.id).count, "tab", "tabs"))
+        }) { call in
             let folder = try find(call, try call.need("folder"))
             call.browser.removeTabGroup(folder.id)
             return ["folder": folder.name, "message": "Deleted. Its tabs stayed."]

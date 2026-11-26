@@ -285,7 +285,7 @@ final class FormFill {
 }
 
 @MainActor
-class FormGlassBar: NSView {
+class FormGlassBar: NSView, BarShrinks {
     let glass: KitGlass
     let inside = KitBox(fill: nil)
     var items: [NSView] = [] {
@@ -312,6 +312,10 @@ class FormGlassBar: NSView {
 
     override var isFlipped: Bool { true }
 
+    private var words: KitLabel? { items.first as? KitLabel }
+    var leastWidth: CGFloat { intrinsicContentSize.width - (words.map { ceil($0.intrinsicContentSize.width) } ?? 0) }
+    var barWords: String? { words?.text }
+
     func gap(after index: Int) -> CGFloat {
         guard items.indices.contains(index + 1) else { return 0 }
         return items[index] is KitButton && items[index + 1] is KitButton ? SurfaceLook.keyGap : spacing
@@ -328,11 +332,13 @@ class FormGlassBar: NSView {
         super.layout()
         glass.frame = bounds
         inside.frame = glass.bounds
+        let squeeze = max(0, intrinsicContentSize.width - bounds.width)
         var x = lead
         for (index, item) in items.enumerated() {
             let size = item.intrinsicContentSize
-            item.frame = kitSnap(NSRect(x: x, y: (bounds.height - size.height) / 2, width: size.width, height: size.height))
-            x += size.width + gap(after: index)
+            let width = item === words ? max(0, size.width - squeeze) : size.width
+            item.frame = kitSnap(NSRect(x: x, y: (bounds.height - size.height) / 2, width: width, height: size.height))
+            x += width + gap(after: index)
         }
     }
 }

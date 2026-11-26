@@ -169,7 +169,11 @@ enum PersonStuff {
             call.browser.openedForAgent(tab, link: call.link)
             return ["id": short(tab.id)]
         },
-        PersonVerb("bookmarks", "delete", .erase, first: { _ = try bookmark($0, try $0.need("id")) }) { call in
+        PersonVerb("bookmarks", "delete", .erase, first: { _ = try bookmark($0, try $0.need("id")) }, names: { call in
+            let node = try bookmark(call, try call.need("id"))
+            if node.isFolder { return PersonAsk.line(node.title, PersonAsk.count(node.children?.count ?? 0, "bookmark", "bookmarks")) }
+            return PersonAsk.line(node.title, PersonAsk.host(node.url))
+        }) { call in
             let node = try bookmark(call, try call.need("id"))
             call.browser.bookmarks.remove(node.id)
             return ["id": short(node.id), "message": "Deleted"]
@@ -206,7 +210,8 @@ enum PersonStuff {
         PersonVerb("downloads", "resume", .arrange) { call in try fetch(call, can: \.canResume) { $0.resumeDownload($1) } },
         PersonVerb("downloads", "retry", .arrange) { call in try fetch(call, can: \.canRetry) { $0.retryDownload($1) } },
         PersonVerb("downloads", "cancel", .erase, first: { _ = try running($0.browser, try $0.need("id")) }) { call in try fetch(call, can: { _ in true }) { $0.cancelDownload($1) } },
-        PersonVerb("downloads", "forget", .erase, first: { _ = try finished($0.browser, try $0.need("id")) }) { call in
+        PersonVerb("downloads", "forget", .erase, first: { _ = try finished($0.browser, try $0.need("id")) },
+                   names: { try finished($0.browser, try $0.need("id")).name }) { call in
             let keep = try finished(call.browser, try call.need("id"))
             call.browser.loot.forget(keep)
             return ["name": keep.name, "message": "Off the list. The file stays."]
@@ -357,7 +362,11 @@ enum PersonStuff {
             }
             return ["message": "Reading now"]
         },
-        PersonVerb("live", "delete", .erase, first: { _ = try live($0) }) { call in
+        PersonVerb("live", "delete", .erase, first: { _ = try live($0) }, names: { call in
+            let found = try live(call)
+            let spaces = call.browser.spaces
+            return PersonAsk.line(found.name, spaces.count > 1 ? spaces.first { $0.id == found.space }?.name : nil)
+        }) { call in
             let found = try live(call)
             LiveFolders.shared.remove(found.id)
             return ["id": short(found.id), "message": "Deleted"]
