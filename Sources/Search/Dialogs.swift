@@ -147,6 +147,7 @@ extension Browser {
         initiatedByFrame frame: WKFrameInfo,
         completionHandler: @escaping () -> Void
     ) {
+        if DialogRuns.silenced(webView) { return completionHandler() }
         if askAgent(webView, frame: frame, message: message, kind: .alert, reply: { _, _ in completionHandler() }) { return }
         if let tab = paneAsking(webView) {
             return askInPane(tab, frame: frame, message: message, kind: .alert) { _, _ in completionHandler() }
@@ -154,7 +155,7 @@ extension Browser {
         ask(from: webView, show: {
             let alert = Dialogs.alert(from: frame, saying: message)
             alert.addButton(withTitle: "OK")
-            Dialogs.show(alert, over: webView) { _ in completionHandler() }
+            Dialogs.showFromPage(alert, over: webView) { _ in completionHandler() }
         }, drop: completionHandler)
     }
 
@@ -164,6 +165,7 @@ extension Browser {
         initiatedByFrame frame: WKFrameInfo,
         completionHandler: @escaping (Bool) -> Void
     ) {
+        if DialogRuns.silenced(webView) { return completionHandler(false) }
         if askAgent(webView, frame: frame, message: message, kind: .confirm, reply: { ok, _ in completionHandler(ok) }) { return }
         if let tab = paneAsking(webView) {
             return askInPane(tab, frame: frame, message: message, kind: .confirm) { ok, _ in completionHandler(ok) }
@@ -172,7 +174,7 @@ extension Browser {
             let alert = Dialogs.alert(from: frame, saying: message)
             alert.addButton(withTitle: "OK")
             alert.addButton(withTitle: "Cancel")
-            Dialogs.show(alert, over: webView) { answer in
+            Dialogs.showFromPage(alert, over: webView) { answer in
                 completionHandler(answer == .alertFirstButtonReturn)
             }
         }, drop: { completionHandler(false) })
@@ -185,6 +187,7 @@ extension Browser {
         initiatedByFrame frame: WKFrameInfo,
         completionHandler: @escaping (String?) -> Void
     ) {
+        if DialogRuns.silenced(webView) { return completionHandler(nil) }
         if askAgent(webView, frame: frame, message: prompt, kind: .prompt(""), reply: { ok, text in completionHandler(ok ? (text ?? "") : nil) }) { return }
         if let tab = paneAsking(webView) {
             return askInPane(tab, frame: frame, message: prompt, kind: .prompt(defaultText ?? "")) { ok, text in
@@ -199,7 +202,7 @@ extension Browser {
             field.frame = NSRect(x: 0, y: 0, width: 260, height: 24)
             alert.accessoryView = field
             alert.window.initialFirstResponder = field
-            Dialogs.show(alert, over: webView) { answer in
+            Dialogs.showFromPage(alert, over: webView) { answer in
                 completionHandler(answer == .alertFirstButtonReturn ? field.stringValue : nil)
             }
         }, drop: { completionHandler(nil) })
@@ -402,11 +405,55 @@ extension Browser {
         if tab.endedOnPurpose(webView) { return }
         // In front of you: straight back, a reload beats a white page with a
         // button on it. Behind another tab: the moment you come back to it.
-        if tab.id == activeID, !tab.isBlank {
+        if visibleTabIDs.contains(tab.id), !tab.isBlank {
             tab.recoverFromCrash()
         } else {
             tab.stale = true
         }
+    }
+}
+
+struct DialogRun {
+    static let span: TimeInterval = 10
+
+    private(set) var answered: Date?
+    private(set) var silenced = false
+
+    func offersSilence(at now: Date) -> Bool {
+        guard let answered else { return false }
+        return now.timeIntervalSince(answered) < Self.span
+    }
+
+    mutating func answer(at now: Date, silence: Bool) {
+        answered = now
+        if silence { silenced = true }
+    }
+}
+
+@MainActor
+enum DialogRuns {
+    private final class Held {
+        var run = DialogRun()
+    }
+
+    private static let runs = NSMapTable<WKWebView, Held>.weakToStrongObjects()
+
+    static func silenced(_ page: WKWebView) -> Bool {
+        runs.object(forKey: page)?.run.silenced == true
+    }
+
+    static func offersSilence(_ page: WKWebView, at now: Date = Date()) -> Bool {
+        runs.object(forKey: page)?.run.offersSilence(at: now) == true
+    }
+
+    static func answered(_ page: WKWebView, silence: Bool, at now: Date = Date()) {
+        let held = runs.object(forKey: page) ?? Held()
+        held.run.answer(at: now, silence: silence)
+        runs.setObject(held, forKey: page)
+    }
+
+    static func reset(_ page: WKWebView) {
+        runs.removeObject(forKey: page)
     }
 }
 
@@ -426,6 +473,22 @@ enum Dialogs {
     /// isn't on stage right now.
     static func window(for webView: WKWebView) -> NSWindow? {
         webView.window ?? NSApp.mainWindow ?? NSApp.windows.first { $0.contentView != nil && $0.isVisible }
+    }
+
+    @MainActor
+    static func showFromPage(_ alert: NSAlert, over webView: WKWebView,
+                             then finish: @escaping (NSApplication.ModalResponse) -> Void) {
+        if DialogRuns.silenced(webView) { return finish(.cancel) }
+        if DialogRuns.offersSilence(webView) {
+            alert.showsSuppressionButton = true
+            alert.suppressionButton?.title = "Don't let this page show more dialogs"
+        }
+        show(alert, over: webView) { [weak webView] answer in
+            if let webView {
+                DialogRuns.answered(webView, silence: alert.showsSuppressionButton && alert.suppressionButton?.state == .on)
+            }
+            finish(answer)
+        }
     }
 
     /// A test run's questions, in the order they would have been shown.

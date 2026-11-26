@@ -564,7 +564,7 @@ enum TabMenuItems {
         if !browser.tabsBelow(tab).isEmpty {
             items.append(action("Close Tabs Below") { browser.closeTabsBelow(tab) })
         }
-        if !browser.ghosts.isEmpty {
+        if !browser.ghosts.isEmpty || Browsers.lastClosedAt != nil {
             items.append(action(browser.reopenTitle) { browser.reopen() })
         }
         return items

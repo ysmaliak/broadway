@@ -51,6 +51,7 @@ enum WindowMerge {
             let row = takeRow(space, from: source)
             guard !row.tabs.isEmpty || !row.groups.isEmpty else { continue }
             give(row, space: space, to: front, after: previous)
+            source.handQuestions(of: row.tabs, to: front)
             if space == front.spaceID, let end = row.tabs.last { last = end.id }
         }
         return last

@@ -449,7 +449,11 @@ final class Tab: Identifiable {
     /// 125% once should be the last time you think about it. A site at the
     /// size every site starts at keeps nothing, and follows that size.
     func rememberZoom() {
-        guard let host = address?.host(), !shy else { return }
+        guard let host = address?.host() else { return }
+        guard !shy else {
+            ownZooms[host] = zoom
+            return
+        }
         if abs(zoom - Tab.defaultZoom) < 0.01 {
             Store.settings.removeObject(forKey: "zoom." + host)
         } else {
@@ -459,7 +463,7 @@ final class Tab: Identifiable {
 
     func applyRememberedZoom() {
         guard let host = address?.host() else { return }
-        let kept = (Store.settings.object(forKey: "zoom." + host) as? Double).map { CGFloat($0) }
+        let kept = ownZooms[host] ?? (Store.settings.object(forKey: "zoom." + host) as? Double).map { CGFloat($0) }
             ?? Tab.defaultZoom
         guard abs(kept - web.pageZoom) > 0.004 else { return }
         web.pageZoom = kept
@@ -471,7 +475,10 @@ final class Tab: Identifiable {
     /// stays as sharp at 200% as it was at 100%.
     private(set) var zoom: CGFloat = 1
 
+    @ObservationIgnored private var ownZooms: [String: CGFloat] = [:]
+
     @ObservationIgnored var onZoom: ((Tab, CGFloat) -> Void)?
+    @ObservationIgnored var watchers: [AnyCancellable] = []
     /// The resolved address under the pointer, or nil when it leaves a link.
     @ObservationIgnored var onLink: ((Tab, String?) -> Void)?
     /// The page took the keys (see PageView.onKeys).
@@ -2090,6 +2097,7 @@ final class Tab: Identifiable {
     /// Called when the tab is thrown away. Without it the view keeps running
     /// whatever the page left behind — timers, video, sockets.
     func close() {
+        watchers = []
         cancelImageText()
         LocalNetworkGuard.shared.forget(tab: id)
         onZoom = nil

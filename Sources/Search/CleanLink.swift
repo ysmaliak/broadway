@@ -69,7 +69,16 @@ enum CleanLink {
             return
         }
         let text = board.string(forType: .URL) ?? board.string(forType: .string)
-        guard let text, let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)) else { return }
-        copy(url, to: board)
+        guard let text else { return }
+        let address = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: address) else { return }
+        let cleaned = clean(url).absoluteString
+        guard cleaned != address else { return }
+        let name = NSPasteboard.PasteboardType("public.url-name")
+        let title = board.string(forType: name)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        board.clearContents()
+        board.setString(cleaned, forType: .URL)
+        if let title, !title.isEmpty { board.setString(title, forType: name) }
+        board.setString(cleaned, forType: .string)
     }
 }

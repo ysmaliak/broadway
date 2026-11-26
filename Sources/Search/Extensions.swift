@@ -2046,7 +2046,7 @@ final class ExtensionTab: NSObject, WKWebExtensionTab {
     func close(for context: WKWebExtensionContext) async throws {
         try checkAccess(context)
         guard let tab else { return }
-        browser?.close(tab)
+        browser?.closeTab(tab)
     }
 
     func takeSnapshot(using configuration: WKSnapshotConfiguration, for context: WKWebExtensionContext) async throws -> NSImage? {

@@ -124,9 +124,22 @@ extension Browser {
     /// with that space's sign-ins; History still has it.
     func closeParkedAgentTab(_ tab: Tab) { closeParked(tab) }
 
-    private func closeParked(_ tab: Tab) {
+    func closeParkedCard(_ tab: Tab) { closeParked(tab, remembering: true) }
+
+    func putsAwayParked(_ tab: Tab) -> Bool {
+        guard prefs.usesTabGroups, tab.pin == nil, let folder = tab.groupID,
+              let groups = parked.first(where: { $0.value.tabs.contains { $0 === tab } })?.value.groups,
+              groups.contains(where: { $0.id == folder }) else { return false }
+        return FolderTree.raised(folder, in: groups) && !tab.asleep && !tab.isBlank && !tab.bench && tab.address != nil
+    }
+
+    private func closeParked(_ tab: Tab, remembering: Bool = false) {
         guard let space = parked.first(where: { $0.value.tabs.contains { $0 === tab } })?.key,
               var row = parked[space] else { return }
+        if remembering, let index = row.tabs.firstIndex(where: { $0 === tab }) {
+            let pair = row.splits.first { $0.contains(tab.id) }
+            remember(tab, at: index, partner: pair?.partner(of: tab.id), onLeft: pair?.left == tab.id, split: pair, space: space)
+        }
         row.tabs.removeAll { $0 === tab }
         row.splits = row.splits.filter { Browser.holds($0, in: row.tabs) }
         if row.active == tab.id {

@@ -31,9 +31,15 @@ final class PaneBarView: NSView {
         addSubview(ground)
         addSubview(title)
         for door in [back, forward, reload, site, close] as [NSView] { addSubview(door) }
-        back.action = { [weak self] in self?.tab.back() }
+        back.action = { [weak self] in
+            guard let self else { return }
+            browser.back(self.tab)
+        }
         forward.action = { [weak self] in self?.tab.forward() }
-        reload.onReload = { [weak self] in self?.tab.reload() }
+        reload.onReload = { [weak self] in
+            guard let self else { return }
+            browser.reload(self.tab)
+        }
         site.action = { [weak self] in
             guard let self else { return }
             SiteCardPanel.toggle(browser)

@@ -419,6 +419,24 @@ enum Browsers {
         return true
     }
 
+    static func reopenWindow(_ id: UUID) -> Bool {
+        guard let at = closed.lastIndex(where: { $0.record.id == id }) else { return false }
+        let record = closed.remove(at: at).record
+        let browser = Browser(record: record)
+        open(browser, frame: record.rect)
+        save()
+        return true
+    }
+
+    static func tabCount(_ record: WindowRecord) -> Int {
+        record.rows.values.reduce(0) { $0 + $1.tabs.filter { $0.pin == nil && $0.pinID == nil }.count }
+    }
+
+    static func closedTitle(_ record: WindowRecord) -> String {
+        let count = tabCount(record)
+        return count == 1 ? "Window with 1 Tab" : "Window with \(count) Tabs"
+    }
+
     /// When the newest closed window was closed, to weigh against the newest
     /// closed tab.
     static var lastClosedAt: Date? { closed.last?.at }

@@ -81,8 +81,26 @@ enum PersonTabs {
         }
     }
 
-    private static func shut(_ found: PersonTab) {
-        if found.onScreen { found.browser.close(found.tab) } else { found.browser.closeParkedAgentTab(found.tab) }
+    private static func unsaved(_ tab: Tab) async -> Bool {
+        await withCheckedContinuation { done in tab.unsaved { done.resume(returning: $0) } }
+    }
+
+    private static func shut(_ found: PersonTab) -> String {
+        let browser = found.browser, tab = found.tab
+        if tab.pin != nil {
+            if found.onScreen { browser.close(tab) } else { tab.rest() }
+            return "Put down"
+        }
+        if found.onScreen, browser.putsAway(tab) {
+            browser.putAway(tab)
+            return "Put away"
+        }
+        if !found.onScreen, browser.putsAwayParked(tab) {
+            tab.rest()
+            return "Put away"
+        }
+        if found.onScreen { browser.close(tab) } else { browser.closeParkedAgentTab(tab) }
+        return "Closed"
     }
 
     private static func slept(_ found: PersonTab) async -> String {
@@ -234,13 +252,23 @@ enum PersonTabs {
             for named in call.strings("tab") { _ = try find(call, named) }
         }) { call in
             let found = try call.strings("tab").map { try find(call, $0) }
+            for one in found where !one.tab.agent && !one.tab.shy {
+                if await unsaved(one.tab) {
+                    throw PersonRefusal("refused", "This page has unsaved form entries, and they could be lost. Close it in Broadway.")
+                }
+            }
+            var said = "Closed"
             for one in found {
-                if one.tab.agent { one.browser.closeAgentTab(one.tab) } else { shut(one) }
+                if one.tab.agent { one.browser.closeAgentTab(one.tab) } else { said = shut(one) }
                 if PersonCommands.short(one.tab.id) == AgentSocket.shared.currentTab { AgentSocket.shared.currentTab = nil }
             }
-            return ["closed": found.map { PersonCommands.short($0.tab.id) }, "message": found.count == 1 ? "Closed" : "Closed \(found.count) tabs"]
+            return ["closed": found.map { PersonCommands.short($0.tab.id) }, "message": found.count == 1 ? said : "Closed \(found.count) tabs"]
         },
         PersonVerb("tabs", "reopen", .arrange) { call in
+            if Browser.reopensWindow(closedWindow: Browsers.lastClosedAt, closedTab: call.browser.ghosts.last?.at),
+               Browsers.reopenWindow() {
+                return ["window": true, "message": "Reopened a window"]
+            }
             guard call.browser.recentlyClosed.first != nil else { throw PersonRefusal("refused", "Nothing was closed lately") }
             call.browser.reopen()
             return ["id": call.browser.active.map { PersonCommands.short($0.id) } ?? "", "message": "Reopened"]

@@ -2346,6 +2346,7 @@ final class Browser: NSObject {
         var muted = false
         var split: TabSplit? = nil
         var live: LiveDismissal? = nil
+        var space: UUID? = nil
 
         var label: String { title.isEmpty ? Address.pretty(url) : title }
     }
@@ -2384,7 +2385,7 @@ final class Browser: NSObject {
     @ObservationIgnored var storeWatch: AnyCancellable?
     @ObservationIgnored private(set) var hush: NoticeClock?
     @ObservationIgnored private var zoomShown = 100
-    @ObservationIgnored private var remembering = false
+    @ObservationIgnored private(set) var remembering = false
     /// Spaces (see Spaces.swift): every one, the one on screen, and the
     /// rows of tabs of the others.
     var spaces: [Space]
@@ -3347,6 +3348,10 @@ extension Browser {
 
     /// Its window closed for good, with others open: every page let go.
     func closeAll() {
+        dozing?.invalidate()
+        dozing = nil
+        pressure?.cancel()
+        pressure = nil
         fileChoice?.cancel()
         SaveAsk.shared.tabClosed(Set((tabs + parkedTabs).map(\.id)))
         SiteFileAsk.shared.tabClosed(Set((tabs + parkedTabs).map(\.id)))
@@ -3601,6 +3606,7 @@ extension Browser {
             typed = ""
             activeID = tab.id
             tab.touch()
+            if !tab.wake() { tab.revive() }
             rememberSession()
         } else {
             select(tab)
@@ -3710,7 +3716,11 @@ extension Browser {
     func closeSplit() {
         guard let pair = activeSplit else { return }
         let members = pair.tabs.compactMap { id in tabs.first { $0.id == id } }
-        for tab in members { close(tab) }
+        guard mayLeave(members, again: { [weak self] in self?.closeSplit() }) else { return }
+        closingTogether(.tabs) { _ in
+            for tab in members where tab.id != activeID { close(tab) }
+            for tab in members where tab.id == activeID { close(tab) }
+        }
     }
 
     /// An empty page of a pair given an open tab: the tab takes its place,
@@ -4077,14 +4087,14 @@ extension Browser {
             // their site, as Arc's pins are: the pin wakes on the page it was
             // pinned at, not wherever its links had taken it.
             tab.rest(at: prefs.pinsGoHome || prefs.pinsPeek ? tab.home : nil)
-            leave(tab)
+            if activeID == tab.id { leave(tab) }
             writeSession(now: true)
             return
         }
 
         if tabs.count == 1 {
             if tab.isBlank {
-                NSApp.keyWindow?.performClose(nil)
+                window?.performClose(nil)
             } else {
                 let fresh = makeTab()
                 remember(tab, at: 0, live: live)
@@ -4094,6 +4104,7 @@ extension Browser {
                 activeID = fresh.id
                 typed = ""
                 removeEmptyGroup(tab.groupID)
+                rememberSession()
             }
             return
         }
@@ -4124,7 +4135,7 @@ extension Browser {
                     editing = false
                     focusRequest += 1
                 } else {
-                    NSApp.keyWindow?.performClose(nil)
+                    window?.performClose(nil)
                 }
                 return
             }
@@ -4160,8 +4171,15 @@ extension Browser {
         guard mayLeave(tabs.filter { $0.id != keep.id && $0.id != partner }, again: { [weak self] in self?.closeOthers(but: keep) }) else { return }
         select(keep)
         // The list is read once: closing walks the row and can add to it.
-        for tab in tabs.filter({ $0.id != keep.id && $0.id != partner }) {
-            close(tab)
+        let going = tabs.filter { $0.id != keep.id && $0.id != partner }
+        closingTogether(.tabs) { _ in
+            for tab in going.reversed() {
+                if let id = group(of: tab), tabs(in: id).count == 1,
+                   let at = tabGroups.firstIndex(where: { $0.id == id }) {
+                    closedGroups[id] = (tabGroups[at], at, [])
+                }
+                close(tab)
+            }
         }
         select(keep)
     }
@@ -4279,7 +4297,7 @@ extension Browser {
     func reopen() {
         // A window closed after the last tab was: the window comes back, as
         // in Safari and Chrome (see Windows.swift).
-        if let window = Browsers.lastClosedAt, window > (ghosts.last?.at ?? .distantPast), Browsers.reopenWindow() { return }
+        if Browser.reopensWindow(closedWindow: Browsers.lastClosedAt, closedTab: ghosts.last?.at), Browsers.reopenWindow() { return }
         guard let ghost = ghosts.last else { return }
         reopen(ghost)
     }
@@ -4304,9 +4322,14 @@ extension Browser {
 
     /// What ⇧⌘T brings back: one bulk close, or the last tab or window.
     var reopenTitle: String {
-        guard let last = ghosts.last, last.batch != nil,
-              (Browsers.lastClosedAt ?? .distantPast) <= last.at else { return "Reopen Closed Tab" }
+        if Browser.reopensWindow(closedWindow: Browsers.lastClosedAt, closedTab: ghosts.last?.at) { return "Reopen Closed Window" }
+        guard let last = ghosts.last, last.batch != nil else { return "Reopen Closed Tab" }
         return "Reopen \(closedTitle(for: last))"
+    }
+
+    static func reopensWindow(closedWindow: Date?, closedTab: Date?) -> Bool {
+        guard let closedWindow else { return false }
+        return closedWindow > (closedTab ?? .distantPast)
     }
 
     private func reopen(batch: UUID) {
@@ -4359,6 +4382,9 @@ extension Browser {
 
     /// One tab or bulk close, from the History menu.
     func reopen(_ ghost: Ghost) {
+        if let space = ghost.space, space != spaceID, showsSpaces, spaces.contains(where: { $0.id == space }) {
+            if prefs.stacksSpaces { stackedEnter(space, announcing: false) } else { switchSpace(to: space) }
+        }
         if let batch = ghost.batch {
             reopen(batch: batch)
             return
@@ -4384,7 +4410,7 @@ extension Browser {
         typed = ""
         tab.go(to: ghost.url)
         // Back into its pair, if the page it was beside is still alone.
-        if let id = ghost.partner, let partner = tabs.first(where: { $0.id == id }),
+        if let id = ghost.partner.map(resolved), let partner = tabs.first(where: { $0.id == id }),
            split(for: partner) == nil, canSplit(tab, with: partner) {
             pair(tab, with: partner, onLeft: ghost.onLeft)
         }
@@ -4418,12 +4444,12 @@ extension Browser {
         return (id, back)
     }
 
-    private func remember(_ tab: Tab, at index: Int, partner: Tab.ID? = nil, onLeft: Bool = false, split: TabSplit? = nil,
-                          live: LiveDismissal? = nil) {
+    func remember(_ tab: Tab, at index: Int, partner: Tab.ID? = nil, onLeft: Bool = false, split: TabSplit? = nil,
+                  live: LiveDismissal? = nil, space: UUID? = nil) {
         guard !tab.shy, tab.liveKey == nil || live != nil, !tab.agent, let url = tab.address else { return }
         ghosts.append(Ghost(url: url, title: tab.savedTitle, index: index, groupID: tab.groupID,
                             partner: partner, onLeft: onLeft, was: tab.id, batch: batching?.id,
-                            kind: batching?.kind ?? .tabs, muted: tab.muted, split: split, live: live))
+                            kind: batching?.kind ?? .tabs, muted: tab.muted, split: split, live: live, space: space))
         var steps = Set<UUID>()
         let count = ghosts.reduce(0) { total, ghost in
             guard let batch = ghost.batch else { return total + 1 }
@@ -4652,6 +4678,7 @@ extension Browser {
         let destination = target ?? Browser(record: WindowRecord(space: spaceID), privateStore: privateStore)
         detach(tab)
         destination.receive(tab)
+        handQuestions(of: [tab], to: destination)
         if target == nil {
             // Dragged out: the new window where the tab was let go, its row
             // under the hand.
@@ -4671,6 +4698,7 @@ extension Browser {
         let destination = target ?? Browser(record: WindowRecord(space: spaceID), privateStore: privateStore)
         for half in halves { detach(half) }
         destination.receive(pair: pair, halves)
+        handQuestions(of: halves, to: destination)
         if target == nil {
             let frame = point.map { TearOff.newWindow(at: $0, leaving: window) }
             Browsers.open(destination, frame: frame)
@@ -4692,6 +4720,17 @@ extension Browser {
         // After the drag has let go, not inside it.
         DispatchQueue.main.async { [weak self] in self?.moveToWindow(tab, over, at: point) }
         return true
+    }
+
+    func handQuestions(of moved: [Tab], to destination: Browser) {
+        for tab in moved {
+            guard let held = heldDialogs.removeValue(forKey: tab.id), !held.isEmpty else { continue }
+            if destination.activeID == tab.id {
+                DispatchQueue.main.async { held.forEach { $0.present() } }
+            } else {
+                destination.heldDialogs[tab.id, default: []] += held
+            }
+        }
     }
 
     /// Out of this row, not closed: it is on its way to another window.
@@ -5382,14 +5421,11 @@ extension Browser {
         let switcher = tabSwitcher
         guard let tab = switcherTab(id) else { return }
         let partner = switcher.partners[id].flatMap(switcherTab)
+        if case .close = action { return closeCard(tab, partner: partner) }
         if switcherSpace(of: id) != nil {
             switch action {
             case .close:
-                switcher.remove(id)
-                for page in [tab, partner].compactMap({ $0 }) {
-                    if page.pin != nil { page.rest() } else { closeParkedAgentTab(page) }
-                }
-                writeSession(now: true)
+                break
             case .reload:
                 tab.reload()
                 partner?.reload()
@@ -5402,17 +5438,7 @@ extension Browser {
         }
         switch action {
         case .close:
-            // A pin not on screen is put down where it is and keeps its
-            // card, as ⌘W puts one down, without taking you anywhere; a tab
-            // in a group is put away the same way (closeTab).
-            if tab.pin != nil || putsAway(tab), id != activeID, partner == nil {
-                tab.rest()
-                writeSession(now: true)
-                return switcher.redraw()
-            }
-            switcher.remove(id)
-            close(tab)
-            if let partner { close(partner) }
+            break
         case .reload:
             tab.reload()
             partner?.reload()
@@ -5420,6 +5446,52 @@ extension Browser {
             tab.toggleMute()
             partner?.toggleMute()
             switcher.redraw()
+        }
+    }
+
+    private func closeCard(_ tab: Tab, partner: Tab?) {
+        let switcher = tabSwitcher, id = tab.id
+        guard switcherTab(id) != nil else { return }
+        let pages = [tab, partner].compactMap { $0 }
+        guard mayLeave(pages, again: { [weak self] in self?.closeCard(tab, partner: partner) }) else { return }
+        if switcherSpace(of: id) != nil {
+            if partner == nil, tab.pin != nil || putsAwayParked(tab) {
+                tab.rest()
+                writeSession(now: true)
+                return switcher.redraw()
+            }
+            switcher.remove(id)
+            if partner == nil {
+                closeParkedCard(tab)
+            } else {
+                closingTogether(.tabs) { _ in
+                    for page in pages {
+                        if page.pin != nil { page.rest() } else { closeParkedCard(page) }
+                    }
+                }
+                if let at = ghosts.lastIndex(where: { $0.was == id }) { ghosts[at].front = true }
+            }
+            writeSession(now: true)
+            return
+        }
+        // A pin not on screen is put down where it is and keeps its
+        // card, as ⌘W puts one down, without taking you anywhere; a tab
+        // in a group is put away the same way (closeTab).
+        if tab.pin != nil || putsAway(tab), id != activeID, partner == nil {
+            tab.rest()
+            writeSession(now: true)
+            return switcher.redraw()
+        }
+        switcher.remove(id)
+        if partner != nil {
+            closingTogether(.tabs) { _ in
+                for page in pages where page.id != activeID { close(page) }
+                for page in pages where page.id == activeID { close(page) }
+            }
+        } else if putsAway(tab) {
+            putAway(tab)
+        } else {
+            close(tab)
         }
     }
 
@@ -6603,25 +6675,20 @@ extension Browser {
         // A page's title lands a beat after the page itself, and a history
         // entry that only ever holds an address is half a memory.
         // Anywhere a tab lands is worth remembering for next launch.
-        kitObserve(initial: false, { [weak tab] in tab?.address }) { [weak self] _ in self?.rememberSession() }
-            .store(in: &bag)
-
-        kitObserve(initial: false, { [weak tab] in tab?.muted }) { [weak self] _ in self?.rememberSession() }
-            .store(in: &bag)
-
-        kitObserve(initial: false, { [weak tab] in tab?.address }) { [weak self, weak tab] _ in
-            if let tab { self?.noteMeetingPage(tab) }
-        }
-        .store(in: &bag)
-
-        kitObserve(initial: false, { [weak tab] in tab?.title ?? "" }) { [weak self, weak tab] title in
+        tab.watchers = [
+            kitObserve(initial: false, { [weak tab] in tab?.address }) { [weak self] _ in self?.rememberSession() },
+            kitObserve(initial: false, { [weak tab] in tab?.muted }) { [weak self] _ in self?.rememberSession() },
+            kitObserve(initial: false, { [weak tab] in tab?.address }) { [weak self, weak tab] _ in
+                if let tab { self?.noteMeetingPage(tab) }
+            },
+            kitObserve(initial: false, { [weak tab] in tab?.title ?? "" }) { [weak self, weak tab] title in
                 if let tab { self?.noteMeetingPage(tab) }
                 // A translated title is the page's in your words, not its own:
                 // history keeps the page's (Translate.swift).
                 guard let tab, !tab.shy, !tab.agent, tab.translator == nil, let url = tab.address else { return }
                 self?.history.retitle(url, title)
-            }
-            .store(in: &bag)
+            },
+        ]
     }
 
     /// Put the cursor back in the field, from wherever asked.
@@ -7302,8 +7369,13 @@ extension Browser {
     }
 
     func reload(fromOrigin: Bool = false) {
-        Shield.shared.reloaded(hereHost)
-        active?.reload(fromOrigin: fromOrigin)
+        guard let active else { return Shield.shared.reloaded(hereHost) }
+        reload(active, fromOrigin: fromOrigin)
+    }
+
+    func reload(_ tab: Tab, fromOrigin: Bool = false) {
+        Shield.shared.reloaded(curtain.host(of: tab.address))
+        tab.reload(fromOrigin: fromOrigin)
     }
 
     func reloadPage() {
@@ -7312,8 +7384,13 @@ extension Browser {
         for tab in picked where !tab.asleep { tab.reload() }
     }
     func back() {
-        if let tab = active, leaveBack(tab) { return }
-        active?.back()
+        guard let active else { return }
+        back(active)
+    }
+
+    func back(_ tab: Tab) {
+        if leaveBack(tab) { return }
+        tab.back()
     }
     func forward() { active?.forward() }
 }
@@ -7782,8 +7859,10 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
             tabs.insert(tab, at: placeForLink(from: opener))
             if clicked, let run = linkRun { runBeforeScript = (tab.id, run) }
             noteReturn(tab, front: true, from: opener)
+            leaving()
             activeID = tab.id
             editing = false
+            typed = ""
         }
         // Returning the view is what makes it the target. WebKit loads the
         // request into it itself when the action carries one.
@@ -8457,11 +8536,11 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         if tab.id == activeID, let opener = tab.opener, let home = tabs.first(where: { $0.id == opener }), !home.agent {
             select(home)
         }
-        tab.pin = nil
         close(tab)
     }
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        DialogRuns.reset(webView)
         popupTab(for: webView)?.popupGesture.clear()
         popupTab(for: webView)?.didCommit()
         guard let tab = anyTab(for: webView) else {
@@ -8839,16 +8918,22 @@ final class PrintSheet: NSObject {
     /// change with history.pushState between two print()s. Two cancels
     /// within ten seconds and the site asks no more, until the tab goes to
     /// another site or closes.
-    private struct Cancels {
+    struct Cancels {
         var site: String?
         var when: [Date] = []
         var blocked = false
     }
-    private static var cancelled: [Tab.ID: Cancels] = [:]
+    private(set) static var cancelled: [Tab.ID: Cancels] = [:]
 
     private static func site(of tab: Tab) -> String? {
         guard let page = tab.committed else { return nil }
         return "\(page.scheme ?? "")://\(page.host() ?? ""):\(page.port.map(String.init) ?? "")"
+    }
+
+    static func note(_ seen: Cancels, for tab: Tab.ID) {
+        let open = Set(Browsers.all.flatMap { $0.tabs + $0.parkedTabs }.map(\.id))
+        cancelled = cancelled.filter { open.contains($0.key) }
+        cancelled[tab] = seen
     }
 
     /// Whether this tab's site may bring the sheet up again.
@@ -8867,7 +8952,7 @@ final class PrintSheet: NSObject {
             let now = Date()
             seen.when = seen.when.filter { now.timeIntervalSince($0) < 10 } + [now]
             if seen.when.count >= 2 { seen.blocked = true }
-            PrintSheet.cancelled[tab] = seen
+            PrintSheet.note(seen, for: tab)
         }
         done()
     }

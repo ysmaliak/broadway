@@ -600,12 +600,17 @@ enum MenuBar {
                 }, url))
             }
         }
-        if !browser.ghosts.isEmpty {
+        let windows = Browsers.closed.filter { Browsers.tabCount($0.record) > 0 }
+        if !browser.ghosts.isEmpty || !windows.isEmpty {
             if !items.isEmpty { items.append(.separator()) }
             items.append(.sectionHeader(title: "Recently Closed"))
-            for ghost in browser.recentlyClosed.prefix(10) {
-                items.append(line(act(browser.closedTitle(for: ghost)) { $0.reopen(ghost) }, ghost.url))
+            var closed: [(at: Date, item: NSMenuItem)] = browser.recentlyClosed.prefix(10).map { ghost in
+                (ghost.at, line(act(browser.closedTitle(for: ghost)) { $0.reopen(ghost) }, ghost.url))
             }
+            closed += windows.map { window in
+                (window.at, command(Browsers.closedTitle(window.record)) { _ = Browsers.reopenWindow(window.record.id) })
+            }
+            for row in closed.sorted(by: { $0.at > $1.at }).prefix(10) { items.append(row.item) }
         }
         if !items.isEmpty { items.append(.separator()) }
         items += [

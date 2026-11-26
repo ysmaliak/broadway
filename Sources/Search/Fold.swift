@@ -109,6 +109,10 @@ final class Fold: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
+    deinit {
+        for note in notes { NotificationCenter.default.removeObserver(note) }
+    }
+
     override var isFlipped: Bool { true }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
