@@ -96,7 +96,7 @@ extension Browser {
         }
         return order.compactMap { task in
             guard let tabs = members[task], tabs.count >= 2 else { return nil }
-            return TaskFolder(id: task, name: "Task", tabs: tabs, folded: ai.foldedTasks.contains(task),
+            return TaskFolder(id: task, name: "Task", tabs: tabs, folded: foldedTasks.contains(task),
                               needsYou: tabs.contains { $0.agentMood == .waving })
         }
     }
@@ -113,7 +113,7 @@ extension Browser {
     }
 
     func toggleTaskFolder(_ task: UUID) {
-        if ai.foldedTasks.remove(task) == nil { ai.foldedTasks.insert(task) }
+        if foldedTasks.remove(task) == nil { foldedTasks.insert(task) }
     }
 
     func closeAgentTab(_ tab: Tab) {

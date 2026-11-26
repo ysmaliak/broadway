@@ -224,16 +224,20 @@ enum FieldTimes {
         return "UTC" + (seconds < 0 ? "−" : "+") + String(size / 3600) + (minutes == 0 ? "" : String(format: ":%02d", minutes))
     }
 
+    private static func clock(locale: Locale, zone: TimeZone, template: String) -> DateFormatter {
+        AnswerFormatters.formatter(.init("clock", locale: locale, zone: zone, template: template)) {
+            let made = DateFormatter()
+            made.locale = locale
+            made.timeZone = zone
+            made.dateFormat = DateFormatter.dateFormat(fromTemplate: template, options: 0, locale: locale)
+            return made
+        }
+    }
+
     static func format(_ instant: Date, in place: AnswerZone, expression: String, context: AnswerContext) -> FieldAnswer {
         let locale = context.wordsLocale
-        let time = DateFormatter()
-        time.locale = locale
-        time.timeZone = place.zone
-        time.dateFormat = DateFormatter.dateFormat(fromTemplate: "jmm", options: 0, locale: locale)
-        let day = DateFormatter()
-        day.locale = locale
-        day.timeZone = place.zone
-        day.dateFormat = DateFormatter.dateFormat(fromTemplate: "EEEdMMM", options: 0, locale: locale)
+        let time = clock(locale: locale, zone: place.zone, template: "jmm")
+        let day = clock(locale: locale, zone: place.zone, template: "EEEdMMM")
         let clock = time.string(from: instant)
         let plain = clock.replacingOccurrences(of: "\u{202F}", with: " ")
         let detail = [day.string(from: instant), place.shown(russian: context.russian), offset(place.zone, at: instant)]

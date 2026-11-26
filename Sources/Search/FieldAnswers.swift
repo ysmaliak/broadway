@@ -132,6 +132,49 @@ enum FieldAnswers {
     }
 }
 
+enum AnswerFormatters {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var made: [Key: DateFormatter] = [:]
+    private static let watch: NSObjectProtocol = NotificationCenter.default.addObserver(
+        forName: NSLocale.currentLocaleDidChangeNotification, object: nil, queue: nil
+    ) { _ in AnswerFormatters.forget() }
+
+    struct Key: Hashable {
+        let kind: String
+        let locale: Locale
+        let localeName: String
+        let zone: TimeZone
+        let zoneName: String
+        let template: String
+
+        init(_ kind: String, locale: Locale, zone: TimeZone, template: String) {
+            self.kind = kind
+            self.locale = locale
+            localeName = locale.identifier
+            self.zone = zone
+            zoneName = zone.identifier
+            self.template = template
+        }
+    }
+
+    static func formatter(_ key: Key, make: () -> DateFormatter) -> DateFormatter {
+        _ = watch
+        lock.lock()
+        defer { lock.unlock() }
+        if let known = made[key] { return known }
+        if made.count > 256 { made.removeAll() }
+        let formatter = make()
+        made[key] = formatter
+        return formatter
+    }
+
+    static func forget() {
+        lock.lock()
+        made.removeAll()
+        lock.unlock()
+    }
+}
+
 struct AnswerContext {
     let locale: Locale
     let russian: Bool

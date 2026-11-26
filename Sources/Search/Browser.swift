@@ -485,8 +485,7 @@ final class Browser: NSObject {
         get { findState.on }
         set { if findState.on != newValue { findState.on = newValue } }
     }
-    /// The AI panel's conversation about the page, while it is open.
-    var ai = AIStage()
+    var foldedTasks: Set<UUID> = []
     /// The side panel, beside the page (see SidePanel.swift): up or
     /// not, and what is in it.
     var sidePanelShown = false
@@ -3441,10 +3440,7 @@ extension Browser {
         SessionStates.keep(row.tabs, space: space, from: self, now: now)
     }
 
-    /// The session written a moment from now, for other files.
-    func writeSessionSoon() { rememberSession() }
-
-    private func rememberSession() {
+    func rememberSession() {
         guard !remembering else { return }
         remembering = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
@@ -9016,7 +9012,7 @@ extension Browser {
         editing = false
         typed = ""
         if activeID != tab.id { select(tab) }
-        writeSessionSoon()
+        rememberSession()
         return tab
     }
 
@@ -9035,7 +9031,7 @@ extension Browser {
         // As show(_:) does: the list read before the page is drawn.
         if page.kind == .passwords { relist() }
         here.show(page)
-        writeSessionSoon()
+        rememberSession()
     }
 
     /// The page's tab closed, as ⌘W would close it. For the bench, and the
@@ -9050,6 +9046,6 @@ extension Browser {
     func settingsMoved(to section: SettingsPage) {
         guard let tab = pageTab(.settings), tab.page?.detail != section.rawValue else { return }
         tab.show(InternalPage(.settings, section.rawValue), stepping: false)
-        writeSessionSoon()
+        rememberSession()
     }
 }

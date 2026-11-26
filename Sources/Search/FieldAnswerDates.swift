@@ -128,11 +128,15 @@ enum FieldDates {
     }
 
     private static func formatted(_ date: Date, template: String, context: AnswerContext) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = context.wordsLocale
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.timeZone = context.zone
-        formatter.setLocalizedDateFormatFromTemplate(template)
+        let locale = context.wordsLocale, zone = context.zone
+        let formatter = AnswerFormatters.formatter(.init("day", locale: locale, zone: zone, template: template)) {
+            let made = DateFormatter()
+            made.locale = locale
+            made.calendar = Calendar(identifier: .gregorian)
+            made.timeZone = zone
+            made.setLocalizedDateFormatFromTemplate(template)
+            return made
+        }
         return formatter.string(from: date)
     }
 

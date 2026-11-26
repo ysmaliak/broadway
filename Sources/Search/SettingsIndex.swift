@@ -129,7 +129,7 @@ enum SettingsIndex {
               keys: [Preferences.meetingFoldersKey],
               words: ["meeting", "meetings", "call", "calls", "zoom", "meet", "teams", "folder", "folders", "group", "calendar"]),
         .init(id: "groups.openrouter", group: "tabs", icon: "key", title: AIGroupWords.keyTitle,
-              detail: AIGroupWords.offer(remoteDecides: false),
+              detail: "Add your own key and OpenRouter names folders. The key stays in this Mac's Keychain.",
               words: ["openrouter", "api key", "key", "folder names", "name folders", "group tabs", "keychain"]),
 
         .init(id: "general.default", group: "browser", icon: "link.badge.plus",

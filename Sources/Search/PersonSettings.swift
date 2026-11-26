@@ -360,7 +360,7 @@ enum PersonSettings {
         case "ai.groups": return AIGroups.shared.sends
         case "groups.openrouter":
             let key = OpenRouterKey.shared
-            return AIGroupWords.keyLine(state: key.state, trouble: key.trouble, remoteDecides: AIGroups.shared.remoteDecides)
+            return AIGroupWords.keyLine(state: key.state, trouble: key.trouble)
         default: return item.detail
         }
     }

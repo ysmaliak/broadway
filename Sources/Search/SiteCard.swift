@@ -190,7 +190,7 @@ final class SiteCard: NSObject, NSMenuDelegate {
                 out.append(action("Hide Elements…", key: "view.hide") { [weak self] in self?.browser.toggleHiding() })
             }
         }
-        if PageTranslator.enabled, tab.isWeb {
+        if tab.isWeb {
             let item = submenu(tab.translator == nil ? "Translate" : "Translated", id: "site.translate", translating())
             translateMenu = item.submenu
             out.append(item)
@@ -352,7 +352,7 @@ final class SiteCard: NSObject, NSMenuDelegate {
     }
 
     private func askLanguages() {
-        guard PageTranslator.enabled, tab.isWeb, !SiteCard.asked else { return }
+        guard tab.isWeb, !SiteCard.asked else { return }
         SiteCard.asked = true
         Task { @MainActor [weak self] in
             let found = await LanguageAvailability().supportedLanguages

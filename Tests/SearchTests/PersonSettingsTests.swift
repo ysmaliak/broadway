@@ -104,7 +104,7 @@ final class PersonSettingsTests {
         let openRouter = try await entry.run(call("get", ["setting": "groups.openrouter"]))
 
         #expect(groups["detail"] as? String == AIGroups.shared.sends)
-        #expect(openRouter["detail"] as? String == AIGroupWords.keyLine(state: key.state, trouble: key.trouble, remoteDecides: AIGroups.shared.remoteDecides))
+        #expect(openRouter["detail"] as? String == AIGroupWords.keyLine(state: key.state, trouble: key.trouble))
         #expect(groups["detail"] as? String != SettingsIndex.item("ai.groups")?.detail)
         #expect(openRouter["detail"] as? String != SettingsIndex.item("groups.openrouter")?.detail)
     }

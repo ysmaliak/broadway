@@ -201,7 +201,7 @@ struct Command: Identifiable {
         Command("view.console", "JavaScript Console", .view, KeyCombo("j", option: true)) { $0.showConsole() },
         Command("view.inspect", "Inspect Element", .view, KeyCombo("c", option: true)) { $0.inspectElement() },
         Command("view.translate", "Translate Page", .view, nil) { browser in
-            guard PageTranslator.enabled, let tab = browser.active, tab.isWeb else { return }
+            guard let tab = browser.active, tab.isWeb else { return }
             tab.toggleTranslation()
         },
 

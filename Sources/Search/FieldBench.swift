@@ -30,7 +30,7 @@ final class FixedBoard: CopiedBoard {
 extension Bench {
     static func fieldHost(in view: NSView?) -> NSView? {
         guard let view else { return nil }
-        if view is FieldHost.Layer { return view }
+        if view is FieldHostLayer { return view }
         for sub in view.subviews { if let found = fieldHost(in: sub) { return found } }
         return nil
     }

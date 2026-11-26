@@ -2301,7 +2301,6 @@ final class Bench {
                     }
                 }
                 return [
-                    "enabled": PageTranslator.enabled, "available": PageTranslator.available,
                     "mark": mark, "running": tab.translator != nil, "frames": tab.translateFrames.count,
                     "report": tab.translator?.report ?? [:], "menu": tab.built?.translateItem()?.title ?? "",
                     "always": browser.prefs.translateAlways.sorted(), "tabAlways": tab.translateLanguages.sorted(),
@@ -2411,7 +2410,7 @@ final class Bench {
             guard Store.testing else { answer(["error": "ai only works on a --test run"]); return }
             switch request["action"] as? String {
             case "state":
-                answer(browser.aiState())
+                answer(["acting": browser.active?.agentActing ?? ""])
             case "picture":
                 guard let path = request["path"] as? String else { answer(["error": "ai picture PATH"]); return }
                 var made: [String] = []
@@ -2436,17 +2435,10 @@ final class Bench {
                 guard let tab = find(request, in: browser) else { answer(missing(request)); return }
                 Task { @MainActor in
                     guard let read = await AIPage.read(tab) else { answer(["error": "nothing to read"]); return }
-                    Bench.aiRead = read
                     answer(["title": read.title, "text": read.text, "links": read.links.count, "cut": read.cut])
                 }
-            case "check":
-                // The last page read, and an answer checked against it.
-                guard let read = Bench.aiRead, let text = request["text"] as? String else {
-                    answer(["error": "ai read a page first, then ai check TEXT"]); return
-                }
-                answer(["strays": AIPage.strays(in: text, from: read)])
             default:
-                answer(["error": "ai state | picture PATH | read ID | check TEXT"])
+                answer(["error": "ai state | picture PATH | read ID"])
             }
 
         case "notifications":
@@ -5768,7 +5760,6 @@ final class Bench {
     }
 
     /// The last page `ai read` read, for `ai check`.
-    static var aiRead: AIPage.Read?
 
     private func makeRoom() -> NSWindow {
         let window = AgentPageRoom.make()

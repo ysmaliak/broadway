@@ -10,9 +10,6 @@ enum AIPage {
         let links: [String]
         /// Too long: the start and the end are kept.
         let cut: Bool
-        /// It has words addressed to an AI ("ignore previous instructions",
-        /// "System:"): the answer may have been steered, which the models
-        /// themselves never say, so the panel does.
         var addressed = false
     }
 
@@ -59,128 +56,6 @@ enum AIPage {
             #"(?i)\b(ai|assistant|model|llm)s?\b.{0,30}\b(must|should) (tell|say|add|include|output)\b"#,
         ]
         return patterns.contains { text.range(of: $0, options: .regularExpression) != nil }
-    }
-
-    static func shownAddress(_ url: URL?) -> String {
-        guard let url, var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return "unknown" }
-        parts.query = nil
-        parts.fragment = nil
-        parts.user = nil
-        parts.password = nil
-        return String((parts.string ?? "unknown").prefix(300))
-    }
-
-    static func joined(_ reads: [Read]) -> Read {
-        guard let first = reads.first else { return Read(title: "", url: nil, text: "", links: [], cut: false) }
-        var whole = first
-        for read in reads.dropFirst() {
-            whole = Read(title: whole.title + "\n" + read.title + "\n" + (read.url?.absoluteString ?? ""), url: whole.url,
-                         text: whole.text + "\n" + read.text, links: whole.links + read.links, cut: whole.cut)
-        }
-        return whole
-    }
-
-    /// A marker no page could have guessed.
-    static func newFence() -> String {
-        "page-" + UUID().uuidString.lowercased().replacingOccurrences(of: "-", with: "").prefix(16)
-    }
-
-    // MARK: - the check
-
-    /// Web addresses, emails and phone numbers in the answer that the page
-    /// doesn't have — in its text, its links or its own address. A model
-    /// talked into it by the page would put them there: a "support number",
-    /// a link to "verify your account".
-    ///
-    /// Looked for a word at a time, each word no longer than 300 characters,
-    /// and in no more than the first 12,000 characters of the answer: an
-    /// answer made of one enormous word can't make the check take forever.
-    /// What the page has is gathered the same way, and compared whole — a
-    /// site by its full name (bank.co is not bank.com), a number as a run of
-    /// digits the page wrote, not digits scattered through it.
-    nonisolated static func strays(in answer: String, from read: Read) -> [String] {
-        let said = normalized(String(answer.prefix(12_000)))
-        let pageText = normalized(read.text + "\n" + read.title)
-        var pageEmails = Set<String>(), pageHosts = Set<String>(), pagePhones = Set<String>()
-        for word in words(pageText) + read.links + [read.url?.absoluteString ?? ""] {
-            for email in matches(emailPattern, in: word) { pageEmails.insert(email.lowercased()) }
-            for place in matches(placePattern, in: word) { if let host = host(of: place) { pageHosts.insert(host) } }
-        }
-        for line in lines(pageText) {
-            for phone in matches(phonePattern, in: line) { pagePhones.insert(phone.filter(\.isNumber)) }
-        }
-        if let host = read.url?.host()?.lowercased() { pageHosts.insert(host.hasPrefix("www.") ? String(host.dropFirst(4)) : host) }
-
-        var found: [String] = []
-        func note(_ item: String) { if !found.contains(item) { found.append(item) } }
-        for word in words(said) {
-            let emails = matches(emailPattern, in: word)
-            for email in emails where !pageEmails.contains(email.lowercased()) { note(email) }
-            for place in matches(placePattern, in: word) {
-                var shown = place
-                while let last = shown.last, ".,;:!?".contains(last) { shown.removeLast() }
-                let written = shown.lowercased().hasPrefix("http") || shown.lowercased().hasPrefix("www.")
-                guard let host = host(of: shown), host.contains("."), host.rangeOfCharacter(from: .letters) != nil,
-                      !emails.contains(where: { $0.lowercased().hasSuffix("@" + host) })
-                else { continue }
-                // A file's name ("config.json") is not a place to go.
-                let ending = host.split(separator: ".").last.map(String.init) ?? ""
-                guard written || !fileEndings.contains(ending) else { continue }
-                if !pageHosts.contains(host) { note(shown) }
-            }
-        }
-        for line in lines(said) {
-            for phone in matches(phonePattern, in: line) {
-                let digits = phone.filter(\.isNumber)
-                guard digits.count >= 7, !pagePhones.contains(where: { $0.contains(digits) }) else { continue }
-                note(phone.trimmingCharacters(in: .whitespaces))
-            }
-        }
-        return found
-    }
-
-    private static let emailPattern = #"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}"#
-    private static let placePattern = #"(?:https?://|www\.)[^\s<>()\[\]"']+|\b(?:[A-Za-z0-9\-]+\.)+[A-Za-z]{2,}(?:/[^\s<>()\[\]"']*)?"#
-    private static let phonePattern = #"\+?\d[\d\s().\-]{6,}\d"#
-
-    /// Look-alikes made plain: full-width letters and digits, and the dots a
-    /// name can be written with instead of ".".
-    private static func normalized(_ text: String) -> String {
-        text.precomposedStringWithCompatibilityMapping
-            .replacingOccurrences(of: "\u{3002}", with: ".")
-            .replacingOccurrences(of: "\u{FF61}", with: ".")
-    }
-
-    private static func words(_ text: String) -> [String] {
-        text.split(whereSeparator: \.isWhitespace).map { String($0.prefix(300)) }
-    }
-
-    private static func lines(_ text: String) -> [String] {
-        text.split(whereSeparator: \.isNewline).map { String($0.prefix(400)) }
-    }
-
-    /// The site a web address or bare name is for, without www.
-    private static func host(of place: String) -> String? {
-        var text = place.lowercased()
-        for prefix in ["https://", "http://"] where text.hasPrefix(prefix) { text.removeFirst(prefix.count) }
-        var host = String(text.split(whereSeparator: { "/?#:".contains($0) }).first ?? "")
-        while let last = host.last, ".,;:!?)]}'\"".contains(last) { host.removeLast() }
-        if host.hasPrefix("www.") { host.removeFirst(4) }
-        return host.isEmpty ? nil : host
-    }
-
-    /// What a file's name ends with, rather than a site's.
-    private static let fileEndings: Set<String> = [
-        "json", "js", "ts", "md", "txt", "html", "htm", "css", "png", "jpg", "jpeg", "gif", "svg", "pdf", "csv", "xml",
-        "yml", "yaml", "py", "rb", "rs", "swift", "java", "kt", "cpp", "sh", "zip", "gz", "tar", "dmg", "pkg", "exe",
-        "doc", "docx", "xls", "xlsx", "ppt", "pptx", "mp3", "mp4", "mov", "wav", "log", "plist", "ini", "toml",
-    ]
-
-    nonisolated private static func matches(_ pattern: String, in text: String) -> [String] {
-        guard let expression = try? NSRegularExpression(pattern: pattern) else { return [] }
-        return expression.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap {
-            Range($0.range, in: text).map { String(text[$0]) }
-        }
     }
 
     // MARK: - the reading

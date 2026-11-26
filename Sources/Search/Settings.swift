@@ -243,18 +243,15 @@ final class SettingsPageView: SettingsFormStack {
     @discardableResult
     func row(_ id: String, control: NSView? = nil, wide: Bool = false, detail: (() -> String)? = nil) -> SettingsRowView {
         let item = SettingsIndex.item(id)
-        let folded = false
         let base = item?.detail ?? ""
-        let more = item?.more
-        let line = folded ? [base, more ?? ""].filter { !$0.isEmpty }.joined(separator: base.isEmpty ? "" : ". ") : base
-        let made = SettingsRowView(id: id, symbol: item?.icon, title: item?.title ?? id, detail: line,
-                                   more: folded ? nil : more, wide: wide || item?.kind == .wide, control: control)
+        let made = SettingsRowView(id: id, symbol: item?.icon, title: item?.title ?? id, detail: base,
+                                   more: item?.more, wide: wide || item?.kind == .wide, control: control)
         made.lit = shell.lit == id
         if let control, !(control is SettingsPopUp) { control.kitAccess(id: "settings." + id, label: item?.title ?? id) }
         if let detail {
             update { [weak made] in
                 let said = detail()
-                made?.say(folded && said == base ? line : said)
+                made?.say(said)
             }
         }
         if let item, !SettingsIndex.applies(item, prefs) {
@@ -654,7 +651,6 @@ extension SettingsPageView {
 
     func openRouterRow() {
         let key = OpenRouterKey.shared
-        let groups = AIGroups.shared
         let drafts = drafts
         shape { key.state == .saved }
         let control: NSView
@@ -676,7 +672,7 @@ extension SettingsPageView {
             control = pair(typed, add)
         }
         row("groups.openrouter", control: control,
-            detail: { AIGroupWords.keyLine(state: key.state, trouble: key.trouble, remoteDecides: groups.remoteDecides) })
+            detail: { AIGroupWords.keyLine(state: key.state, trouble: key.trouble) })
     }
 
     func saveOpenRouterKey() {

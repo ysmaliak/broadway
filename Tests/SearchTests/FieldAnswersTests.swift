@@ -235,4 +235,36 @@ struct FieldAnswersTests {
         #expect(unit?.copy == "1500 MB")
         #expect(answer("  20%   of 80 ")?.expression == "20% of 80")
     }
+
+    @Test func timeAndDateAnswersFollowEachLocaleAndZoneInTurn() {
+        let now = "2026-11-04T20:00:00Z"
+        let tokyo = TimeZone(identifier: "Asia/Tokyo")!
+        let first = answer("time in tokyo", english, now: now)
+        let inGerman = answer("time in tokyo", german, now: now)
+        let again = answer("time in tokyo", english, now: now)
+        let warsawDay = answer("in 2 days", english, now: now)
+        let tokyoDay = answer("in 2 days", english, now: now, zone: tokyo)
+        let germanDay = answer("in 2 days", german, now: now)
+        let german = DateFormatter()
+        german.locale = self.german
+        german.calendar = Calendar(identifier: .gregorian)
+        german.timeZone = warsaw
+        german.setLocalizedDateFormatFromTemplate("yMMMd")
+
+        #expect(first?.answer == "5:00 AM")
+        #expect(inGerman?.answer == "05:00")
+        #expect(again == first)
+        #expect(warsawDay?.answer == "Nov 6, 2026")
+        #expect(warsawDay?.detail == "Friday")
+        #expect(tokyoDay?.answer == "Nov 7, 2026")
+        #expect(tokyoDay?.detail == "Saturday")
+        #expect(germanDay?.answer == german.string(from: day("2026-11-06T12:00:00Z")))
+    }
+
+    @Test func aCurrencyAmountIsFoundWithEitherNameOrCode() {
+        #expect(FieldCurrency.question("100 euros in usd", locale: english) == CurrencyQuestion(expression: "100 euros in usd", amount: 100, from: "EUR", to: "USD"))
+        #expect(FieldCurrency.question("€5 to zł", locale: english) == CurrencyQuestion(expression: "€5 to zł", amount: 5, from: "EUR", to: "PLN"))
+        #expect(FieldCurrency.question("20 us dollars in gbp", locale: english)?.from == "USD")
+        #expect(FieldCurrency.isQuery("20 us dollars", locale: english))
+    }
 }

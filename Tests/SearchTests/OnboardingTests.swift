@@ -688,7 +688,7 @@ final class OnboardingTests {
     }
 
     @Test func onAMacWithoutAppleIntelligenceTheKeyIsWhatTurnsOnFolders() {
-        let line = AIGroupWords.stepLine(mac: false, remoteDecides: true)
+        let line = AIGroupWords.stepLine(mac: false)
 
         #expect(line.contains("turns on folders"))
         #expect(line.contains("fraction of a cent"))

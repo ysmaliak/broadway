@@ -61,7 +61,3 @@ final class FieldHostLayer: NSView {
         CATransaction.commit()
     }
 }
-
-enum FieldHost {
-    typealias Layer = FieldHostLayer
-}

@@ -103,7 +103,7 @@ final class AgentDrivingTests {
         browser.takeOver()
         let plain = browser.drivingKey(key(36, []))
         let held = tab.driving
-        let back = browser.aiKey(key(36, .command))
+        let back = browser.drivingKey(key(36, .command)) || browser.deskKey(key(36, .command))
 
         #expect(!idle)
         #expect(!plain)
@@ -201,7 +201,7 @@ final class AgentDrivingTests {
         let asked = try await question()
         try await Task.sleep(for: .milliseconds(600))
 
-        let pressed = browser.aiKey(key(36, .command))
+        let pressed = browser.drivingKey(key(36, .command)) || browser.deskKey(key(36, .command))
         let open = AgentDesk.shared.front?.id
         AgentDesk.shared.take(asked.id, .no)
         _ = await call.value

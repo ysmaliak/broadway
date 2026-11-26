@@ -21,9 +21,6 @@ final class PageTranslator {
     static let key = "translate.pages"
     static let alwaysKey = "translate.always"
 
-    static var available: Bool { true }
-    static var enabled: Bool { available }
-
     static var fake: Bool { Store.testing && ProcessInfo.processInfo.environment["SEARCH_TRANSLATE_FAKE"] != nil }
 
     nonisolated static var reader: Locale.Language {
@@ -76,8 +73,8 @@ final class PageTranslator {
     static func start(_ tab: Tab, to asked: Locale.Language? = nil, done: (([String: Any]) -> Void)? = nil) -> PageTranslator? {
         let target = asked ?? reader(for: tab)
         tab.translator?.end(restore: true)
-        guard enabled, tab.built != nil else {
-            done?(["error": enabled ? "no page" : "off"])
+        guard tab.built != nil else {
+            done?(["error": "no page"])
             return nil
         }
         let translator = PageTranslator(tab: tab, target: target)
@@ -784,7 +781,7 @@ extension Tab {
     }
 
     func translateIfWanted() {
-        guard PageTranslator.enabled, translator == nil, let web = built, let url = pageAddress,
+        guard translator == nil, let web = built, let url = pageAddress,
               ["http", "https", "file"].contains(url.scheme?.lowercased() ?? "") else { return }
         if let wake = translateOnWake {
             translateOnWake = nil

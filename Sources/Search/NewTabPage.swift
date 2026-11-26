@@ -227,9 +227,9 @@ final class NewTabPageView: KitFlippedView {
         let site = here ? browser.siteChip : nil
         let place = here ? browser.fieldPlace : nil
         let chipsMoved = site != shownSite || place != shownPlace
-        siteChip = chip(siteChip, showing: site != shownSite ? site.map { value in { NewTabHosts.site($0, site: value, lift: self.ink.lift) } } : nil,
+        siteChip = chip(siteChip, showing: site != shownSite ? site.map { value in { NewTabHosts.site($0, site: value) } } : nil,
                         keep: site != nil)
-        placeChip = chip(placeChip, showing: place != shownPlace ? place.map { value in { NewTabHosts.place($0, place: value, lift: self.ink.lift) } } : nil,
+        placeChip = chip(placeChip, showing: place != shownPlace ? place.map { value in { NewTabHosts.place($0, place: value) } } : nil,
                          keep: place != nil)
         shownSite = site
         shownPlace = place
@@ -278,7 +278,7 @@ final class NewTabPageView: KitFlippedView {
         if input != addressInput {
             addressInput = input
             NewTabHosts.address(field, browser: browser, tab: tab.id, search: menu.showing ? menu.query : nil,
-                                prompt: Self.prompt, lift: ink.lift)
+                                prompt: Self.prompt)
             if field.frame.isEmpty { field.frame = NSRect(x: 0, y: 0, width: max(row.bounds.width - 60, 200), height: 28) }
             if field.window != nil { field.layoutSubtreeIfNeeded() }
         }
@@ -358,9 +358,9 @@ final class NewTabPageView: KitFlippedView {
             listHost?.removeFromSuperview()
             let host = NewTabHosts.make()
             if menu.showing {
-                NewTabHosts.menu(host, menu: menu, rowHeight: Self.rowHeight, headerHeight: Self.headerHeight, lift: ink.lift)
+                NewTabHosts.menu(host, menu: menu, rowHeight: Self.rowHeight, headerHeight: Self.headerHeight)
             } else {
-                NewTabHosts.list(host, browser: browser, rowHeight: Self.rowHeight, headerHeight: Self.headerHeight, lift: ink.lift)
+                NewTabHosts.list(host, browser: browser, rowHeight: Self.rowHeight, headerHeight: Self.headerHeight)
             }
             list.addSubview(host)
             listHost = host

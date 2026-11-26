@@ -9,8 +9,6 @@ struct ReloadFace: Equatable {
         case reload, stop
     }
 
-    static let grace: Duration = .milliseconds(340)
-
     private(set) var phase: Phase
     private var loading: Bool
     private var reloads: Int

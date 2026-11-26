@@ -97,7 +97,7 @@ final class Onboarding {
     @ObservationIgnored private var arrived = false
     @ObservationIgnored var keys: OpenRouterKey = .shared
     @ObservationIgnored var keyLine: () -> String = {
-        AIGroupWords.stepLine(mac: AIGroups.shared.available(.thisMac), remoteDecides: AIGroups.shared.remoteDecides)
+        AIGroupWords.stepLine(mac: AIGroups.shared.available(.thisMac))
     }
     @ObservationIgnored var openLink: (URL) -> Void = { url in
         guard !Store.testing else { return }
@@ -328,7 +328,7 @@ final class Onboarding {
         case .side: return "Tabs live in a sidebar. Put it where your hand goes. You can move it later in Settings."
         case .links: return "Links from mail, chats and other apps can open right here. macOS will ask to be sure."
         case .agents: return "Coding agents and your own scripts can open pages, read them and click for you. Turning agents on adds Broadway's skill to the coding agents on this Mac and hooks to Claude Code and Codex, and puts the broadway command in ~/.local/bin when none is there."
-        case .key: return AIGroupWords.stepLine(mac: true, remoteDecides: false)
+        case .key: return AIGroupWords.stepLine(mac: true)
         case .bring: return "Bookmarks, history and more, from the browser you used before. Nothing leaves your Mac."
         }
     }

@@ -100,7 +100,7 @@ final class AIGroups {
     }
 
     var sends: String {
-        AIGroupWords.line(mac: available(.thisMac), key: openRouter.present, remoteDecides: remoteDecides)
+        AIGroupWords.line(mac: available(.thisMac), key: openRouter.present && remoteDecides)
     }
 
     func active(_ browser: Browser) -> Bool {

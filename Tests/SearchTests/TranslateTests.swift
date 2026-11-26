@@ -78,4 +78,14 @@ struct TranslateTests {
         #expect(tab.alwaysTranslates("de"))
         #expect(!other.alwaysTranslates("de"))
     }
+
+    @Test func translatingATabWithNoPageSaysThereIsNoPage() {
+        let tab = Tab()
+        var said: [String: Any] = [:]
+
+        let started = PageTranslator.start(tab) { said = $0 }
+
+        #expect(started == nil)
+        #expect(said["error"] as? String == "no page")
+    }
 }

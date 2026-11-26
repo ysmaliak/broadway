@@ -50,7 +50,7 @@ final class SessionWorldTests {
 
     @Test func aBrowserStartsWithoutThePinsAnEarlierTestLeft() {
         for browser in Self.earlier {
-            browser.writeSessionSoon()
+            browser.rememberSession()
             browser.flushSession()
         }
 

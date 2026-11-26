@@ -1325,11 +1325,9 @@ final class Tab: Identifiable {
         )
         // Every frame but the top, only while Translate Page is switched on:
         // a frame of another site says it's there, to be translated too.
-        if PageTranslator.enabled {
-            controller.addUserScript(
-                WKUserScript(source: PageTranslator.announce, injectionTime: .atDocumentEnd, forMainFrameOnly: false, in: Web.world)
-            )
-        }
+        controller.addUserScript(
+            WKUserScript(source: PageTranslator.announce, injectionTime: .atDocumentEnd, forMainFrameOnly: false, in: Web.world)
+        )
         // Only while it is on and not paused: otherwise pages get nothing
         // (see Dusk.swift). Before the document, so a site known to be light
         // is never seen white. Every frame: a frame darkens its own document,
@@ -2622,7 +2620,7 @@ final class PageView: WKWebView {
     /// Translate Page to <your language>, or Show Original once it is:
     /// nothing while the switch is off.
     func translateItem() -> NSMenuItem? {
-        guard PageTranslator.enabled, let on = translating?() else { return nil }
+        guard let on = translating?() else { return nil }
         let language = PageTranslator.name(PageTranslator.code(readsIn?() ?? PageTranslator.reader))
         let item = NSMenuItem(title: on ? "Show Original" : "Translate Page to \(language)", action: #selector(translatePage(_:)), keyEquivalent: "")
         item.target = self

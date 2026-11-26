@@ -1,19 +1,5 @@
 import Foundation
 
-struct ChatPage: Codable, Equatable, Identifiable {
-    var title: String
-    var address: String
-    var visited: Date
-
-    var id: String { address }
-
-    init(_ hit: PageHit) {
-        title = hit.title.isEmpty ? Address.pretty(hit.url) : hit.title
-        address = hit.opening.absoluteString
-        visited = hit.visited
-    }
-}
-
 enum HistoryQuestion {
     private static let dull: Set<String> = [
         "a", "about", "an", "and", "any", "are", "article", "be", "blog", "can", "could", "did", "do", "does", "find", "for", "from", "had", "has",

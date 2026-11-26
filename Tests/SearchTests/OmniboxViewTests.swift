@@ -95,7 +95,7 @@ struct OmniboxViewTests {
         _ = NSApplication.shared
         let browser = Browser(record: WindowRecord())
         defer { browser.closeAll() }
-        let layer = FieldHost.Layer(browser: browser)
+        let layer = FieldHostLayer(browser: browser)
         layer.frame = NSRect(x: 0, y: 0, width: 900, height: 600)
         let window = window(layer)
         defer { window.close() }

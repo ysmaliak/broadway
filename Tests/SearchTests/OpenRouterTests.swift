@@ -487,19 +487,15 @@ final class OpenRouterTests {
 
     @Test func theSettingsWordsSayWhatLeavesTheMac() {
         let words = [
-            AIGroupWords.line(mac: true, key: false, remoteDecides: false),
-            AIGroupWords.line(mac: true, key: true, remoteDecides: false),
-            AIGroupWords.line(mac: true, key: true, remoteDecides: true),
-            AIGroupWords.line(mac: false, key: false, remoteDecides: true),
-            AIGroupWords.keyLine(state: .none, trouble: nil, remoteDecides: true),
-            AIGroupWords.keyLine(state: .none, trouble: nil, remoteDecides: false),
-            AIGroupWords.keyLine(state: .saved, trouble: nil, remoteDecides: true),
-            AIGroupWords.keyLine(state: .saved, trouble: nil, remoteDecides: false),
-            AIGroupWords.keyLine(state: .checking, trouble: nil, remoteDecides: true),
-            AIGroupWords.keyLine(state: .saved, trouble: OpenRouterTrouble.noCredit.words, remoteDecides: true),
-            AIGroupWords.stepLine(mac: true, remoteDecides: true),
-            AIGroupWords.stepLine(mac: false, remoteDecides: true),
-            AIGroupWords.stepLine(mac: true, remoteDecides: false),
+            AIGroupWords.line(mac: true, key: false),
+            AIGroupWords.line(mac: true, key: true),
+            AIGroupWords.line(mac: false, key: false),
+            AIGroupWords.keyLine(state: .none, trouble: nil),
+            AIGroupWords.keyLine(state: .saved, trouble: nil),
+            AIGroupWords.keyLine(state: .checking, trouble: nil),
+            AIGroupWords.keyLine(state: .saved, trouble: OpenRouterTrouble.noCredit.words),
+            AIGroupWords.stepLine(mac: true),
+            AIGroupWords.stepLine(mac: false),
         ]
         for line in words {
             #expect(!line.contains(";"))
@@ -510,13 +506,18 @@ final class OpenRouterTests {
             #expect(!line.lowercased().contains("jev"))
             #expect(!line.lowercased().contains("luna"))
         }
-        #expect(!AIGroupWords.line(mac: true, key: true, remoteDecides: false).contains("Nothing leaves it"))
-        #expect(AIGroupWords.line(mac: false, key: false, remoteDecides: false) == AIGroupWords.needs)
-        #expect(AIGroupWords.keyLine(state: .saved, trouble: nil, remoteDecides: true)
+        #expect(AIGroupWords.line(mac: true, key: true) == "Related tabs find each other as you open them. OpenRouter sorts and names them with your key.")
+        #expect(AIGroupWords.line(mac: false, key: false) == AIGroupWords.needs)
+        #expect(AIGroupWords.keyLine(state: .saved, trouble: nil)
                 == "Tab titles, site names, folder names and searches go to OpenRouter, never addresses, authors or pages")
-        #expect(AIGroupWords.keyLine(state: .saved, trouble: "Your OpenRouter account is out of credit", remoteDecides: true)
+        #expect(AIGroupWords.keyLine(state: .none, trouble: nil)
+                == "Add your own key and OpenRouter sorts and names folders. The key stays in this Mac's Keychain.")
+        #expect(AIGroupWords.keyLine(state: .saved, trouble: "Your OpenRouter account is out of credit")
                 == "Your OpenRouter account is out of credit")
+        #expect(AIGroupWords.stepLine(mac: true)
+                == "OpenRouter sorts and names your folders. Only tab titles, site names and searches are sent. It costs a fraction of a cent a folder on your account, and the key stays in this Mac's Keychain.")
         let row = SettingsIndex.item("groups.openrouter")
+        #expect(row?.detail == "Add your own key and OpenRouter names folders. The key stays in this Mac's Keychain.")
         #expect(row?.title == "OpenRouter key")
         #expect(row?.group == "tabs")
         #expect(row?.words.contains("openrouter") == true)

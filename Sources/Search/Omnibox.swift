@@ -339,8 +339,8 @@ final class OmniboxView: NSView {
 
     var benchDrawn: [String: Any] {
         var up: NSView? = superview
-        while let view = up, !(view is FieldHost.Layer) { up = view.superview }
-        let host = up as? FieldHost.Layer
+        while let view = up, !(view is FieldHostLayer) { up = view.superview }
+        let host = up as? FieldHostLayer
         let editor = field.currentEditor() as? NSTextView
         let selection = editor.map { [$0.selectedRange().location, $0.selectedRange().length] } ?? []
         var out: [String: Any] = [

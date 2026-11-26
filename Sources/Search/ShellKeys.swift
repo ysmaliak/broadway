@@ -132,7 +132,7 @@ extension ContentView {
             return true
         }
         guard !ShortcutStore.shared.recording else { return false }
-        if browser.aiKey(event) { return true }
+        if browser.drivingKey(event) || browser.deskKey(event) { return true }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let key = event.shortcutCharacters
         let recent = ShortcutStore.shared.recentSwitch(event)

@@ -51,8 +51,9 @@ enum FieldCurrency {
         }
     }
 
+    private static let names = (Array(aliases.keys) + codes.map { $0.lowercased() }).sorted { $0.count > $1.count }
+
     private static func amount(_ left: String, locale: Locale) -> (Double, String)? {
-        let names = (Array(aliases.keys) + codes.map { $0.lowercased() }).sorted { $0.count > $1.count }
         for name in names {
             let amount: String
             if left.hasSuffix(name) { amount = String(left.dropLast(name.count)).trimmingCharacters(in: .whitespaces) }
@@ -87,7 +88,7 @@ struct ECBRates: Codable, Equatable {
         return values.allSatisfy { FieldCurrency.codes.contains($0.key) && $0.value.isFinite && $0.value > 0 }
     }
 
-    private static var formatter: DateFormatter {
+    private static let formatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = Calendar(identifier: .gregorian)
@@ -95,7 +96,7 @@ struct ECBRates: Codable, Equatable {
         formatter.dateFormat = "yyyy-MM-dd"
         formatter.isLenient = false
         return formatter
-    }
+    }()
 
     static func parse(_ data: Data) -> ECBRates? {
         guard data.count <= 65_536 else { return nil }

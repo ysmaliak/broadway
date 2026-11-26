@@ -33,28 +33,28 @@ final class NewTabSlot: NSView {
 enum NewTabHosts {
     static func make() -> NSView { NewTabSlot() }
 
-    static func address(_ host: NSView, browser: Browser, tab: UUID, search: String?, prompt: String, lift: Double) {
+    static func address(_ host: NSView, browser: Browser, tab: UUID, search: String?, prompt: String) {
         guard let slot = host as? NewTabSlot else { return }
         let field = slot.content as? AddressTextField ?? AddressTextField(keys: AddressFieldKeys(browser: browser), size: 20, prompt: prompt)
         slot.show(field)
         field.update(browser: browser, tab: tab, search: search, prompt: prompt, live: true)
     }
 
-    static func site(_ host: NSView, site: SearchSite, lift: Double) {
+    static func site(_ host: NSView, site: SearchSite) {
         guard let slot = host as? NewTabSlot else { return }
         if let chip = slot.content as? SiteChipView { chip.site = site } else { slot.show(SiteChipView(site: site)) }
     }
 
-    static func place(_ host: NSView, place: FieldPlace, lift: Double) {
+    static func place(_ host: NSView, place: FieldPlace) {
         guard let slot = host as? NewTabSlot else { return }
         if let chip = slot.content as? PlaceChipView { chip.place = place } else { slot.show(PlaceChipView(place: place)) }
     }
 
-    static func menu(_ host: NSView, menu: FieldMenu, rowHeight: CGFloat, headerHeight: CGFloat, lift: Double) {
+    static func menu(_ host: NSView, menu: FieldMenu, rowHeight: CGFloat, headerHeight: CGFloat) {
         (host as? NewTabSlot)?.show(FieldMenuListView(menu: menu, rowHeight: rowHeight, headerHeight: headerHeight))
     }
 
-    static func list(_ host: NSView, browser: Browser, rowHeight: CGFloat, headerHeight: CGFloat, lift: Double) {
+    static func list(_ host: NSView, browser: Browser, rowHeight: CGFloat, headerHeight: CGFloat) {
         let list = FieldListView(browser: browser, rowHeight: rowHeight, headerHeight: headerHeight)
         list.headerMuted = true
         (host as? NewTabSlot)?.show(list)

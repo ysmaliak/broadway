@@ -16,7 +16,7 @@ final class ContentView: NSView {
     private let foldHost: Fold
     private let lowerHost: ShellLowerLayer
     private let peek: PeekView
-    private let field: FieldHost.Layer
+    private let field: FieldHostLayer
     private let upperHost: ShellUpperLayer
     private let switcher: TabSwitcherView
     private let topHost: ShellTopLayer
@@ -92,7 +92,7 @@ final class ContentView: NSView {
         foldHost = Fold(browser: browser)
         lowerHost = ShellLowerLayer(browser: browser)
         peek = PeekView(browser: browser)
-        field = FieldHost.Layer(browser: browser)
+        field = FieldHostLayer(browser: browser)
         upperHost = ShellUpperLayer(browser: browser)
         switcher = TabSwitcherView(browser: browser)
         topHost = ShellTopLayer(browser: browser)

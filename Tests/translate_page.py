@@ -186,8 +186,6 @@ def main():
         sv.setup(**{"translate.pages": False})
         launch()
         page = visit("/plain")
-        st = tr(page, "state")
-        t.ok("always on, an old off notwithstanding", st["enabled"] is True and st["available"] is True, st)
         items = menu(page)
         t.ok("Translate Page in the page's menu", items == "Translate Page to English", items)
         t.ok("and the page is untouched until it's chosen", text(page, "#p1") == FR)
