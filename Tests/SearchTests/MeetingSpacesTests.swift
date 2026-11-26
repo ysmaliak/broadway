@@ -182,6 +182,32 @@ final class MeetingSpacesTests {
         #expect(spaceTabs(first).contains(call))
     }
 
+    @Test func joinStayingHereWithALiveFoldersRowInFrontOpensTheCallLoose() throws {
+        let groups = browser.prefs.usesTabGroups, live = browser.prefs.liveFolders
+        browser.prefs.usesTabGroups = true
+        browser.prefs.liveFolders = true
+        let made = LiveFolders.shared.add(name: "PRs", source: LiveSource(kind: .pullRequests, address: "http://127.0.0.1:9/pulls"),
+                                          space: first)
+        defer {
+            LiveFolders.shared.remove(made.id)
+            browser.prefs.usesTabGroups = groups
+            browser.prefs.liveFolders = live
+        }
+        LiveFolders.shared.apply(.items([LiveItem(key: "http://127.0.0.1:9/acme/rocket/pull/1", title: "PR 1")], nil), to: made.id)
+        browser.syncLive()
+        let row = try #require(browser.tabs(in: made.id).first)
+        browser.select(row)
+
+        browser.joinMeeting(call, event: event(account: "nobody@example.test"))
+
+        let tab = try #require(browser.tabs.first { $0.address == call })
+        #expect(memory.lastChoice == .current)
+        #expect(browser.spaceID == first)
+        #expect(browser.active?.id == tab.id)
+        #expect(tab.groupID == nil)
+        #expect(browser.tabs(in: made.id).map(\.id) == [row.id])
+    }
+
     @Test func joinGoesBackToTheCallAlreadyOpenInAnotherSpace() {
         browser.switchSpace(to: second)
         browser.open(call, foreground: true, from: browser.active)

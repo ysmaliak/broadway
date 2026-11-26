@@ -10,6 +10,7 @@ final class MeetingFoldersTests {
     private let call = URL(string: "http://call.invalid/qwe-rtyu-iop")!
     private let notes = URL(string: "http://notes.invalid/agenda")!
     private var saved: (groups: Bool, spaces: Bool, folders: Bool)!
+    private var live: [UUID] = []
 
     init() async throws {
         addTeardownBlock { await self.tearDown() }
@@ -17,6 +18,7 @@ final class MeetingFoldersTests {
         _ = NSApplication.shared
         MeetingLink.testHosts = ["call.invalid": .meet]
         MeetingFolders.shared.forget()
+        keepSetting(Shared.prefs, \.liveFolders, "live.on")
         browser = Browser(record: WindowRecord())
         browser.leaveFiles()
         saved = (browser.prefs.usesTabGroups, browser.prefs.usesSpaces, browser.prefs.meetingFolders)
@@ -31,6 +33,7 @@ final class MeetingFoldersTests {
     }
 
     private func tearDown() async {
+        for id in live { LiveFolders.shared.remove(id) }
         MeetingLink.testHosts = [:]
         MeetingFolders.shared.forget()
         browser.prefs.usesTabGroups = saved.groups
@@ -58,6 +61,16 @@ final class MeetingFoldersTests {
         return try #require(browser.tabs.last { $0.address == call })
     }
 
+    private func liveFolder() -> UUID {
+        browser.prefs.liveFolders = true
+        let made = LiveFolders.shared.add(name: "PRs", source: LiveSource(kind: .pullRequests, address: "http://127.0.0.1:9/pulls"),
+                                          space: browser.spaceID)
+        live.append(made.id)
+        LiveFolders.shared.apply(.items([LiveItem(key: "http://127.0.0.1:9/acme/rocket/pull/1", title: "PR 1")], nil), to: made.id)
+        browser.syncLive()
+        return made.id
+    }
+
     private func meetingFolder() -> TabGroup? {
         browser.tabGroups.first { $0.meeting != nil }
     }
@@ -79,6 +92,32 @@ final class MeetingFoldersTests {
         #expect(Set(browser.tabs(in: folder.id).map(\.id)) == [tab.id, page.id])
         #expect(browser.announcement == MeetingFolderRule.made)
         #expect(browser.announcedUndo != nil)
+    }
+
+    @Test func joinWithALiveFoldersRowInFrontOpensTheCallLoose() async throws {
+        let made = liveFolder()
+        let row = try #require(browser.tabs(in: made).first)
+        browser.select(row)
+
+        let tab = try await joined()
+
+        #expect(browser.active?.id == tab.id)
+        #expect(tab.groupID == nil)
+        #expect(browser.group(of: tab) == nil)
+        #expect(browser.tabs(in: made).map(\.id) == [row.id])
+    }
+
+    @Test func joinWithAFoldersTabInFrontOpensTheCallLoose() async throws {
+        let page = browser.open(notes, foreground: true)
+        let folder = try #require(browser.newFolder(with: [page], named: "Plans", editing: false))
+        browser.select(page)
+
+        let tab = try await joined()
+
+        #expect(browser.active?.id == tab.id)
+        #expect(tab.groupID == nil)
+        #expect(browser.group(of: tab) == nil)
+        #expect(browser.tabs(in: folder).map(\.id) == [page.id])
     }
 
     @Test func aTabOpenedByHandDuringTheCallStaysOutside() async throws {
