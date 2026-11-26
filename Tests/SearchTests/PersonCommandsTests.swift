@@ -73,6 +73,25 @@ final class PersonCommandsTests {
         #expect(PersonAsk.title(noun: "spaces", verb: "delete", site: nil) == "Delete a space?")
     }
 
+    @Test func shieldsUpdateWaitsAndSaysWhyTheListsCouldNotBeFetched() async throws {
+        let lists = ShieldLists.shared
+        let before = lists.sources
+        lists.sources = [FilterLists.Source(id: "unreachable-fixture", name: "Example List", address: "")]
+        let update = try #require(PersonCommands.find("shields", "update"))
+        let list = try #require(PersonCommands.find("shields", "list"))
+
+        let updated = try await update.run(call())
+        let listed = try await list.run(call())
+
+        lists.sources = []
+        await lists.refresh(force: true)
+        lists.sources = before
+        #expect(updated["message"] as? String == "Couldn't fetch Example List")
+        #expect(updated["lists_trouble"] as? String == "Couldn't fetch Example List")
+        #expect(listed["lists_trouble"] as? String == "Couldn't fetch Example List")
+        #expect(listed["lists_checked"] is String)
+    }
+
     @Test func noVerbIsListedTwice() {
         let names = PersonCommands.table.map(\.name)
         #expect(names.count == Set(names).count)

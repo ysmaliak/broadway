@@ -400,7 +400,7 @@ Each works on the tab chosen as above and is gated on its site.
 | `extensions enable`, `disable`, `reload` | A | |
 | `extensions install LINK` | A | the person then answers Broadway's own sheet about its permissions |
 | `extensions remove ID` | E | |
-| `shields list` | R | on or off, and the sites where it is off |
+| `shields list` | R | on or off, the sites where it is off, and the filter lists' trouble and last check |
 | `shields on HOST`, `shields update` | A | |
 | `permissions list [SITE]` | R | camera, microphone, location, notifications, local network |
 | `permissions reset SITE [--kind KIND]` | A | forget an answer, so the site has to ask again |

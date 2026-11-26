@@ -25,6 +25,7 @@ final class ShieldLists {
     nonisolated static let every: TimeInterval = 7 * 24 * 60 * 60
     static let prefix = "broadway-shield-list-"
     private static let attempts = 64
+    private static let unbuilt = "Couldn't compile the new filter lists"
 
     private(set) var saved = Saved()
     private(set) var busy = false
@@ -33,6 +34,7 @@ final class ShieldLists {
     @ObservationIgnored var sources = FilterLists.sources
     @ObservationIgnored private var started = false
     @ObservationIgnored private var clock: Timer?
+    @ObservationIgnored private var running: Task<Void, Never>?
     private let session = URLSession(configuration: .ephemeral)
 
     private static var folder: URL {
@@ -102,9 +104,19 @@ final class ShieldLists {
         }
     }
 
+    var fallingBack: Bool { trouble != nil && Shield.shared.downloaded.isEmpty }
+
     func refresh(force: Bool) async {
+        if let running { return await running.value }
         let wanted = Shield.shared.enabled && (Store.settings.object(forKey: "shield.lists") as? Bool ?? true)
-        guard !busy, force || (wanted && Self.due(checked: saved.checked, missing: missing)) else { return }
+        guard force || (wanted && Self.due(checked: saved.checked, missing: missing)) else { return }
+        let work = Task { await update() }
+        running = work
+        await work.value
+        running = nil
+    }
+
+    private func update() async {
         busy = true
         defer { busy = false }
         var changed = false
@@ -117,8 +129,9 @@ final class ShieldLists {
             }
         }
         if failed.count < sources.count { saved.checked = Date() }
-        if changed || Shield.shared.downloaded.isEmpty { _ = await rebuild() }
-        trouble = failed.isEmpty ? nil : "Couldn't fetch \(failed.joined(separator: ", "))"
+        var compiled = true
+        if changed || Shield.shared.downloaded.isEmpty { compiled = await rebuild() || inputs().isEmpty }
+        trouble = !compiled ? Self.unbuilt : failed.isEmpty ? nil : "Couldn't fetch \(failed.joined(separator: ", "))"
         write()
     }
 
@@ -165,7 +178,7 @@ final class ShieldLists {
             lists += await build(part, named: "\(Self.prefix)\(made.stamp)-\(index)", store: store, budget: &budget)
         }
         guard !lists.isEmpty || made.parts.isEmpty else {
-            trouble = "Couldn't compile the new filter lists"
+            trouble = Self.unbuilt
             return false
         }
         Shield.shared.use(lists)

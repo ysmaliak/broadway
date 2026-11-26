@@ -70,6 +70,7 @@ final class Extensions: NSObject {
     /// Errors an extension's pages and worker ran into, newest last, a few
     /// dozen at most per extension.
     private(set) var errors: [String: [String]] = [:]
+    private(set) var updateTrouble: [String: String] = [:]
 
     func noteError(_ text: String, for id: String) {
         var list = errors[id] ?? []
@@ -1124,10 +1125,7 @@ final class Extensions: NSObject {
         Store.settings.set(true, forKey: Tempo.handedOffKey)
         installed[index].enabled = false
         save()
-        if contexts[id] != nil {
-            unload(id)
-            ExtensionCapture.forget(id)
-        }
+        if contexts[id] != nil { unload(id) }
         (shown ?? browser)?.announce(Tempo.handOffNote, undo: { [weak self] in self?.setEnabled(id, true) })
     }
 
@@ -1139,8 +1137,22 @@ final class Extensions: NSObject {
             Task { await load(installed[index]) }
         } else {
             unload(id)
-            ExtensionCapture.forget(id)
         }
+    }
+
+    var blockers: [String] {
+        installed.filter(\.enabled).compactMap { item in
+            guard let context = contexts[item.id], Extensions.blocks(context.webExtension.manifest) else { return nil }
+            return item.name
+        }
+    }
+
+    nonisolated static func blocks(_ manifest: [String: Any]) -> Bool {
+        let named = Set((manifest["permissions"] as? [Any] ?? []).compactMap { $0 as? String })
+        guard named.contains("declarativeNetRequest") || named.contains("declarativeNetRequestWithHostAccess"),
+              let rules = manifest["declarative_net_request"] as? [String: Any],
+              let resources = rules["rule_resources"] as? [[String: Any]] else { return false }
+        return resources.contains { $0["enabled"] as? Bool == true }
     }
 
     func openOptions(_ id: String) {
@@ -1184,21 +1196,19 @@ final class Extensions: NSObject {
             URLQueryItem(name: "acceptformat", value: "crx3"),
             URLQueryItem(name: "x", value: "id=\(item.id)&v=\(item.version)&uc"),
         ]
-        guard let url = parts.url,
-              let (data, _) = try? await URLSession.shared.data(from: url),
-              let xml = String(data: data, encoding: .utf8),
-              // The answer is the <updatecheck> element alone: status="ok"
-              // with a version when there is a newer one, "noupdate" when
-              // not. Read across the whole reply, the first version="" is
-              // the XML declaration's "1.0", and status="ok" is on <app>
-              // either way — which took every reply for an update.
-              let check = xml.range(of: #"<updatecheck\b[^>]*>"#, options: .regularExpression)
-                .map({ String(xml[$0]) }),
-              check.contains("status=\"ok\""),
+        guard let url = parts.url, let (data, _) = try? await URLSession.shared.data(from: url),
+              let check = Extensions.updateCheck(in: data) else {
+            Store.settings.removeObject(forKey: "extensions.checked")
+            return
+        }
+        guard check.contains("status=\"ok\""),
               let version = check.range(of: #"\bversion="([^"]+)""#, options: .regularExpression)
                 .map({ String(check[$0].dropFirst(9).dropLast()) }),
               version != item.version
-        else { return }
+        else {
+            updateTrouble[item.id] = nil
+            return
+        }
         do {
             let zip = try Crx.verifiedZip(try await Crx.fetch(item.id), id: item.id)
             let staged = Extensions.stagingFolder(for: item.id)
@@ -1226,11 +1236,23 @@ final class Extensions: NSObject {
             workersChanged()
             installed[index].version = found.version ?? version
             installed[index].permissions = wants.sorted()
+            updateTrouble[item.id] = nil
             save()
             if installed[index].enabled { await load(installed[index]) }
         } catch {
+            updateTrouble[item.id] = error.localizedDescription
             NSLog("Extensions: update of %@ failed: %@", item.id, error.localizedDescription)
         }
+    }
+
+    nonisolated static func updateCheck(in data: Data) -> String? {
+        guard let xml = String(data: data, encoding: .utf8) else { return nil }
+        // The answer is the <updatecheck> element alone: status="ok"
+        // with a version when there is a newer one, "noupdate" when
+        // not. Read across the whole reply, the first version="" is
+        // the XML declaration's "1.0", and status="ok" is on <app>
+        // either way — which took every reply for an update.
+        return xml.range(of: #"<updatecheck\b[^>]*>"#, options: .regularExpression).map { String(xml[$0]) }
     }
 
     /// The page the manifest names for the button, when WebKit hasn't said.
@@ -1411,17 +1433,7 @@ final class Extensions: NSObject {
             let hosts = patterns.compactMap(\.host).filter { !$0.isEmpty }
             out.append("Read and change what's on " + (hosts.prefix(4).joined(separator: ", ")) + (hosts.count > 4 ? " and \(hosts.count - 4) more" : ""))
         }
-        let words: [WKWebExtension.Permission: String] = [
-            .tabs: "See your open tabs and their addresses",
-            .cookies: "Read and change cookies",
-            .webNavigation: "See where you go",
-            .webRequest: "See the requests pages make",
-            .declarativeNetRequest: "Block or change requests pages make",
-            .clipboardWrite: "Write to the clipboard",
-            .nativeMessaging: "Talk to apps on this Mac",
-            .scripting: "Run scripts in pages",
-        ]
-        for (permission, sentence) in words where found.requestedPermissions.contains(permission) && !added.contains(permission.rawValue) {
+        for (permission, sentence) in Extensions.words where found.requestedPermissions.contains(permission) && !added.contains(permission.rawValue) {
             out.append(sentence)
         }
         // Chrome's own, which Search answers itself.
@@ -1429,10 +1441,47 @@ final class Extensions: NSObject {
         return out
     }
 
+    static let words: [WKWebExtension.Permission: String] = [
+        .tabs: "See your open tabs and their addresses",
+        .cookies: "Read and change cookies",
+        .webNavigation: "See where you go",
+        .webRequest: "See the requests pages make",
+        .declarativeNetRequest: "Block or change requests pages make",
+        .clipboardWrite: "Write to the clipboard",
+        .nativeMessaging: "Talk to apps on this Mac",
+        .scripting: "Run scripts in pages",
+    ]
+
+    static let laterWords: [String: String] = [
+        "activeTab": "Read and change the page you're on when you use it",
+        "contextMenus": "Add items to menus",
+        "storage": "Keep its own data",
+        "unlimitedStorage": "Keep its own data",
+        "alarms": "Run on a schedule",
+        "clipboardRead": "Read the clipboard",
+        "declarativeNetRequestWithHostAccess": "Block or change requests pages make",
+        "declarativeNetRequestFeedback": "See which requests it blocked or changed",
+        "webRequestBlocking": "Block or change requests pages make",
+    ]
+
+    static func sentence(for name: String) -> String {
+        words[WKWebExtension.Permission(rawValue: name)] ?? searchAnswered.first { $0.0 == name }?.1 ?? laterWords[name]
+            ?? name.replacingOccurrences(of: ".", with: " ")
+    }
+
+    static func abilities(_ wants: [String]) -> String {
+        "It will be able to:\n• " + wants.joined(separator: "\n• ")
+    }
+
+    static func abilities(named names: [String]) -> String {
+        var seen = Set<String>()
+        return abilities(names.sorted().map(sentence(for:)).filter { seen.insert($0).inserted })
+    }
+
     func ask(install name: String, wants: [String], icon: NSImage?, updating: Bool = false) async -> Bool {
         await ask(
             "Add “\(name)” to Broadway?",
-            detail: wants.isEmpty ? "It doesn't ask for anything special" : "It will be able to:\n• " + wants.joined(separator: "\n• "),
+            detail: wants.isEmpty ? "It doesn't ask for anything special" : Extensions.abilities(wants),
             icon: icon, yes: "Add Extension", no: "Cancel", updating: updating
         )
     }
@@ -1769,7 +1818,7 @@ extension Extensions: WKWebExtensionControllerDelegate {
     }
 
     func webExtensionController(_ controller: WKWebExtensionController, promptForPermissions permissions: Set<WKWebExtension.Permission>, in tab: (any WKWebExtensionTab)?, for extensionContext: WKWebExtensionContext) async -> (Set<WKWebExtension.Permission>, Date?) {
-        let detail = permissions.map(\.rawValue).sorted().joined(separator: ", ")
+        let detail = Extensions.abilities(named: permissions.map(\.rawValue))
         return await ask("asks for more access", detail: detail, context: extensionContext) ? (permissions, nil) : ([], nil)
     }
 
@@ -2046,30 +2095,6 @@ final class ExtensionWindow: NSObject, WKWebExtensionWindow {
 
 // MARK: - the buttons in the row
 
-@MainActor
-enum ExtensionActions {
-    static func items(_ id: String, name: String, _ extensions: Extensions) -> [KitMenuItem] {
-        let pinned = extensions.installed.first { $0.id == id }?.pinned ?? false
-        var items: [KitMenuItem] = [.action(pinned ? "Unpin" : "Pin to Toolbar") { extensions.setPinned(id, !pinned) }]
-        if extensions.contexts[id]?.optionsPageURL != nil {
-            items.append(.action("Options") { extensions.openOptions(id) })
-        }
-        items.append(.action("Reload") { extensions.reload(id) })
-        items.append(.separator)
-        items.append(.action("Remove “\(name)”…") { confirmRemove(id, name: name, extensions) })
-        return items
-    }
-
-    static func confirmRemove(_ id: String, name: String, _ extensions: Extensions) {
-        let alert = NSAlert()
-        alert.messageText = "Remove “\(name)”?"
-        alert.informativeText = "Its settings and data go with it"
-        alert.addButton(withTitle: "Remove")
-        alert.addButton(withTitle: "Cancel")
-        if alert.runModal() == .alertFirstButtonReturn { extensions.remove(id) }
-    }
-}
-
 final class ExtensionIconView: NSView {
     var button: Extensions.Button { didSet { refresh() } }
     let size: CGFloat
@@ -2231,7 +2256,8 @@ final class ExtensionActionButton: KitButton {
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
-        KitMenu.make(ExtensionActions.items(button.id, name: button.name, .shared))
+        let items = ExtensionsLogic.actions(of: button.id, .shared, over: window)
+        return items.isEmpty ? nil : KitMenu.make(items)
     }
 }
 

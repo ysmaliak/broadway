@@ -46,12 +46,22 @@ enum ExtensionsLogic {
     }
 
     static func detail(_ item: Installed, _ context: WKWebExtensionContext?, _ extensions: Extensions) -> String {
+        detail(item, context, extensions, starting: extensions.starting, updateTrouble: extensions.updateTrouble[item.id])
+    }
+
+    static func detail(_ item: Installed, _ context: WKWebExtensionContext?, _ extensions: Extensions, starting: Bool, updateTrouble: String?) -> String {
         var parts = ["Version \(item.version)", item.fromStore ? "Chrome Web Store" : folder(item)]
-        if item.enabled, context == nil { parts.append("couldn't start") }
+        if item.enabled, context == nil { parts.append(starting ? "Starting" : "couldn't start") }
+        if let updateTrouble { parts.append("Couldn't update: \(updateTrouble)") }
         if extensions.newTabPageID == item.id { parts.append("shows in new tabs") }
         if context?.hasAccessToPrivateData == true { parts.append("allowed in private windows") }
         if let errors = context.map(Extensions.errors(of:)), !errors.isEmpty { parts.append("\(errors.count) warning\(errors.count == 1 ? "" : "s")") }
         return parts.joined(separator: " · ")
+    }
+
+    static func actions(of id: String, _ extensions: Extensions, over window: NSWindow?) -> [KitMenuItem] {
+        guard let item = extensions.installed.first(where: { $0.id == id }) else { return [] }
+        return actions(item, extensions.contexts[id], extensions, over: window)
     }
 
     static func actions(_ item: Installed, _ context: WKWebExtensionContext?, _ extensions: Extensions, over window: NSWindow? = nil) -> [KitMenuItem] {

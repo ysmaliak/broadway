@@ -533,6 +533,7 @@ enum PersonSettings {
         },
         PersonVerb("shields", "list", .look) { call in
             ["on": call.browser.prefs.shielded, "lists": call.browser.prefs.shieldLists, "trouble": Shield.shared.trouble ?? "",
+             "lists_trouble": ShieldLists.shared.trouble ?? "", "lists_checked": PersonCommands.stamp(ShieldLists.shared.saved.checked),
              "sites": Shield.shared.paused.sorted().map { ["site": $0] }]
         },
         PersonVerb("shields", "on", .arrange) { call in
@@ -546,8 +547,10 @@ enum PersonSettings {
             throw PersonRefusal.person("Turning the blocker off for a site is the person's to say", where: "the site's controls, beside the address")
         },
         PersonVerb("shields", "update", .arrange) { _ in
-            Task { await ShieldLists.shared.refresh(force: true) }
-            return ["message": "Fetching the lists"]
+            let lists = ShieldLists.shared
+            await lists.refresh(force: true)
+            return ["message": lists.trouble ?? "The filter lists are up to date", "lists_trouble": lists.trouble ?? "",
+                    "lists_checked": PersonCommands.stamp(lists.saved.checked), "rules": lists.saved.rules]
         },
         PersonVerb("permissions", "list", .look) { call in
             let wanted = call.string("site")?.lowercased()

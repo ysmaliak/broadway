@@ -312,7 +312,7 @@ enum Nouns {
             Verb("shields list", "Say what's on, and where it's off", columns: ["site"]),
             Verb("shields on <host>", "Turn the blocker back on for a site"),
             Verb("shields off <host>", "Only the person can turn it off", hidden: true),
-            Verb("shields update", "Fetch the filter lists now"),
+            Verb("shields update", "Fetch the filter lists now, and say how it went"),
         ]),
         Noun("permissions", "What sites were allowed or refused", group: "Settings", [
             Verb("permissions list [site]", "List site permissions", columns: ["site", "kind", "allowed"]),

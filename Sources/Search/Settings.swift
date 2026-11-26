@@ -829,6 +829,12 @@ extension SettingsPageView {
                 _ = line(trouble, "Nothing is being blocked until this clears. Try again, or restart Broadway.", id: "shield.trouble",
                          control: button("Try Again") { shield.compile() })
             }
+            let lists = ShieldLists.shared
+            shape { [lists.fallingBack, prefs.shielded, shield.trouble == nil] }
+            if lists.fallingBack, prefs.shielded, shield.trouble == nil {
+                _ = line("Couldn't update the filter lists", "The built-in list is in use", id: "shield.lists.trouble",
+                         control: button("Try Again") { Task { await lists.refresh(force: true) } })
+            }
             let host = browser.hereHost
             shape { [browser.hereHost ?? "", prefs.shielded ? "on" : "off"] }
             if let host, prefs.shielded, shield.trouble == nil {

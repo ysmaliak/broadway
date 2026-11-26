@@ -268,6 +268,42 @@ struct FilterListsTests {
         #expect(ShieldLists.usable(Data("[Adblock Plus 2.0]\n! Title: EasyList\n||a.example^\n".utf8)))
     }
 
+    @Test @MainActor func aListThatCannotBeFetchedLeavesTroubleThatSaysTheBuiltInListIsInUse() async {
+        let lists = ShieldLists.shared
+        let before = lists.sources
+        lists.sources = [FilterLists.Source(id: "unreachable-fixture", name: "Example List", address: "")]
+
+        await lists.refresh(force: true)
+        let trouble = lists.trouble
+        let fallingBack = lists.fallingBack
+
+        lists.sources = []
+        await lists.refresh(force: true)
+        lists.sources = before
+        #expect(trouble == "Couldn't fetch Example List")
+        #expect(fallingBack == Shield.shared.downloaded.isEmpty)
+        #expect(lists.trouble == nil)
+        #expect(!lists.fallingBack)
+    }
+
+    @Test @MainActor func twoRefreshesAtOnceBothWaitForTheSameFetch() async {
+        let lists = ShieldLists.shared
+        let before = lists.sources
+        lists.sources = [FilterLists.Source(id: "unreachable-fixture", name: "Example List", address: "")]
+
+        async let first: Void = lists.refresh(force: true)
+        async let second: Void = lists.refresh(force: true)
+        _ = await (first, second)
+        let trouble = lists.trouble
+        let busy = lists.busy
+
+        lists.sources = []
+        await lists.refresh(force: true)
+        lists.sources = before
+        #expect(trouble == "Couldn't fetch Example List")
+        #expect(!busy)
+    }
+
     @MainActor
     @Test func threeReloadsWithinTwentySecondsOfferToAllowAds() {
         let now = Date()

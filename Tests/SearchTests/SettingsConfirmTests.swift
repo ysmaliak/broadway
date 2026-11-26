@@ -322,6 +322,22 @@ final class SettingsConfirmTests {
         #expect(Ask.asked.first == "Remove “Confirm”?")
     }
 
+    @Test func onlyAnExtensionFromAFolderOffersReload() {
+        let store = Installed(id: "store-extension", name: "Store", version: "1", enabled: false, fromStore: true, permissions: [])
+        let folder = Installed(id: "folder-extension", name: "Folder", version: "1", enabled: false, fromStore: false, permissions: [])
+
+        let storeTitles = KitMenu.make(ExtensionsLogic.actions(store, nil, Extensions.shared)).items.map(\.title)
+        let folderTitles = KitMenu.make(ExtensionsLogic.actions(folder, nil, Extensions.shared)).items.map(\.title)
+
+        #expect(!storeTitles.contains("Reload"))
+        #expect(folderTitles.contains("Reload"))
+        #expect(storeTitles.contains("Remove…"))
+    }
+
+    @Test func theToolbarButtonOffersNothingForAnExtensionThatIsNotInstalled() {
+        #expect(ExtensionsLogic.actions(of: "not-installed-extension", Extensions.shared, over: nil).isEmpty)
+    }
+
     @Test func removingAScreenRecorderAsksFirst() throws {
         Store.settings.set(true, forKey: "extensions.capture.confirm-recorder")
         let line = ExtensionsLogic.recorder("confirm-recorder")

@@ -4472,7 +4472,7 @@ enum ExtensionShims {
             // Those Chrome grants without a word, having nothing to warn of.
             let silent: Set<String> = ["tabGroups", "sidePanel", "offscreen", "idle", "power", "fontSettings", "search",
                                        "system.cpu", "system.memory", "system.display", "favicon"]
-            let names = wanted.map { $0.replacingOccurrences(of: ".", with: " ") }.joined(separator: ", ")
+            let names = Extensions.abilities(named: wanted.filter { !silent.contains($0) })
             let yes = wanted.allSatisfy(silent.contains) ? true : await owner.ask(more: names, context: context)
             guard yes else { return false }
             let had = Store.settings.stringArray(forKey: "extensions.granted.\(id)") ?? []
@@ -4520,7 +4520,7 @@ enum ExtensionShims {
             let every = unreached.contains { $0.matchesAllHosts || $0.matchesAllURLs }
             let sites = every ? "every website" : unreached.map(\.string).sorted().joined(separator: ", ")
             let question = unreached.isEmpty ? "asks for more access" : "wants to read and change \(sites)"
-            let detail = missing.isEmpty ? "Until you remove the extension" : missing.map(\.rawValue).sorted().joined(separator: ", ")
+            let detail = missing.isEmpty ? "Until you remove the extension" : Extensions.abilities(named: missing.map(\.rawValue))
             guard await owner.ask(question, detail: detail, context: context) else { return false }
             for permission in missing { context.setPermissionStatus(.grantedExplicitly, for: permission) }
             for pattern in unreached { context.setPermissionStatus(.grantedExplicitly, for: pattern) }
