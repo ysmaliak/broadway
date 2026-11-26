@@ -361,12 +361,27 @@ final class Tab: Identifiable {
     /// already moved on.
     @ObservationIgnored private(set) var held: URL?
     @ObservationIgnored private var heldOver: URL?
+    @ObservationIgnored private var heldFailing = false
 
-    func hold(_ url: URL) {
+    func hold(_ url: URL, failing: Bool = false) {
         held = url
         heldOver = built?.backForwardList.currentItem?.url
+        heldFailing = failing
         address = url
         failure = nil
+    }
+
+    var handedOver: Bool { held != nil && !heldFailing }
+
+    var failedOver: Bool { failure != nil && held != nil && heldOver != nil }
+
+    func leaveFailure() {
+        held = nil
+        heldOver = nil
+        failure = nil
+        address = built?.url
+        if let shown = built?.title, !shown.isEmpty { title = shown }
+        steps()
     }
     private(set) var progress: Double = 0
     private(set) var loading = false
@@ -886,8 +901,8 @@ final class Tab: Identifiable {
     }
 
     /// Back and Forward as this tab has them now.
-    private func steps() {
-        let back = page != nil ? !trail.isEmpty : (built?.canGoBack ?? false) || behind != nil
+    func steps() {
+        let back = page != nil ? !trail.isEmpty : (built?.canGoBack ?? false) || behind != nil || failedOver
         let forward = page != nil ? !ahead.isEmpty : built?.canGoForward ?? false
         if canGoBack != back { canGoBack = back }
         if canGoForward != forward { canGoForward = forward }
@@ -1964,6 +1979,10 @@ final class Tab: Identifiable {
             web.open(again)
             return
         }
+        if failure != nil, held != nil, let address {
+            web.open(address)
+            return
+        }
         armResume(for: address)
         // A file is read again with the folder it may read (see open).
         if let address, hollow || address.isFileURL {
@@ -2043,6 +2062,10 @@ final class Tab: Identifiable {
     func back() {
         if page == nil, reach(.back) { return }
         kicks.back += 1
+        if page == nil, failedOver {
+            leaveFailure()
+            return
+        }
         goingBack = true
         if let page {
             guard let last = trail.popLast() else { return }

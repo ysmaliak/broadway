@@ -3287,7 +3287,7 @@ extension Browser {
         // A tab holding an extension's sign-in answer (Tab.hold) carries its
         // code in the address: that is never written down.
         let url = tab.pending ?? tab.address
-        return !tab.shy && !tab.bench && tab.held == nil
+        return !tab.shy && !tab.bench && !tab.handedOver
             && (url?.scheme?.hasPrefix("http") == true || url?.isFileURL == true || tab.page != nil)
     }
 

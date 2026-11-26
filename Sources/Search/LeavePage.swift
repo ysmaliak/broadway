@@ -28,6 +28,7 @@ enum LeaveHold {
 final class LeaveQuestion: Identifiable {
     let id = UUID()
     let asked = Date()
+    var cover: NSImage?
     private var reply: ((Bool) -> Void)?
 
     init(reply: @escaping (Bool) -> Void) {
@@ -50,6 +51,8 @@ final class LeaveClosing {
     weak var view: WKWebView?
     let since = Date()
     var asked = false
+    var knocked = false
+    var picture: NSImage?
     private var done: ((Bool) -> Void)?
 
     init(view: WKWebView, done: @escaping (Bool) -> Void) {
@@ -63,6 +66,28 @@ final class LeaveClosing {
         let done = done
         self.done = nil
         done?(leave)
+    }
+}
+
+@MainActor
+enum LeaveCover {
+    static func ground(page: NSColor?, dark: Bool) -> NSColor {
+        let window = Palette.NS.ground.kitResolved(dark: dark)
+        guard let page = page?.kitResolved(dark: dark), page.alphaComponent > 0.5 else { return window }
+        if dark, page.brightnessComponent > 0.8, page.saturationComponent < 0.15 { return window }
+        return page
+    }
+
+    static func image(_ colour: NSColor) -> NSImage {
+        let image = NSImage(size: NSSize(width: 8, height: 8))
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 8, pixelsHigh: 8, bitsPerSample: 8, samplesPerPixel: 4,
+                                   hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
+        if let rep, let context = NSGraphicsContext(bitmapImageRep: rep) {
+            context.cgContext.setFillColor(colour.cgColor)
+            context.cgContext.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+            image.addRepresentation(rep)
+        }
+        return image
     }
 }
 
@@ -122,7 +147,14 @@ extension Browser {
         closing?.asked = true
         StuckRules.committed(&tab.stuck)
         tab.leaveStayedAt = nil
-        tab.leaveQuestion = LeaveQuestion(reply: completionHandler)
+        let question = LeaveQuestion(reply: completionHandler)
+        if let closing, !showsNow(tab) {
+            let dark = (window?.effectiveAppearance ?? NSApp.effectiveAppearance).bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            let cover = closing.picture ?? LeaveCover.image(LeaveCover.ground(page: webView.underPageBackgroundColor, dark: dark))
+            question.cover = cover
+            tab.cover(with: cover)
+        }
+        tab.leaveQuestion = question
         bringForward(tab)
     }
 
@@ -193,6 +225,21 @@ extension Browser {
         tab.leaveClosing = closing
         tab.leaveStayedAt = nil
         tab.leaveTried = web
+        guard why == .closeTab, !showsNow(tab), web.bounds.width > 0 else { return knock(tab, web, closing) }
+        tab.preview(width: web.bounds.width) { [weak self, weak tab, weak closing] picture in
+            guard let self, let tab, let closing, !closing.knocked else { return }
+            closing.picture = picture
+            self.knock(tab, web, closing)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self, weak tab, weak closing] in
+            guard let self, let tab, let closing else { return }
+            self.knock(tab, web, closing)
+        }
+    }
+
+    private func knock(_ tab: Tab, _ web: WKWebView, _ closing: LeaveClosing) {
+        guard !closing.knocked, tab.leaveClosing === closing, closing.open else { return }
+        closing.knocked = true
         guard !tryClose(web) else { return finishClosing(tab, closing, leave: true) }
         DispatchQueue.main.asyncAfter(deadline: .now() + LeaveRules.patience) { [weak self, weak tab, weak closing] in
             guard let self, let tab, let closing, tab.leaveClosing === closing, closing.open else { return }
@@ -219,6 +266,7 @@ extension Browser {
         tab.leaveQuestion = nil
         if !leave { tab.leaveStayedAt = Date() }
         question.answer(leave: leave)
+        uncover(tab, question)
         if let closing = tab.leaveClosing { finishClosing(tab, closing, leave: leave) }
         if !leave, let web = tab.built, web.window != nil { web.window?.makeFirstResponder(web) }
     }
@@ -253,8 +301,17 @@ extension Browser {
         if let question = tab.leaveQuestion {
             tab.leaveQuestion = nil
             question.answer(leave: true)
+            uncover(tab, question)
         }
         if let closing = tab.leaveClosing { finishClosing(tab, closing, leave: true) }
+    }
+
+    private func uncover(_ tab: Tab, _ question: LeaveQuestion) {
+        guard let cover = question.cover else { return }
+        question.cover = nil
+        guard let web = tab.built, web.window != nil else { return tab.uncover(cover) }
+        Settling.afterDrawing(web) { [weak tab] in tab?.uncover(cover) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak tab] in tab?.uncover(cover) }
     }
 
     private func bringForward(_ tab: Tab) {

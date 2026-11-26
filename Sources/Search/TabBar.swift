@@ -303,6 +303,7 @@ enum TabMenuItems {
     static func menu(browser: Browser, tab: Tab, close: @escaping () -> Void) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
+        menu.allowsContextMenuPlugIns = false
         for item in items(browser: browser, tab: tab, close: close) { menu.addItem(item) }
         return menu
     }

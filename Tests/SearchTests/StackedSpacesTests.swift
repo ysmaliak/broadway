@@ -244,4 +244,30 @@ struct StackedSpacesTests {
             #expect(afterJump.1 == "Personal")
         }
     }
+
+    @Test func aFoldedSpaceGivenANewTabFromItsHeadingIsUnfolded() {
+        fresh {
+            let browser = Browser(record: WindowRecord())
+            let previous = (browser.prefs.usesSpaces, browser.prefs.stackedSpaces)
+            defer { (browser.prefs.usesSpaces, browser.prefs.stackedSpaces) = previous }
+            browser.prefs.usesSpaces = true
+            browser.prefs.stackedSpaces = true
+            let home = browser.spaceID
+            let work = UUID()
+            browser.spaces = [Space(id: home, name: "Personal", colour: 0), Space(id: work, name: "Work", colour: 1)]
+            StackedFolds.shared.set(work, folded: true)
+            StackedFolds.shared.set(home, folded: true)
+            defer { StackedFolds.shared.forget(work); StackedFolds.shared.forget(home) }
+
+            browser.stackedNewTab(in: work)
+            let away = (browser.spaceID, StackedFolds.shared.isFolded(work))
+            browser.stackedNewTab(in: work)
+            let here = StackedFolds.shared.isFolded(work)
+
+            #expect(away.0 == work)
+            #expect(!away.1)
+            #expect(!here)
+            #expect(StackedFolds.shared.isFolded(home))
+        }
+    }
 }

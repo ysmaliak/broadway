@@ -141,6 +141,40 @@ final class CloseAsksTests {
         #expect(try await text(typed) == "hi")
     }
 
+    @Test func aBackgroundPageThatAsksShowsItsPictureUntilItDrawsAgain() async throws {
+        let typed = try await open("/asks")
+        try await typeInto(typed)
+        _ = try await open("/plain")
+
+        browser.closeAsking(typed)
+        try await until("the page asks") { typed.leaveQuestion != nil }
+        let covered = typed.cover
+        browser.answerLeave(typed, leave: false)
+        try await until("the picture goes") { typed.cover == nil }
+
+        let picture = try #require(covered)
+        #expect(picture.size.width > 8)
+        #expect(open(typed))
+        #expect(try await text(typed) == "hi")
+    }
+
+    @Test func withNoPictureThePageKeepsItsOwnColourButNeverWhiteInDarkMode() {
+        let white = NSColor.white
+        let night = NSColor(srgbRed: 0.1, green: 0.12, blue: 0.2, alpha: 1)
+        let ground = Palette.NS.ground.kitResolved(dark: true)
+
+        let darkWhite = LeaveCover.ground(page: white, dark: true)
+        let darkNight = LeaveCover.ground(page: night, dark: true)
+        let lightWhite = LeaveCover.ground(page: white, dark: false)
+        let none = LeaveCover.ground(page: nil, dark: true)
+
+        #expect(darkWhite == ground)
+        #expect(darkWhite.brightnessComponent < 0.5)
+        #expect(darkNight.usingColorSpace(.sRGB) == night.usingColorSpace(.sRGB))
+        #expect(lightWhite.brightnessComponent > 0.95)
+        #expect(none == ground)
+    }
+
     @Test func controlWInTheSwitcherAsksBeforeLeavingTypedWork() async throws {
         let typed = try await open("/asks")
         try await typeInto(typed)

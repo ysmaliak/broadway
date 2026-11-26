@@ -285,6 +285,7 @@ extension Browser {
     }
 
     func stackedNewTab(in id: UUID) {
+        StackedFolds.shared.set(id, folded: false)
         guard id != spaceID else { return launch() }
         stackedEnter(id, announcing: false) { launch() }
     }

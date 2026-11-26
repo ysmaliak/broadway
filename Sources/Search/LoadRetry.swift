@@ -204,8 +204,9 @@ extension Tab {
     }
 
     func showFailure(_ message: String?, at url: URL) {
-        hold(url)
+        hold(url, failing: true)
         failure = message
+        steps()
     }
 
     var waitingForNetwork: Bool { retry.network.isWaiting }
@@ -226,7 +227,7 @@ extension Browser {
     }
 
     func loadFailedBeforeCommit(_ webView: WKWebView, _ error: Error) {
-        guard let tab = tab(for: webView), !tab.memoryStopped else { return }
+        guard let tab = anyTab(for: webView), !tab.memoryStopped else { return }
         let nsError = error as NSError
         let fault = LoadFault(error: nsError)
         let handedOver = nsError.domain == "WebKitErrorDomain" && [102, 204].contains(nsError.code)
@@ -239,7 +240,8 @@ extension Browser {
         let failure = tab.failure
         switch tab.retry.failed(fault, at: failing, failure: failure, agent: tab.agent, returns: path.returns,
                                 available: path.available, onScreen: showsNow(tab)) {
-        case .nothing: break
+        case .nothing:
+            if let failing, tab.failure != nil, failing != tab.built?.url { tab.showFailure(tab.failure, at: failing) }
         case .go(let url): tab.takeDetour(to: url)
         case .showFirst(let detour): tab.showFailure(detour.failure ?? failure, at: detour.from)
         case .showAt(let url): tab.showFailure(failure, at: url)

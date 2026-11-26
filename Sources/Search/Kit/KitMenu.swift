@@ -26,6 +26,7 @@ enum KitMenu {
     static func make(_ items: [KitMenuItem], title: String = "") -> NSMenu {
         let menu = NSMenu(title: title)
         menu.autoenablesItems = false
+        menu.allowsContextMenuPlugIns = false
         for item in items { menu.addItem(self.item(item)) }
         return menu
     }

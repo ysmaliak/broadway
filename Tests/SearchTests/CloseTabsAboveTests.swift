@@ -20,6 +20,16 @@ struct CloseTabsAboveTests {
         }
     }
 
+    @Test func broadwaysRowMenusLeaveOutTheSystemsOwnRows() {
+        withBrowser(count: 1) { browser, tabs in
+            let row = TabMenuItems.menu(browser: browser, tab: tabs[0], close: {})
+            let made = KitMenu.make([])
+
+            #expect(!row.allowsContextMenuPlugIns)
+            #expect(!made.allowsContextMenuPlugIns)
+        }
+    }
+
     @Test func doesNothingOnTheFirstTab() {
         withBrowser { browser, tabs in
             #expect(browser.tabsAbove(tabs[0]).isEmpty)
