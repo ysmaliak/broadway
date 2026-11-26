@@ -285,4 +285,10 @@ final class AgentBatchTests {
         #expect(calls == ["click", "dialog", "click"])
         #expect(code(ignored) == "moved")
     }
+
+    @Test func theAppTakesTheSameStepsAsTheCommandUnderTheToolsNames() {
+        #expect(AgentBatch.allowed == ["open", "navigate", "back", "forward", "reload", "tab", "click", "type", "fill_form", "choose", "press",
+                                       "scroll", "hover", "drag", "select", "upload", "download", "wait", "dialog", "locate", "find",
+                                       "snapshot", "text", "screenshot", "close"])
+    }
 }

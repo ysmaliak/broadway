@@ -1,6 +1,9 @@
 import CryptoKit
 import Foundation
 import Security
+import os
+
+private let log = Logger(subsystem: "com.ysmaliak.broadway", category: "ConsentMark")
 
 enum ConsentMark {
     static let mark = Data("on".utf8)
@@ -52,7 +55,7 @@ enum ConsentMark {
             status = SecItemAdd(item as CFDictionary, nil)
         }
         let kept = read(name, service: service)
-        if !kept { NSLog("ConsentMark: %@ left no mark in %@ (%d)", name, service, status) }
+        if !kept { log.notice("\(name, privacy: .public) left no mark in \(service, privacy: .public) (\(status))") }
         return kept
     }
 
@@ -90,7 +93,7 @@ enum ConsentMark {
         var out: CFTypeRef?
         let status = quietly { SecItemCopyMatching(asked as CFDictionary, &out) }
         if status != errSecSuccess, status != errSecItemNotFound {
-            NSLog("ConsentMark: %@ in %@ can't be read (%d)", name, service, status)
+            log.notice("\(name, privacy: .public) in \(service, privacy: .public) can't be read (\(status))")
         }
         return granted(status, out as? Data)
     }

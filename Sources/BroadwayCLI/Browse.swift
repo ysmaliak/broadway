@@ -118,6 +118,7 @@ enum Browse {
     }
 
     static func run(_ command: Command, _ words: [String], called: String, context: Context) throws -> Exit {
+        Link.watch?.reads = command.reads
         let taken = command.tool == "upload" ? try Given.take(words, context: context) : (words: words, folder: nil)
         var handed = false
         defer { if let folder = taken.folder, !handed { try? FileManager.default.removeItem(at: folder) } }

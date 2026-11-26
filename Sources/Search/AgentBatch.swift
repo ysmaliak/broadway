@@ -1,12 +1,11 @@
+import BroadwayCLI
 import Foundation
 
 enum AgentBatch {
     static let most = 25
     static let stops: Set<String> = ["needs_you", "said_no", "never_here", "driving", "person_only", "secret_field", "refused", "unmet", "moved"]
-    static let allowed: Set<String> = ["open", "navigate", "back", "forward", "reload", "tab", "click", "type", "fill_form", "choose", "press",
-                                       "scroll", "hover", "drag", "select", "upload", "download", "wait", "dialog", "locate", "find",
-                                       "snapshot", "text", "screenshot", "close"]
     static let names: [String: String] = ["go": "navigate", "read": "text", "shot": "screenshot", "fill": "fill_form"]
+    static let allowed: Set<String> = Set(Batch.allowed.map { names[$0] ?? $0 }).union(["locate"])
 
     static let spec = ToolSpec(
         name: "batch",

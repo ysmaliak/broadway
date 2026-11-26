@@ -1,6 +1,9 @@
 import Foundation
 import Observation
 import Security
+import os
+
+private let log = Logger(subsystem: "com.ysmaliak.broadway", category: "OpenRouter")
 
 enum OpenRouterModels {
     static let grouping = "~typesafe/jev-latest"
@@ -170,7 +173,7 @@ final class OpenRouterKeychain: OpenRouterKeyStore {
     func read() -> String? {
         let (data, status) = quietly { Keychain.read(slot) }
         guard let data, let key = String(data: data, encoding: .utf8), !key.isEmpty else {
-            if status != errSecSuccess, status != errSecItemNotFound { NSLog("OpenRouterKeychain: read failed (%d)", status) }
+            if status != errSecSuccess, status != errSecItemNotFound { log.notice("keychain read failed (\(status))") }
             return nil
         }
         return key
@@ -183,7 +186,7 @@ final class OpenRouterKeychain: OpenRouterKeyStore {
         item[kSecAttrLabel as String] = Self.service
         item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlocked
         let status = Keychain.write(slot, [kSecValueData as String: data], orAdd: item, quietly: { quietly($0) }).status
-        if status != errSecSuccess { NSLog("OpenRouterKeychain: write failed (%d)", status) }
+        if status != errSecSuccess { log.notice("keychain write failed (\(status))") }
         return status == errSecSuccess
     }
 

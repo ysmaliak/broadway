@@ -250,4 +250,38 @@ final class TabIconTests {
         #expect(IconChoices.typed("a") == nil)
         #expect(IconChoices.typed("hello") == nil)
     }
+
+    @Test func aFoldersMoveToSpaceItemsCarryEachOtherSpacesIcon() throws {
+        let spaces = browser.prefs.usesSpaces
+        browser.prefs.usesSpaces = true
+        defer { browser.prefs.usesSpaces = spaces }
+        browser.spaces.append(Space(id: UUID(), name: "Work", colour: 0))
+        browser.spaces[1].icon = TabIcon(emoji: "🌱")
+        let folder = browser.addTabGroup(containing: page())
+        browser.editingGroupID = nil
+
+        let menu = FolderMenus.menu(browser: browser, group: try #require(browser.tabGroups.first { $0.id == folder }))
+        let move = try #require(menu.items.first { $0.title == "Move" }?.submenu)
+        let places = try #require(move.items.first { $0.title == "Space" }?.submenu).items.filter { !$0.isSeparatorItem }
+
+        #expect(places.map(\.title) == ["Work", "New Space…"])
+        #expect(places.first?.image?.size == NSSize(width: 16, height: 16))
+        #expect(places.first?.keyEquivalentModifierMask == .command)
+        #expect(places.first?.state == .off)
+    }
+
+    @Test func aSpaceMenuStillActsAfterOtherMenusAreMade() throws {
+        browser.spaces.append(Space(id: UUID(), name: "Work", colour: 0))
+        let first = SpaceMenu.menu(for: browser)
+        let plus = PlusMenu.menu(for: browser)
+
+        _ = SpaceMenu.menu(for: browser)
+        _ = PlusMenu.column(for: browser)
+
+        let work = try #require(first.items.first { $0.title == "Work" })
+        let newSpace = try #require(first.items.first { $0.title == "New Space…" })
+        let newTab = try #require(plus.items.first { $0.title == "New Tab" })
+        #expect([work, newSpace, newTab].allSatisfy { item in item.action.map { item.target?.responds(to: $0) == true } == true })
+        #expect(newSpace.keyEquivalentModifierMask == [])
+    }
 }

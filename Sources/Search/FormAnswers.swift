@@ -2,6 +2,9 @@ import AppKit
 import CryptoKit
 import Foundation
 import Observation
+import os
+
+private let log = Logger(subsystem: "com.ysmaliak.broadway", category: "Form answers")
 
 struct FormAnswer: Codable, Equatable {
     var value: String
@@ -199,7 +202,7 @@ final class FormAnswers {
             try sealed.write(to: file, options: .atomic)
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
         } catch {
-            NSLog("Form answers: couldn't be saved")
+            log.notice("couldn't be saved")
         }
     }
 }

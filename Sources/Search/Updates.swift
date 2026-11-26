@@ -257,16 +257,7 @@ final class Updates: NSObject, SPUUpdaterDelegate, UpdateEngine, NSMenuItemValid
         guard let place = Updates.moveOffer else { return }
         let timer = Timer(timeInterval: 1, repeats: false) { _ in
             MainActor.assumeIsolated {
-                let alert = NSAlert()
-                alert.messageText = place.title
-                alert.informativeText = place.words
-                alert.addButton(withTitle: "Quit Broadway")
-                alert.addButton(withTitle: "Not Now")
-                NSApp.activate()
-                UpdateWindows.answerWhileModal(true)
-                let answer = alert.runModal()
-                UpdateWindows.answerWhileModal(false)
-                if answer == .alertFirstButtonReturn { NSApp.terminate(nil) }
+                if UpdateAlerts.modal(UpdateAlerts.move(place)) { NSApp.terminate(nil) }
             }
         }
         RunLoop.main.add(timer, forMode: .common)
@@ -438,16 +429,31 @@ final class UpdateMenuItem: NSMenuItem {
 @MainActor
 enum UpdateAlerts {
     static func show(_ tell: UpdateTell) {
+        let alert = alert(for: tell)
+        let install: (Bool) -> Void = { yes in
+            guard yes, case .available = tell else { return }
+            Updates.shared.install(over: NSApp.keyWindow ?? Browsers.front?.window)
+        }
+        if let yes = Ask.rehearsed(alert.messageText) {
+            install(yes)
+            return
+        }
+        present(alert, install)
+    }
+
+    static func alert(for tell: UpdateTell) -> NSAlert {
         switch tell {
         case .upToDate(let version):
-            inform(UpdateWords.upToDate, detail: UpdateWords.newest(version))
+            Ask.plain(UpdateWords.upToDate, detail: UpdateWords.newest(version), buttons: ["OK"])
         case .checkFailed(let reason):
-            inform(UpdateWords.checkFailed, detail: reason)
+            Ask.plain(UpdateWords.checkFailed, detail: reason, buttons: ["OK"])
         case .available(let found):
-            ask(UpdateWords.available(found.version), confirm: "Install", cancel: "Not Now") {
-                Updates.shared.install(over: NSApp.keyWindow ?? Browsers.front?.window)
-            }
+            Ask.plain(UpdateWords.available(found.version), buttons: ["Install", "Not Now"])
         }
+    }
+
+    static func move(_ place: UpdatePlace) -> NSAlert {
+        Ask.plain(place.title, detail: place.words, buttons: ["Quit Broadway", "Not Now"])
     }
 
     private static var window: NSWindow? {
@@ -455,41 +461,20 @@ enum UpdateAlerts {
         return front
     }
 
-    private static func inform(_ title: String, detail: String) {
-        if Store.testing, Ask.testing != nil {
-            Ask.asked.append(title)
-            return
-        }
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = detail
-        alert.addButton(withTitle: "OK")
-        present(alert) { _ in }
-    }
-
-    private static func ask(_ title: String, confirm: String, cancel: String, then: @escaping () -> Void) {
-        if Store.testing, let yes = Ask.testing {
-            Ask.asked.append(title)
-            if yes { then() }
-            return
-        }
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.addButton(withTitle: confirm)
-        alert.addButton(withTitle: cancel)
-        present(alert) { yes in if yes { then() } }
-    }
-
     private static func present(_ alert: NSAlert, _ done: @escaping (Bool) -> Void) {
         if let window {
             alert.beginSheetModal(for: window) { done($0 == .alertFirstButtonReturn) }
             return
         }
+        done(modal(alert))
+    }
+
+    static func modal(_ alert: NSAlert) -> Bool {
         NSApp.activate()
         UpdateWindows.answerWhileModal(true)
         let answer = alert.runModal()
         UpdateWindows.answerWhileModal(false)
-        done(answer == .alertFirstButtonReturn)
+        return answer == .alertFirstButtonReturn
     }
 }
 

@@ -439,24 +439,11 @@ extension Browser {
 
 @MainActor
 enum PlusMenu {
-    private final class Action: NSObject {
-        let run: () -> Void
-        init(_ run: @escaping () -> Void) { self.run = run }
-        @objc func fire() { run() }
-    }
-
-    private static var actions: [Action] = []
-
     static func item(_ title: String, _ run: @escaping () -> Void) -> NSMenuItem {
-        let action = Action(run)
-        actions.append(action)
-        let item = NSMenuItem(title: title, action: #selector(Action.fire), keyEquivalent: "")
-        item.target = action
-        return item
+        KitMenu.item(.action(title, run: run))
     }
 
     static func column(for browser: Browser) -> NSMenu {
-        actions = []
         let menu = NSMenu()
         let prefs = browser.prefs
         menu.addItem(item("New Tab") { browser.launch() }.symbol(MenuSymbol.newTab))
@@ -471,7 +458,6 @@ enum PlusMenu {
     }
 
     static func menu(for browser: Browser) -> NSMenu {
-        actions = []
         let menu = NSMenu()
         let newTab = item("New Tab") { browser.launch() }.symbol(MenuSymbol.newTab)
         if let key = ShortcutStore.shared.key(for: "file.newTab")?.menuKey {

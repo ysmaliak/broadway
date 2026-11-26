@@ -209,6 +209,14 @@ struct OutputTests {
         #expect(!Help.mcpInstructions.contains(";"))
     }
 
+    @Test func theCommandLineGuideQuotesTheMcpInstructionsWordForWord() throws {
+        let docs = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("docs/cli.md")
+        let text = try String(contentsOf: docs, encoding: .utf8)
+
+        #expect(text.contains("> " + Help.mcpInstructions + "\n"))
+    }
+
     @Test func batchIsListedOnceUnderTheBrowser() {
         let catalog = Catalog([["name": "click", "summary": "Click"], ["name": "batch", "summary": "From the app"]])
 

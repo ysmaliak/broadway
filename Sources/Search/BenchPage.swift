@@ -281,6 +281,7 @@ enum BenchPage {
     private static func title(_ item: KitMenuItem) -> String? {
         switch item {
         case .action(let title, _, _, _, _, _, _, _): return title
+        case .picture(let title, _, _): return title
         case .submenu(let title, _, _): return title
         case .header(let title): return title
         case .separator: return nil

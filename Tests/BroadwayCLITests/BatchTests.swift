@@ -143,4 +143,9 @@ struct BatchTests {
 
         #expect(text == ["2 ok    click Two", "3 ok    click Three"])
     }
+
+    @Test func theStepsABatchTakesAreTheOnesItAlwaysTook() {
+        #expect(Batch.allowed == ["open", "go", "back", "forward", "reload", "tab", "click", "type", "fill", "choose", "press", "scroll",
+                                 "hover", "drag", "select", "upload", "download", "wait", "dialog", "find", "snapshot", "read", "shot", "close"])
+    }
 }

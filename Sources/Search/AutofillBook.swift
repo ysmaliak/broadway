@@ -2,6 +2,9 @@ import Foundation
 import Observation
 import Combine
 import Security
+import os
+
+private let log = Logger(subsystem: "com.ysmaliak.broadway", category: "Autofill")
 
 enum AutofillShelf: String, CaseIterable {
     case profile, address, card, answers
@@ -84,7 +87,7 @@ final class KeychainKeeper: AutofillKeeper, @unchecked Sendable {
     func list(_ shelf: AutofillShelf) -> [KeptItem] {
         let (rows, status) = Keychain.list(query(shelf))
         guard let rows else {
-            if status != errSecItemNotFound { NSLog("Autofill: keychain list failed (%d)", status) }
+            if status != errSecItemNotFound { log.notice("keychain list failed (\(status))") }
             return []
         }
         return rows.compactMap { row in
@@ -97,7 +100,7 @@ final class KeychainKeeper: AutofillKeeper, @unchecked Sendable {
     func read(_ shelf: AutofillShelf, id: String) -> Data? {
         let (data, status) = Keychain.read(query(shelf, id: id))
         guard let data else {
-            if status != errSecItemNotFound { NSLog("Autofill: keychain read failed (%d)", status) }
+            if status != errSecItemNotFound { log.notice("keychain read failed (\(status))") }
             return nil
         }
         return data
@@ -115,7 +118,7 @@ final class KeychainKeeper: AutofillKeeper, @unchecked Sendable {
         if let keychain { fresh[kSecUseKeychain as String] = keychain }
         let put = Keychain.write(query(shelf, id: id), fields, orAdd: fresh)
         if put.status == errSecSuccess { return true }
-        NSLog(put.added ? "Autofill: keychain add failed (%d)" : "Autofill: keychain write failed (%d)", put.status)
+        log.notice("keychain \(put.added ? "add" : "write", privacy: .public) failed (\(put.status))")
         return false
     }
 

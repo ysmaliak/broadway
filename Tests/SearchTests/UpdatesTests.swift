@@ -179,4 +179,37 @@ struct UpdatesTests {
         #expect(check.read(browser.prefs) as? Bool == false)
         #expect((version.read(browser.prefs) as? String)?.hasSuffix(UpdateWords.none) == true)
     }
+
+    @Test func theUpdateAlertsKeepTheirWordsButtonsAndKeys() {
+        let alerts = [
+            UpdateAlerts.alert(for: .upToDate("0.7.4")),
+            UpdateAlerts.alert(for: .checkFailed("The feed couldn't be read")),
+            UpdateAlerts.alert(for: .available(UpdateFound(version: "0.8", build: "300"))),
+            UpdateAlerts.move(.diskImage),
+            UpdateAlerts.move(.downloaded),
+        ]
+
+        #expect(alerts.map(\.messageText) == [UpdateWords.upToDate, UpdateWords.checkFailed, UpdateWords.available("0.8"),
+                                               UpdatePlace.diskImage.title, UpdatePlace.downloaded.title])
+        #expect(alerts.map(\.informativeText) == [UpdateWords.newest("0.7.4"), "The feed couldn't be read", "",
+                                                   UpdatePlace.diskImage.words, UpdatePlace.downloaded.words])
+        #expect(alerts.map { $0.buttons.map(\.title) } == [["OK"], ["OK"], ["Install", "Not Now"], ["Quit Broadway", "Not Now"], ["Quit Broadway", "Not Now"]])
+        #expect(alerts.map { $0.buttons.map(\.keyEquivalent) } == [["\r"], ["\r"], ["\r", ""], ["\r", ""], ["\r", ""]])
+        #expect(alerts.allSatisfy { $0.buttons.allSatisfy { !$0.hasDestructiveAction } })
+    }
+
+    @Test func aTestRunHearsTheUpdateAlertsWithoutShowingThem() {
+        Ask.testing = false
+        Ask.asked = []
+        defer {
+            Ask.testing = nil
+            Ask.asked = []
+        }
+
+        UpdateAlerts.show(.upToDate("0.7.4"))
+        UpdateAlerts.show(.checkFailed("The feed couldn't be read"))
+        UpdateAlerts.show(.available(UpdateFound(version: "0.8", build: "300")))
+
+        #expect(Ask.asked == [UpdateWords.upToDate, UpdateWords.checkFailed, UpdateWords.available("0.8")])
+    }
 }

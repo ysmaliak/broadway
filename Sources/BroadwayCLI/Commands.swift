@@ -34,6 +34,9 @@ final class Context {
 
     func catalog() -> Catalog {
         if let loaded { return loaded }
+        let was = Link.watch?.reads
+        Link.watch?.reads = true
+        defer { if let was { Link.watch?.reads = was } }
         var found = Catalog(nil)
         if link == nil { link = place.connect() }
         Clock.mark("connect")
@@ -51,6 +54,9 @@ final class Context {
 
     func command(_ word: String) -> Command? {
         if let loaded { return loaded.find(word) }
+        let was = Link.watch?.reads
+        Link.watch?.reads = true
+        defer { if let was { Link.watch?.reads = was } }
         if link == nil { link = place.connect() }
         Clock.mark("connect")
         if let link, link.send(["op": "tools", "only": Catalog.wanted(word)]), let reply = link.object(), let commands = reply["commands"] as? [[String: Any]] {
@@ -213,9 +219,9 @@ public enum BroadwayCommand {
         return Date().addingTimeInterval(seconds)
     }
 
-    private static func reads(_ words: [String], context: Context) -> Bool {
+    static func reads(_ words: [String], context: Context) -> Bool {
         guard let first = words.first else { return true }
-        return ["tabs", "snapshot", "read", "shot", "console", "network", "wait", "history", "status", "help", "guide", "find", "locate", "audit", "timings", "styles"].contains(first)
+        return ["status", "help", "guide"].contains(first)
             || words.dropFirst().first.map { ["list", "get", "find", "show"].contains($0) } == true
     }
 

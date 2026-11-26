@@ -1,6 +1,9 @@
 import Foundation
 import Security
 import LocalAuthentication
+import os
+
+private let log = Logger(subsystem: "com.ysmaliak.broadway", category: "Vault")
 
 // Where passwords live: the macOS keychain, under this app's own name, as
 // internet passwords keyed by site and account. Nothing is written to disk by
@@ -175,7 +178,7 @@ enum Vault {
         guard let rows else {
             // Nothing kept reads as "not found"; anything else is worth a
             // line in the log, because the panel will only say "nothing".
-            if status != errSecItemNotFound { NSLog("Vault: keychain list failed (%d)", status) }
+            if status != errSecItemNotFound { log.notice("keychain list failed (\(status))") }
             return []
         }
         return rows
@@ -185,7 +188,7 @@ enum Vault {
     private static func secret(host: String, user: String, port: Int?) -> String? {
         let (data, status) = Keychain.read(identity(host: host, user: user, port: port))
         guard let data else {
-            if status != errSecItemNotFound { NSLog("Vault: keychain read failed (%d)", status) }
+            if status != errSecItemNotFound { log.notice("keychain read failed (\(status))") }
             return nil
         }
         return String(data: data, encoding: .utf8)
@@ -261,7 +264,7 @@ enum Vault {
         if put.status == errSecSuccess { return true }
         guard put.added else { return false }
         guard put.status == errSecDuplicateItem, dropFormer(host: host, user: user, clear: clear) else {
-            NSLog("Vault: keychain save failed (%d)", put.status)
+            log.notice("keychain save failed (\(put.status))")
             return false
         }
         return Keychain.add(fresh) == errSecSuccess

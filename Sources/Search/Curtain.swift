@@ -114,7 +114,7 @@ final class Curtain {
 
 /// Carries a chosen element back from the page.
 final class VeilRelay: NSObject, WKScriptMessageHandler {
-    static let name = "officeVeil"
+    static let name = "broadwayVeil"
 
     weak var tab: Tab?
 
@@ -149,10 +149,10 @@ enum Veiling {
             .replacingOccurrences(of: "$", with: "\\$")
         return """
         (function () {
-          var sheet = document.getElementById('office-veil');
+          var sheet = document.getElementById('broadway-veil');
           if (!sheet) {
             sheet = document.createElement('style');
-            sheet.id = 'office-veil';
+            sheet.id = 'broadway-veil';
             (document.head || document.documentElement).appendChild(sheet);
           }
           sheet.textContent = `\(escaped)`;
@@ -164,7 +164,7 @@ enum Veiling {
     /// and a few functions until somebody actually asks for it.
     static let picker = """
     (function () {
-      if (window.__officeVeil) return;
+      if (window.__broadwayVeil) return;
       var frame = null, tag = null, target = null, live = false;
 
       function sheet(id) {
@@ -318,13 +318,13 @@ enum Veiling {
         var el = target || document.elementFromPoint(e.clientX, e.clientY);
         if (!el || el === frame || el === document.documentElement || el === document.body) return;
         try {
-          window.webkit.messageHandlers.officeVeil.postMessage({
+          window.webkit.messageHandlers.broadwayVeil.postMessage({
             selector: selectorFor(el),
             label: name(el),
             note: shape(el)
           });
         } catch (err) {
-          window.webkit.messageHandlers.officeVeil.postMessage({ trouble: String(err) });
+          window.webkit.messageHandlers.broadwayVeil.postMessage({ trouble: String(err) });
         }
         target = null;
         if (frame) frame.style.display = 'none';
@@ -333,7 +333,7 @@ enum Veiling {
       var presses = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click',
                      'dblclick', 'contextmenu', 'touchstart'];
 
-      window.__officeVeil = {
+      window.__broadwayVeil = {
         on: function () {
           if (live) return;
           live = true;
@@ -356,15 +356,15 @@ enum Veiling {
           presses.forEach(function (kind) {
             document.removeEventListener(kind, kind === 'pointerdown' ? onPress : swallow, true);
           });
-          window.webkit.messageHandlers.officeVeil.postMessage({ off: true });
+          window.webkit.messageHandlers.broadwayVeil.postMessage({ off: true });
         },
         // Show one hidden thing for as long as the pointer rests on its row.
         // The stylesheet is rebuilt without that one selector rather than
         // fighting it with another rule, so the element comes back with the
         // layout it actually had.
         peek: function (css, sel) {
-          sheet('office-veil').textContent = css;
-          sheet('office-peek').textContent = sel +
+          sheet('broadway-veil').textContent = css;
+          sheet('broadway-peek').textContent = sel +
             ' { outline: 2px solid rgba(23,23,23,.9) !important; outline-offset: 2px !important; }';
           try {
             var el = document.querySelector(sel);
@@ -372,8 +372,8 @@ enum Veiling {
           } catch (e) {}
         },
         unpeek: function (css) {
-          sheet('office-veil').textContent = css;
-          sheet('office-peek').textContent = '';
+          sheet('broadway-veil').textContent = css;
+          sheet('broadway-peek').textContent = '';
         }
       };
     })();

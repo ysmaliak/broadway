@@ -1,9 +1,9 @@
 import Darwin
 import Foundation
 
-enum Batch {
+public enum Batch {
     static let most = 25
-    static let allowed: Set<String> = ["open", "go", "back", "forward", "reload", "tab", "click", "type", "fill", "choose", "press", "scroll",
+    public static let allowed: Set<String> = ["open", "go", "back", "forward", "reload", "tab", "click", "type", "fill", "choose", "press", "scroll",
                                        "hover", "drag", "select", "upload", "download", "wait", "dialog", "find", "snapshot", "read", "shot", "close"]
     static let reads: Set<String> = ["snapshot", "text", "screenshot", "locate", "find", "wait"]
     static let personal: Set<String> = ["needs_you", "said_no", "never_here", "driving", "person_only", "secret_field", "refused"]

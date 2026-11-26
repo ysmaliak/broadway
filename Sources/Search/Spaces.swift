@@ -625,23 +625,8 @@ extension Browser {
 /// The dot's menu: the spaces, then what can be done to the one on screen.
 @MainActor
 enum SpaceMenu {
-    /// Menu items call back into Swift through this.
-    private final class Action: NSObject {
-        let run: () -> Void
-        init(_ run: @escaping () -> Void) { self.run = run }
-        @objc func fire() { run() }
-    }
-
-    private static var actions: [Action] = []
-
-    private static func item(_ title: String, key: String = "", checked: Bool = false, _ run: @escaping () -> Void) -> NSMenuItem {
-        let action = Action(run)
-        actions.append(action)
-        let item = NSMenuItem(title: title, action: #selector(Action.fire), keyEquivalent: key)
-        item.target = action
-        item.keyEquivalentModifierMask = key.isEmpty ? [] : .control
-        item.state = checked ? .on : .off
-        return item
+    private static func item(_ title: String, checked: Bool = false, _ run: @escaping () -> Void) -> NSMenuItem {
+        KitMenu.item(.action(title, modifiers: [], on: checked, run: run))
     }
 
     static func show(for browser: Browser) {
@@ -650,7 +635,6 @@ enum SpaceMenu {
 
     /// The menu itself, for show() to pop up, and for the bench to read.
     static func menu(for browser: Browser, space id: UUID? = nil, icon: Bool = false) -> NSMenu {
-        actions = []
         let menu = NSMenu()
         for (index, space) in browser.spaces.enumerated() {
             let entry = item(space.name, checked: space.id == browser.spaceID) {
@@ -738,9 +722,7 @@ enum Ask {
             if empty || !name.isEmpty { then(name) }
             return
         }
-        let alert = NSAlert()
-        alert.messageText = title
-        if let detail { alert.informativeText = detail }
+        let alert = plain(title, detail: detail ?? "")
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
         field.placeholderString = placeholder
         field.stringValue = initial
@@ -757,8 +739,7 @@ enum Ask {
     /// `returnCancels`: Return is Cancel's, for a yes that can't be undone.
     static func sure(_ title: String, detail: String, confirm: String, cancel: String = "Cancel", returnCancels: Bool = false,
                      over window: NSWindow? = nil, then: @escaping () -> Void) {
-        if Store.testing, let yes = testing {
-            asked.append(title)
+        if let yes = rehearsed(title) {
             if yes { then() }
             return
         }
@@ -767,26 +748,43 @@ enum Ask {
             show(alert, over: window) { ok in if ok { then() } }
             return
         }
-        let no = alert.buttons[1]
         // A button holds one key, and Cancel gave up Esc for Return: Esc is
         // caught here for it while the question is up.
-        let escape = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            guard event.window === alert.window, event.keyCode == 53 else { return event }
-            no.performClick(nil)
-            return nil
-        }
+        let escape = escapeCancels(alert)
         show(alert, over: window) { ok in
             if let escape { NSEvent.removeMonitor(escape) }
             if ok { then() }
         }
     }
 
-    static func question(_ title: String, detail: String, confirm: String, cancel: String = "Cancel", returnCancels: Bool) -> NSAlert {
+    static func rehearsed(_ title: String) -> Bool? {
+        guard Store.testing, let yes = testing else { return nil }
+        asked.append(title)
+        return yes
+    }
+
+    static func plain(_ title: String, detail: String = "", buttons: [String] = []) -> NSAlert {
         let alert = NSAlert()
         alert.messageText = title
         alert.informativeText = detail
+        for button in buttons { alert.addButton(withTitle: button) }
+        return alert
+    }
+
+    static func escapeCancels(_ alert: NSAlert) -> Any? {
+        let no = alert.buttons[1]
+        return NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.window === alert.window, event.keyCode == 53 else { return event }
+            no.performClick(nil)
+            return nil
+        }
+    }
+
+    static func question(_ title: String, detail: String, confirm: String, cancel: String = "Cancel", returnCancels: Bool,
+                         destructive: Bool = true) -> NSAlert {
+        let alert = plain(title, detail: detail)
         let yes = alert.addButton(withTitle: confirm)
-        yes.hasDestructiveAction = true
+        yes.hasDestructiveAction = destructive
         let no = alert.addButton(withTitle: cancel)
         if returnCancels {
             yes.keyEquivalent = ""

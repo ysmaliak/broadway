@@ -1,5 +1,8 @@
 import Foundation
 import Security
+import os
+
+private let log = Logger(subsystem: "com.ysmaliak.broadway", category: "Sign-ins")
 
 protocol SignInShelf: Sendable {
     func read(_ account: String) -> Data?
@@ -33,7 +36,7 @@ struct KeychainShelf: SignInShelf {
     func read(_ account: String) -> Data? {
         let (data, status) = Keychain.read(item(account))
         guard let data else {
-            if status != errSecItemNotFound { NSLog("Sign-ins: keychain read refused (%d)", status) }
+            if status != errSecItemNotFound { log.notice("keychain read refused (\(status))") }
             return nil
         }
         return data
@@ -51,13 +54,13 @@ struct KeychainShelf: SignInShelf {
             _ = Keychain.delete(item(account))
             added = Keychain.add(fresh)
         }
-        if added != errSecSuccess { NSLog("Sign-ins: keychain write failed (%d)", added) }
+        if added != errSecSuccess { log.notice("keychain write failed (\(added))") }
         return added == errSecSuccess
     }
 
     func remove(_ account: String) {
         let status = Keychain.delete(item(account))
-        if status != errSecSuccess, status != errSecItemNotFound { NSLog("Sign-ins: keychain remove failed (%d)", status) }
+        if status != errSecSuccess, status != errSecItemNotFound { log.notice("keychain remove failed (\(status))") }
     }
 
     func accounts() -> [String] {

@@ -3,6 +3,7 @@ import AppKit
 indirect enum KitMenuItem {
     case action(String, symbol: String? = nil, key: String = "", modifiers: NSEvent.ModifierFlags = .command,
                 on: Bool = false, enabled: Bool = true, id: String? = nil, run: () -> Void)
+    case picture(String, NSImage?, run: () -> Void)
     case submenu(String, symbol: String? = nil, [KitMenuItem])
     case header(String)
     case separator
@@ -38,6 +39,10 @@ enum KitMenu {
             made.isEnabled = enabled
             if let symbol { made.image = KitGlyph.plain(symbol) }
             if let id { made.setAccessibilityIdentifier(id) }
+            return made
+        case let .picture(title, image, run):
+            let made = KitMenuAction(title, key: "", run: run)
+            made.image = image
             return made
         case let .submenu(title, symbol, items):
             let made = NSMenuItem(title: title, action: nil, keyEquivalent: "")

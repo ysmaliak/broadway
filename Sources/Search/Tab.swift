@@ -1359,8 +1359,8 @@ final class Tab: Identifiable {
         built?.evaluateInSearch(Veiling.style(css))
     }
 
-    func startPicking() { web.evaluateInSearch("window.__officeVeil && window.__officeVeil.on()") }
-    func stopPicking() { web.evaluateInSearch("window.__officeVeil && window.__officeVeil.off()") }
+    func startPicking() { web.evaluateInSearch("window.__broadwayVeil && window.__broadwayVeil.on()") }
+    func stopPicking() { web.evaluateInSearch("window.__broadwayVeil && window.__broadwayVeil.off()") }
 
     func foundSignIn() { onSignIn?(self) }
 
@@ -1518,12 +1518,12 @@ final class Tab: Identifiable {
     /// Show one hidden thing while the pointer rests on its row in the list.
     func peek(_ selector: String, keeping css: String) {
         web.evaluateInSearch(
-            "window.__officeVeil && window.__officeVeil.peek(`\(escape(css))`, `\(escape(selector))`)"
+            "window.__broadwayVeil && window.__broadwayVeil.peek(`\(escape(css))`, `\(escape(selector))`)"
         )
     }
 
     func unpeek(_ css: String) {
-        web.evaluateInSearch("window.__officeVeil && window.__officeVeil.unpeek(`\(escape(css))`)")
+        web.evaluateInSearch("window.__broadwayVeil && window.__broadwayVeil.unpeek(`\(escape(css))`)")
     }
 
     private func escape(_ text: String) -> String {
@@ -3462,7 +3462,7 @@ final class PointerGate: NSResponder {
 /// two rather than the tab registering itself — otherwise a closed tab is kept
 /// alive by the very page it was told to stop showing.
 final class ScrollRelay: NSObject, WKScriptMessageHandler {
-    static let name = "officeScroll"
+    static let name = "broadwayScroll"
 
     weak var tab: Tab?
 

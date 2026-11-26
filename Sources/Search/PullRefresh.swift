@@ -66,7 +66,7 @@ enum PullRefresh {
         typed.push(new WeakRef(el));
         if (!main && !told) {
           told = true;
-          window.webkit.messageHandlers.officeScroll.postMessage({ pull: 'typed', at: Date.now() });
+          window.webkit.messageHandlers.broadwayScroll.postMessage({ pull: 'typed', at: Date.now() });
         }
       }, { capture: true, passive: true });
       addEventListener('submit', function (e) {
@@ -113,7 +113,7 @@ enum PullRefresh {
         var now = Date.now();
         if (why === was && now - said < 100) return;
         was = why; said = now;
-        window.webkit.messageHandlers.officeScroll.postMessage({ pull: why || 'free', at: at });
+        window.webkit.messageHandlers.broadwayScroll.postMessage({ pull: why || 'free', at: at });
       }
 
       addEventListener('wheel', function (e) {
@@ -126,7 +126,7 @@ enum PullRefresh {
 
       window.__broadwayPull = page;
       window.__broadwayTyped = held;
-      if (main) window.webkit.messageHandlers.officeScroll.postMessage({ pull: 'born', at: Date.now() });
+      if (main) window.webkit.messageHandlers.broadwayScroll.postMessage({ pull: 'born', at: Date.now() });
     })();
     """
 }

@@ -434,13 +434,7 @@ final class BookmarksAnchorView: NSView {
 @MainActor
 enum FolderMenus {
     static func menu(browser: Browser, group: TabGroup) -> NSMenu {
-        let menu = KitMenu.make(group.live ? live(browser, group.id) : folder(browser, group))
-        let others = browser.spaces.filter { $0.id != browser.spaceID }
-        if !group.live, let move = menu.items.first(where: { $0.title == "Move" })?.submenu,
-           let space = move.items.first(where: { $0.title == "Space" })?.submenu {
-            for (item, other) in zip(space.items, others) { item.image = other.menuImage }
-        }
-        return menu
+        KitMenu.make(group.live ? live(browser, group.id) : folder(browser, group))
     }
 
     private static func folder(_ browser: Browser, _ group: TabGroup) -> [KitMenuItem] {
@@ -474,7 +468,7 @@ enum FolderMenus {
             var moves: [KitMenuItem] = []
             if spaces {
                 var places: [KitMenuItem] = browser.spaces.filter { $0.id != browser.spaceID }.map { space in
-                    .action(space.name, run: { browser.move(group: group.id, toSpace: space.id) })
+                    .picture(space.name, space.menuImage, run: { browser.move(group: group.id, toSpace: space.id) })
                 }
                 if !places.isEmpty { places.append(.separator) }
                 places.append(.action("New Space…", symbol: MenuSymbol.newSpace, run: {

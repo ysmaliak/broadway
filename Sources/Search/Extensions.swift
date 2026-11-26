@@ -2,6 +2,9 @@ import AppKit
 import WebKit
 import Combine
 import Observation
+import os
+
+private let log = Logger(subsystem: "com.ysmaliak.broadway", category: "Extensions")
 
 // Chrome extensions, on WebKit.
 //
@@ -612,7 +615,7 @@ final class Extensions: NSObject {
             actionsChanged += 1
             return true
         } catch {
-            NSLog("Extensions: couldn't load %@: %@", item.id, error.localizedDescription)
+            log.notice("couldn't load \(item.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
             return false
         }
     }
@@ -1044,13 +1047,13 @@ final class Extensions: NSObject {
             guard let configuration = standIn.webViewConfiguration else { return false }
             let page = HiddenPage(configuration)
             guard await page.loadBlank(at: base) else {
-                NSLog("Extensions: couldn't open %@ to clear what it kept", id)
+                log.notice("couldn't open \(id, privacy: .public) to clear what it kept")
                 return false
             }
             _ = try await page.web.callAsyncJavaScript(Extensions.forgetScript, contentWorld: .defaultClient)
             return true
         } catch {
-            NSLog("Extensions: couldn't clear what %@ kept: %@", id, error.localizedDescription)
+            log.notice("couldn't clear what \(id, privacy: .public) kept: \(error.localizedDescription, privacy: .public)")
             return false
         }
     }
@@ -1260,7 +1263,7 @@ final class Extensions: NSObject {
             if installed[index].enabled { await load(installed[index]) }
         } catch {
             updateTrouble[item.id] = error.localizedDescription
-            NSLog("Extensions: update of %@ failed: %@", item.id, error.localizedDescription)
+            log.notice("update of \(item.id, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -1537,6 +1540,12 @@ final class Extensions: NSObject {
     /// What was asked, for the bench.
     private(set) var asked: [String] = []
 
+    static func questionAlert(_ title: String, detail: String, icon: NSImage?, yes: String, no: String, updating: Bool) -> NSAlert {
+        let alert = Ask.question(title, detail: detail, confirm: yes, cancel: no, returnCancels: updating, destructive: false)
+        if let icon { alert.icon = icon }
+        return alert
+    }
+
     /// One question at a time, as a sheet on the browser's window. An alert
     /// run modally would stop the whole browser — pages, downloads, every
     /// other extension — for as long as it waits, and an extension can ask
@@ -1547,23 +1556,8 @@ final class Extensions: NSObject {
             _ = await before?.value
             self?.asked.append(title)
             if Store.testing, let answer = self?.answerForTests { return answer }
-            let alert = NSAlert()
-            alert.messageText = title
-            alert.informativeText = detail
-            if let icon { alert.icon = icon }
-            let confirm = alert.addButton(withTitle: yes)
-            let cancel = alert.addButton(withTitle: no)
-            var escape: Any?
-            if updating {
-                confirm.keyEquivalent = ""
-                cancel.keyEquivalent = "\r"
-                // Cancel keeps Escape too, as in Ask.sure(returnCancels:).
-                escape = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-                    guard event.window === alert.window, event.keyCode == 53 else { return event }
-                    cancel.performClick(nil)
-                    return nil
-                }
-            }
+            let alert = Extensions.questionAlert(title, detail: detail, icon: icon, yes: yes, no: no, updating: updating)
+            let escape = updating ? Ask.escapeCancels(alert) : nil
             defer { if let escape { NSEvent.removeMonitor(escape) } }
             guard let window = NSApp.mainWindow ?? NSApp.windows.first(where: { $0.isVisible && $0.canBecomeMain }) else {
                 guard !updating else { return false }

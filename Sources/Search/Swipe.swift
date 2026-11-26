@@ -63,8 +63,8 @@ enum Swipe {
     /// made to shout.
     static let watch = """
     (function () {
-      if (window.__officeSwipe) return;
-      window.__officeSwipe = true;
+      if (window.__broadwaySwipe) return;
+      window.__broadwaySwipe = true;
 
       var was = null, said = 0;
 
@@ -111,7 +111,7 @@ enum Swipe {
         var now = Date.now();
         if (t === was && now - said < 100) return;
         was = t; said = now;
-        window.webkit.messageHandlers.officeScroll.postMessage({ side: t ? 'taken' : 'free' });
+        window.webkit.messageHandlers.broadwayScroll.postMessage({ side: t ? 'taken' : 'free' });
       }
 
       window.addEventListener('wheel', function (e) {
