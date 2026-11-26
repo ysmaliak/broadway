@@ -275,6 +275,8 @@ enum Motion {
 
     static var pane: TimeInterval { reduced ? 0 : slide }
 
+    static let columnScroll: TimeInterval = 0.32
+
     static var fieldOutSeconds: Double? { reduced ? nil : 0.2 }
 
     static var spaceResponse: Double { light ? 0.16 : 0.22 }

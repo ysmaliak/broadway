@@ -417,7 +417,7 @@ final class CallFloat {
     static let size = NSSize(width: 340, height: 214)
     static let stage = NSEdgeInsets(top: 8, left: 8, bottom: 58, right: 8)
     static let radius: CGFloat = 14
-    private static let kept = KitKeptFrame(key: "call.spot")
+    static let kept = KitKeptFrame(key: "call.spot")
 
     private(set) var status = CallButtons.Status()
     @ObservationIgnored private(set) weak var tab: Tab?
@@ -539,8 +539,15 @@ final class CallFloat {
     private func spot(for size: NSSize, window: NSWindow?) -> NSPoint {
         if Store.testing { return NSPoint(x: -20000, y: -20000) }
         let screen = window?.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
-        if let kept = Self.kept.frame { return kept.origin }
+        if let kept = Self.keptSpot(for: size, kept: Self.kept, on: NSScreen.screens.map(\.visibleFrame)) { return kept }
         return NSPoint(x: screen.maxX - size.width - 24, y: screen.minY + 24)
+    }
+
+    static func keptSpot(for size: NSSize, kept: KitKeptFrame, on screens: [NSRect]) -> NSPoint? {
+        if kept.store.string(forKey: kept.key) != nil { return kept.frame(on: screens)?.origin }
+        guard let old = kept.store.array(forKey: kept.key) as? [Double], old.count == 2 else { return nil }
+        let frame = NSRect(x: old[0], y: old[1], width: size.width, height: size.height)
+        return KitKeptFrame.shown(frame, on: screens) ? frame.origin : nil
     }
 
     private func keepSpot() {

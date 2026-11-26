@@ -18,10 +18,12 @@ struct KitKeptFrame {
     let key: String
     var store: UserDefaults = Store.settings
 
-    var frame: NSRect? {
+    var frame: NSRect? { frame(on: NSScreen.screens.map(\.visibleFrame)) }
+
+    func frame(on screens: [NSRect]) -> NSRect? {
         guard let text = store.string(forKey: key) else { return nil }
         let frame = NSRectFromString(text)
-        return Self.shown(frame, on: NSScreen.screens.map(\.visibleFrame)) ? frame : nil
+        return Self.shown(frame, on: screens) ? frame : nil
     }
 
     func keep(_ frame: NSRect?) {

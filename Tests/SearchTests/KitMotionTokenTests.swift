@@ -29,6 +29,10 @@ struct KitMotionTokenTests {
         #expect(reduced(false) { Motion.pane } == Motion.slide)
     }
 
+    @Test func theStackedColumnScrollTravelsForAThirdOfASecond() {
+        #expect(Motion.columnScroll == 0.32)
+    }
+
     @Test func aFadeStaysUnderReduceMotionAndTakesALittleLongerThere() {
         let plain = reduced(false) { Motion.kitFade }
         let calm = reduced(true) { Motion.kitFade }
