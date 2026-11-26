@@ -717,7 +717,7 @@ final class StackedHeaderView: NSView {
     private func refreshNow() {
         let name = space.name
         if mark.icon != space.shownIcon { mark.icon = space.shownIcon }
-        tally.text = "\(count)"
+        tally.roll("\(count)", for: space.id)
         add.setAccessibilityLabel("New Tab in \(name)")
         add.toolTip = "New Tab in \(name)"
         more.setAccessibilityLabel("\(name) Menu")

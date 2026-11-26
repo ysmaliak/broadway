@@ -598,21 +598,7 @@ final class AddressLaneView: NSView {
 
     private func glide(_ view: AddressWordsView, shift: CGSize, leaving: Bool, curve: KitCurve) {
         guard let layer = view.layer else { return }
-        let duration: CFTimeInterval = if case .easeOut(let seconds) = curve { seconds } else { 0.34 }
-        let base = layer.position
-        let away = CGPoint(x: base.x + shift.width, y: base.y + shift.height)
-        if shift != .zero, let move = curve.animation("position", from: NSValue(point: leaving ? base : away), to: NSValue(point: leaving ? away : base)) {
-            move.fillMode = .both
-            move.isRemovedOnCompletion = !leaving
-            layer.add(move, forKey: "glide.position")
-        }
-        let fade = CAKeyframeAnimation(keyPath: "opacity")
-        fade.values = leaving ? [1, 0, 0] : [0, 0, 1, 1]
-        fade.keyTimes = leaving ? [0, 0.45, 1] : [0, 0.2, 0.75, 1]
-        fade.duration = duration
-        fade.fillMode = .both
-        fade.isRemovedOnCompletion = !leaving
-        layer.add(fade, forKey: "glide.opacity")
+        let duration = AddressMove.glide(layer, shift: shift, leaving: leaving, curve: curve)
         if leaving {
             DispatchQueue.main.asyncAfter(deadline: .now() + max(duration, 0.4)) { [weak self, weak view] in
                 guard let view, self?.leaving === view else { return }

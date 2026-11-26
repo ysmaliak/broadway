@@ -140,8 +140,9 @@ final class CallLeftSign: NSView {
 
     private func refresh() {
         let now = left
-        minutes.isHidden = now == nil
+        minutes.thing = tab?.id
         if let now { minutes.minutes = now }
+        minutes.isHidden = now == nil
         if superview != nil { changed() }
         needsLayout = true
     }
@@ -347,7 +348,7 @@ final class PinMeetingView: NSView {
 
     private func refresh() {
         let now = label
-        if let now { badge.show(now, title: Meetings.shared.next?.event.title ?? "") }
+        if let now { badge.show(now, title: Meetings.shared.next?.event.title ?? "", for: Meetings.shared.next.map { [$0.event.id, address?.absoluteString ?? ""] }) }
         if (now != nil) != shown {
             shown = now != nil
             if shown { badge.isHidden = false }
@@ -520,11 +521,10 @@ final class LiveStatusView: NSView, SideGrounded {
         let own = rings && !overCount
         let quiet = own || folder?.state == .waiting
         let fresh = folder.flatMap { !quiet && collapsed && status == nil && $0.freshCount > 0 ? $0.freshCount : nil }
-        count.isHidden = fresh == nil
         dot.isHidden = fresh == nil
         var made = NSSize.zero
         if let fresh {
-            count.text = "\(fresh)"
+            count.roll("\(fresh)", for: id)
             let said = fresh == 1 ? "1 item with new activity" : "\(fresh) items with new activity"
             setAccessibilityElement(true)
             setAccessibilityRole(.staticText)
@@ -537,6 +537,7 @@ final class LiveStatusView: NSView, SideGrounded {
             setAccessibilityLabel(nil)
             toolTip = nil
         }
+        count.isHidden = fresh == nil
         var button: (String, String, String, () -> Void)?
         var text: String?
         var warned = false

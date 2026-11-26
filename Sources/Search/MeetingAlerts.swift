@@ -1053,8 +1053,8 @@ final class MeetingAlertCardView: NSView {
         ticker = nil
         let now = alerts.clock()
         let stage = MeetingAlertRules.stage(event, at: now)
-        when.runs = [KitLabel.Run(text: stage.said, font: Self.stageFont, color: Self.ink(stage)),
-                     KitLabel.Run(text: " · \(MeetingAlertRules.span(event))", font: Self.spanFont)]
+        when.roll([KitLabel.Run(text: stage.said, font: Self.stageFont, color: Self.ink(stage)),
+                   KitLabel.Run(text: " · \(MeetingAlertRules.span(event))", font: Self.spanFont)], for: event.id)
         name(snooze, MeetingAlertRules.snoozeTitle(event, at: now))
         snooze.kitAccess(help: event.start.timeIntervalSince(now) > 30 ? "Again when it starts" : "Again in 2 minutes")
         needsLayout = true

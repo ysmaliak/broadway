@@ -469,27 +469,24 @@ final class PinMeetingBadgeView: KitButton {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    func show(_ label: Meeting.PinLabel, title: String) {
+    func show(_ label: Meeting.PinLabel, title: String, for key: AnyHashable? = nil) {
         self.label = label
         switch label {
         case .join:
-            word.text = "Join"
-            word.color = .white
+            say("Join", .white, for: key)
             ground.fill = MeetingGreen.fill(in: effectiveAppearance)
             toolTip = title
             setAccessibilityElement(true)
             setAccessibilityRole(.button)
             setAccessibilityLabel("Join")
         case .countdown(let text):
-            word.text = text
-            word.color = KitColor.ink
+            say(text, KitColor.ink, for: key)
             ground.fill = Palette.NS.wash
             toolTip = nil
             setAccessibilityRole(.staticText)
             setAccessibilityLabel(text)
         case .started:
-            word.text = label.text
-            word.color = KitColor.ink
+            say(label.text, KitColor.ink, for: key)
             ground.fill = Palette.NS.wash
             toolTip = nil
             setAccessibilityRole(.staticText)
@@ -499,6 +496,11 @@ final class PinMeetingBadgeView: KitButton {
         height = PinMeetingPlaces.capsule
         invalidateIntrinsicContentSize()
         needsLayout = true
+    }
+
+    private func say(_ text: String, _ color: NSColor, for key: AnyHashable?) {
+        word.color = color
+        word.roll([KitLabel.Run(text: text, font: PinMeetingPlaces.font, color: color)], for: key)
     }
 
     private func pad() {
@@ -527,10 +529,11 @@ final class PinMeetingBadgeView: KitButton {
 @MainActor
 final class CallMinutesView: NSView {
     private let word = KitLabel("", font: .monospacedDigitSystemFont(ofSize: 11, weight: .medium), color: KitColor.muted)
+    var thing: AnyHashable?
     var minutes = 0 {
         didSet {
             guard minutes != oldValue else { return }
-            word.text = "\(minutes)m left"
+            word.roll("\(minutes)m left", for: thing)
             invalidateIntrinsicContentSize()
         }
     }

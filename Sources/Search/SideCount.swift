@@ -8,7 +8,8 @@ final class SideCountView: KitFlippedView {
     static let wash = 0.07
     static let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
 
-    var count = 0 { didSet { if count != oldValue { tally.text = "\(count)"; needsLayout = true } } }
+    var thing: AnyHashable? = 0
+    var count = 0 { didSet { if count != oldValue { tally.roll("\(count)", for: thing); needsLayout = true } } }
     var yields = false { didSet { if yields != oldValue { chip.alphaValue = yields ? 0 : 1 } } }
     private(set) var shown: Swift.Float = 0
     private let chip = KitBox(fill: KitColor.ink.withAlphaComponent(SideCountView.wash), corners: .capsule)

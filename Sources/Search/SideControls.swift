@@ -199,6 +199,7 @@ class CloseSpotView: NSView {
 final class TalkMarkView: NSView {
     static let gap: CGFloat = 1.5
 
+    var thing: AnyHashable?
     var count = 0 { didSet { if count != oldValue { changed() } } }
     var ink: KitInk = .flat { didSet { if ink != oldValue { glyph.ink = ink; number.ink = ink } } }
 
@@ -235,7 +236,7 @@ final class TalkMarkView: NSView {
     }
 
     private func changed() {
-        number.text = count > 1 ? "\(count)" : ""
+        number.roll(count > 1 ? "\(count)" : "", for: thing)
         number.isHidden = count < 2
         let said = count == 1 ? "1 unanswered comment" : "\(count) unanswered comments"
         setAccessibilityLabel(said)

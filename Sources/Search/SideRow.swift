@@ -1159,6 +1159,7 @@ final class TabRowView: KitHoverView {
                 face.addSubview(made, positioned: .below, relativeTo: closeZone)
                 talk = made
             }
+            made.thing = tab.id
             made.count = talking
             made.ink = state.ground.ink
         } else if let made = talk {

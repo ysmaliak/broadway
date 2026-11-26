@@ -19,6 +19,7 @@ final class KitLabel: NSView {
     var alignment: NSTextAlignment = .natural { didSet { if alignment != oldValue { needsDisplay = true } } }
     var overflow: Overflow = .tail { didSet { if overflow != oldValue { changed() } } }
     var lines = 1 { didSet { if lines != oldValue { changed() } } }
+    var rolled: LabelRoll?
 
     var text: String {
         get { runs.map(\.text).joined() }
@@ -61,6 +62,7 @@ final class KitLabel: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        if rolled?.busy == true { return }
         let string = attributed(dark: kitDark)
         let natural = measure(width: lines == 1 ? .greatestFiniteMagnitude : bounds.width)
         let y = (bounds.height - natural.height) / 2
