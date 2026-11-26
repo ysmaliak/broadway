@@ -251,7 +251,6 @@ final class PickedDragTests {
         defer { for (key, value) in saved { store.set(value, forKey: key) } }
         let browser = makeBrowser(count: 6)
         let t = browser.tabs
-        browser.prefs.usesTabGroups = true
         let folder = browser.addTabGroup(containing: t[0], pinned: false)
         browser.move(t[1], toGroup: folder)
         browser.editingGroupID = nil

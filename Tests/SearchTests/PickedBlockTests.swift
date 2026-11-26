@@ -20,7 +20,7 @@ struct PickedBlockTests {
     }
 
     @Test func pickedRowsInsideAFolderLandAsABlockBetweenItsRows() throws {
-        try withBrowser(count: 6, groups: true) { browser, t, undo in
+        try withBrowser(count: 6) { browser, t, undo in
             let folder = makeFolder(browser, [t[0], t[1], t[2], t[3], t[4]])
             browser.select(t[0])
             pick(browser, [t[1]])
@@ -33,7 +33,7 @@ struct PickedBlockTests {
     }
 
     @Test func aDropLineBesideAnotherPickedRowPutsTheBlockThere() throws {
-        try withBrowser(count: 6, groups: true) { browser, t, undo in
+        try withBrowser(count: 6) { browser, t, undo in
             let folder = makeFolder(browser, [t[0], t[1], t[2], t[3], t[4]])
             browser.select(t[0])
             pick(browser, [t[3]])
@@ -45,7 +45,7 @@ struct PickedBlockTests {
     }
 
     @Test func pickedRowsLeaveTheirFolderForTheLooseRowsAsABlock() throws {
-        try withBrowser(count: 6, groups: true) { browser, t, undo in
+        try withBrowser(count: 6) { browser, t, undo in
             let folder = makeFolder(browser, [t[0], t[1], t[2]])
             browser.select(t[1])
             pick(browser, [t[2]])
@@ -59,7 +59,7 @@ struct PickedBlockTests {
     }
 
     @Test func aPickAcrossFoldersAndLooseRowsGathersAtTheDropPlaceInColumnOrder() throws {
-        try withBrowser(count: 7, groups: true) { browser, t, undo in
+        try withBrowser(count: 7) { browser, t, undo in
             let first = makeFolder(browser, [t[0], t[1]])
             let second = makeFolder(browser, [t[2], t[3]])
             browser.select(t[5])
@@ -74,7 +74,7 @@ struct PickedBlockTests {
     }
 
     @Test func aPickAcrossFoldersAndLooseRowsGathersInsideAFolderInColumnOrder() throws {
-        try withBrowser(count: 7, groups: true) { browser, t, undo in
+        try withBrowser(count: 7) { browser, t, undo in
             let first = makeFolder(browser, [t[0], t[1]])
             let second = makeFolder(browser, [t[2], t[3]])
             browser.select(t[5])
@@ -124,7 +124,7 @@ struct PickedBlockTests {
     }
 
     @Test func aLiveFolderTakesNoBlock() throws {
-        try withBrowser(count: 6, groups: true) { browser, t, undo in
+        try withBrowser(count: 6) { browser, t, undo in
             var live = TabGroup(id: UUID(), name: "News", collapsed: false)
             live.live = true
             browser.tabGroups.append(live)
@@ -143,7 +143,7 @@ struct PickedBlockTests {
     }
 
     @Test func aPickHoldingALiveFoldersRowMovesNothing() throws {
-        try withBrowser(count: 6, groups: true) { browser, t, undo in
+        try withBrowser(count: 6) { browser, t, undo in
             var live = TabGroup(id: UUID(), name: "News", collapsed: false)
             live.live = true
             browser.tabGroups.append(live)
@@ -165,7 +165,7 @@ struct PickedBlockTests {
     }
 
     @Test func oneUndoTakesTheWholeMoveBackToEachRowsFolderAndPlace() throws {
-        try withBrowser(count: 7, groups: true) { browser, t, undo in
+        try withBrowser(count: 7) { browser, t, undo in
             let first = makeFolder(browser, [t[1]])
             let second = makeFolder(browser, [t[2], t[3]])
             browser.quietly { browser.tabGroups = browser.tabGroups.map { var group = $0; group.held = false; return group } }
@@ -194,7 +194,7 @@ struct PickedBlockTests {
     }
 
     @Test func aBlockLetGoOnAFolderHeadingJoinsItAsOneStep() throws {
-        try withBrowser(count: 6, groups: true) { browser, t, undo in
+        try withBrowser(count: 6) { browser, t, undo in
             let folder = makeFolder(browser, [t[0]])
             browser.select(t[2])
             pick(browser, [t[4], t[3]])
@@ -218,7 +218,7 @@ struct PickedBlockTests {
     }
 
     @Test func aDropWhereTheBlockAlreadyIsIsQuiet() throws {
-        try withBrowser(count: 6, groups: true) { browser, t, undo in
+        try withBrowser(count: 6) { browser, t, undo in
             let folder = makeFolder(browser, [t[0], t[1], t[2]])
             browser.select(t[1])
             pick(browser, [t[2]])
@@ -264,12 +264,12 @@ struct PickedBlockTests {
         browser.displayedTabs.filter { $0.pin == nil && browser.group(of: $0) == nil }.map(\.id)
     }
 
-    private func withBrowser(count: Int, groups: Bool = false, _ body: (Browser, [Tab], UndoManager) throws -> Void) throws {
+    private func withBrowser(count: Int, _ body: (Browser, [Tab], UndoManager) throws -> Void) throws {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
         let browser = Browser(record: WindowRecord())
         let prefs = browser.prefs
-        let saved = (prefs.usesTabGroups, prefs.splitView, prefs.newTabPlace, prefs.usesSpaces)
+        let saved = (prefs.splitView, prefs.usesSpaces)
         let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 640, height: 400),
                               styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
@@ -278,14 +278,10 @@ struct PickedBlockTests {
             for tab in browser.tabs where tab.pin != nil { browser.unpin(tab) }
             browser.closeAll()
             window.close()
-            prefs.usesTabGroups = saved.0
-            prefs.splitView = saved.1
-            prefs.newTabPlace = saved.2
-            prefs.usesSpaces = saved.3
+            prefs.splitView = saved.0
+            prefs.usesSpaces = saved.1
         }
-        prefs.usesTabGroups = groups
         prefs.splitView = false
-        prefs.newTabPlace = .end
         prefs.usesSpaces = false
         for number in 1...count {
             if number > 1 { browser.newTab() }

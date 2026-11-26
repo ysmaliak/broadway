@@ -206,13 +206,12 @@ extension Browser {
         guard let movers = blockMovers(chosen) else { return }
         let mark = beginStep(movers.count == 1 ? "Move Tab" : "Move \(movers.count) Tabs")
         defer { endStep(mark) }
-        let grouped = prefs.usesTabGroups
         let ids = Set(movers.map(\.id))
         var folder: UUID?
         var anchor: (index: Int, after: Bool)?
         switch place {
         case .folder(let target):
-            guard grouped, tabGroups.contains(where: { $0.id == target.group && !$0.live }) else { return }
+            guard tabGroups.contains(where: { $0.id == target.group && !$0.live }) else { return }
             guard let member = target.member else {
                 for tab in movers { move(tab, toGroup: target.group) }
                 return
@@ -237,22 +236,20 @@ extension Browser {
             tabs[..<at.index].filter { !ids.contains($0.id) }.count + (at.after && !ids.contains(tabs[at.index].id) ? 1 : 0)
         } ?? row.count
         row.insert(contentsOf: movers, at: insertion)
-        let regrouped = grouped && movers.contains { $0.groupID != folder }
+        let regrouped = movers.contains { $0.groupID != folder }
         guard regrouped || row.map(\.id) != tabs.map(\.id) else { return }
         let previous = Dictionary(movers.map { ($0.id, $0.groupID) }, uniquingKeysWith: { first, _ in first })
-        if grouped {
-            if let folder, regrouped { markFilled(folder) }
-            for tab in movers {
-                tab.groupID = folder
-                letGoLive(tab, from: previous[tab.id] ?? nil)
-            }
+        if let folder, regrouped { markFilled(folder) }
+        for tab in movers {
+            tab.groupID = folder
+            letGoLive(tab, from: previous[tab.id] ?? nil)
         }
         if let folder, let index = tabGroups.firstIndex(where: { $0.id == folder }) {
             tabGroups[index].held = false
             unfoldFolder(folder)
         }
         setRow(row)
-        if grouped { for id in Set(previous.values.compactMap { $0 }) where id != folder { removeEmptyGroup(id) } }
+        for id in Set(previous.values.compactMap { $0 }) where id != folder { removeEmptyGroup(id) }
         writeSession(now: true)
     }
 
