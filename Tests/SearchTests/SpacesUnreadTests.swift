@@ -139,4 +139,70 @@ struct SpacesUnreadTests {
         #expect(waiting != nil)
         #expect(dropped == nil)
     }
+
+    private func asides(in folder: URL) -> [URL] {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        return names.filter { $0.hasPrefix("spaces.unreadable-") }.map { folder.appendingPathComponent($0) }
+    }
+
+    @Test func aDamagedListIsSetAsideBeforeANewSpaceIsWrittenAndTheFoldersStillWait() throws {
+        let made = try world()
+        defer { try? FileManager.default.removeItem(at: made.folder) }
+        let damaged = Data("[{\"id\": \"00000000-0000-0000".utf8)
+        try damaged.write(to: made.spaces)
+        let added = Space(id: UUID(), name: "Added", colour: 0)
+
+        Spaces.put([Space.first(), added], at: made.spaces)
+
+        let aside = asides(in: made.folder)
+        #expect(aside.count == 1)
+        #expect(try aside.first.map { try Data(contentsOf: $0) } == damaged)
+        #expect(Spaces.listed(at: made.spaces) == [Space.firstID, added.id])
+        #expect(!Spaces.trusted(at: made.spaces))
+
+        let relaunch = LiveFolders(file: made.live, housing: Spaces.trusted(at: made.spaces) ? Spaces.listed(at: made.spaces) : nil)
+        Disk.drain()
+
+        #expect(relaunch.waiting.map(\.id) == [made.other.id])
+        #expect(Set(try kept(made.live)) == [made.home.id, made.other.id])
+        #expect(try Data(contentsOf: made.live) == made.bytes)
+    }
+
+    @Test func aReadableListIsWrittenOverWithNothingSetAside() throws {
+        let made = try world()
+        defer { try? FileManager.default.removeItem(at: made.folder) }
+        try JSONEncoder().encode([Space.first()]).write(to: made.spaces)
+
+        Spaces.put([Space.first(), Space(id: away, name: "Away", colour: 0)], at: made.spaces)
+
+        #expect(asides(in: made.folder).isEmpty)
+        #expect(Spaces.trusted(at: made.spaces))
+    }
+
+    @Test func aMissingListIsWrittenWithNothingSetAside() throws {
+        let made = try world()
+        defer { try? FileManager.default.removeItem(at: made.folder) }
+
+        Spaces.put([Space.first()], at: made.spaces)
+
+        #expect(asides(in: made.folder).isEmpty)
+        #expect(Spaces.trusted(at: made.spaces))
+    }
+
+    @Test func theSpacesComeBackWithEverythingWhenTheSetAsideFileIsPutBack() throws {
+        let made = try world()
+        defer { try? FileManager.default.removeItem(at: made.folder) }
+        try Data("not a list".utf8).write(to: made.spaces)
+        Spaces.put([Space.first()], at: made.spaces)
+        let aside = try #require(asides(in: made.folder).first)
+        try FileManager.default.removeItem(at: aside)
+        try JSONEncoder().encode([Space.first(), Space(id: away, name: "Away", colour: 0)]).write(to: made.spaces)
+
+        let relaunch = LiveFolders(file: made.live, housing: Spaces.trusted(at: made.spaces) ? Spaces.listed(at: made.spaces) : nil)
+        Disk.drain()
+
+        #expect(Spaces.trusted(at: made.spaces))
+        #expect(Set(relaunch.folders.map(\.id)) == [made.home.id, made.other.id])
+        #expect(Set(try kept(made.live)) == [made.home.id, made.other.id])
+    }
 }

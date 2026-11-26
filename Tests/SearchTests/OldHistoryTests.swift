@@ -241,7 +241,10 @@ struct OldHistoryTests {
         let office = Space(id: UUID(), name: "Office", colour: 1)
         let folders = LiveFolders.shared
         let reading = folders.add(name: "PRs", source: .reviewRequests, space: office.id)
+        let wasRead = Spaces.listRead
+        Spaces.listRead = true
         addTeardownBlock {
+            Spaces.listRead = wasRead
             folders.remove(reading.id)
             prefs.usesSpaces = previous.0
             browser.spaces = previous.1

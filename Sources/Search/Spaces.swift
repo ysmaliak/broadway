@@ -108,7 +108,17 @@ enum Spaces {
         return Set(saved.map(\.id) + [Space.firstID])
     }
 
-    @MainActor static var listRead = listed() != nil
+    static func trusted(at file: URL = Spaces.file) -> Bool {
+        listed(at: file) != nil && !setAside(beside: file)
+    }
+
+    static func setAside(beside file: URL) -> Bool {
+        let start = file.deletingPathExtension().lastPathComponent + ".unreadable-"
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: file.deletingLastPathComponent().path)) ?? []
+        return names.contains { $0.hasPrefix(start) }
+    }
+
+    @MainActor static var listRead = trusted()
 
     static func read() -> [Space] {
         let saved = (try? Data(contentsOf: file)).flatMap { try? JSONDecoder().decode([Space].self, from: $0) } ?? []
@@ -132,13 +142,23 @@ enum Spaces {
         Store.settings.bool(forKey: "spaces.orderKept") || spaces.first?.id != Space.firstID
     }
 
-    static func write(_ spaces: [Space]) {
+    static func put(_ spaces: [Space], at file: URL = Spaces.file) {
         guard let data = try? JSONEncoder().encode(spaces) else { return }
-        try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let manager = FileManager.default
+        if manager.fileExists(atPath: file.path), listed(at: file) == nil {
+            Store.quarantine(file)
+            guard !manager.fileExists(atPath: file.path) else { return }
+        }
+        try? manager.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: file, options: .atomic)
+    }
+
+    static func write(_ spaces: [Space]) {
+        guard (try? JSONEncoder().encode(spaces)) != nil else { return }
+        put(spaces)
         MainActor.assumeIsolated {
             known = Dictionary(spaces.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-            listRead = true
+            listRead = trusted()
         }
         // Every window's list follows (see Browser.init).
         NotificationCenter.default.post(name: changed, object: spaces)
