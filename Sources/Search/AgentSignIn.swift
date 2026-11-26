@@ -92,7 +92,12 @@ enum AgentSignInMatch {
         guard let host = page.host(), !host.isEmpty, bare(kept.host) == bare(host) else { return false }
         let scheme = page.scheme?.lowercased()
         guard scheme == "https" || (scheme == "http" && kept.clear) else { return false }
-        if kept.port == nil, loopback(host) { return true }
+        return portFits(kept, page: page)
+    }
+
+    static func portFits(_ kept: Kept, page: URL) -> Bool {
+        let scheme = page.scheme?.lowercased()
+        if kept.port == nil, loopback(page.host() ?? "") { return true }
         let wanted = page.port ?? defaultPort(scheme)
         let held = kept.port ?? defaultPort(scheme)
         return wanted == held
@@ -124,6 +129,11 @@ enum PersonSignIn {
 
     static func bare(_ sentence: String) -> String {
         sentence.hasSuffix(".") ? String(sentence.dropLast()) : sentence
+    }
+
+    static func onePasswordRefusal(_ why: String, locked: Bool) -> PersonRefusal {
+        PersonRefusal("failed", "1Password didn't hand the password over, so nothing was filled. \(bare(why)).",
+                      hint: locked ? onePasswordHint : handHint)
     }
 
     static func label(_ kept: Kept, marked: Bool) -> String {
@@ -202,13 +212,16 @@ enum PersonSignIn {
     static func signIn(_ call: PersonCall, tab: Tab, kept: Kept, place: URL, told: Bool) async throws -> [String: Any] {
         let fromOnePassword = kept.item != nil
         if fromOnePassword { call.channel?.send(["event": "asking", "message": "Asking 1Password for the password"]) }
-        let read = fromOnePassword ? await OnePassword.login(kept) : await call.box.loginSecret(kept)
-        guard let login = read else {
-            if fromOnePassword {
-                throw PersonRefusal("failed", "1Password didn't hand the password over, so nothing was filled", hint: onePasswordHint)
+        let read: Login?
+        if fromOnePassword {
+            switch await OnePassword.fetch(kept) {
+            case .login(let login): read = login
+            case .refused(let why, let locked): throw onePasswordRefusal(why, locked: locked)
             }
-            throw PersonRefusal("failed", "The keychain refused it")
+        } else {
+            read = await call.box.loginSecret(kept)
         }
+        guard let login = read else { throw PersonRefusal("failed", "The keychain refused it") }
         guard tab.pageAddress == place, !tab.driving else {
             throw PersonRefusal("refused", "The page changed, so nothing was filled. Look again.")
         }

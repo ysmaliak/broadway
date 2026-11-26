@@ -23,7 +23,7 @@ struct Login: Identifiable, Equatable, Hashable {
     var clear = false
     var port: Int?
 
-    var id: String { host + "\u{1}" + user }
+    var id: String { Vault.id(host, user, port) }
 }
 
 /// One item as a list needs it: the site, the account, and when it was last
@@ -43,7 +43,7 @@ struct Kept: Identifiable, Equatable, Hashable {
     var agent: AgentUse?
     var item: OnePasswordItem?
 
-    var id: String { host + "\u{1}" + user }
+    var id: String { Vault.id(host, user, port) }
 }
 
 struct AgentUse: Equatable, Hashable {
@@ -90,6 +90,20 @@ enum Vault {
     private static let reader = DispatchQueue(label: "com.ysmaliak.broadway.vault", qos: .userInitiated)
 
     static var rehearsing: Bool { Store.unitTests }
+
+    static func id(_ host: String, _ user: String, _ port: Int?) -> String {
+        host + "\u{1}" + user + (port.map { "\u{1}\($0)" } ?? "")
+    }
+
+    static func identity(host: String, user: String, port: Int?) -> [String: Any] {
+        [
+            kSecClass as String: kSecClassInternetPassword,
+            kSecAttrServer as String: host,
+            kSecAttrAccount as String: user,
+            kSecAttrLabel as String: label,
+            kSecAttrPort as String: max(port ?? 0, 0),
+        ]
+    }
 
     static func off<Value>(_ read: @escaping @Sendable () -> Value) async -> Value {
         await withCheckedContinuation { done in
@@ -171,16 +185,12 @@ enum Vault {
     }
 
     /// One item's secret, by the two things that name it.
-    private static func secret(host: String, user: String) -> String? {
+    private static func secret(host: String, user: String, port: Int?) -> String? {
         var out: CFTypeRef?
-        let status = SecItemCopyMatching([
-            kSecClass as String: kSecClassInternetPassword,
-            kSecAttrLabel as String: label,
-            kSecAttrServer as String: host,
-            kSecAttrAccount as String: user,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ] as CFDictionary, &out)
+        var query = identity(host: host, user: user, port: port)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        let status = SecItemCopyMatching(query as CFDictionary, &out)
         guard status == errSecSuccess, let data = out as? Data else {
             if status != errSecItemNotFound { NSLog("Vault: keychain read failed (%d)", status) }
             return nil
@@ -190,7 +200,7 @@ enum Vault {
 
     /// One item's secret, where a list holds only the item: read when a
     /// password is shown or copied, and never as part of a list.
-    static func secret(of kept: Kept) -> String? { secret(host: kept.host, user: kept.user) }
+    static func secret(of kept: Kept) -> String? { secret(host: kept.host, user: kept.user, port: kept.port) }
 
     /// What an item's attributes say beyond its name: when it was last used,
     /// and whether it was kept from a page sent in the clear.
@@ -240,12 +250,7 @@ enum Vault {
         // Ours only. Server and account alone also match what other apps
         // keep for the same site — git's token for github.com under your
         // username — and an update would write this password over it.
-        let identity: [String: Any] = [
-            kSecClass as String: kSecClassInternetPassword,
-            kSecAttrServer as String: host,
-            kSecAttrAccount as String: user,
-            kSecAttrLabel as String: label,
-        ]
+        let identity = identity(host: host, user: user, port: port)
         // A web form's, which also keeps ours apart from another app's item
         // in the keychain's eyes: one for the same server, account and
         // protocol — git's — makes adding ours fail as a duplicate.
@@ -256,7 +261,6 @@ enum Vault {
             kSecAttrProtocol as String: clear ? kSecAttrProtocolHTTP : kSecAttrProtocolHTTPS,
         ]
         if let used { fields[kSecAttrComment as String] = String(used.timeIntervalSince1970) }
-        if let port, port > 0 { fields[kSecAttrPort as String] = port }
 
         let status = SecItemUpdate(identity as CFDictionary, fields as CFDictionary)
         if status == errSecSuccess { return true }
@@ -286,6 +290,11 @@ enum Vault {
         ] as CFDictionary) == errSecSuccess
     }
 
+    static func keepsNewer(_ kept: Kept?, than login: Login) -> Bool {
+        guard let kept, let mine = kept.used else { return false }
+        return mine > (login.used ?? .distantPast)
+    }
+
     /// It was just used to sign in. Lists put it first from now on.
     static func touch(_ login: Login) {
         save(host: login.host, user: login.user, password: login.password, used: Date(), clear: login.clear, port: login.port)
@@ -293,23 +302,14 @@ enum Vault {
 
     @discardableResult
     static func note(_ use: AgentUse, on kept: Kept) -> Bool {
-        SecItemUpdate([
-            kSecClass as String: kSecClassInternetPassword,
-            kSecAttrServer as String: kept.host,
-            kSecAttrAccount as String: kept.user,
-            kSecAttrLabel as String: label,
-        ] as CFDictionary, [kSecAttrDescription as String: use.stored] as CFDictionary) == errSecSuccess
+        SecItemUpdate(identity(host: kept.host, user: kept.user, port: kept.port) as CFDictionary,
+                      [kSecAttrDescription as String: use.stored] as CFDictionary) == errSecSuccess
     }
 
     /// Whether the keychain let it go: Remove All… counts only those.
     @discardableResult
-    static func forget(host: String, user: String) -> Bool {
-        SecItemDelete([
-            kSecClass as String: kSecClassInternetPassword,
-            kSecAttrServer as String: host,
-            kSecAttrAccount as String: user,
-            kSecAttrLabel as String: label,
-        ] as CFDictionary) == errSecSuccess
+    static func forget(host: String, user: String, port: Int? = nil) -> Bool {
+        SecItemDelete(identity(host: host, user: user, port: port) as CFDictionary) == errSecSuccess
     }
 
     // MARK: - sites that asked not to be asked
@@ -329,22 +329,7 @@ enum Vault {
     /// A password is shown only to the person the Mac belongs to. Touch ID,
     /// the watch, or the account password — whatever the Mac itself takes.
     @MainActor static func prove(_ reason: String, _ done: @escaping (Bool) -> Void) {
-        // A test run answers as it answers Ask.sure (`ui confirm on|off`).
-        if Store.testing, let yes = Ask.testing {
-            done(yes)
-            return
-        }
-        let context = LAContext()
-        var trouble: NSError?
-        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &trouble) else {
-            // No way to ask at all — a Mac with no password set. Then there is
-            // nothing to prove.
-            done(true)
-            return
-        }
-        context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { ok, _ in
-            DispatchQueue.main.async { done(ok) }
-        }
+        Owner.prove(reason) { done($0) }
     }
 
     // MARK: - the site behind a host
@@ -366,6 +351,13 @@ enum Vault {
               let host = url.host()?.lowercased()
         else { return "" }
         return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+    }
+
+    static func address(of text: String) -> (host: String, clear: Bool, port: Int?) {
+        let value = text.trimmingCharacters(in: .whitespaces)
+        let clear = value.lowercased().hasPrefix("http://")
+        let port = URL(string: value.contains("://") ? value : "https://" + value).flatMap { SentSignIn.port(of: $0) }
+        return (host(of: value), clear, port)
     }
 
     // MARK: - taking in an export
@@ -392,14 +384,13 @@ enum Vault {
                 skipped += 1
                 continue
             }
-            let host = self.host(of: row[urlAt])
+            let (host, clear, port) = address(of: row[urlAt])
             let password = row[passAt]
             guard !host.isEmpty, !password.isEmpty else {
                 skipped += 1
                 continue
             }
-            let clear = row[urlAt].trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("http://")
-            save(host: host, user: row[userAt], password: password, clear: clear) ? (kept += 1) : (skipped += 1)
+            save(host: host, user: row[userAt], password: password, clear: clear, port: port) ? (kept += 1) : (skipped += 1)
         }
         return (kept, skipped)
     }
@@ -427,11 +418,10 @@ enum Vault {
                 }
             }
             guard row.count > max(urlAt, max(userAt, passAt)) else { skipped += 1; continue }
-            let host = self.host(of: row[urlAt])
+            let (host, clear, port) = address(of: row[urlAt])
             let password = row[passAt]
             guard !host.isEmpty, !password.isEmpty else { skipped += 1; continue }
-            let clear = row[urlAt].trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("http://")
-            save(host: host, user: row[userAt], password: password, clear: clear) ? (kept += 1) : (skipped += 1)
+            save(host: host, user: row[userAt], password: password, clear: clear, port: port) ? (kept += 1) : (skipped += 1)
         }
         return (kept, skipped)
     }

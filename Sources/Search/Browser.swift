@@ -985,7 +985,7 @@ final class Browser: NSObject {
 
     private func raiseList(_ found: [Kept], tab: Tab, spot: CGRect, host: String, inTheClear: Bool, passwords: Bool,
                            name: Bool, wide: Bool, hint: String?) {
-        var kept = found.filter { !inTheClear || $0.clear }
+        var kept = found.filter { one in (!inTheClear || one.clear) && (tab.pageAddress.map { AgentSignInMatch.portFits(one, page: $0) } ?? true) }
         // The account whose name the step before was sent with comes first:
         // the password page of a sign-in that asks for the name first.
         if let given = tab.givenName(),
@@ -1346,8 +1346,8 @@ final class Browser: NSObject {
         }
     }
 
-    func keep(host: String, user: String, password: String) {
-        guard Vault.save(host: host, user: user, password: password) else {
+    func keep(host: String, user: String, password: String, clear: Bool = false, port: Int? = nil) {
+        guard Vault.save(host: host, user: user, password: password, clear: clear, port: port) else {
             announce("The keychain refused it", kind: .error)
             return
         }
@@ -1355,9 +1355,24 @@ final class Browser: NSObject {
         announce("Password saved for \(host)")
     }
 
+    static func removeQuestion(_ login: Kept) -> (title: String, detail: String) {
+        let account = login.user.isEmpty ? "The password with no username" : login.user
+        return ("Remove the password for \(login.host)?", "\(account) will no longer be filled in. This can't be undone.")
+    }
+
     func forget(_ login: Kept) {
-        Vault.forget(host: login.host, user: login.user)
-        relist()
+        let question = Browser.removeQuestion(login)
+        Ask.sure(question.title, detail: question.detail, confirm: "Remove", returnCancels: true) { [weak self] in
+            Vault.prove("remove the password for \(login.host)") { ok in
+                guard ok else { return }
+                Task { [weak self] in
+                    let gone = await Vault.off { Vault.forget(host: login.host, user: login.user, port: login.port) }
+                    guard let self else { return }
+                    relist()
+                    if !gone { announce("The keychain refused it", kind: .error) }
+                }
+            }
+        }
     }
 
     /// The panel's Remove All…, or Remove N… while its search narrows the
@@ -1385,7 +1400,7 @@ final class Browser: NSObject {
                 DispatchQueue.global(qos: .userInitiated).async {
                     // Counted as the keychain answers, not as asked: one
                     // it kept is not reported gone.
-                    let gone = shown.filter { Vault.forget(host: $0.host, user: $0.user) }.count
+                    let gone = shown.filter { Vault.forget(host: $0.host, user: $0.user, port: $0.port) }.count
                     DispatchQueue.main.async {
                         self.forgetting = false
                         self.relist()
@@ -1430,11 +1445,12 @@ final class Browser: NSObject {
     /// kept updates it, so bringing the same in again adds nothing twice.
     /// Returns how many were kept.
     func keep(_ found: Chromium.Found) -> (kept: Int, here: Int) {
-        let held = Set(Vault.all().map(\.id))
+        let held = Dictionary(Vault.all().map { ($0.id, $0) }) { first, _ in first }
         var kept = 0, here = 0
         for login in found.logins {
-            let saved = Vault.save(host: login.host, user: login.user, password: login.password, used: login.used, clear: login.clear)
-            if held.contains(login.id) {
+            let older = Vault.keepsNewer(held[login.id], than: login)
+            let saved = !older && Vault.save(host: login.host, user: login.user, password: login.password, used: login.used, clear: login.clear, port: login.port)
+            if held[login.id] != nil {
                 here += 1
             } else if saved {
                 kept += 1
@@ -1812,7 +1828,7 @@ final class Browser: NSObject {
     @ObservationIgnored private var displayRequest: UUID?
     private var permissionBusy: Bool { decide != nil || decideDisplay != nil }
     private(set) static var displayAnswered: Int?
-    @ObservationIgnored private var askedAbout = ""
+    @ObservationIgnored private var askedAbout: [String] = []
 
     func allowCapture() { answerCapture(.grant) }
     func allowCaptureOnce() { answerCapture(.grant, keep: false) }
@@ -1854,7 +1870,7 @@ final class Browser: NSObject {
         cancelDisplay()
         let pending = decide
         decide = nil
-        askedAbout = ""
+        askedAbout = []
         asking = nil
         pending?(.deny)
     }
@@ -1862,9 +1878,9 @@ final class Browser: NSObject {
     private func answerCapture(_ decision: WKPermissionDecision, keep: Bool = true) {
         guard let decide, let asking, Date().timeIntervalSince(asking.shown) > 0.5 else { return }
         // Remembered per site, so a call you take every week asks once.
-        if keep, !askedAbout.isEmpty { Store.settings.set(decision == .grant, forKey: "capture." + askedAbout) }
+        if keep { askedAbout.forEach { Store.settings.set(decision == .grant, forKey: "capture." + $0) } }
         self.decide = nil
-        askedAbout = ""
+        askedAbout = []
         self.asking = nil
         decide(decision)
     }
@@ -1872,6 +1888,8 @@ final class Browser: NSObject {
     /// Everything a site has been allowed or refused, for the day you want to
     /// change your mind.
     func forgetCaptureChoices() {
+        let notifying = Array(SiteNotifications.choices.keys)
+        defer { PageNotifications.forget(origins: notifying) }
         for key in Store.settings.dictionaryRepresentation().keys
         where key.hasPrefix("capture.") || key.hasPrefix(Grounded.prefix) {
             Store.settings.removeObject(forKey: key)
@@ -8181,13 +8199,13 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
             host = origin.host.isEmpty ? (tab(for: webView)?.address?.host() ?? "This page") : origin.host
             site = origin.host.isEmpty ? host : "\(origin.protocol)://\(origin.host)" + (origin.port == 0 ? "" : ":\(origin.port)")
         }
-        let key = "\(site)|\(type.rawValue)"
         let shy = tab(for: webView).map { $0.shy || !webView.configuration.websiteDataStore.isPersistent } ?? false
-
-        if !shy, let remembered = Store.settings.object(forKey: "capture." + key) as? Bool {
-            decisionHandler(remembered ? .grant : .deny)
+        let known = Browser.captureAnswer(type, site: site) { shy ? nil : Store.settings.object(forKey: "capture." + $0) as? Bool }
+        if let decided = known.decision {
+            decisionHandler(decided ? .grant : .deny)
             return
         }
+        let unanswered = known.unanswered
         HookAsk.permission(site: site, wants: HookAsk.wants(type), tab: tab(for: webView), in: self, asker: asker.protocol) { [weak self, weak webView] hooked in
             if let hooked { return decisionHandler(hooked ? .grant : .deny) }
             guard let self, let webView else { return decisionHandler(.deny) }
@@ -8195,10 +8213,20 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
                 guard let self else { return decisionHandler(.deny) }
                 guard !permissionBusy else { return decisionHandler(.deny) }
                 decide = decisionHandler
-                askedAbout = shy ? "" : key
-                asking = CaptureAsk(host: host, wants: Browser.name(for: type))
+                askedAbout = shy ? [] : unanswered.map { "\(site)|\($0.rawValue)" }
+                asking = CaptureAsk(host: host, wants: Browser.name(for: unanswered.count == 2 ? .cameraAndMicrophone : unanswered.first ?? type))
             }, drop: { decisionHandler(.deny) })
         }
+    }
+
+    nonisolated static func captureAnswer(_ type: WKMediaCaptureType, site: String,
+                                          read: (String) -> Bool?) -> (decision: Bool?, unanswered: [WKMediaCaptureType]) {
+        let parts: [WKMediaCaptureType] = type == .cameraAndMicrophone ? [.camera, .microphone] : [type]
+        let both = read("\(site)|\(WKMediaCaptureType.cameraAndMicrophone.rawValue)")
+        let answers = parts.map { read("\(site)|\($0.rawValue)") ?? both }
+        if answers.contains(false) { return (false, []) }
+        let unanswered = zip(parts, answers).filter { $0.1 == nil }.map(\.0)
+        return unanswered.isEmpty ? (true, []) : (nil, unanswered)
     }
 
     /// WebKit's private delegate lets Search ask before opening the system picker.
@@ -8278,7 +8306,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
             guard let self, tab.id == activeID else { return give(.deny) }
             guard !permissionBusy else { return give(.deny) }
             decide = give
-            askedAbout = tab.shy ? "" : key
+            askedAbout = tab.shy ? [] : [key]
             let named = Browser.extensionScheme(origin.protocol) ? Browser.extensionName(origin.host) : origin.host
             asking = CaptureAsk(host: named, wants: "location", once: true, keeps: !tab.shy)
         }
@@ -8311,7 +8339,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
                     decisionHandler(decision == .grant)
                     SiteNotifications.shared.changed()
                 }
-                askedAbout = "\(site)|notifications"
+                askedAbout = ["\(site)|notifications"]
                 asking = CaptureAsk(host: origin.host, wants: "notifications")
             }, drop: { decisionHandler(false) })
         }
@@ -8372,7 +8400,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
                 }
                 then(allowed)
             }
-            askedAbout = shy ? "" : "\(site)|\(LocalNetwork.kind)"
+            askedAbout = shy ? [] : ["\(site)|\(LocalNetwork.kind)"]
             asking = CaptureAsk(host: page.host(percentEncoded: false) ?? site, wants: LocalNetwork.kind,
                                 reach: LocalNetwork.shown(target), mac: LocalNetwork.reach(target) == .loopback)
         }, drop: { then(false) })

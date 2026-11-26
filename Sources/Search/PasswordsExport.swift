@@ -6,7 +6,7 @@ struct PasswordsExport {
     enum Outcome: Equatable {
         case cancelled
         case failed
-        case exported(Int)
+        case exported(Int, of: Int)
     }
 
     static let menuTitle = "Export Passwords\u{2026}"
@@ -20,7 +20,12 @@ struct PasswordsExport {
         Ask.sure(PasswordsExport.title, detail: PasswordsExport.detail, confirm: PasswordsExport.confirm, returnCancels: true, then: go)
     }
     var place: (@escaping (URL?) -> Void) -> Void = { done in PasswordsExport.savePanel(done) }
-    var logins: () async -> [Login] = { await Vault.off { Vault.all().compactMap(Vault.login) } }
+    var logins: () async -> (read: [Login], kept: Int) = {
+        await Vault.off {
+            let kept = Vault.all()
+            return (kept.compactMap(Vault.login), kept.count)
+        }
+    }
     var write: (Data, URL) -> Bool = { data, file in PasswordsExport.writeFile(data, to: file) }
 
     func run(done: @escaping (Outcome) -> Void) {
@@ -31,7 +36,7 @@ struct PasswordsExport {
                     guard let file else { return done(.cancelled) }
                     Task { @MainActor in
                         let all = await logins()
-                        done(write(Data(Self.csv(all).utf8), file) ? .exported(all.count) : .failed)
+                        done(write(Data(Self.csv(all.read).utf8), file) ? .exported(all.read.count, of: all.kept) : .failed)
                     }
                 }
             }
@@ -41,9 +46,15 @@ struct PasswordsExport {
     static func csv(_ logins: [Login]) -> String {
         let sorted = logins.sorted { $0.host == $1.host ? $0.user < $1.user : $0.host < $1.host }
         let rows = sorted.map { login in
-            [(login.clear ? "http://" : "https://") + login.host, login.user, login.password, ""].map(quoted).joined(separator: ",")
+            [(login.clear ? "http://" : "https://") + login.host + (login.port.map { ":\($0)" } ?? ""), login.user, login.password, ""].map(quoted).joined(separator: ",")
         }
         return (["url,username,password,note"] + rows).joined(separator: "\n") + "\n"
+    }
+
+    static func words(_ read: Int, of kept: Int) -> String {
+        guard read < kept else { return read == 1 ? "Exported 1 password" : "Exported \(read) passwords" }
+        let missed = kept - read
+        return "Exported \(read) of \(kept == 1 ? "1 password" : "\(kept) passwords"). \(missed) couldn't be read from the keychain."
     }
 
     static func quoted(_ field: String) -> String {
@@ -65,14 +76,25 @@ struct PasswordsExport {
         }
     }
 
-    private static func writeFile(_ data: Data, to file: URL) -> Bool {
-        do {
-            try data.write(to: file, options: .atomic)
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+    static func writeFile(_ data: Data, to file: URL) -> Bool {
+        let temporary = file.deletingLastPathComponent().appendingPathComponent(".\(file.lastPathComponent).\(UUID().uuidString)")
+        let handle = open(temporary.path, O_WRONLY | O_CREAT | O_EXCL, 0o600)
+        guard handle >= 0 else { return false }
+        let wrote = data.withUnsafeBytes { bytes -> Bool in
+            var offset = 0
+            while offset < bytes.count {
+                let count = Darwin.write(handle, bytes.baseAddress! + offset, bytes.count - offset)
+                guard count > 0 else { return false }
+                offset += count
+            }
             return true
-        } catch {
+        }
+        let closed = close(handle) == 0
+        guard wrote, closed, rename(temporary.path, file.path) == 0 else {
+            unlink(temporary.path)
             return false
         }
+        return true
     }
 }
 
@@ -82,7 +104,7 @@ extension Browser {
             switch outcome {
             case .cancelled: break
             case .failed: self?.announce("The passwords couldn't be written to that file", kind: .error)
-            case .exported(let count): self?.announce(count == 1 ? "Exported 1 password" : "Exported \(count) passwords")
+            case .exported(let read, let kept): self?.announce(PasswordsExport.words(read, of: kept))
             }
         }
     }

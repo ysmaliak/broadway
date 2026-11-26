@@ -5,6 +5,21 @@ import Testing
 @Suite(.sharedWorld)
 @MainActor
 struct PasswordPagesTests {
+    @Test func removingOnePasswordAsksFirstNamingTheSiteAndAccount() {
+        let browser = Browser(record: WindowRecord())
+        defer { browser.closeAll() }
+        let testing = Ask.testing
+        defer { Ask.testing = testing }
+        Ask.testing = false
+        let asked = Ask.asked.count
+
+        browser.forget(Kept(host: "shop.example", user: "ada"))
+
+        #expect(Array(Ask.asked.dropFirst(asked)) == ["Remove the password for shop.example?"])
+        #expect(Browser.removeQuestion(Kept(host: "shop.example", user: "ada")).detail == "ada will no longer be filled in. This can't be undone.")
+        #expect(Browser.removeQuestion(Kept(host: "shop.example", user: "")).detail == "The password with no username will no longer be filled in. This can't be undone.")
+    }
+
     @Test func switchFlipsOnPressAndRefusesWhenDisabled() {
         let made = KitSwitch(isOn: false, label: "Passwords")
         var heard: [Bool] = []

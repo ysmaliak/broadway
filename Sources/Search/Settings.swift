@@ -598,35 +598,16 @@ extension SettingsPageView {
         section("Site permissions") {
             settingRow("notifications.ask")
             settingRow("privacy.forget")
-            shape { SiteNotifications.allowed }
-            for site in SiteNotifications.allowed {
-                _ = line(URL(string: site).map(SiteCard.site) ?? site, "Can send notifications", id: "site.notify." + site,
-                         control: button("Remove…") { [weak self] in
-                             SettingsQuestion.notifications(URL(string: site).map(SiteCard.site) ?? site).ask(over: self?.window) {
-                                 SiteNotifications.forget(site)
-                                 self?.refresh()
-                             }
-                         })
-            }
-            shape { LocalNetworkGuard.sites.map { "\($0.origin)\($0.allowed)" } }
-            for site in LocalNetworkGuard.sites {
-                _ = line(URL(string: site.origin).map(SiteCard.site) ?? site.origin,
-                         site.allowed ? "Can reach your local network" : "Can't reach your local network",
-                         id: "site.network." + site.origin, control: button("Remove…") { [weak self] in
-                             SettingsQuestion.localNetwork(URL(string: site.origin).map(SiteCard.site) ?? site.origin).ask(over: self?.window) {
-                                 LocalNetworkGuard.shared.forget(site.origin)
-                                 self?.refresh()
-                             }
-                         })
-            }
-        }
-        shape { prefs.popupSites.sorted() }
-        let sites = prefs.popupSites.sorted()
-        if !sites.isEmpty {
-            section("Pop-ups") {
-                for site in sites {
-                    _ = line(site, "Can open pop-ups without a click", id: "site.popup." + site, control: button("Remove…") { [weak self] in
-                        SettingsQuestion.popups(site).ask(over: self?.window) { prefs.popupSites.remove(site) }
+            let kept = { SitePermissions.all(in: Store.settings.dictionaryRepresentation(), popups: prefs.popupSites) }
+            shape { kept().flatMap { $0.entries.map { "\($0.key)\($0.allowed)" } } }
+            for site in kept() {
+                let name = SitePermissions.name(site.site)
+                for entry in site.entries {
+                    _ = line(name, SitePermissions.words(entry), id: SitePermissions.rowID(entry), control: button("Remove…") { [weak self] in
+                        SitePermissions.question(entry, name: name).ask(over: self?.window) {
+                            SitePermissions.forget(entry, in: nil, prefs: prefs)
+                            self?.refresh()
+                        }
                     })
                 }
             }

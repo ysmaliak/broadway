@@ -1,4 +1,5 @@
 import Foundation
+import LocalAuthentication
 import Testing
 @testable import Search
 
@@ -131,6 +132,32 @@ struct CardsTests {
         var answer: Bool?
 
         Owner.prove("anything") { answer = $0 }
+
+        #expect(answer == false)
+    }
+
+    @Test func onlyAMacWithNoPasswordSetHasNothingToProveForPasswordsAndCardsAlike() {
+        let none = NSError(domain: LAErrorDomain, code: LAError.Code.passcodeNotSet.rawValue)
+        let locked = NSError(domain: LAErrorDomain, code: LAError.Code.biometryLockout.rawValue)
+        let stranger = NSError(domain: "elsewhere.example", code: 1)
+
+        #expect(Owner.nothingToProve(Owner.code(of: none)))
+        #expect(!Owner.nothingToProve(Owner.code(of: locked)))
+        #expect(!Owner.nothingToProve(Owner.code(of: stranger)))
+        #expect(!Owner.nothingToProve(Owner.code(of: nil)))
+    }
+
+    @Test func aCardNotFilledSaysWhyInPlainWords() {
+        #expect(Owner.cardRefused(nil) == "Not filled: your card needs Touch ID")
+        #expect(Owner.cardRefused(.notInteractive) == "Not filled: the Mac couldn't ask for Touch ID just now")
+        #expect(Owner.cardRefused(.biometryNotAvailable) == "Not filled: this Mac can't ask for Touch ID or its password")
+    }
+
+    @Test func showingAPasswordFailsClosedWithoutATestAnswerAsACardDoes() {
+        Ask.testing = nil
+        var answer: Bool?
+
+        Vault.prove("anything") { answer = $0 }
 
         #expect(answer == false)
     }

@@ -358,7 +358,7 @@ enum SettingsIndex {
               title: "Site permissions", detail: "Camera, microphone, location, notifications, your network and pop-ups",
               words: ["permissions", "camera", "microphone", "location", "local network", "pop-ups"]),
         .init(id: "privacy.forget", group: "permissions", icon: "arrow.uturn.backward.circle",
-              title: "What sites were allowed", detail: "Camera, microphone, location, notifications and your network, by site",
+              title: "What sites were allowed", detail: "Camera, microphone, location, notifications, network, video speeds and floating videos",
               words: ["permissions", "camera", "microphone", "location", "reset", "local network", "refused"]),
         .init(id: "clear.history", group: "clear", icon: "clock.arrow.circlepath",
               title: "History", detail: "Every address you have been to", words: ["clear history"]),

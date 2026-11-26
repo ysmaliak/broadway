@@ -122,9 +122,40 @@ enum Owner {
     static func prove(_ reason: String, _ done: @escaping @MainActor (Bool) -> Void) {
         if AutofillBook.rehearsing { return done(Ask.testing ?? false) }
         let context = LAContext()
-        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: nil) else { return done(false) }
+        var trouble: NSError?
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &trouble) else {
+            return done(nothingToProve(code(of: trouble)))
+        }
         context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { ok, _ in
             DispatchQueue.main.async { MainActor.assumeIsolated { done(ok) } }
+        }
+    }
+
+    nonisolated static func code(of trouble: NSError?) -> LAError.Code? {
+        guard let trouble else { return nil }
+        guard trouble.domain == LAErrorDomain else { return .biometryNotAvailable }
+        return LAError.Code(rawValue: trouble.code) ?? .biometryNotAvailable
+    }
+
+    nonisolated static func nothingToProve(_ code: LAError.Code?) -> Bool {
+        code == .passcodeNotSet
+    }
+
+    static func trouble() -> LAError.Code? {
+        guard !AutofillBook.rehearsing else { return nil }
+        var trouble: NSError?
+        guard !LAContext().canEvaluatePolicy(.deviceOwnerAuthentication, error: &trouble) else { return nil }
+        let code = code(of: trouble)
+        return nothingToProve(code) ? nil : code
+    }
+
+    static func cardRefusal() -> String { cardRefused(trouble()) }
+
+    nonisolated static func cardRefused(_ code: LAError.Code?) -> String {
+        switch code {
+        case nil: "Not filled: your card needs Touch ID"
+        case .notInteractive?: "Not filled: the Mac couldn't ask for Touch ID just now"
+        default: "Not filled: this Mac can't ask for Touch ID or its password"
         }
     }
 }

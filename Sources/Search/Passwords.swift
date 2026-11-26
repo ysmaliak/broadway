@@ -258,9 +258,9 @@ final class PasswordsAddForm: KitFlippedView {
     }
 
     private func keep() {
-        let host = Vault.host(of: site.text)
+        let (host, clear, port) = Vault.address(of: site.text)
         guard !host.isEmpty, !password.text.isEmpty else { return }
-        browser.keep(host: host, user: user.text.trimmingCharacters(in: .whitespaces), password: password.text)
+        browser.keep(host: host, user: user.text.trimmingCharacters(in: .whitespaces), password: password.text, clear: clear, port: port)
         done()
     }
 }
@@ -536,7 +536,7 @@ final class PasswordsAccountCell: NSTableCellView {
     private let secret = NSTextField(labelWithString: "")
     private let show = PasswordsQuick("Show")
     private let copy = PasswordsQuick("Copy")
-    private let forget = PasswordsQuick("Remove", destructive: true)
+    private let forget = PasswordsQuick("Remove\u{2026}", destructive: true)
     private let used = NSTextField(labelWithString: "")
     private var hovering = false { didSet { if hovering != oldValue { needsLayout = true } } }
     private var area: NSTrackingArea?

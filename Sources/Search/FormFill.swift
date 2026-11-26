@@ -162,7 +162,7 @@ final class FormFill {
         book.release(card: row) { [weak self] secret in
             guard let self else { return }
             guard let secret else {
-                browser?.announce("Not filled: your card needs Touch ID", kind: .error)
+                browser?.announce(Owner.cardRefusal(), kind: .error)
                 return
             }
             guard tab.pageAddress == up.page else { return }

@@ -159,6 +159,22 @@ final class SettingsConfirmTests {
         #expect(Ask.asked.first == "Remove the local network choice for confirm.example?")
     }
 
+    @Test func removingASitesCameraChoiceAsksFirst() throws {
+        let key = "capture.https://confirm.example|0"
+        Store.settings.set(true, forKey: key)
+        defer { Store.settings.removeObject(forKey: key) }
+        let view = page { $0.go(to: .websites) }
+        let remove = try pill("Remove…", in: try row("site.capture.https://confirm.example|0", in: view))
+
+        answer(false) { _ = remove.accessibilityPerformPress() }
+        let kept = Store.settings.object(forKey: key) != nil
+        answer(true) { _ = remove.accessibilityPerformPress() }
+
+        #expect(kept)
+        #expect(Store.settings.object(forKey: key) == nil)
+        #expect(Ask.asked.first == "Remove the camera choice for confirm.example?")
+    }
+
     @Test func removingAPopUpSiteAsksFirst() throws {
         let prefs = browser.prefs
         prefs.popupSites = ["confirm.example"]

@@ -110,6 +110,23 @@ final class OnePasswordTests {
         #expect(standIn.calls.contains { $0.hasPrefix("item get i1") && $0.contains("--account ACCOUNT1") && $0.contains("--reveal") })
     }
 
+    @Test func aPasswordNotHandedOverTellsTheAgent1PasswordsReason() async throws {
+        try standIn.items([standIn.login("i1", user: "pat@example.com", password: "p1", href: "https://example.com")])
+        standIn.set(mode: "signedout")
+        let kept = Kept(host: "example.com", user: "pat@example.com", item: OnePasswordItem(account: "ACCOUNT1", id: "i1"))
+
+        let fetched = await OnePassword.fetch(kept)
+
+        let why = "1Password isn't signed in. Open the 1Password app and unlock it."
+        #expect(fetched == .refused(why, locked: false))
+        let refusal = PersonSignIn.onePasswordRefusal(why, locked: false)
+        #expect(refusal.message == "1Password didn't hand the password over, so nothing was filled. \(why)")
+        #expect(refusal.hint == PersonSignIn.handHint)
+        #expect(PersonSignIn.onePasswordRefusal("1Password wasn't unlocked", locked: true).hint == PersonSignIn.onePasswordHint)
+        #expect(PersonSignIn.onePasswordRefusal("1Password wasn't unlocked", locked: true).message
+            == "1Password didn't hand the password over, so nothing was filled. 1Password wasn't unlocked.")
+    }
+
     @Test func aLookupFindsOnlyThePagesOwnHostAndPort() async throws {
         try standIn.items([
             standIn.login("i1", user: "pat@example.com", password: "p1", href: "https://example.com"),

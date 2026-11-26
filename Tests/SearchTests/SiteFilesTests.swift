@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import WebKit
 @testable import Search
 
 struct SiteFilesTests {
@@ -121,6 +122,32 @@ struct SiteFilesTests {
 
         #expect(answers.answer(site: "example.com", store: "one") == nil)
         #expect(answers.answer(site: "example.com", store: "two") == true)
+    }
+
+    @MainActor
+    @Test func aDownloadAnswerBelongsToTheStoresHolderAndGoesWithIt() {
+        let one = WKWebsiteDataStore.nonPersistent()
+        let two = WKWebsiteDataStore.nonPersistent()
+        #expect(SiteFileAsk.storeKey(one) == SiteFileAsk.storeKey(one))
+        #expect(SiteFileAsk.storeKey(one) != SiteFileAsk.storeKey(two))
+        #expect(SiteFileAsk.storeKey(one) == SiteFileAsk.key(CertificateTrust.holder(for: one)))
+
+        let ask = SiteFileAsk()
+        let space = UUID()
+        ask.keep(true, site: "example.com", store: SiteFileAsk.storeKey(one))
+        ask.keep(true, site: "example.com", store: SiteFileAsk.key(.space(space)))
+        guard case .passing(let id) = CertificateTrust.holder(for: one) else {
+            Issue.record("a private store is passing")
+            return
+        }
+
+        ask.forget(.passing(id))
+        #expect(ask.kept(site: "example.com", store: SiteFileAsk.storeKey(one)) == nil)
+        #expect(ask.kept(site: "example.com", store: SiteFileAsk.key(.space(space))) == true)
+
+        SiteFileAsk.shared.keep(true, site: "example.com", store: SiteFileAsk.key(.space(space)))
+        CertificateTrust.forget(space: space)
+        #expect(SiteFileAsk.shared.kept(site: "example.com", store: SiteFileAsk.key(.space(space))) == nil)
     }
 
     @Test func filesFromOneSiteWaitOnOneCard() {

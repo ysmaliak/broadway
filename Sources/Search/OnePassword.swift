@@ -208,12 +208,26 @@ enum OnePassword {
         return .found(all)
     }
 
+    enum Fetched: Equatable {
+        case login(Login)
+        case refused(String, locked: Bool)
+    }
+
+    static func fetch(_ kept: Kept) async -> Fetched {
+        guard let item = kept.item else { return .refused("1Password refused it", locked: false) }
+        guard let read = await run(["item", "get", item.id, "--fields", "type=concealed", "--reveal", "--format", "json"] + item.accountArguments, bound: askBound)
+        else { return .refused(notInstalled, locked: false) }
+        guard read.ok else {
+            let why = words(read)
+            return .refused(why, locked: read.late || why == "1Password wasn't unlocked")
+        }
+        guard let password = password(read.out) else { return .refused("1Password gave an answer Broadway couldn't read", locked: false) }
+        return .login(Login(host: kept.host, user: kept.user, password: password, used: nil, clear: kept.clear, port: kept.port))
+    }
+
     static func login(_ kept: Kept) async -> Login? {
-        guard let item = kept.item,
-              let read = await run(["item", "get", item.id, "--fields", "type=concealed", "--reveal", "--format", "json"] + item.accountArguments, bound: askBound),
-              read.ok, let password = password(read.out)
-        else { return nil }
-        return Login(host: kept.host, user: kept.user, password: password, used: nil, clear: kept.clear, port: kept.port)
+        guard case .login(let login) = await fetch(kept) else { return nil }
+        return login
     }
 
     static func oneTimeCode(_ item: OnePasswordItem) async -> String? {

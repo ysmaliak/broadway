@@ -46,6 +46,16 @@ struct SavedAlreadyTests {
         #expect(SavedAlready.touched(kept, by: sent, clear: true).port == 3000)
     }
 
+    @Test func aLoginKeptForAnotherPortIsNeitherAlreadySavedNorUpdated() {
+        let keychain = Keychain()
+        let other = keychain.keep(Kept(host: "localhost", user: "admin", used: nil, clear: true, port: 3000), "sa-made-up-1")
+        let sent = SentSignIn(host: "localhost", user: "admin", password: "sa-made-up-1", port: 8080)
+        #expect(verdict(sent, [other], keychain) == .offer(changed: false))
+        #expect(keychain.reads.isEmpty)
+        let same = SentSignIn(host: "localhost", user: "admin", password: "sa-other", port: 3000)
+        #expect(verdict(same, [other], keychain) == .offer(changed: true))
+    }
+
     @Test func noNameAndTheSamePasswordKeptIsAlreadySaved() {
         let keychain = Keychain()
         let pat = keychain.keep(kept("id.example.test", "pat"), "sa-made-up-1")

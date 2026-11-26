@@ -290,7 +290,7 @@ enum Chromium {
                 }
                 guard !password.isEmpty else { continue }
                 let clear = row.origin.lowercased().hasPrefix("http://")
-                let login = Login(host: host, user: row.user, password: password, used: row.used, clear: clear)
+                let login = Login(host: host, user: row.user, password: password, used: row.used, clear: clear, port: Vault.address(of: row.origin).port)
                 guard seen.insert(login.id).inserted else { continue }
                 logins.append(login)
             }
@@ -1075,7 +1075,7 @@ enum Mozilla {
                 }
                 guard !password.isEmpty else { continue }
                 let clear = origin.lowercased().hasPrefix("http://")
-                let login = Login(host: host, user: user, password: password, used: nil, clear: clear)
+                let login = Login(host: host, user: user, password: password, used: nil, clear: clear, port: Vault.address(of: origin).port)
                 guard seen.insert(login.id).inserted else { continue }
                 logins.append(login)
             }

@@ -25,6 +25,7 @@ enum CertificateTrust {
                 MainActor.assumeIsolated {
                     CertificateTrust.book.drop(passing: id)
                     ClientCertificateAsk.answers.forget(.passing(id))
+                    SiteFileAsk.shared.forget(.passing(id))
                 }
             }
         }
@@ -106,5 +107,6 @@ enum CertificateTrust {
     static func forget(space: UUID) {
         book.forget(space: space)
         ClientCertificateAsk.answers.forget(.space(space))
+        SiteFileAsk.shared.forget(.space(space))
     }
 }

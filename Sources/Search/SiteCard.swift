@@ -288,20 +288,18 @@ final class SiteCard: NSObject, NSMenuDelegate {
         return out
     }
 
-    private var pageOrigin: String? {
-        guard let url = tab.pageAddress, let scheme = url.scheme, let host = url.host() else { return nil }
-        return Browser.origin(scheme, host, url.port ?? 0)
-    }
-
     private var siteChoices: [SitePermissions.Entry] {
-        guard let pageOrigin else { return [] }
-        return SitePermissions.entries(for: pageOrigin, in: Store.settings.dictionaryRepresentation())
+        if tab.shy { return SitePermissions.own(tab) }
+        return SitePermissions.entries(for: tab.pageAddress, in: Store.settings.dictionaryRepresentation(), popups: browser.prefs.popupSites)
     }
 
     private func permissions() -> [NSMenuItem] {
         var out = [NSMenuItem.sectionHeader(title: "Forget a Choice")]
         for entry in siteChoices {
-            let item = action(entry.name) { SitePermissions.forget(entry) }
+            let item = action(entry.name) { [weak self] in
+                guard let self else { return }
+                SitePermissions.forget(entry, in: self.tab, prefs: self.browser.prefs)
+            }
             item.subtitle = entry.allowed ? "Allowed" : "Refused"
             item.identifier = NSUserInterfaceItemIdentifier("site.permission.\(entry.key)")
             out.append(item)

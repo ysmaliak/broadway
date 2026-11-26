@@ -29,7 +29,7 @@ extension SettingsQuestion {
 
     static let siteChoices = SettingsQuestion(
         title: "Forget what every site was allowed?",
-        detail: "Camera, microphone, location, notification, local network and video speed choices are forgotten for every site. Each site asks again when it needs one. This can't be undone.",
+        detail: "Camera, microphone, location, notification, local network, video speed and floating video choices are forgotten for every site. Each site asks again when it needs one. This can't be undone.",
         confirm: "Forget")
 
     static func notifications(_ site: String) -> SettingsQuestion {
@@ -41,6 +41,12 @@ extension SettingsQuestion {
     static func localNetwork(_ site: String) -> SettingsQuestion {
         SettingsQuestion(title: "Remove the local network choice for \(site)?",
                          detail: "It asks again the next time it tries to reach your local network",
+                         confirm: "Remove")
+    }
+
+    static func capture(_ what: String, _ site: String) -> SettingsQuestion {
+        SettingsQuestion(title: "Remove the \(what) choice for \(site)?",
+                         detail: "It asks again the next time it wants your \(what)",
                          confirm: "Remove")
     }
 

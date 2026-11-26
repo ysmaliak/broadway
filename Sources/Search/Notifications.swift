@@ -35,7 +35,7 @@ final class SiteNotifications: NSObject {
     @ObservationIgnored private(set) var recorded: [[String: String]] = []
 
     /// The store each shown notification came from, for its click.
-    @ObservationIgnored fileprivate var stores: [String: WKWebsiteDataStore] = [:]
+    @ObservationIgnored fileprivate(set) var stores: [String: WKWebsiteDataStore] = [:]
     @ObservationIgnored private var authorized = false
 
     // MARK: - choices
@@ -58,6 +58,7 @@ final class SiteNotifications: NSObject {
 
     static func forget(_ origin: String) {
         Store.settings.removeObject(forKey: key(origin))
+        PageNotifications.forget(origins: [origin])
         shared.changed()
     }
 
@@ -104,8 +105,10 @@ final class SiteNotifications: NSObject {
                 .map { "\($0)" } ?? UUID().uuidString
             let dictionary = data.responds(to: NSSelectorFromString("dictionaryRepresentation"))
                 ? data.perform(NSSelectorFromString("dictionaryRepresentation"))?.takeUnretainedValue() as? NSDictionary : nil
-            stores[id] = store
-            post(id: id, title: text("title"), body: text("body"), origin: origin, tag: text("tag"),
+            let tag = text("tag")
+            let key = tag.isEmpty ? id : "tag|\(origin)|\(tag)"
+            stores[key] = store
+            post(id: key, title: text("title"), body: text("body"), origin: origin, tag: tag,
                  info: ["search.kind": "worker", "search.id": id, "search.origin": origin,
                         "search.data": dictionary ?? [:]])
         }
@@ -294,6 +297,8 @@ private struct WebKitC {
     /// Optional: a service worker's notification, which the store's
     /// delegate posts, is left alone here.
     let persistent: (@convention(c) (Ref) -> Bool)?
+    let removePolicies: (@convention(c) (Ref, Ref) -> Void)?
+    let originFromString: (@convention(c) (Ref) -> Ref?)?
 
     static let loaded: WebKitC? = {
         let webkit = dlopen("/System/Library/Frameworks/WebKit.framework/WebKit", RTLD_NOW)
@@ -327,7 +332,9 @@ private struct WebKitC {
                        didClick: didClick, didClose: didClose, uint64: uint64, uint64Value: uint64Value, array: array,
                        arraySize: arraySize, arrayItem: arrayItem, dictionary: dictionary, setItem: setItem,
                        boolean: boolean, string: string, release: release,
-                       persistent: f("WKNotificationGetIsPersistent"))
+                       persistent: f("WKNotificationGetIsPersistent"),
+                       removePolicies: f("WKNotificationManagerProviderDidRemoveNotificationPolicies"),
+                       originFromString: f("WKSecurityOriginCreateFromString"))
     }()
 
     /// A WKString copied out, and the copy let go.
@@ -395,6 +402,26 @@ enum PageNotifications {
     }
 
     /// Set on the manager of a (not private) tab's page, once.
+    static func forget(origins: [String]) {
+        guard let c = WebKitC.loaded, let remove = c.removePolicies, let make = c.originFromString else { return }
+        var live: [Ref] = []
+        for web in Web.pages.allObjects {
+            guard let page = page(of: web), let context = c.pageContext(page), let manager = c.manager(context),
+                  !live.contains(manager) else { continue }
+            live.append(manager)
+        }
+        guard !live.isEmpty else { return }
+        var items: [Ref?] = origins.compactMap { origin in
+            guard let text = c.string(origin as CFString) else { return nil }
+            defer { c.release(text) }
+            return make(text)
+        }
+        defer { items.forEach { $0.map(c.release) } }
+        guard !items.isEmpty, let array = c.array(&items, items.count) else { return }
+        defer { c.release(array) }
+        for manager in live { remove(manager, array) }
+    }
+
     static func provide(_ web: WKWebView) {
         guard let c = WebKitC.loaded, let page = page(of: web), let context = c.pageContext(page),
               let manager = c.manager(context), !managers.contains(manager) else { return }

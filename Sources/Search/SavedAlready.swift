@@ -62,7 +62,7 @@ enum SavedAlready {
 
     static func reads(_ sent: SentSignIn, kept: [Kept], registrable: (String) -> String = Vault.registrable) -> [Kept] {
         let page = kept
-            .filter { sameSite($0.host, sent.host, registrable: registrable) }
+            .filter { sameSite($0.host, sent.host, registrable: registrable) && ($0.port == nil || $0.port == sent.port) }
             .sorted { ($0.used ?? .distantPast) > ($1.used ?? .distantPast) }
         guard sent.user.isEmpty else {
             let named = page.filter { $0.user == sent.user }
@@ -93,6 +93,6 @@ enum SavedAlready {
         for one in reads(sent, kept: kept, registrable: registrable) where read(one) == sent.password {
             return .kept(one)
         }
-        return .offer(changed: kept.contains { $0.host == sent.host && $0.user == sent.user })
+        return .offer(changed: kept.contains { $0.host == sent.host && $0.user == sent.user && $0.port == sent.port })
     }
 }

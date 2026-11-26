@@ -13,12 +13,12 @@ final class PasswordsExportTests {
         Login(host: "old.example", user: "", password: "plain", clear: true),
     ]
 
-    private func export(proof: Bool = true, agrees: Bool = true, file: URL?) -> PasswordsExport {
+    private func export(proof: Bool = true, agrees: Bool = true, file: URL?, kept: Int? = nil) -> PasswordsExport {
         var made = PasswordsExport()
         made.prove = { [unowned self] _, done in steps.append("prove"); done(proof) }
         made.ask = { [unowned self] go in steps.append("ask"); if agrees { go() } }
         made.place = { [unowned self] done in steps.append("place"); done(file) }
-        made.logins = { [unowned self] in steps.append("read"); return logins }
+        made.logins = { [unowned self] in steps.append("read"); return (logins, kept ?? logins.count) }
         made.write = { [unowned self] data, url in steps.append("write"); written.append((data, url)); return true }
         return made
     }
@@ -64,9 +64,20 @@ final class PasswordsExportTests {
 
         let outcome = await run(export)
 
-        #expect(outcome == .exported(2))
+        #expect(outcome == .exported(2, of: 2))
         #expect(steps == ["prove", "ask", "place", "read", "write"])
         #expect(written.first?.1 == target)
+    }
+
+    @Test func passwordsTheKeychainWouldNotHandOverAreCountedAndNamed() async {
+        let export = export(file: target, kept: 22)
+
+        let outcome = await run(export)
+
+        #expect(outcome == .exported(2, of: 22))
+        #expect(PasswordsExport.words(380, of: 400) == "Exported 380 of 400 passwords. 20 couldn't be read from the keychain.")
+        #expect(PasswordsExport.words(400, of: 400) == "Exported 400 passwords")
+        #expect(PasswordsExport.words(1, of: 1) == "Exported 1 password")
     }
 
     @Test func theFileHasTheColumnsChromeAnd1PasswordReadWithOneRowPerPassword() {
@@ -100,10 +111,26 @@ final class PasswordsExportTests {
 
         let outcome = await run(export)
 
-        #expect(outcome == .exported(2))
+        #expect(outcome == .exported(2, of: 2))
         let permissions = try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int
         #expect(permissions == 0o600)
         #expect(try String(contentsOf: file, encoding: .utf8).hasPrefix("url,username,password,note\n"))
+    }
+
+    @Test func theFileIsOnlyThePersonsFromTheMomentItIsMadeAndReplacesAReadableOne() throws {
+        let folder = Store.folder.appendingPathComponent("export-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent(PasswordsExport.fileName)
+        try Data("old".utf8).write(to: file)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path)
+
+        #expect(PasswordsExport.writeFile(Data("url,username,password,note\n".utf8), to: file))
+
+        let permissions = try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int
+        #expect(permissions == 0o600)
+        #expect(try String(contentsOf: file, encoding: .utf8) == "url,username,password,note\n")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path) == [PasswordsExport.fileName])
     }
 
     @Test func theWordsAreTheOnesAskedFor() {

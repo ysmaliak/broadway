@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import Testing
 @testable import Search
 
@@ -44,6 +45,48 @@ struct VaultAndUpdaterTests {
 
     @Test func registrableDomainWithoutASuffixListIsTheHost() {
         #expect(Registrable.domain(of: "accounts.example.com", isSuffix: nil) == "accounts.example.com")
+    }
+
+    @Test func anImportNeverReplacesAKeptPasswordUsedSinceTheOtherBrowserLastUsedIt() {
+        let now = Date()
+        let kept = Kept(host: "example.com", user: "me", used: now)
+        let older = Login(host: "example.com", user: "me", password: "old-made-up", used: now.addingTimeInterval(-3600))
+        let newer = Login(host: "example.com", user: "me", password: "new-made-up", used: now.addingTimeInterval(60))
+        let undated = Login(host: "example.com", user: "me", password: "undated-made-up", used: nil)
+        #expect(Vault.keepsNewer(kept, than: older))
+        #expect(Vault.keepsNewer(kept, than: undated))
+        #expect(!Vault.keepsNewer(kept, than: newer))
+        #expect(!Vault.keepsNewer(nil, than: older))
+        #expect(!Vault.keepsNewer(Kept(host: "example.com", user: "me", used: nil), than: older))
+    }
+
+    @Test func thePortIsPartOfAKeptPasswordsName() {
+        #expect(Vault.identity(host: "localhost", user: "admin", port: 3000)[kSecAttrPort as String] as? Int == 3000)
+        #expect(Vault.identity(host: "localhost", user: "admin", port: nil)[kSecAttrPort as String] as? Int == 0)
+        let three = Kept(host: "localhost", user: "admin", used: nil, clear: true, port: 3000)
+        let eight = Kept(host: "localhost", user: "admin", used: nil, clear: true, port: 8080)
+        #expect(three.id != eight.id)
+        #expect(Kept(host: "example.com", user: "me").id == Login(host: "example.com", user: "me", password: "x").id)
+    }
+
+    @Test func theListUnderASignInBoxOffersOnlyTheLoginsKeptForThatPort() {
+        let page = URL(string: "http://localhost:8080/login")!
+        #expect(AgentSignInMatch.portFits(Kept(host: "localhost", user: "admin", clear: true, port: 8080), page: page))
+        #expect(!AgentSignInMatch.portFits(Kept(host: "localhost", user: "admin", clear: true, port: 3000), page: page))
+        #expect(AgentSignInMatch.portFits(Kept(host: "localhost", user: "admin", clear: true), page: page))
+        #expect(!AgentSignInMatch.portFits(Kept(host: "example.com", user: "me"), page: URL(string: "https://example.com:8443/")!))
+        #expect(AgentSignInMatch.portFits(Kept(host: "example.com", user: "me"), page: URL(string: "https://example.com/")!))
+    }
+
+    @Test func anAddressTypedOrBroughtInKeepsPlainHttpAndItsPort() {
+        #expect(Vault.address(of: "http://192.0.2.1:8080/login") == ("192.0.2.1", true, 8080))
+        #expect(Vault.address(of: "https://www.example.com/") == ("example.com", false, nil))
+        #expect(Vault.address(of: "localhost:3000") == ("localhost", false, 3000))
+        #expect(Vault.address(of: "http://192.0.2.1:80") == ("192.0.2.1", true, nil))
+        let row = PasswordsExport.csv([Login(host: "192.0.2.1", user: "admin", password: "x", clear: true, port: 8080)])
+            .split(separator: "\n")[1]
+        #expect(row.hasPrefix("http://192.0.2.1:8080,"))
+        #expect(Vault.address(of: String(row.split(separator: ",")[0])) == ("192.0.2.1", true, 8080))
     }
 
     @Test func exportWithoutAPasswordColumnIsSkippedWhole() {

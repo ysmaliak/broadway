@@ -71,7 +71,7 @@ final class SiteFileAsk {
         guard let card = deck.answer(id) else { return }
         cards[entry.key] = deck.isEmpty ? nil : deck
         if card.kind == .site, let store = card.files.lazy.compactMap({ self.waiting[$0]?.store }).first {
-            answers.keep(allow, site: card.site, store: store)
+            keep(allow, site: card.site, store: store)
         }
         for file in card.files { waiting.removeValue(forKey: file)?.reply(allow) }
     }
@@ -86,8 +86,12 @@ final class SiteFileAsk {
         for (file, wait) in waiting where ids.contains(wait.tab) { leave(file, allow: false) }
     }
 
-    func forget(store: String) {
-        answers.forget(store: store)
+    func keep(_ allowed: Bool, site: String, store: String) {
+        answers.keep(allowed, site: site, store: store)
+    }
+
+    func forget(_ holder: CertificateHolder) {
+        answers.forget(store: Self.key(holder))
     }
 
     func forgetAll() {
@@ -128,7 +132,14 @@ final class SiteFileAsk {
     }
 
     static func storeKey(_ store: WKWebsiteDataStore) -> String {
-        String(describing: ObjectIdentifier(store))
+        key(CertificateTrust.holder(for: store))
+    }
+
+    static func key(_ holder: CertificateHolder) -> String {
+        switch holder {
+        case .space(let id): "space:" + id.uuidString
+        case .passing(let id): "passing:" + id.uuidString
+        }
     }
 
     static func site(of url: URL?) -> String? {

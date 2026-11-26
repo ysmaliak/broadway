@@ -220,6 +220,11 @@ final class LocalNetworkGuard {
         refitAll()
     }
 
+    func forget(_ origin: String, tab: UUID) {
+        shyAnswers[tab]?[origin] = nil
+        refitAll()
+    }
+
     func forget(tab: UUID) {
         shyAnswers[tab] = nil
         asked = asked.filter { !$0.hasPrefix(tab.uuidString) }

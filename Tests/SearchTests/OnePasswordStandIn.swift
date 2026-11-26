@@ -33,6 +33,7 @@ final class OnePasswordStandIn {
         cat "$here/items.json"; exit 0;;
       "item get")
         id=$3
+        [ "$mode" = "signedout" ] && { echo "[ERROR] 2026/11/24 18:00:00 You are not currently signed in. Please run op signin --help for instructions" >&2; exit 1; }
         case " $* " in
           *" --otp "*) [ -f "$here/otp-$id" ] && { cat "$here/otp-$id"; exit 0; }
             echo "[ERROR] 2026/11/24 18:00:00 item has no one-time password" >&2; exit 1;;
