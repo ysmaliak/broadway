@@ -47,13 +47,21 @@ final class PersonWatch {
 
     static let kinds = ["tabs", "spaces", "downloads", "approvals"]
 
+    static func ending(open: Bool, mode: AgentMode?) -> [String: Any]? {
+        guard open else { return ToolFailure.error("agents_off", "Agents are off in Broadway") }
+        if let mode, AgentPolicy.verdict(.tab, mode: mode, rule: nil) == .ask {
+            return ToolFailure.error("needs_task", "Agents are set to Ask now, so watching stopped")
+        }
+        return nil
+    }
+
     private func run() async {
         _ = look()
         while running {
             try? await Task.sleep(for: Self.beat)
             guard running else { return }
-            guard box.open else {
-                connection.send(ToolFailure.error("agents_off", "Agents are off in Broadway"))
+            if let last = Self.ending(open: box.open, mode: browser?.prefs.agentMode) {
+                connection.send(last)
                 return connection.close()
             }
             for (name, fields) in look() { send(name, fields) }

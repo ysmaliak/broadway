@@ -130,6 +130,7 @@ extension Browser {
 
     func keepAgentTab(_ tab: Tab) {
         guard tab.agent else { return }
+        let task = tab.agentTask
         tab.agent = false
         tab.bench = false
         tab.agentTask = nil
@@ -138,6 +139,7 @@ extension Browser {
         tab.agentActing = nil
         tab.driving = false
         tab.agentSeen = true
+        AgentLinks.shared.kept(AgentWorkTabs.short(tab.id), from: task)
         if let url = tab.address, !tab.shy { history.record(url, title: tab.title, space: spaceOf(tab)) }
         writeSession(now: true)
         if let space = parked.first(where: { $0.value.tabs.contains { $0 === tab } })?.key, let row = parked[space] {

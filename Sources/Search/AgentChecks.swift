@@ -332,8 +332,9 @@ enum AgentChecks {
 
 extension BrowserToolbox {
     func check(_ name: String, _ tab: Tab, _ arguments: [String: Any], task: UUID?) async -> ToolOutcome {
+        if let refused = notMine(tab, task: task) { return refused }
         guard tab.agent else {
-            return .failure("Only tabs an agent opened can be checked with \(name). Use open for a tab of your own.", code: .refused)
+            return .failure("Only tabs an agent opened can be checked with \(name). Use open for a tab of your own.", code: .notYours)
         }
         acting(tab, "Reading")
         switch name {

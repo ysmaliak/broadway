@@ -23,6 +23,27 @@ enum AgentFerry {
         return nil
     }
 
+    static func ours(_ path: String) -> Bool {
+        let folder = URL(fileURLWithPath: path).deletingLastPathComponent()
+        return real(folder.deletingLastPathComponent()) == real(temporary()) && made.contains(where: folder.lastPathComponent.hasPrefix)
+    }
+
+    static func fetch(_ request: [String: Any], browser: Browser, box: BrowserToolbox, link: AgentLink?) async -> [String: Any] {
+        if let path = request["path"] as? String, allowed(path) != nil, !ours(path) {
+            var call = PersonCall(noun: "downloads", verb: "get", arguments: [:], browser: browser, box: box)
+            call.link = link
+            call.request = request
+            do {
+                try await PersonCommands.approve(.look, call, site: nil, request: request, channel: PersonChannel { _ in })
+            } catch let refused as PersonRefusal {
+                return failure(refused.code, refused.message, hint: refused.hint)
+            } catch {
+                return failure("failed", "That didn't work")
+            }
+        }
+        return read(request)
+    }
+
     static func failure(_ code: String, _ message: String, hint: String? = nil) -> [String: Any] {
         var error: [String: Any] = ["code": code, "message": message]
         if let hint { error["hint"] = hint }

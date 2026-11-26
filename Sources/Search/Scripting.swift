@@ -64,7 +64,10 @@ extension NSWindow {
 enum Scripting {
     /// The tabs a script may see in a window: its browser's, without the
     /// private ones.
+    static var allowed: () -> Bool = { Shared.prefs.bench }
+
     static func shown(in window: NSWindow) -> [Tab] {
-        Browsers.browser(for: window)?.tabs.filter { !$0.shy } ?? []
+        guard allowed() else { return [] }
+        return Browsers.browser(for: window)?.tabs.filter { !$0.shy } ?? []
     }
 }

@@ -55,7 +55,6 @@ extension AgentSocket {
         if request["hook"] as? Bool != true { links.heard(found.id) }
         if let named { links.rename(found.id, named, given: name == nil && wish.named) }
         AgentLinks.open(found)
-        if request["person"] as? String == "none" { links.setPatience(found.id, 0) }
         return links.link(found.id) ?? found
     }
 }

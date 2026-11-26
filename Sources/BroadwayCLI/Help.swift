@@ -45,7 +45,7 @@ enum Help {
                         ("--timeout SEC", "give up after this long with exit 4. A command waits 10 minutes at most by default."),
                         ("--world NAME", "a test world of Broadway instead of the real one")])
         out.append("")
-        out.append(style.dim("Commands on the person's things also take --wait-person MIN and --no-person"))
+        out.append(style.dim("Commands that may ask the person also take --wait-person MIN and --no-person"))
         out.append(style.dim("exit: 0 done · 1 failed · 2 command mistake · 3 needs you · 4 no answer in time · 130 stopped"))
         out.append(style.dim("broadway help COMMAND for one command, broadway help NOUN VERB for one verb"))
         return out.joined(separator: "\n")

@@ -379,7 +379,8 @@ extension BrowserToolbox {
         guard let ask = read.ask else { return .failure(read.problem ?? "That shot can't be taken", code: .usage) }
         if ask.tiles { return await tiles(tab, ask, task: task) }
         if !ask.ref.isEmpty, AgentRef(ask.ref).frame != nil { return .failure("A picture of one element in a frame is not supported. Take the whole page.") }
-        if ask.full, !tab.agent { return .failure("A full-page picture needs a tab of your own: the person's page is never resized. Use open.") }
+        if ask.full, let refused = notMine(tab, task: task) { return refused }
+        if ask.full, !tab.agent { return .failure("A full-page picture needs a tab of your own: the person's page is never resized. Use open.", code: .notYours) }
         let web = tab.web
         let kept = (frame: web.frame, mask: web.autoresizingMask)
         var rect = web.bounds
@@ -459,6 +460,7 @@ extension BrowserToolbox {
     }
 
     func tiles(_ tab: Tab, _ ask: ShotAsk, task: UUID?) async -> ToolOutcome {
+        if let refused = notMine(tab, task: task) { return refused }
         guard tab.agent else { return .failure("Tiles need a tab of your own, since the person's page is never scrolled under them. Use open.", code: .notYours) }
         let web = tab.web
         guard let start = await PageSelection.run(tab, ShotTiles.startScript) as? [String: Any] else { return .failure("The page gave no answer", code: .noAnswer) }

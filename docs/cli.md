@@ -92,7 +92,7 @@ Each works on one tab, chosen as below, and is gated on that tab's site.
 | `upload TARGET PATH...` or `upload TARGET --stdin NAME` | give files from this Mac, or one file that comes on standard input, to a file field or a drop zone |
 | `download TARGET` or `download --url URL [--downloads]` | download a file and wait for it |
 | `dialog [accept [TEXT] \| dismiss] [--id ID]` | answer a page's alert, confirm or prompt |
-| `wait [TEXT]`, `wait --gone TEXT`, `--url PART`, `--title TEXT`, `TARGET --state S`, `--selector CSS`, `--request PATH`, `--download` | wait for the page, 10 seconds by default and 60 at most |
+| `wait [TEXT]`, `wait --gone TEXT`, `--url PART`, `--title TEXT`, `TARGET --state visible\|gone`, `--selector CSS`, `--request PATH`, `--download` | wait for the page, 10 seconds by default and 60 at most |
 | `batch STEP...` or `batch < steps` | several steps in one call, each checked as if alone |
 | `handoff REASON [--seconds N] [--optional]` | hand the tab to the person and wait until they give it back |
 | `ask QUESTION --choice TEXT --choice TEXT... [--seconds N]` | ask the person one question with two to nine choices, and wait for their pick. It never approves anything |
@@ -442,6 +442,8 @@ A shell can't be told apart from a coding agent, so a command never assumes a pe
 | O | open | runs | runs | runs | runs |
 
 A site marked Never Here refuses every command on it. A site marked Always Here runs everything except paying and giving access to an account. Using the Mac outside the browser always asks. A tab the person is driving is never touched.
+
+AppleScript reads the address and title of tabs only while View › Developer › Allow Scripts to Drive Broadway is on, whatever the agents switch and mode say. It never lists a private tab.
 
 **The person's yes.** A question appears in Broadway on the agent's card, with the command line quoted, and only a key or a click in Broadway answers it. The command waits 100 seconds for an agent's session, or as long as `--wait-person MIN` says. With `--no-person`, `broadway serve --no-person` or a hidden Broadway it fails at once. When nobody answers it exits 3 with `needs_you` and nothing is done. Commands take no `--yes` flag, because an agent could type it.
 

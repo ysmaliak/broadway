@@ -123,6 +123,8 @@ All of these are in Settings › Agents, and none of them can be changed from th
 - **Let agents ask for a saved password.** Off until the person turns it on. A password never leaves Broadway except this way: `broadway logins give SITE` run on its own in a terminal on the Mac that runs Broadway, after the person's yes on a card in every mode, Bypass included, and Touch ID, every time. Never over MCP, in a batch or a script, or over ssh. The sign-in then shows who it was given to in Settings › Passwords.
 - **Connected agents**, and **the broadway command** for setting it up.
 
+AppleScript is outside this gate. A script reads the address and title of tabs only while View › Developer › Allow Scripts to Drive Broadway is on, and never a private tab.
+
 [cli.md](cli.md#who-may-do-what) lists how each command is gated. The MCP tools for spaces, folders, bookmarks, live folders, settings, shortcuts, extensions, shields, permissions, link rules, site shortcuts, Quick Actions and snippets take the same path as their commands, so each is gated exactly as its command is.
 
 ## The Agents area

@@ -108,12 +108,14 @@ final class MCPServer {
         "question": "One question, 200 characters at most", "choices": "Two to nine choices, 40 characters at most each",    ]
 
     private let box: AgentToolbox
-    private let task: UUID?
+    private(set) var task: UUID?
     let reply: ([String: Any]) -> Void
+    var join: (() -> UUID?)?
     var named: ((String?) -> Void)?
     var aim: ((_ tool: String, _ arguments: [String: Any]) async -> Aimed)?
     var landed: ((_ tool: String, _ arguments: [String: Any], _ outcome: ToolOutcome) -> Void)?
-    var person: ((_ tool: PersonTools.Tool, _ arguments: [String: Any]) async -> ToolOutcome)?
+    typealias Person = (_ tool: PersonTools.Tool, _ arguments: [String: Any]) async -> ToolOutcome
+    var person: Person?
 
     init(box: AgentToolbox, task: UUID? = nil, reply: @escaping ([String: Any]) -> Void) {
         self.box = box
@@ -321,6 +323,11 @@ final class MCPServer {
             guard box.open else {
                 AgentTally.shared.count(AgentTally.command([name], tools: box.tools), failed: ToolCode.agentsOff.rawValue)
                 return answer(id, MCPServer.result(.failure("Agents are off in Broadway", code: .agentsOff), tool: name))
+            }
+            if task == nil, let made = join?() {
+                task = made
+                join = nil
+                reply(["jsonrpc": "2.0", "method": "notifications/tools/list_changed"])
             }
             var arguments = params["arguments"] as? [String: Any] ?? [:]
             if name == Self.moreTools {

@@ -306,6 +306,20 @@ struct ParsingTests {
         #expect(asked.arguments["target"] as? [String: String] == ["words": "Save"])
     }
 
+    @Test func aBrowserCommandTakesWaitPersonAndNoPersonForItself() throws {
+        let waiting = try Browse.arguments(click, ["Send", "--wait-person", "5"], tab: nil, tabFlag: false)
+        let nobody = try Browse.arguments(click, ["Send", "--no-person"], tab: nil, tabFlag: false)
+
+        #expect(waiting.wait == 300)
+        #expect(!waiting.nobody)
+        #expect(nobody.nobody)
+        #expect(waiting.arguments["target"] as? [String: String] == ["words": "Send"])
+        #expect(nobody.arguments["no-person"] == nil)
+        #expect((try? Browse.arguments(click, ["Send", "--no-person", "--wait-person", "5"], tab: nil, tabFlag: false)) == nil)
+        #expect((try? Browse.arguments(click, ["Send", "--wait-person", "soon"], tab: nil, tabFlag: false)) == nil)
+        #expect((try? Browse.arguments(click, ["Send", "--no-person"], tab: nil, tabFlag: false, secrets: false)) == nil)
+    }
+
     @Test func severalAddressesNeedAnAppThatTakesThem() throws {
         let url = parameter("url", required: true)
         let one = command("open", positional: [url], flags: [url], tabbed: false)

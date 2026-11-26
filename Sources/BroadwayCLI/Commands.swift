@@ -78,6 +78,8 @@ final class Context {
     }
 
     func carry(_ request: [String: Any]) throws -> [String: Any] {
+        var request = request
+        if request["agent"] == nil { request["agent"] = Context.agent }
         guard let link = place.connect() else { throw Failure("not_running", "Broadway went away", retrySafe: true) }
         guard link.send(request), let reply = link.object() else { throw Failure("not_running", "Broadway went away", retrySafe: true) }
         if let failure = Context.failure(reply) { throw failure }

@@ -35,6 +35,7 @@ struct AgentGoneTab: Equatable {
     var key: AgentLinkKey?
     var handed: Bool
     var how: AgentLinkEnding
+    var kept = false
 }
 
 struct AgentProcessID: Equatable {
@@ -352,6 +353,17 @@ final class AgentLinks {
         while goneOrder.count > Self.goneLimit { gone[goneOrder.removeFirst()] = nil }
     }
 
+    func kept(_ tab: String, from id: UUID?) {
+        if AgentSocket.shared.currentTab == tab { AgentSocket.shared.currentTab = nil }
+        guard let id else { return }
+        if tabs[id] == tab { tabs[id] = nil }
+        if lastTabs[id] == tab { lastTabs[id] = nil }
+        guard let found = link(id), found.live else { return }
+        if gone[tab] == nil { goneOrder.append(tab) }
+        gone[tab] = AgentGoneTab(key: found.key, handed: true, how: .left, kept: true)
+        while goneOrder.count > Self.goneLimit { gone[goneOrder.removeFirst()] = nil }
+    }
+
     func goneTab(_ named: String) -> AgentGoneTab? {
         let wanted = String(named.lowercased().prefix(8))
         guard !wanted.isEmpty else { return nil }
@@ -513,6 +525,18 @@ final class AgentLinks {
 }
 
 enum AgentPatience {
+    @TaskLocal static var asked: Double?
+
+    static func wanted(_ request: [String: Any]) -> Double? {
+        if request["person"] as? String == "none" { return 0 }
+        guard let wait = request["wait"] as? Double ?? (request["wait"] as? Int).map(Double.init), wait > 0 else { return nil }
+        return wait
+    }
+
+    @MainActor static func seconds(_ task: UUID) -> Double {
+        asked ?? AgentLinks.shared.patience(task)
+    }
+
     private final class Once: @unchecked Sendable {
         private let lock = NSLock()
         private var done: CheckedContinuation<AgentAnswer?, Never>?

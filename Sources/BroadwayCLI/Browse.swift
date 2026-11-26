@@ -6,6 +6,8 @@ enum Browse {
         var short = false
         var look = true
         var secret: String?
+        var wait: Double?
+        var nobody = false
     }
 
     static let answerFlags = ["--quiet-answer", "--no-look"]
@@ -45,6 +47,21 @@ enum Browse {
                 secret = (parts[0], value)
                 continue
             }
+            if !literal, parts[0] == "--no-person" || parts[0] == "--wait-person" {
+                guard secrets else { throw Failure.usage("\(parts[0]) works on a command of its own, not on one step of a batch or a script") }
+                if parts[0] == "--no-person" {
+                    asked.nobody = true
+                    continue
+                }
+                var value = parts.count == 2 ? parts[1] : nil
+                if value == nil, index < words.count {
+                    value = words[index]
+                    index += 1
+                }
+                guard let minutes = value.flatMap(Double.init), minutes >= 0 else { throw Failure.usage("--wait-person is a number of minutes") }
+                asked.wait = minutes * 60
+                continue
+            }
             if !literal, let kind = expectKinds[parts[0]] {
                 guard expect == nil else { throw Failure.usage("Give one of --expect, --expect-gone or --expect-url, not two") }
                 guard !command.reads else { throw Failure.usage("--expect goes on an action, and \(command.name) only reads") }
@@ -71,6 +88,7 @@ enum Browse {
                 kept = kept.filter { !addresses.contains($0) } + [addresses[0]]
             }
         }
+        if asked.nobody, asked.wait != nil { throw Failure.usage("--no-person and --wait-person pull opposite ways, so pick one") }
         var arguments = try CommandLineInput.parse(command, kept)
         if let secret {
             if arguments["text"] != nil { throw Failure.usage("Give the text or a secret, not both. Nothing was typed.") }
@@ -116,6 +134,7 @@ enum Browse {
         }
         var request = context.call(command.tool, arguments)
         if let secret = asked.secret { request["secret"] = secret }
+        if asked.nobody { request["person"] = "none" } else if let wait = asked.wait { request["wait"] = wait }
         guard link.send(request), let reply = link.object() else {
             throw Failure("not_running", "Broadway went away", hint: command.reads ? nil : "It may or may not have happened, so look before you repeat it", retrySafe: command.reads)
         }

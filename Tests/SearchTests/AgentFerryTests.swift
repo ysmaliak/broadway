@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import Search
@@ -49,6 +50,42 @@ struct AgentFerryTests {
         let answer = AgentFerry.read(["path": file.path])["data"] as? [String: Any]
 
         #expect((answer?["bytes"] as? String).flatMap { Data(base64Encoded: $0) } == Data("report".utf8))
+    }
+
+    @Test func inAskModeADownloadsBytesNeedTheSameYesAsDownloadsGet() async throws {
+        keepSetting(Shared.prefs, \.agentMode, "agents.mode")
+        _ = NSApplication.shared
+        NSApp.setActivationPolicy(.prohibited)
+        let browser = Browser(record: WindowRecord())
+        defer { browser.closeAll() }
+        let box = BrowserToolbox()
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("report-\(UUID().uuidString).bin")
+        try Data("report".utf8).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("broadway-pdf-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let pdf = folder.appendingPathComponent("page.pdf")
+        try Data("pdf".utf8).write(to: pdf)
+        let before = AgentFerry.downloads
+        AgentFerry.downloads = { [file] }
+        defer { AgentFerry.downloads = before }
+        let link = AgentLinks.shared.join(.named(UUID().uuidString), name: "Claude Code")
+        defer { AgentLinks.shared.forget(link.id) }
+        browser.prefs.agentMode = .ask
+
+        let stranger = await AgentFerry.fetch(["path": file.path], browser: browser, box: box, link: nil)
+        let made = await AgentFerry.fetch(["path": pdf.path], browser: browser, box: box, link: nil)
+        AgentDesk.shared.grant(.tab, task: link.id, site: nil)
+        let granted = await AgentFerry.fetch(["path": file.path], browser: browser, box: box, link: link)
+        browser.prefs.agentMode = .auto
+        let auto = await AgentFerry.fetch(["path": file.path], browser: browser, box: box, link: nil)
+
+        #expect((stranger["error"] as? [String: Any])?["code"] as? String == "needs_task")
+        #expect(stranger["data"] == nil)
+        #expect(made["ok"] as? Bool == true)
+        #expect(((granted["data"] as? [String: Any])?["bytes"] as? String).flatMap { Data(base64Encoded: $0) } == Data("report".utf8))
+        #expect(auto["ok"] as? Bool == true)
     }
 
     @Test func bytesSentInPiecesBecomeOneFileInAnUploadFolder() throws {

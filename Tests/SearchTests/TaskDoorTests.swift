@@ -126,6 +126,43 @@ final class TaskDoorTests {
         #expect(((run["result"] as? [String: Any])?["isError"] as? Bool) == true)
     }
 
+    @Test func anMCPConnectionMadeWithAgentsOffTakesASessionAtItsFirstCallOnceTheyAreOn() async throws {
+        browser.prefs.agentsOn = false
+        let connected = try await hello(["op": "mcp", "agent": [String: Any]()])
+        defer { connected.connection.close() }
+        browser.prefs.agentsOn = true
+        let before = Set(AgentLinks.shared.live.map(\.id))
+
+        connected.connection.onLine?(["jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": ["name": "tabs", "arguments": [String: Any]()]])
+        let changed = await next(connected.fd) { $0["method"] as? String != nil }
+        let answer = try #require(await next(connected.fd) { ($0["id"] as? Int) == 1 })
+        let joined = AgentLinks.shared.live.map(\.id).filter { !before.contains($0) }
+        made += joined
+
+        #expect(connected.greeting["link"] == nil)
+        #expect(changed?["method"] as? String == "notifications/tools/list_changed")
+        #expect(((answer["result"] as? [String: Any])?["isError"] as? Bool) != true)
+        #expect(joined.count == 1)
+        #expect(joined.first.map { TaskLedger.shared.entry($0) != nil } == true)
+    }
+
+    @Test func aRunningWatchEndsWithOneLineWhenThePersonSwitchesToAsk() async throws {
+        browser.prefs.agentMode = .auto
+        let (connection, fd) = try pair()
+        var closed = false
+        connection.onClose = { closed = true }
+        socket.handle(["op": "watch", "only": ["spaces"]], on: connection)
+        let started = try #require(await next(fd))
+
+        browser.prefs.agentMode = .ask
+        let last = try #require(await next(fd) { $0["error"] != nil })
+        for _ in 0..<200 where !closed { try? await Task.sleep(for: .milliseconds(5)) }
+
+        #expect((started["data"] as? [String: Any])?["watching"] as? Bool == true)
+        #expect((last["error"] as? [String: Any])?["message"] as? String == "Agents are set to Ask now, so watching stopped")
+        #expect(closed)
+    }
+
     @Test func aRemovedToolIsAnUnknownToolForAnOutsideAgentAndForAMadeUpTask() async throws {
         let link = AgentLinks.shared.join(.named(UUID().uuidString), name: "Claude Code")
         TaskLedger.shared.open(link.id, title: "Claude Code")

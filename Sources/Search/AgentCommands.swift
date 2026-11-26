@@ -80,7 +80,7 @@ enum AgentCatalog {
         "select": Shape(positional: ["ref", "text"], examples: ["broadway select @e12", "broadway select @e12 \"order number\""]),
         "resize": Shape(positional: ["width", "height"], examples: ["broadway resize 390 844", "broadway resize 1440 900"]),
         "scroll": Shape(positional: ["by"], examples: ["broadway scroll 600", "broadway scroll -300", "broadway scroll @e12"]),
-        "wait": Shape(positional: ["text"], examples: ["broadway wait", "broadway wait \"Order placed\"", "broadway wait --selector '#done' --seconds 20", "broadway wait --gone Loading", "broadway wait --download", "broadway wait --idle", "broadway wait --request /api/save"]),
+        "wait": Shape(positional: ["text"], examples: ["broadway wait", "broadway wait \"Order placed\"", "broadway wait --selector '#done' --seconds 20", "broadway wait --gone Loading", "broadway wait --download", "broadway wait --idle", "broadway wait --request /api/save", "broadway wait @e12 --state visible", "broadway wait --title Inbox"]),
         "history": Shape(positional: ["query"], examples: ["broadway history github", "broadway history --limit 5"], columns: ["last", "title", "url"]),
         "handoff": Shape(positional: ["reason"], examples: ["broadway handoff \"Solve the captcha\"", "broadway handoff \"Type the code you were sent\" --seconds 600", "broadway handoff \"Pick a seat\" --optional"]),
         "ask": Shape(positional: ["question"], examples: ["broadway ask \"Which account?\" --choice Work --choice Personal", "broadway ask \"Book which day?\" --choice Friday --choice Saturday --seconds 600"],
@@ -91,7 +91,7 @@ enum AgentCatalog {
 
     private static let plainly = [
         "ref": "An element from broadway snapshot, like @e3", "url": "A web address", "key": "The key to press",
-        "by": "Points to scroll, negative for up", "seconds": "How long to wait, 30 at most", "limit": "How many to return at most",
+        "by": "Points to scroll, negative for up", "seconds": "How long to wait, 60 at most", "limit": "How many to return at most",
         "query": "Words to look for", "selector": "A CSS selector to wait for", "gone": "Text to wait to go away",
         "submit": "Submit the form afterwards", "text": "The text", "paths": "Files on this Mac",
     ]
@@ -423,7 +423,9 @@ extension AgentSocket {
                 AgentLinks.shared.calling(link)
                 defer { AgentLinks.shared.called(link) }
                 var reply = await AgentClock.$current.withValue(clock) {
-                    await self.batch(request["arguments"] as? [String: Any] ?? [:], browser: browser, link: link)
+                    await AgentPatience.$asked.withValue(AgentPatience.wanted(request)) {
+                        await self.batch(request["arguments"] as? [String: Any] ?? [:], browser: browser, link: link)
+                    }
                 }
                 AgentTally.shared.count(name, reply: reply)
                 if let clock {
@@ -457,7 +459,9 @@ extension AgentSocket {
             clock?.add("started")
             var reply = await AgentClock.$current.withValue(clock) {
                 await AgentSecretHand.$secret.withValue(secret) {
-                    await self.perform(name, spec: spec, arguments: arguments, browser: browser, link: link, preferred: preferred)
+                    await AgentPatience.$asked.withValue(AgentPatience.wanted(request)) {
+                        await self.perform(name, spec: spec, arguments: arguments, browser: browser, link: link, preferred: preferred)
+                    }
                 }
             }
             if let clock {
@@ -533,12 +537,12 @@ extension AgentSocket {
             if matches.count > 1 { return .failure(TabRefusal(code: "ambiguous_tab", message: "\(named) fits \(matches.count) tabs: give more of its id")) }
             let links = AgentLinks.shared
             guard let only = matches.first else {
-                if let gone = links.goneTab(wanted) { return .failure(AgentEndTabs.refusal(gone.how, tab: wanted, handed: false)) }
+                if let gone = links.goneTab(wanted), !gone.kept { return .failure(AgentEndTabs.refusal(gone.how, tab: wanted, handed: false)) }
                 return .failure(TabRefusal(code: "no_tab", message: "No such tab: \(named)"))
             }
             if let gone = links.goneTab(only), gone.handed, gone.key != nil, gone.key == link.flatMap({ links.link($0)?.key }),
                box.find(["tab": only])?.tab.agent != true {
-                return .failure(AgentEndTabs.refusal(gone.how, tab: only, handed: true))
+                return .failure(AgentEndTabs.refusal(gone, tab: only, handed: true))
             }
             return .success(only)
         }

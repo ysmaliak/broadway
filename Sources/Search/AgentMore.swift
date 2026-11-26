@@ -81,6 +81,11 @@ extension AgentPage {
     return { ok: true };
     """
 
+    static let shownScript = find + """
+    var box = el.getBoundingClientRect(), look = getComputedStyle(el);
+    return { shown: el.isConnected && box.width > 0 && box.height > 0 && look.visibility !== 'hidden' && look.display !== 'none' && Number(look.opacity) > 0 };
+    """
+
     static let dragScript = find + """
     var from = el;
     var toGot = broadwayGet(to);
@@ -307,6 +312,7 @@ extension BrowserToolbox {
     }
 
     private func drag(_ tab: Tab, ref: String, from pointed: AgentAim?, to end: CGPoint, final: String?, task: UUID?) async -> ToolOutcome {
+        if let refused = notMine(tab, task: task) { return refused }
         guard tab.agent, AgentRef(ref).frame == nil else { return .failure("A drag to a point needs a tab of your own and no frame. Use open.", code: .notYours) }
         var start = pointed?.view
         if start == nil {
@@ -371,8 +377,9 @@ extension BrowserToolbox {
         return failure
     }
 
-    func resize(_ tab: Tab, _ arguments: [String: Any]) async -> ToolOutcome {
-        guard tab.agent else { return .failure("Only tabs an agent opened can be resized. Use open for a tab of your own.") }
+    func resize(_ tab: Tab, _ arguments: [String: Any], task: UUID?) async -> ToolOutcome {
+        if let refused = notMine(tab, task: task) { return refused }
+        guard tab.agent else { return .failure("Only tabs an agent opened can be resized. Use open for a tab of your own.", code: .notYours) }
         let width = arguments["width"] as? Double ?? 1280
         let height = arguments["height"] as? Double ?? 800
         guard (320...3840).contains(width), (320...2400).contains(height) else { return .failure("A page is 320 to 3840 points wide and 320 to 2400 high") }
@@ -389,7 +396,7 @@ extension BrowserToolbox {
         let idle = arguments["idle"] as? Bool == true
         guard idle || !part.isEmpty else { return nil }
         let began = Date()
-        let cap = min(arguments["seconds"] as? Double ?? 10, 60)
+        let cap = min(arguments["seconds"] as? Double ?? 10, Self.waitMost)
         let limit = began.addingTimeInterval(cap)
         let start = tab.devLog.sequence
         let lately = Date().addingTimeInterval(-10)

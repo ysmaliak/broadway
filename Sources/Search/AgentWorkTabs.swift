@@ -354,9 +354,12 @@ extension AgentSocket {
         }
         guard let only = matches.first else {
             let anywhere = box.tabIDs.contains { $0.hasPrefix(String(wanted.prefix(8))) }
-            if let gone = AgentLinks.shared.goneTab(wanted), !anywhere || gone.handed {
-                let refused = AgentEndTabs.refusal(gone.how, tab: String(wanted.prefix(8)), handed: anywhere)
+            if let gone = AgentLinks.shared.goneTab(wanted), anywhere ? gone.handed : !gone.kept {
+                let refused = AgentEndTabs.refusal(gone, tab: String(wanted.prefix(8)), handed: anywhere)
                 return .failure(refused.message, code: refused.code, hint: refused.hint)
+            }
+            if let other = box.find(["tab": wanted])?.tab, other.agent {
+                return .failure("Tab \(AgentWorkTabs.short(other.id)) belongs to another session", code: .notYours)
             }
             return anywhere
                 ? .failure("Tab \(wanted) isn't one of yours", code: .notYours)

@@ -312,8 +312,9 @@ extension BrowserToolbox {
         case .wrong(let said): return .failure(said, code: .usage)
         case .most(let number): limit = number
         }
+        if let refused = notMine(tab, task: task) { return refused }
         guard tab.agent else {
-            return .failure("read --rows scrolls the page, so it works only in a tab of your own. Use open for one.", code: .refused)
+            return .failure("read --rows scrolls the page, so it works only in a tab of your own. Use open for one.", code: .notYours)
         }
         if browser.active === tab, let window = tab.web.window, !(window is AgentPageRoom), window.occlusionState.contains(.visible) {
             return .failure("The person is looking at that tab, and read --rows would scroll it. Read it without rows, or work in another tab of yours.", code: .refused)

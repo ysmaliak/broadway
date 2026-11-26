@@ -694,8 +694,10 @@ final class BrowserToolbox: AgentToolbox {
                  properties: with(["tab": tab, "key": ["type": "string"], "final": final, "times": ["type": "number", "description": "How many times, 50 at most", "unlisted": true]]), required: ["tab", "key"]),
         ToolSpec(name: "scroll", description: "Scroll the page, or a part of it with in: down, up, left, right, top, bottom or a number of points. With a target, scroll it into view. The answer says what is in view now.",
                  properties: with(["tab": tab, "by": ["type": "string", "description": "down, up, left, right, top, bottom, points (negative goes up), or a direction and points like right 800"]]), required: ["tab"]),
-        ToolSpec(name: "wait", description: "Wait until text appears (any case, field values too), text goes, the address has words, or a CSS selector matches. Without any of these it waits for the page to be quiet, and with only seconds it pauses. An open page dialog answers at once.",
+        ToolSpec(name: "wait", description: "Wait until text appears (any case, field values too), text goes, the address or the title has words, a CSS selector matches, or an element from a snapshot is visible or gone. Without any of these it waits for the page to be quiet, and with only seconds it pauses. An open page dialog answers at once.",
                  properties: ["tab": tab, "text": ["type": "string"], "selector": ["type": "string"], "gone": ["type": "string"], "url": ["type": "string", "description": "Words the address should have", "unlisted": true],
+                              "title": ["type": "string", "description": "Words the page title should have", "unlisted": true], "ref": ["type": "string", "unlisted": true],
+                              "state": ["type": "string", "enum": ["visible", "gone"], "description": "Wait for the element in ref to be visible or gone", "unlisted": true],
                               "seconds": ["type": "number"], "download": ["type": "boolean", "description": "Wait for this tab's latest download to finish"],
                               "idle": ["type": "boolean", "description": "Wait until the page has loaded and no request has finished for half a second"],
                               "request": ["type": "string", "description": "Wait for a request whose address has these words"]], required: ["tab"]),
@@ -834,6 +836,17 @@ final class BrowserToolbox: AgentToolbox {
         return tab?.driving == true ? .dropped : answer
     }
 
+    static let waitMost: Double = 60
+
+    static func waitCap(_ given: Double?) -> Double {
+        min(max(given ?? 10, 0.5), waitMost)
+    }
+
+    func notMine(_ tab: Tab, task: UUID?) -> ToolOutcome? {
+        guard tab.agent, tab.agentTask != task else { return nil }
+        return .failure("Tab \(AgentWorkTabs.short(tab.id)) belongs to another session", code: .notYours)
+    }
+
     private func unanswerable(_ task: UUID?) -> ToolOutcome? {
         guard let task else { return .failure("This needs the person's yes, and only a connected agent can ask for it. Nothing was done.", code: .needsTask) }
         return nil
@@ -844,7 +857,7 @@ final class BrowserToolbox: AgentToolbox {
         if TaskLedger.shared.entry(task) != nil {
             let asking = Task { @MainActor in await self.waved(tab) { await AgentDesk.shared.ask(question) } }
             let early = AgentPatience.Early()
-            let answer = await AgentPatience.race(asking, seconds: AgentLinks.shared.patience(task), unseen: AgentLooking.unseen(for: task), early: early)
+            let answer = await AgentPatience.race(asking, seconds: AgentPatience.seconds(task), unseen: AgentLooking.unseen(for: task), early: early)
             guard let answer, !Task.isCancelled else {
                 let follow = Task { @MainActor () -> AgentAnswer in
                     let said = await asking.value
@@ -955,7 +968,7 @@ final class BrowserToolbox: AgentToolbox {
             let waiting = ToolOutcome.failure(outside ? "This still waits for the person's yes in Broadway. Nothing was done." : "The person hasn't answered yet. Nothing was done.", code: .needsYou)
             guard outside, let task, Self.answering.contains(name) || AgentLinks.shared.askSignature(task) == signature,
                   let open = AgentLinks.shared.openAsk(task) else { return waiting }
-            guard await AgentPatience.race(open, seconds: AgentLinks.shared.patience(task)) != nil, !AgentDesk.shared.waits(for: task) else { return waiting }
+            guard await AgentPatience.race(open, seconds: AgentPatience.seconds(task)) != nil, !AgentDesk.shared.waits(for: task) else { return waiting }
         }
         if let task { signatures[task] = signature }
         if outside, let task, name == "open" || find(arguments) != nil { AgentLinks.shared.announce(task) }
@@ -1149,6 +1162,7 @@ final class BrowserToolbox: AgentToolbox {
             guard let url = (arguments["url"] as? String).flatMap(Address.url(from:)), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
                 return .failure("That isn't a web address", code: .usage)
             }
+            if let refused = notMine(tab, task: task) { return refused }
             guard tab.agent || found.browser.active !== tab else {
                 return .failure("The person is on that tab, and an agent never takes it elsewhere. Use open for a tab of your own.", code: .refused)
             }
@@ -1159,7 +1173,8 @@ final class BrowserToolbox: AgentToolbox {
             tab.go(to: url)
             return .json(describe(tab, found.browser))
         case "close":
-            guard tab.agent else { return .failure("Only tabs an agent opened can be closed", code: .refused) }
+            if let refused = notMine(tab, task: task) { return refused }
+            guard tab.agent else { return .failure("Only tabs an agent opened can be closed", code: .notYours) }
             if await timed(tab, AgentPage.warnsScript, seconds: 1) as? Bool == true { tab.agentWarned = true }
             found.browser.closeAgentTab(tab)
             return .text("Closed")
@@ -1229,7 +1244,7 @@ final class BrowserToolbox: AgentToolbox {
         case "select":
             return await selectText(tab, arguments)
         case "resize":
-            return await resize(tab, arguments)
+            return await resize(tab, arguments, task: task)
         case "press":
             return await press(tab, arguments, task: task, browser: found.browser)
         case "scroll":
@@ -1380,6 +1395,7 @@ final class BrowserToolbox: AgentToolbox {
     }
 
     private func hover(_ tab: Tab, _ arguments: [String: Any], task: UUID?) async -> ToolOutcome {
+        if let refused = notMine(tab, task: task) { return refused }
         guard tab.agent else { return .failure("Hover needs an agent tab. Use open for a tab of your own.", code: .notYours) }
         let ref = arguments["ref"] as? String ?? ""
         guard AgentRef(ref).frame == nil else { return .failure("Hover in an embedded frame is not supported", code: .refused) }
@@ -1507,6 +1523,7 @@ final class BrowserToolbox: AgentToolbox {
     static let optionRoles = ["option", "menuitem", "menuitemradio", "treeitem"]
 
     private func dialog(_ tab: Tab, _ arguments: [String: Any], task: UUID?) async -> ToolOutcome {
+        if let refused = notMine(tab, task: task) { return refused }
         guard tab.agent, let task, tab.agentTask == task else {
             return .failure("Only the agent that opened this tab can answer its page dialogs", code: .notYours)
         }
@@ -1859,13 +1876,25 @@ final class BrowserToolbox: AgentToolbox {
         if arguments["download"] as? Bool == true {
             return await awaitDownload(tab, since: Date().addingTimeInterval(-120), seconds: min(arguments["seconds"] as? Double ?? 60, 300), clearing: false)
         }
-        let text = (arguments["text"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+        var text = (arguments["text"] as? String ?? "").trimmingCharacters(in: .whitespaces)
         let gone = (arguments["gone"] as? String ?? "").trimmingCharacters(in: .whitespaces)
         let url = (arguments["url"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+        let title = (arguments["title"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+        var ref = (arguments["ref"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+        let state = (arguments["state"] as? String ?? "").trimmingCharacters(in: .whitespaces).lowercased()
+        if !state.isEmpty, ref.isEmpty, text.hasPrefix("@") {
+            ref = text
+            text = ""
+        }
+        if !state.isEmpty || !ref.isEmpty {
+            guard ["visible", "gone"].contains(state) else { return .failure("--state is visible or gone", code: .usage) }
+            guard !ref.isEmpty else { return .failure("--state goes with an element: broadway wait @e12 --state visible", code: .usage) }
+        }
+        let element = "@" + AgentTarget.bare(ref)
         let given = arguments["seconds"] as? Double ?? (arguments["seconds"] as? NSNumber)?.doubleValue
-        let conditions = !text.isEmpty || !gone.isEmpty || !selector.isEmpty || !url.isEmpty
+        let conditions = !text.isEmpty || !gone.isEmpty || !selector.isEmpty || !url.isEmpty || !title.isEmpty || !ref.isEmpty
         if !conditions, arguments["idle"] as? Bool != true, let given {
-            let pause = min(max(given, 0), 60)
+            let pause = min(max(given, 0), Self.waitMost)
             let until = started.addingTimeInterval(pause)
             while Date() < until {
                 if let question = tab.agentDialog, question.open { return dialogAnswer(question) }
@@ -1874,7 +1903,7 @@ final class BrowserToolbox: AgentToolbox {
             let loading = tab.loading ? ". The page is still loading" : ""
             return ToolOutcome(text: ToolReply.notice + "Waited \(Int(pause.rounded())) s\(loading)", data: ["waited": pause, "loading": tab.loading, "tab": short, "website": true])
         }
-        let cap = min(max(given ?? 10, 0.5), 30)
+        let cap = Self.waitCap(given)
         let limit = started.addingTimeInterval(cap)
         let wanted: [String: Any] = ["text": text, "selector": selector, "gone": gone, "near": false]
         var quietSince = Date()
@@ -1890,14 +1919,21 @@ final class BrowserToolbox: AgentToolbox {
                     let after = (Date().timeIntervalSince(started) * 10).rounded() / 10
                     return ToolOutcome(text: ToolReply.notice + "The page is quiet after \(after) s", data: ["ok": true, "after": after, "title": tab.title, "url": AgentSecrets.shown(tab.pageAddress), "tab": short, "website": true])
                 }
-            } else if !tab.loading || !text.isEmpty || !url.isEmpty {
+            } else if !tab.loading || !text.isEmpty || !url.isEmpty || !title.isEmpty || !ref.isEmpty {
                 var met = url.isEmpty || (tab.pageAddress?.absoluteString ?? "").localizedCaseInsensitiveContains(url)
+                if met, !title.isEmpty { met = tab.title.localizedCaseInsensitiveContains(title) }
                 if met, !text.isEmpty || !gone.isEmpty || !selector.isEmpty {
                     met = (await timed(tab, AgentPage.waitScript, wanted, seconds: 1) as? [String: Any])?["met"] as? Bool == true
                 }
+                if met, !ref.isEmpty {
+                    let said = await inFrame(tab, ref, AgentPage.shownScript, seconds: 1) as? [String: Any]
+                    met = state == "visible" ? said?["shown"] as? Bool == true : said?["failed"] != nil || said?["shown"] as? Bool == false
+                }
                 if met {
                     let after = (Date().timeIntervalSince(started) * 10).rounded() / 10
-                    let what = !text.isEmpty ? "\"\(AgentChange.cell(text))\" is there" : !gone.isEmpty ? "\"\(AgentChange.cell(gone))\" is gone" : !url.isEmpty ? "The address has \"\(AgentChange.cell(url))\"" : "It is there"
+                    let what = !text.isEmpty ? "\"\(AgentChange.cell(text))\" is there" : !gone.isEmpty ? "\"\(AgentChange.cell(gone))\" is gone"
+                        : !ref.isEmpty ? "\(element) is \(state)" : !title.isEmpty ? "The title has \"\(AgentChange.cell(title))\""
+                        : !url.isEmpty ? "The address has \"\(AgentChange.cell(url))\"" : "It is there"
                     return ToolOutcome(text: ToolReply.notice + "\(what) after \(after) s in \(short)",
                                        data: ["ok": true, "after": after, "title": tab.title, "url": AgentSecrets.shown(tab.pageAddress), "tab": short, "website": true])
                 }
@@ -1910,7 +1946,9 @@ final class BrowserToolbox: AgentToolbox {
         if !conditions {
             lines.append(tab.loading ? "The page was still loading after \(seconds) s" : "The page was still busy after \(seconds) s")
         } else {
-            let what = !text.isEmpty ? "\"\(AgentChange.cell(text))\" was not there" : !gone.isEmpty ? "\"\(AgentChange.cell(gone))\" was still there" : !url.isEmpty ? "The address never had \"\(AgentChange.cell(url))\"" : "It was not there"
+            let what = !text.isEmpty ? "\"\(AgentChange.cell(text))\" was not there" : !gone.isEmpty ? "\"\(AgentChange.cell(gone))\" was still there"
+                : !ref.isEmpty ? (state == "visible" ? "\(element) was not visible" : "\(element) was still there") : !title.isEmpty ? "The title never had \"\(AgentChange.cell(title))\""
+                : !url.isEmpty ? "The address never had \"\(AgentChange.cell(url))\"" : "It was not there"
             lines.append("\(what) after \(seconds) s")
             var near = wanted
             near["near"] = true

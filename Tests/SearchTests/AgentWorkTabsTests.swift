@@ -602,6 +602,88 @@ final class AgentWorkTabsTests {
         #expect(socket.box.find(["tab": kept]) != nil)
     }
 
+    @Test func waitTakesATitleAndAnElementBeingVisibleOrGone() async throws {
+        let link = session()
+        let id = await open("/shop", link)
+        let tab = try #require(socket.box.find(["tab": id])?.tab)
+        await until { tab.title == "Shop" }
+        let gift = try await ref(id, "Gift cards", link)
+        let element = "@" + AgentTarget.bare(gift)
+
+        let titled = await call("wait", ["tab": id, "title": "shop", "seconds": 2.0], link)
+        let shown = await call("wait", ["tab": id, "text": element, "state": "visible", "seconds": 2.0], link)
+        let still = await call("wait", ["tab": id, "ref": gift, "state": "gone", "seconds": 1.0], link)
+        let wrong = await call("wait", ["tab": id, "ref": gift, "state": "hidden"], link)
+
+        #expect(!titled.failed)
+        #expect(titled.text?.contains("The title has \"shop\"") == true)
+        #expect(!shown.failed)
+        #expect(shown.text?.contains("\(element) is visible") == true)
+        #expect(still.failed)
+        #expect(still.text?.contains("\(element) was still there") == true)
+        #expect(wrong.code == "usage")
+    }
+
+    @Test func everyCommandThatNeedsATabOfYourOwnRefusesAnotherSessionsTabAlike() async {
+        let link = session()
+        let other = session("Codex")
+        _ = await open("/shop", link)
+        let theirs = await open("/help", other)
+        let asks: [(String, [String: Any])] = [
+            ("navigate", ["url": address("/basket"), "tab": theirs]), ("close", ["tab": theirs]), ("resize", ["width": 800.0, "height": 600.0, "tab": theirs]),
+            ("text", ["rows": true, "tab": theirs]), ("audit", ["tab": theirs]), ("screenshot", ["full": true, "tab": theirs]),
+            ("dialog", ["tab": theirs]), ("tab", ["id": theirs]),
+        ]
+
+        for (name, arguments) in asks {
+            let said = await call(name, arguments, link)
+            #expect(said.code == "not_yours", "\(name)")
+            #expect(said.text == "Tab \(theirs) belongs to another session", "\(name)")
+        }
+        #expect(socket.box.find(["tab": theirs])?.tab.pageAddress?.path == "/help")
+    }
+
+    @Test func aCallsOwnWaitForThePersonWinsOverTheSessionsForThatCallOnly() {
+        let link = session()
+
+        let inside = AgentPatience.$asked.withValue(AgentPatience.wanted(["wait": 300.0])) { AgentPatience.seconds(link) }
+        let nobody = AgentPatience.$asked.withValue(AgentPatience.wanted(["person": "none", "wait": 300.0])) { AgentPatience.seconds(link) }
+
+        #expect(inside == 300)
+        #expect(nobody == 0)
+        #expect(AgentPatience.wanted([:]) == nil)
+        #expect(AgentPatience.seconds(link) == AgentLinks.defaultPatience)
+    }
+
+    @Test func oneCommandWithNoPersonLeavesTheSessionsPatienceForTheNext() async throws {
+        let key = UUID().uuidString
+        let first = try #require(socket.link(for: ["agent": ["id": key], "person": "none"], create: true))
+        made.append(first.id)
+        let next = try #require(socket.link(for: ["agent": ["id": key]], create: false))
+
+        #expect(next.id == first.id)
+        #expect(AgentLinks.shared.patience(first.id) == AgentLinks.defaultPatience)
+    }
+
+    @Test func aTabThePersonKeepsMidSessionIsNoLongerTheAgentsToActIn() async throws {
+        let link = session()
+        let kept = await open("/shop", link)
+        let found = try #require(socket.box.find(["tab": kept]))
+        found.browser.keepAgentTab(found.tab)
+
+        let acted = await call("press", ["key": "Tab"], link)
+        let named = await call("press", ["key": "Tab", "tab": kept], link)
+        let picked = await call("tab", ["id": kept], link)
+
+        #expect(socket.current(link) == nil)
+        #expect(acted.code == "no_tab")
+        #expect(named.code == "not_yours")
+        #expect(named.text == "Tab \(kept) is the person's now")
+        #expect(picked.code == "not_yours")
+        #expect(picked.text == "Tab \(kept) is the person's now")
+        #expect(!found.tab.agent)
+    }
+
     private func asked(_ path: String, _ link: UUID, answer: AgentAnswer) async -> (asked: Bool, outcome: ToolOutcome) {
         let opening = Task { await call("open", ["url": address(path)], link) }
         let shown = await question()

@@ -171,41 +171,57 @@ final class AgentSocket {
         case "file", "give":
             if !browser.prefs.agentsAllowed {
                 connection.send(AgentFerry.failure("agents_off", "Agents are off in Broadway"))
+            } else if request["op"] as? String == "file" {
+                let link = self.link(for: request, create: false)
+                Task { @MainActor in
+                    connection.send(await AgentFerry.fetch(request, browser: browser, box: self.box, link: link))
+                    connection.close()
+                }
+                return
             } else {
-                connection.send(request["op"] as? String == "file" ? AgentFerry.read(request) : AgentFerry.take(request))
+                connection.send(AgentFerry.take(request))
             }
             connection.close()
         case "mcp":
-            var task: UUID?
-            if browser.prefs.agentsAllowed {
+            let join = { [weak self, weak connection, weak browser] (client: String?) -> (UUID, MCPServer.Person)? in
+                guard let self, let connection else { return nil }
                 let held = UUID()
                 let shared = ((request["agent"] as? [String: Any])?["session"] as? String).map { !$0.isEmpty } == true
-                task = link(for: request, create: true, connection: shared ? nil : held, name: AgentLinks.mcpName(request["client"] as? String))?.id
+                guard let task = self.link(for: request, create: true, connection: shared ? nil : held, name: AgentLinks.mcpName(client))?.id else { return nil }
                 let gone = connection.onClose
                 if !shared {
                     connection.onClose = {
                         gone?()
                         MainActor.assumeIsolated { AgentLinks.shared.endConnection(held) }
                     }
-                } else if let task {
+                } else {
                     connection.onClose = {
                         gone?()
                         MainActor.assumeIsolated { AgentLinks.shared.closedShared(task) }
                     }
                 }
-            }
-            let server = MCPServer(box: AgentSessionBox(socket: self, browser: browser), task: task) { [weak connection] message in connection?.send(message) }
-            server.named = { client in
-                guard let task, let name = AgentLinks.mcpName(client) else { return }
-                AgentLinks.shared.rename(task, name)
-            }
-            if let wait = request["wait_person"] as? String { server.environment["BROADWAY_WAIT_PERSON"] = wait }
-            if task != nil {
-                server.person = { [weak self, weak browser] tool, arguments in
+                let person: MCPServer.Person = { [weak self] tool, arguments in
                     guard let self else { return .failure("Broadway has no window open", code: .noWindow) }
                     return await PersonTools.call(tool, arguments, link: task, browser: Browsers.agentHome(keeping: browser) ?? Browsers.agentWindow(), socket: self)
                 }
+                return (task, person)
             }
+            let joined = browser.prefs.agentsAllowed ? join(request["client"] as? String) : nil
+            let task = joined?.0
+            let server = MCPServer(box: AgentSessionBox(socket: self, browser: browser), task: task) { [weak connection] message in connection?.send(message) }
+            server.person = joined?.1
+            if task == nil {
+                server.join = { [weak server] in
+                    guard let server, let made = join(server.client ?? request["client"] as? String) else { return nil }
+                    server.person = made.1
+                    return made.0
+                }
+            }
+            server.named = { [weak server] client in
+                guard let task = server?.task, let name = AgentLinks.mcpName(client) else { return }
+                AgentLinks.shared.rename(task, name)
+            }
+            if let wait = request["wait_person"] as? String { server.environment["BROADWAY_WAIT_PERSON"] = wait }
             box.browser = browser
             connection.onLine = { line in MainActor.assumeIsolated { server.handle(line) } }
             var greeting: [String: Any] = ["mcp": true]

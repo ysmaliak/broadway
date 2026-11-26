@@ -144,6 +144,11 @@ enum AgentEndTabs {
         return lines
     }
 
+    static func refusal(_ gone: AgentGoneTab, tab: String, handed: Bool) -> AgentSocket.TabRefusal {
+        guard gone.kept else { return refusal(gone.how, tab: tab, handed: handed) }
+        return AgentSocket.TabRefusal(code: ToolCode.notYours.rawValue, message: "Tab \(tab) is the person's now", hint: ToolCode.notYours.hint)
+    }
+
     static func refusal(_ how: AgentLinkEnding, tab: String?, handed: Bool) -> AgentSocket.TabRefusal {
         let why = how == .left ? "Your Broadway session ended after \(minutes) minutes without a command" : "Your Broadway session ended"
         let what = handed ? ", and tab \(tab ?? "") is the person's now" : ", and its tabs closed"

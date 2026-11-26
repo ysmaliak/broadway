@@ -33,7 +33,7 @@
                 <cocoa key="scriptCurrentTab"/>
             </property>
         </class>
-        <class name="tab" plural="tabs" code="bTab" description="A tab. Private tabs are never listed.">
+        <class name="tab" plural="tabs" code="bTab" description="A tab. Tabs are listed only while View › Developer › Allow Scripts to Drive Broadway is on, and private tabs never are.">
             <cocoa class="ScriptTab"/>
             <property name="URL" code="pURL" type="text" access="r" description="The address of the page on screen in the tab">
                 <cocoa key="url"/>
