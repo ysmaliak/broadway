@@ -569,6 +569,7 @@ final class Browser: NSObject {
             return
         }
         guard active?.isWeb == true else { return }
+        readFindBoard()
         finding = true
         findState.focus += 1
     }
@@ -583,6 +584,12 @@ final class Browser: NSObject {
            window.firstResponder === window || window.firstResponder is NSText {
             window.makeFirstResponder(web)
         }
+    }
+
+    func escapeShutFind() -> Bool {
+        guard !finding, findSpec != nil || findResult != nil else { return false }
+        closeFind()
+        return true
     }
 
     func look(forward: Bool) {
@@ -677,12 +684,7 @@ final class Browser: NSObject {
     private func resetFindState() {
         let web = findWeb
         forgetFind()
-        resettingFind = true
         finding = false
-        if !needle.isEmpty { needle = "" }
-        if matchCase { matchCase = false }
-        if wholeWords { wholeWords = false }
-        resettingFind = false
         if findResult != nil { findResult = nil }
         if missed { missed = false }
         if let web { clearFind(on: web) }
@@ -1715,7 +1717,7 @@ final class Browser: NSObject {
 
         var detail: String {
             switch self {
-            case .history: "Every address you have been to, in every space, is removed from this Mac, with the text kept from those pages, the sites' icons, the searches learned from sites and the video speeds kept for them. Open tabs, bookmarks and sign-ins stay. This can't be undone."
+            case .history: "Every address you have been to, in every space, is removed from this Mac, with the text kept from those pages, the sites' icons, the searches learned from sites, the list of files you gave to sites, and the video speeds and darkened pages kept for sites. Open tabs, bookmarks, sign-ins and the downloads list stay. This can't be undone."
             case .sites: "Cookies, sign-ins and everything sites keep on this Mac are removed from every space, so you are signed out everywhere. History, tabs and bookmarks stay. This can't be undone."
             case .cache: "The copies of pages and images kept to draw sites faster are removed from every space. Sign-ins, cookies, history and tabs stay."
             }
@@ -1754,6 +1756,8 @@ final class Browser: NSObject {
         SiteNameBook.forget()
         forms.answers.forgetAll()
         forgetVideoTraces()
+        Uploads.shared.forgetAll()
+        Dusk.shared.forgetSites()
         announce("History cleared")
     }
 
@@ -6858,6 +6862,7 @@ extension Browser {
             command.run(on: self)
             if command.keepsField { return }
         } else if let id = offer.tab, let tab = tabs.first(where: { $0.id == id }) {
+            if fillsPair(with: tab) { return }
             if !switchFromNewTab(to: tab) { select(tab) }
         } else if launching {
             open(offer.url, foreground: true, from: active)
@@ -7053,11 +7058,7 @@ extension Browser {
            let tab = tabs.first(where: { $0.id == id }) {
             summoning = false
             // From the empty page of a pair: that tab comes into the pair.
-            if let blank = active, blank.isBlank, split(for: blank) != nil, !aside,
-               tab.shy == blank.shy, split(for: tab)?.contains(blank.id) != true {
-                fill(blank, with: tab)
-                return
-            }
+            if !aside, fillsPair(with: tab) { return }
             if !aside, switchFromNewTab(to: tab) { return }
             select(tab)
             editing = false

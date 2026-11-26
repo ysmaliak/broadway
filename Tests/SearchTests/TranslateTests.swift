@@ -59,4 +59,23 @@ struct TranslateTests {
         #expect(PageTranslator.same(Locale.Language(identifier: "en-US"), Locale.Language(identifier: "en")))
         #expect(!PageTranslator.same(Locale.Language(identifier: "zh-Hans"), Locale.Language(identifier: "zh-Hant")))
     }
+
+    @Test func aPrivateTabTurnsASavedLanguageOffForItselfOnly() {
+        let was = Shared.prefs.translateAlways
+        defer { Shared.prefs.translateAlways = was }
+        Shared.prefs.translateAlways = ["fr"]
+        let tab = Tab(shy: true, configuration: Web.configuration(shy: true))
+        let other = Tab(shy: true, configuration: Web.configuration(shy: true))
+
+        tab.setAlwaysTranslates("fr", false)
+
+        #expect(!tab.alwaysTranslates("fr"))
+        #expect(other.alwaysTranslates("fr"))
+        #expect(Shared.prefs.translateAlways == ["fr"])
+        tab.setAlwaysTranslates("fr", true)
+        #expect(tab.alwaysTranslates("fr"))
+        tab.setAlwaysTranslates("de", true)
+        #expect(tab.alwaysTranslates("de"))
+        #expect(!other.alwaysTranslates("de"))
+    }
 }

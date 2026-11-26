@@ -650,6 +650,7 @@ final class Tab: Identifiable {
     @ObservationIgnored var translator: PageTranslator?
     @ObservationIgnored var translateFrames: [WKFrameInfo] = []
     @ObservationIgnored var translateLanguages: Set<String> = []
+    @ObservationIgnored var translateLanguagesOff: Set<String> = []
     @ObservationIgnored var translateOnWake: (url: URL, to: String)?
     private let translateRelay = TranslateRelay()
     private let jsonRelay = JSONRelay()

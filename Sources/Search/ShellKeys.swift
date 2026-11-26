@@ -209,6 +209,7 @@ extension ContentView {
             if browser.escapeEmptyNewTabPage() { return true }
             if browser.letGoOfRow() { return true }
             if browser.escapeNewTab() { return true }
+            if !browser.editing, browser.escapeShutFind() { return true }
             guard browser.editing, browser.active?.isBlank == false else {
                 if let tab = browser.active, tab.loading { tab.stop() }
                 return false

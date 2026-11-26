@@ -47,6 +47,45 @@ struct FindStageTests {
         #expect(bar.superview == nil)
     }
 
+    @Test func closingTheBarKeepsTheSearchAndEscapeWithTheBarShutClearsThePaint() async throws {
+        _ = NSApplication.shared
+        let browser = Browser(record: WindowRecord())
+        let tab = browser.benchOpen(URL(string: "about:blank")!)
+        browser.activeID = tab.id
+        let stage = PaneStage(frame: CGRect(x: 0, y: 0, width: 600, height: 400))
+        stage.show([tab], split: nil, focused: tab.id)
+        let window = makeWindow(stage)
+        defer { browser.closeFind(); window.close() }
+        let web = tab.web
+        web.loadHTMLString("<body>orchid orchid orchid<script>window.findFixtureReady = true;</script></body>",
+                           baseURL: URL(string: "https://find-shut.invalid/"))
+        try await waitUntil("the fixture page loads") {
+            (try? await web.evaluateJavaScript("window.findFixtureReady")) as? Bool == true
+        }
+        browser.openFind()
+        browser.needle = "orchid"
+        try await waitUntil("find answers") { !browser.findBusy && browser.findResult != nil }
+
+        browser.closeFind()
+        let kept = browser.needle
+        let again = browser.canFindAgain
+        browser.look(forward: true)
+        try await waitUntil("find next answers with the bar shut") { !browser.findBusy && browser.findResult != nil }
+        let painted = try await web.evaluateJavaScript("CSS.highlights.get('search-find-match')?.size ?? 0") as? Int
+        let escaped = browser.escapeShutFind()
+        try await waitUntil("Escape clears the page's paint") {
+            (try await web.evaluateJavaScript("CSS.highlights.get('search-find-match')?.size ?? 0")) as? Int == 0
+        }
+
+        #expect(painted == 3)
+        #expect(kept == "orchid")
+        #expect(again)
+        #expect(!browser.finding)
+        #expect(escaped)
+        #expect(browser.findResult == nil)
+        #expect(!browser.escapeShutFind())
+    }
+
     @Test func closeButtonClearsFindWithoutClickingPageAfterStatusChanges() async throws {
         _ = NSApplication.shared
         let browser = Browser(record: WindowRecord())
@@ -99,7 +138,7 @@ struct FindStageTests {
             guard !browser.finding else { return false }
             return (try await web.evaluateJavaScript("CSS.highlights.get('search-find-match')?.size ?? 0")) as? Int == 0
         }
-        #expect(browser.needle == "")
+        #expect(browser.needle == "orchid")
         #expect(browser.findResult == nil)
         #expect(browser.findStatus == nil)
         let clicks = try await web.evaluateJavaScript("window.pageClicks")

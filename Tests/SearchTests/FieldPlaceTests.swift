@@ -105,6 +105,48 @@ final class FieldPlaceTests {
         #expect(titles() == ["Morning news"])
     }
 
+    @Test func forgetFromHistoryShowsShiftDeleteAndTakesControlXInTheMainList() throws {
+        visit("https://keys.example/page", "Keys page", minutesAgo: 1)
+        browser.edit()
+        browser.enterPlace(.history)
+        let placed = browser.fieldMenuItems(for: browser.pickedOffer).first { $0.title == "Forget from History" }
+        browser.quitField()
+        browser.edit()
+        browser.offers = [Suggestion(key: "keys.example/page", title: "Keys page", url: URL(string: "https://keys.example/page")!, kind: .visited)]
+        browser.picked = 0
+        let listed = browser.fieldMenuItems(for: browser.pickedOffer).first { $0.title == "Forget from History" }
+        let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .control, timestamp: 0,
+            windowNumber: 0, context: nil, characters: "\u{18}", charactersIgnoringModifiers: "x", isARepeat: false, keyCode: 7))
+
+        let taken = browser.fieldKey(event)
+
+        #expect(placed?.keys == "⇧⌫")
+        #expect(listed?.keys == "⇧⌫")
+        #expect(taken)
+        #expect(browser.announcement == "Forgot Keys page")
+        #expect(FieldPlace.history.hints(splits: false).map(\.keys) == ["⌘↩", "⇧⌘C", "⇧⌫"])
+        #expect(FieldPlace.history.hints(splits: false).first?.word == "Background")
+    }
+
+    @Test func clearHistoryInAHistoryRowsMenuComesLastAfterARuleAndAsksFirst() throws {
+        visit("https://clear.example/page", "Clear page", minutesAgo: 1)
+        browser.edit()
+        let row = Suggestion(key: "clear.example/page", title: "Clear page", url: URL(string: "https://clear.example/page")!, kind: .visited)
+        let items = browser.fieldMenuItems(for: row)
+        let last = try #require(items.last)
+        Ask.asked = []
+        Ask.testing = false
+        defer { Ask.testing = nil }
+
+        last.run()
+
+        #expect(last.title == "Clear History…")
+        #expect(last.parted)
+        #expect(!items.contains { $0.title == "Forget Everything" })
+        #expect(Ask.asked == ["Clear history?"])
+        #expect(browser.history.trace(History.identity(for: URL(string: "https://clear.example/page")!)) != nil)
+    }
+
     @Test func historyRowsAreCapped() {
         for index in 0..<(FieldPlace.most + 10) {
             visit("https://many.example/\(index)", "Page \(index)", minutesAgo: Double(index))

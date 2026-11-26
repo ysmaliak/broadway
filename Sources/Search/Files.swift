@@ -23,8 +23,8 @@ final class Uploads {
 
     init(file: URL = Store.file("uploads.json")) {
         self.file = file
-        if let data = try? Data(contentsOf: file), let list = try? JSONDecoder().decode([Upload].self, from: data) {
-            kept = list
+        if let data = try? Data(contentsOf: file) {
+            if let list = try? JSONDecoder().decode([Upload].self, from: data) { kept = list } else { Store.quarantine(file) }
         }
     }
 
@@ -42,6 +42,16 @@ final class Uploads {
 
     func forget(_ id: String) {
         kept.removeAll { $0.id == id }
+        save()
+    }
+
+    func forgetAll() {
+        kept = []
+        save()
+    }
+
+    func restore(_ list: [Upload]) {
+        kept = list
         save()
     }
 
@@ -107,7 +117,8 @@ final class FilesPageView: KitFlippedView {
         self.asTab = asTab
         body = FilesBody(loot: loot, uploads: uploads, asTab: asTab)
         super.init(frame: .zero)
-        plate = KitPlatePage("Files", content: body)
+        let foot = FilesFoot(uploads: uploads) { [weak self] in self?.clearList() }
+        plate = KitPlatePage("Files", content: body, foot: foot)
         kitPin(plate)
         let press = NSClickGestureRecognizer(target: self, action: #selector(pressed))
         press.delaysPrimaryMouseButtonEvents = false
@@ -123,6 +134,37 @@ final class FilesPageView: KitFlippedView {
     required init?(coder: NSCoder) { fatalError() }
 
     func type(_ text: String) { body.typed(text) }
+
+    func clearList() {
+        let was = uploads.kept
+        guard !was.isEmpty else { return }
+        uploads.forgetAll()
+        browser.announce("List cleared", undo: { [weak uploads] in uploads?.restore(was) })
+    }
+}
+
+final class FilesFoot: KitFlippedView {
+    private let uploads: Uploads
+    private let clear: KitBroadwayButton
+
+    init(uploads: Uploads, clear: @escaping () -> Void) {
+        self.uploads = uploads
+        self.clear = KitBroadwayButton("Clear List", action: clear)
+        super.init(frame: .zero)
+        addSubview(self.clear)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: clear.intrinsicContentSize.height) }
+
+    override func layout() {
+        super.layout()
+        clear.isEnabled = !uploads.kept.isEmpty
+        let size = clear.intrinsicContentSize
+        clear.frame = NSRect(x: bounds.width - size.width, y: ((bounds.height - size.height) / 2).rounded(), width: size.width, height: size.height)
+    }
 }
 
 final class FilesBody: KitFlippedView {

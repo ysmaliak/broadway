@@ -19,6 +19,7 @@ struct FieldMenuItem: Identifiable {
     let title: String
     let symbol: String
     var keys = ""
+    var parted = false
     var run: @MainActor () -> Void
 }
 
@@ -168,6 +169,7 @@ final class FieldMenuListView: NSView {
                 page.addSubview(made)
                 rows.append(made)
             }
+            rows[index].ruled = item.parted && index > 0
         }
         empty.isHidden = !list.isEmpty
         let width = bounds.width
@@ -228,14 +230,20 @@ final class FieldMenuRowView: NSView {
         }
     }
 
+    var ruled = false {
+        didSet { if ruled != oldValue { rule.isHidden = !ruled } }
+    }
+
     private let icon = FieldLine.symbol("circle", size: 13)
     private let title = FieldLine.label("", size: 14)
     private let keys = FieldLine.label("", size: 12, weight: .medium, color: KitColor.muted)
+    private let rule = KitBox(fill: KitColor.ink.withAlphaComponent(0.1))
 
     init(item: FieldMenuItem) {
         self.item = item
         super.init(frame: .zero)
-        for view in [icon, title, keys] as [NSView] { addSubview(view) }
+        for view in [icon, title, keys, rule] as [NSView] { addSubview(view) }
+        rule.isHidden = true
         refresh()
     }
 
@@ -258,6 +266,7 @@ final class FieldMenuRowView: NSView {
         var items: [FieldLine.Item] = [.box(icon, 18, 18), .text(title), .spacer(0)]
         if !keys.isHidden { items.append(.text(keys)) }
         FieldLine.place(items, in: self, padding: 10, spacing: 12)
+        rule.frame = NSRect(x: 10, y: 0, width: max(0, bounds.width - 20), height: 1 / max(kitScale, 1))
     }
 }
 
@@ -341,9 +350,32 @@ extension Browser {
         NSPasteboard.general.setString(text, forType: .string)
     }
 
+    func fillsPair(with tab: Tab) -> Bool {
+        guard let blank = active, blank.isBlank, split(for: blank) != nil,
+              tab.shy == blank.shy, split(for: tab)?.contains(blank.id) != true else { return false }
+        fill(blank, with: tab)
+        return true
+    }
+
     func forgetRow(_ offer: Suggestion) {
-        history.forget(History.identity(for: offer.url))
+        forgetPage(History.identity(for: offer.url)) { [weak self] in
+            guard let self, self.fieldShowing else { return }
+            self.retype()
+        }
         retype()
+    }
+
+    @discardableResult
+    func forgetPage(_ key: String, after: @escaping @MainActor () -> Void = {}) -> Bool {
+        guard let gone = history.forgetPage(key) else {
+            history.forget(key)
+            return false
+        }
+        announce("Forgot \(gone.name)", undo: { [weak self] in
+            self?.history.restore(gone)
+            after()
+        })
+        return true
     }
 
     func forgetSite(of offer: Suggestion) {
@@ -434,10 +466,12 @@ extension Browser {
             add("forgetToday", "Forget Today", "calendar.badge.minus") { [weak self] in
                 self?.forgetSince(Calendar.current.startOfDay(for: Date()), said: "Forgot today")
             }
-            add("forgetAll", "Forget Everything", "trash") { [weak self] in
-                self?.clearHistory()
-                self?.retype()
-            }
+            items.append(FieldMenuItem(id: "clearHistory", title: Clearing.history.row, symbol: "trash", parted: true) { [weak self] in
+                guard let self else { return }
+                let window = self.window
+                self.quitField()
+                self.askToClear(.history, over: window)
+            })
         }
         return items
     }
@@ -507,7 +541,7 @@ extension Browser {
             submit(split: true)
             return true
         }
-        if combo == KeyCombo("delete", command: false, shift: true) {
+        if combo == KeyCombo("delete", command: false, shift: true) || combo == KeyCombo("x", command: false, control: true) {
             guard let row, isHistoryRow(row) else { return false }
             forgetRow(row)
             return true

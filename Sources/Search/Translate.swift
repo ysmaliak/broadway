@@ -765,13 +765,19 @@ extension Tab {
     }
 
     func alwaysTranslates(_ code: String) -> Bool {
-        shy ? translateLanguages.contains(code) || Shared.prefs.translateAlways.contains(code)
+        shy ? !translateLanguagesOff.contains(code) && (translateLanguages.contains(code) || Shared.prefs.translateAlways.contains(code))
             : Shared.prefs.translateAlways.contains(code)
     }
 
     func setAlwaysTranslates(_ code: String, _ on: Bool) {
         if shy {
-            if on { translateLanguages.insert(code) } else { translateLanguages.remove(code) }
+            if on {
+                translateLanguages.insert(code)
+                translateLanguagesOff.remove(code)
+            } else {
+                translateLanguages.remove(code)
+                translateLanguagesOff.insert(code)
+            }
         } else {
             if on { Shared.prefs.translateAlways.insert(code) } else { Shared.prefs.translateAlways.remove(code) }
         }
@@ -787,7 +793,7 @@ extension Tab {
                 return
             }
         }
-        let wanted = shy ? Shared.prefs.translateAlways.union(translateLanguages) : Shared.prefs.translateAlways
+        let wanted = shy ? Shared.prefs.translateAlways.union(translateLanguages).subtracting(translateLanguagesOff) : Shared.prefs.translateAlways
         guard !wanted.isEmpty else { return }
         web.callAsyncJavaScript(
             "return [document.documentElement.lang || '', document.body ? document.body.innerText.slice(0, 3000) : '']",
@@ -864,7 +870,7 @@ final class TranslateMenu: SignMenu {
                 symbol: "checkmark",
                 title: tab.shy ? "Translate \(PageTranslator.name(from)) in This Tab" : "Always Translate \(PageTranslator.name(from))",
                 on: on,
-                help: tab.shy ? "Only until this private window closes" : "Choose it again to stop"
+                help: tab.shy ? "Only in this tab" : "Choose it again to stop"
             ) { [weak self] in
                 self?.tab.setAlwaysTranslates(from, !on)
                 self?.rebuild()

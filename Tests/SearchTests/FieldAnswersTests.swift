@@ -86,6 +86,17 @@ struct FieldAnswersTests {
         }
     }
 
+    @Test func aCapitalLetterBeforeALowercaseBMeansBits() {
+        let table: [(String, String)] = [
+            ("100 Mb in MB", "12.5 MB"), ("1 Gb to MB", "125 MB"), ("8 Kb in B", "1,000 B"), ("100 MB in Mb", "800 Mbit"),
+            ("1.5 GB in MB", "1,500 MB"), ("1.5 gb in mb", "1,500 MB"), ("100Mb in MB", "12.5 MB"),
+        ]
+
+        for (typed, want) in table {
+            #expect((answer(typed)?.answer ?? "") == want, "\(typed)")
+        }
+    }
+
     @Test func unitsTableInRussian() {
         let table: [(String, String)] = [
             ("5 км в милях", "3,10686 мили"), ("5 км в мили", "3,10686 мили"), ("1 миля в км", "1,60934 км"),

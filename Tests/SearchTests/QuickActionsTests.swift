@@ -367,7 +367,7 @@ final class QuickActionsTests {
 
         for title in ["Open", "Open in Background", "Open in New Tab", "Open in New Tab at the End", "Copy Link",
                       "Copy as Markdown Link", "Forget from History", "Forget example.com", "Forget the Last Hour",
-                      "Forget Today", "Forget Everything"] {
+                      "Forget Today", "Clear History…"] {
             #expect(titles.contains(title), "\(title)")
         }
     }

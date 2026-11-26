@@ -44,6 +44,8 @@ final class ClearConfirmTests {
 
         #expect(asked.map(\.rawValue) == ["clear.history", "clear.cookies", "clear.cache"])
         #expect(details[0].contains("Every address you have been to"))
+        #expect(details[0].contains("the list of files you gave to sites, and the video speeds and darkened pages kept for sites"))
+        #expect(details[0].contains("sign-ins and the downloads list stay"))
         #expect(details[1].contains("Cookies, sign-ins"))
         #expect(details[2].contains("Sign-ins, cookies, history and tabs stay"))
         #expect(details.allSatisfy { $0.contains("every space") })

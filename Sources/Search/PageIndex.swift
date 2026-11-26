@@ -31,7 +31,7 @@ struct PageQuery: Equatable, Sendable {
     var until: Date?
     var site: String?
 
-    init?(_ typed: String, minimumWords: Int = 2, now: Date = Date(), calendar: Calendar = .current) {
+    init?(_ typed: String, minimumWords: Int = 2, now: Date = Date(), calendar: Calendar = .current, isSite: (String) -> Bool = { $0.contains(".") }) {
         var tokens = typed.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
         guard tokens.count >= minimumWords else { return nil }
         var since: Date?
@@ -78,7 +78,7 @@ struct PageQuery: Equatable, Sendable {
                     continue
                 }
             }
-            if site == nil, tokens.count > 2, ["on", "at", "from"].contains(tokens[tokens.count - 2]) {
+            if site == nil, tokens.count > 2, ["on", "at", "from"].contains(tokens[tokens.count - 2]), isSite(tokens[tokens.count - 1]) {
                 site = tokens.last
                 tokens.removeLast(2)
                 trimming = true
@@ -144,9 +144,29 @@ final class PageIndex: @unchecked Sendable {
         }
     }
 
-    func remove(key: String) {
+    struct Kept: Sendable {
+        let key: String
+        let url: URL
+        let title: String
+        let body: String
+        let visited: Date
+    }
+
+    func remove(key: String, keeping: (@Sendable (Kept?) -> Void)? = nil) {
         queue.async { [self] in
-            guard let db = connection(creating: false), exec(db, "BEGIN IMMEDIATE") else { return }
+            guard let db = connection(creating: false), exec(db, "BEGIN IMMEDIATE") else {
+                keeping?(nil)
+                return
+            }
+            if let keeping {
+                let sql = "SELECT pages.url, passages.title, passages.body, pages.visited FROM passages CROSS JOIN pages ON pages.id = passages.rowid WHERE pages.key = ?"
+                keeping(rows(db, sql, [.text(key)]) { row -> Kept? in
+                    guard let address = sqlite3_column_text(row, 0), let url = URL(string: String(cString: address)) else { return nil }
+                    return Kept(key: key, url: url, title: sqlite3_column_text(row, 1).map { String(cString: $0) } ?? "",
+                                body: sqlite3_column_text(row, 2).map { String(cString: $0) } ?? "",
+                                visited: Date(timeIntervalSince1970: sqlite3_column_double(row, 3)))
+                }.compactMap { $0 }.first)
+            }
             let id = rows(db, "SELECT id FROM pages WHERE key = ?", [.text(key)]) { sqlite3_column_int64($0, 0) }.first
             if let id {
                 _ = run(db, "DELETE FROM passages WHERE rowid = ?", [.int(id)])
@@ -395,7 +415,7 @@ extension Browser {
 
     func askPages() {
         guard prefs.remembersPageText, !summoning, siteChip == nil, fieldPlace == nil, active?.shy != true,
-              Address.url(from: typed) == nil, let query = PageQuery(typed)
+              Address.url(from: typed) == nil, let query = PageQuery(typed, isSite: history.namesSite)
         else { return }
         let asked = typed
         pageQuestion = Task { [weak self] in

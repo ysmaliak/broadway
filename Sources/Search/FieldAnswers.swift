@@ -33,7 +33,7 @@ enum FieldAnswers {
     }
 
     static func normalized(_ text: String) -> String {
-        var out = text.lowercased()
+        var out = text.replacingOccurrences(of: #"(?<![A-Za-z])([KMG])b(?![A-Za-z])"#, with: "$1bit", options: .regularExpression).lowercased()
         for (from, to) in [("−", "-"), ("–", "-"), ("×", "*"), ("÷", "/"), ("**", "^"), ("·", "*"),
                            ("→", " → "), ("->", " → "), ("⇒", " → ")] {
             out = out.replacingOccurrences(of: from, with: to)

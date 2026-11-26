@@ -154,7 +154,7 @@ final class BlockedPopupsMenu: SignMenu {
         }
         var allow: [SignMenu.Part] = []
         if let site {
-            let once = "Only until this private window closes"
+            let once = "Only in this tab"
             allow.append(.items([SignMenu.Entry(
                 symbol: "checkmark.circle",
                 title: tab.shy ? "Allow Pop-ups from \(site) in This Tab" : "Always Allow Pop-ups from \(site)",

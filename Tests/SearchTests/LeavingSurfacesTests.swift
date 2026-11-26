@@ -36,10 +36,10 @@ struct LeavingSurfacesTests {
         let again = host.bar.shown
 
         #expect(open.needle == "tunnel")
-        #expect(browser.needle.isEmpty)
+        #expect(browser.needle == "tunnel")
         #expect(leaving == open)
         #expect(host.bar.frame.width == width)
-        #expect(again.needle.isEmpty)
+        #expect(again.needle == "tunnel")
         #expect(browser.active?.built == nil, "Finding builds no page to search")
     }
 

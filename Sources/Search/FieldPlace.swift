@@ -49,7 +49,7 @@ enum FieldPlace: String, CaseIterable, Equatable {
     func hints(splits: Bool) -> [(keys: String, word: String)] {
         switch self {
         case .history, .bookmarks:
-            [("⌘↩", "New Tab")] + (splits ? [("⌥↩", "Split View")] : []) + [("⇧⌘C", "Copy Link"), ("⌃X", forgetting)]
+            [("⌘↩", "Background")] + (splits ? [("⌥↩", "Split View")] : []) + [("⇧⌘C", "Copy Link"), (self == .history ? "⇧⌫" : "⌃X", forgetting)]
         case .downloads:
             [("⌘R", "Show in Finder"), ("⇧⌘C", "Copy Path"), ("⌃X", forgetting)]
         case .snippets:
@@ -229,17 +229,21 @@ extension Browser {
 
     func forgetPlaced(_ item: FieldPlaceItem) {
         let at = offers.firstIndex { $0.placed == item } ?? picked ?? 0
+        let relist: @MainActor () -> Void = { [weak self] in
+            guard let self, self.fieldPlace == item.place else { return }
+            let lit = self.picked
+            self.retype()
+            self.picked = self.offers.isEmpty ? nil : min(lit ?? at, self.offers.count - 1)
+        }
         let undo: @MainActor () -> Void
         let said: String
         switch item.place {
         case .history:
-            guard let trace = history.trace(item.id) else { return }
-            history.forget(item.id)
-            said = "Forgot \(item.title)"
-            undo = { [history] in
-                history.take(trace.url, title: trace.title, count: trace.count, last: trace.last)
-                history.settle()
-            }
+            guard history.trace(item.id) != nil else { return }
+            forgetPage(item.id, after: relist)
+            retype()
+            picked = offers.isEmpty ? nil : min(at, offers.count - 1)
+            return
         case .bookmarks:
             guard let id = UUID(uuidString: item.id), let node = bookmarks.bookmark(id) else { return }
             let parent = bookmarks.parent(of: id)
@@ -258,12 +262,9 @@ extension Browser {
         }
         retype()
         picked = offers.isEmpty ? nil : min(at, offers.count - 1)
-        announce(said, undo: { [weak self] in
+        announce(said, undo: {
             undo()
-            guard let self, self.fieldPlace == item.place else { return }
-            let lit = self.picked
-            self.retype()
-            self.picked = self.offers.isEmpty ? nil : min(lit ?? at, self.offers.count - 1)
+            relist()
         })
     }
 
@@ -313,7 +314,7 @@ extension Browser {
             }
             add("copy", "Copy Link", "link", keys: "⇧⌘C") { [weak self] in self?.copyPlaced(item) }
             if item.place == .history {
-                add("forget", "Forget from History", "clock.badge.xmark", keys: "⌃X") { [weak self] in self?.forgetPlaced(item) }
+                add("forget", "Forget from History", "clock.badge.xmark", keys: "⇧⌫") { [weak self] in self?.forgetPlaced(item) }
             } else {
                 add("forget", "Remove Bookmark", "bookmark.slash", keys: "⌃X") { [weak self] in self?.forgetPlaced(item) }
             }

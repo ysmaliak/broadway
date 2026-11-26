@@ -82,6 +82,18 @@ private struct Visit: Codable {
     }
 }
 
+@MainActor
+final class ForgottenPage {
+    fileprivate let visit: Visit
+    let name: String
+    fileprivate(set) var text: PageIndex.Kept?
+
+    fileprivate init(visit: Visit, name: String) {
+        self.visit = visit
+        self.name = name
+    }
+}
+
 private struct PageText {
     let address: String
     let searchable: String
@@ -360,7 +372,7 @@ final class History {
     }
 
     func everything(matching typed: String = "") -> [Trace] {
-        let needle = typed.trimmingCharacters(in: .whitespaces).lowercased()
+        let words = FieldPlace.words(typed)
         return visits.values
             // Every visit to a page also credits its domain, so the address
             // field can offer the front door. Those credits have no title of
@@ -369,11 +381,7 @@ final class History {
             .filter { visit in
                 !(visit.title.isEmpty && pageText[visit.key]?.homepage == true)
             }
-            .filter {
-                needle.isEmpty
-                    || pageText[$0.key]?.searchable.contains(needle) == true
-                    || $0.title.lowercased().contains(needle)
-            }
+            .filter { holds($0, words) }
             .sorted { $0.last > $1.last }
             .compactMap { visit in
                 URL(string: visit.url).map {
@@ -468,11 +476,7 @@ final class History {
             if best.count == limit, let last = best.last, visit.last <= last.last { continue }
             let text = pageText[visit.key]
             if visit.title.isEmpty && text?.homepage == true { continue }
-            if !words.isEmpty {
-                let address = text?.searchable ?? visit.key
-                let title = visit.title.lowercased()
-                guard words.allSatisfy({ address.contains($0) || title.contains($0) }) else { continue }
-            }
+            guard holds(visit, words) else { continue }
             let at = best.firstIndex { visit.last > $0.last } ?? best.endIndex
             best.insert(visit, at: at)
             if best.count > limit { best.removeLast() }
@@ -482,6 +486,13 @@ final class History {
 
     func trace(_ key: String) -> Trace? {
         visits[key].flatMap(trace)
+    }
+
+    private func holds(_ visit: Visit, _ words: [String]) -> Bool {
+        guard !words.isEmpty else { return true }
+        let address = pageText[visit.key]?.searchable ?? visit.key
+        let title = visit.title.lowercased()
+        return words.allSatisfy { address.contains($0) || title.contains($0) }
     }
 
     private func trace(_ visit: Visit) -> Trace? {
@@ -498,6 +509,28 @@ final class History {
         forgetText(for: key)
         textTaken[key] = nil
         pages.remove(key: key)
+        save()
+    }
+
+    func forgetPage(_ key: String) -> ForgottenPage? {
+        guard let visit = visits[key], let trace = trace(visit) else { return nil }
+        let gone = ForgottenPage(visit: visit, name: trace.title.isEmpty ? trace.address : trace.title)
+        if let url = URL(string: visit.url) { Favicons.shared.forget(url) }
+        visits[key] = nil
+        forgetText(for: key)
+        textTaken[key] = nil
+        pages.remove(key: key) { kept in Task { @MainActor in gone.text = kept } }
+        save()
+        return gone
+    }
+
+    func restore(_ gone: ForgottenPage) {
+        let visit = gone.visit
+        visits[visit.key] = visits[visit.key].map { History.merged($0, visit) } ?? visit
+        remember(visit)
+        if let kept = gone.text {
+            pages.add(key: kept.key, url: kept.url, title: kept.title, text: kept.body, visited: kept.visited)
+        }
         save()
     }
 
@@ -596,6 +629,11 @@ final class History {
             counts[host, default: 0] = min(History.mostVisits, counts[host, default: 0] + visit.count)
         }
         return counts
+    }
+
+    func namesSite(_ word: String) -> Bool {
+        if word.contains(".") { return true }
+        return visitedHosts.contains { $0.split(separator: ".").dropLast().contains { $0 == word } }
     }
 
     func visits(to sites: [String]) -> [String: Int] {

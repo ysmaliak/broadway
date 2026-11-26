@@ -88,6 +88,12 @@ final class Dusk {
         revision += 1
     }
 
+    func forgetSites() {
+        sites = [:]
+        Store.settings.removeObject(forKey: "dusk.sites")
+        revision += 1
+    }
+
     func saw(_ host: String, dark: Bool) {
         seen[host] = dark
     }

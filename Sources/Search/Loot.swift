@@ -26,7 +26,10 @@ final class Loot {
 
     static let recentRoom = 6
 
-    init() {
+    private let file: URL
+
+    init(file: URL = Store.file("downloads.json")) {
+        self.file = file
         clearedAt = Store.settings.object(forKey: "downloads.cleared") as? Date ?? .distantPast
         load()
         if Store.settings.object(forKey: "downloads.cleared") == nil, let newest = kept.first {
@@ -87,18 +90,18 @@ final class Loot {
         NSWorkspace.shared.open(keep.url)
     }
 
-    private static var file: URL { Store.file("downloads.json") }
-
     private func load() {
-        guard let data = try? Data(contentsOf: Loot.file),
-              let list = try? JSONDecoder().decode([Keep].self, from: data)
-        else { return }
+        guard let data = try? Data(contentsOf: file) else { return }
+        guard let list = try? JSONDecoder().decode([Keep].self, from: data) else {
+            Store.quarantine(file)
+            return
+        }
         kept = list
     }
 
     private func save() {
         let snapshot = kept
         // One after another, the newest last (see Disk).
-        Disk.write(Loot.file) { try? JSONEncoder().encode(snapshot) }
+        Disk.write(file) { try? JSONEncoder().encode(snapshot) }
     }
 }

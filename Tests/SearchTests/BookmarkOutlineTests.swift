@@ -16,6 +16,26 @@ struct BookmarkOutlineTests {
         for node in bookmarks.roots { bookmarks.remove(node.id) }
     }
 
+    @Test func thePageThePlaceAndTheSuggestionsSearchOneHaystack() {
+        _ = NSApplication.shared
+        let bookmarks = Bookmarks()
+        emptied(bookmarks)
+        defer { emptied(bookmarks) }
+        let plans = Bookmark(title: "Plans", url: "https://www.docs.example/plans")
+        _ = bookmarks.insert(Bookmark(title: "Work", url: nil, children: [plans]), into: nil)
+
+        for typed in ["plans work", "docs.example plans", "work"] {
+            let page = bookmarks.matches(typed).filter { !$0.node.isFolder }.map(\.node.title)
+            let place = bookmarks.listed(matching: typed, limit: 10).map(\.title)
+            let suggested = bookmarks.places(for: typed, limit: 10).map(\.title)
+            #expect(page == ["Plans"], "\(typed)")
+            #expect(place == ["Plans"], "\(typed)")
+            #expect(suggested == ["Plans"], "\(typed)")
+        }
+        #expect(bookmarks.matches("https").isEmpty)
+        #expect(bookmarks.places(for: "https", limit: 10).isEmpty)
+    }
+
     @Test func heightCountsRowsAndTheEmptyFolderHint() {
         _ = NSApplication.shared
         let bookmarks = filled()

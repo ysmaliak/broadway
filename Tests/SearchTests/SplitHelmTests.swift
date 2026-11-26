@@ -5,6 +5,34 @@ import Testing
 @Suite(.sharedWorld, .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct SplitHelmTests {
+    @Test func clickingAnOpenTabRowFromTheEmptyPageOfAPairBringsThatTabIntoThePair() throws {
+        _ = NSApplication.shared
+        let browser = Browser(record: WindowRecord())
+        browser.leaveFiles()
+        let prefs = browser.prefs
+        let previous = prefs.splitView
+        prefs.splitView = true
+        defer {
+            browser.closeAll()
+            prefs.splitView = previous
+        }
+        browser.newTab()
+        let other = try #require(browser.tabs.last)
+        other.restore(url: URL(string: "about:blank#other")!, title: "Other")
+        browser.newTab()
+        let left = try #require(browser.tabs.last)
+        left.restore(url: URL(string: "about:blank#left")!, title: "Left")
+        browser.select(left)
+        browser.startSplit()
+        let blank = try #require(browser.active)
+        #expect(blank.isBlank)
+
+        browser.take(Suggestion(key: "about:blank#other", title: "Other", url: URL(string: "about:blank#other")!, kind: .open, tab: other.id))
+
+        #expect(browser.split(for: other)?.contains(left.id) == true)
+        #expect(!browser.tabs.contains { $0.id == blank.id })
+    }
+
     @Test func theColumnsTopRowStaysWithAPairInFront() throws {
         _ = NSApplication.shared
         let browser = Browser(record: WindowRecord())

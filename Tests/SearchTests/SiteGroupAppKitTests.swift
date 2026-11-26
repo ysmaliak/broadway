@@ -130,6 +130,20 @@ import Testing
         #expect(sign.toolTip == "Sign-in window blocked")
     }
 
+    @Test func inAPrivateTabThePopUpAndTranslateNotesSayOnlyInThisTab() {
+        let browser = Browser(record: WindowRecord())
+        let tab = Tab(shy: true, configuration: Web.configuration(shy: true))
+        tab.restore(url: URL(string: "https://www.example.com/")!, title: "Example")
+        tab.blockedPopups = [BlockedPopup(url: URL(string: "https://ads.example.com/pop"))]
+        tab.translation = TranslationMark(from: "fr", to: "en", phase: .done)
+
+        let popups = BlockedPopupsMenu(browser: browser, tab: tab) {}
+        let translate = TranslateMenu(tab: tab) {}
+
+        #expect(popups.menu.items.first { $0.title == "Allow Pop-ups from example.com in This Tab" }?.toolTip == "Only in this tab")
+        #expect(translate.menu.items.first { $0.title == "Translate French in This Tab" }?.toolTip == "Only in this tab")
+    }
+
     @Test func theTranslateMenuSaysWhatHappened() {
         let tab = page("https://example.fr/")
         tab.translation = TranslationMark(from: "fr", to: "en", phase: .done)

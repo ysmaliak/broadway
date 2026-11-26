@@ -469,7 +469,7 @@ final class HistoryPage: RecallPage {
         draw()
         asking?.cancel()
         let words = browser.recallHunt
-        guard browser.prefs.remembersPageText, let query = PageQuery(words, minimumWords: 1) else { return }
+        guard browser.prefs.remembersPageText, let query = PageQuery(words, minimumWords: 1, isSite: browser.history.namesSite) else { return }
         asking = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(120))
             guard !Task.isCancelled, let browser = self?.browser else { return }
@@ -492,7 +492,7 @@ final class HistoryPage: RecallPage {
                 guard let browser else { return }
                 (browser.pageTab(.history) ?? browser.active)?.go(to: hit?.opening ?? trace.url)
             }, forget: { [weak self, weak browser] in
-                browser?.history.forget(trace.key)
+                browser?.forgetPage(trace.key) { self?.refresh() }
                 self?.refresh()
             })))
         }

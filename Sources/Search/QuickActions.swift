@@ -147,8 +147,8 @@ final class QuickActions {
 
     init(file: URL) {
         self.file = file
-        if let data = try? Data(contentsOf: file), let read = try? JSONDecoder().decode(Saved.self, from: data) {
-            saved = read
+        if let data = try? Data(contentsOf: file) {
+            if let read = try? JSONDecoder().decode(Saved.self, from: data) { saved = read } else { Store.quarantine(file) }
         }
     }
 

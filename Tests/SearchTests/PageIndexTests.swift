@@ -139,12 +139,36 @@ final class PageIndexTests {
         pages.add(key: "o", url: url("https://old.stripe.com/2"), title: "O", text: "invoice paid", visited: lastYear)
         pages.add(key: "g", url: url("https://gusto.com/3"), title: "G", text: "invoice paid", visited: lastWeek)
 
-        let query = PageQuery("invoice last week on stripe", now: now, calendar: calendar)!
+        let query = PageQuery("invoice last week on stripe", now: now, calendar: calendar, isSite: { $0 == "stripe" })!
         let hits = await pages.search(query)
 
         #expect(query.words == ["invoice"])
         #expect(query.site == "stripe")
         #expect(hits.map(\.key) == ["s"])
+    }
+
+    @Test func aWordAfterFromOnOrAtIsASiteOnlyWhenItLooksLikeOne() {
+        let typed = PageQuery("notes from meeting")
+        let dotted = PageQuery("notes from docs.example")
+        let known = PageQuery("dinner at shop", isSite: { $0 == "shop" })
+
+        #expect(typed?.words == ["notes", "from", "meeting"])
+        #expect(typed?.site == nil)
+        #expect(dotted?.words == ["notes"])
+        #expect(dotted?.site == "docs.example")
+        #expect(known?.words == ["dinner"])
+        #expect(known?.site == "shop")
+    }
+
+    @Test func historyNamesASiteByAnyPartOfAHostItHasBeenTo() {
+        _ = NSApplication.shared
+        let history = self.history()
+        history.record(url("https://dashboard.shop.example/invoices"), title: "Invoices")
+
+        #expect(history.namesSite("shop"))
+        #expect(history.namesSite("docs.example"))
+        #expect(!history.namesSite("example"))
+        #expect(!history.namesSite("meeting"))
     }
 
     @Test func queriesNeedTwoWordsInTheField() {
@@ -180,6 +204,61 @@ final class PageIndexTests {
 
         #expect(after.isEmpty)
         #expect(!history.knows(key))
+    }
+
+    @Test func undoingAForgottenPagePutsBackTheWholeVisitAndItsText() async throws {
+        _ = NSApplication.shared
+        let history = self.history()
+        let page = url("https://forget.example/page")
+        let key = History.identity(for: page)
+        let space = UUID()
+        history.record(page, title: "Page", space: space)
+        history.keepText(key: key, url: page, title: "Page", text: "unforgettable passage")
+        _ = await history.pages.search("unforgettable")
+
+        let gone = try #require(history.forgetPage(key))
+        await history.pages.settled()
+        for _ in 0..<200 where gone.text == nil { try await Task.sleep(for: .milliseconds(10)) }
+        let forgotten = await history.pages.search("unforgettable")
+        history.restore(gone)
+        let after = await history.pages.search("unforgettable")
+
+        #expect(gone.name == "Page")
+        #expect(forgotten.isEmpty)
+        #expect(history.knows(key))
+        #expect(history.everything(in: space).map(\.key) == [key])
+        #expect(after.map(\.key) == [key])
+    }
+
+    @Test func forgettingAHistoryRowInTheMainListSaysSoAndOffersUndo() {
+        _ = NSApplication.shared
+        NSApp.setActivationPolicy(.prohibited)
+        let browser = Browser(record: WindowRecord())
+        defer { browser.closeAll() }
+        let page = url("https://forget-row.example/page")
+        let key = History.identity(for: page)
+        browser.history.record(page, title: "Row Page")
+
+        browser.forgetRow(Suggestion(key: "forget-row.example/page", title: "Row Page", url: page, kind: .visited))
+
+        #expect(browser.announcement == "Forgot Row Page")
+        #expect(!browser.history.knows(key))
+        browser.undoAnnounced()
+        #expect(browser.history.knows(key))
+        browser.history.forget(key)
+    }
+
+    @Test func theHistoryPageFindsEveryWordInAnyOrderAsTheFieldDoes() {
+        _ = NSApplication.shared
+        let history = self.history()
+        history.record(url("https://www.code.example/org/repo/issues"), title: "Issues · org/repo")
+        history.record(url("https://news.example/today"), title: "Today")
+
+        let page = history.everything(matching: "repo issues code.example")
+        let place = history.newest(matching: "repo issues code.example", limit: 10)
+
+        #expect(page.map(\.title) == ["Issues · org/repo"])
+        #expect(page.map(\.key) == place.map(\.key))
     }
 
     @Test func clearingHistoryForgetsAllText() async {

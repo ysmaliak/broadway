@@ -47,6 +47,35 @@ struct FindSelectionTests {
         }
     }
 
+    @Test func aPrivateTabKeepsTheSelectionOffTheSharedFindBoard() {
+        withBrowser { browser in
+            board.clearContents()
+            board.setString("kept", forType: .string)
+
+            browser.takeForFind("river stones", board: board, shy: true)
+
+            #expect(browser.needle == "river stones")
+            #expect(board.string(forType: .string) == "kept")
+        }
+    }
+
+    @Test func wordsAnotherAppPutOnTheFindBoardBecomeTheNeedleOnce() {
+        withBrowser { browser in
+            browser.takeForFind("river stones", board: board)
+            browser.readFindBoard(board)
+            #expect(browser.needle == "river stones")
+
+            board.clearContents()
+            board.setString("harbour", forType: .string)
+            browser.readFindBoard(board)
+            #expect(browser.needle == "harbour")
+
+            browser.needle = "typed here"
+            browser.readFindBoard(board)
+            #expect(browser.needle == "typed here")
+        }
+    }
+
     @Test func aTestRunNeverWritesTheMacsOwnFindBoard() {
         #expect(FindBoard.board.name != .find)
     }

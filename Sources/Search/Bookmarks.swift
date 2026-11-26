@@ -95,11 +95,11 @@ final class Bookmarks {
     /// with the folders it sits in — the same rule chrome.bookmarks.search
     /// keeps (see ExtensionShims.swift).
     func matches(_ text: String) -> [(node: Bookmark, path: [String])] {
-        let words = text.lowercased().split(separator: " ").map(String.init)
+        let words = FieldPlace.words(text)
         guard !words.isEmpty else { return [] }
         func walk(_ nodes: [Bookmark], _ path: [String]) -> [(node: Bookmark, path: [String])] {
             nodes.flatMap { node -> [(node: Bookmark, path: [String])] in
-                let hay = (node.title + " " + (node.url ?? "")).lowercased()
+                let hay = Bookmarks.hay(node.unnamed ? "" : node.title, node.url, path)
                 let hit = words.allSatisfy { hay.contains($0) } ? [(node: node, path: path)] : []
                 return hit + walk(node.children ?? [], path + [node.title])
             }
@@ -118,6 +118,7 @@ final class Bookmarks {
         let title: String
         let address: String
         let url: URL
+        let hay: String
     }
 
     /// Every site, folders opened, made once after each change of the list
@@ -142,7 +143,7 @@ final class Bookmarks {
         // then a word anywhere; among equals, the shorter address.
         var best: [(site: Site, score: Int)] = []
         for site in sites ?? [] {
-            guard words.allSatisfy({ site.title.contains($0) || site.address.contains($0) }) else { continue }
+            guard words.allSatisfy({ site.hay.contains($0) }) else { continue }
             let score = site.address.hasPrefix(bare) ? 3
                 : site.title.hasPrefix(needle) || site.title.split(separator: " ").contains(where: { $0.hasPrefix(first) }) ? 2
                 : 1
@@ -184,18 +185,22 @@ final class Bookmarks {
             if node.isFolder { return listing(node.children ?? [], folders + [node.title]) }
             guard let url = node.address, ["http", "https", "file"].contains(url.scheme?.lowercased() ?? "") else { return [] }
             let title = node.unnamed ? "" : node.title
-            let hay = ([title, History.stripped(url.absoluteString)] + folders).joined(separator: " ").lowercased()
-            return [Listed(id: node.id, title: title, url: url, folders: folders, hay: hay)]
+            return [Listed(id: node.id, title: title, url: url, folders: folders, hay: hay(title, url.absoluteString, folders))]
         }
     }
 
-    private static func sites(_ nodes: [Bookmark]) -> [Site] {
+    static func hay(_ title: String, _ address: String?, _ folders: [String]) -> String {
+        ([title] + (address.map { [History.stripped($0)] } ?? []) + folders).joined(separator: " ").lowercased()
+    }
+
+    private static func sites(_ nodes: [Bookmark], _ folders: [String] = []) -> [Site] {
         nodes.flatMap { node -> [Site] in
-            if node.isFolder { return sites(node.children ?? []) }
+            if node.isFolder { return sites(node.children ?? [], folders + [node.title]) }
             // Only places to go: a bookmarklet's javascript: is no address.
             guard let url = node.address, ["http", "https", "file"].contains(url.scheme?.lowercased() ?? "") else { return [] }
             let title = node.unnamed ? "" : node.title
-            return [Site(name: title, title: title.lowercased(), address: History.stripped(url.absoluteString), url: url)]
+            return [Site(name: title, title: title.lowercased(), address: History.stripped(url.absoluteString), url: url,
+                         hay: hay(title, url.absoluteString, folders))]
         }
     }
 
