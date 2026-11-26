@@ -5556,8 +5556,8 @@ final class Bench {
             // Where the page is, as its tab would say it at rest, and whether
             // it says it now: the setting on, the tab you're on, not edited
             // (see AtRest.swift).
-            "atRest": AtRest.of(tab.restAddress)?.text ?? "",
-            "atRestShown": browser.map { tab.id == $0.activeID && $0.editingTab != tab.id && AtRest.said(tab.restAddress, always: $0.prefs.showsAddress) != nil } ?? false,
+            "atRest": AtRest.of(tab.saidAddress)?.text ?? "",
+            "atRestShown": browser.map { tab.id == $0.activeID && $0.editingTab != tab.id && AtRest.said(tab.saidAddress, always: $0.prefs.showsAddress) != nil } ?? false,
             "asleep": tab.asleep,
             "shy": tab.shy,
             "noisy": tab.noisy,

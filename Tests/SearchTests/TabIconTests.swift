@@ -162,6 +162,53 @@ final class TabIconTests {
         #expect(entry.image?.size == NSSize(width: 20, height: 16))
     }
 
+    @Test func anotherSpacesMenuActsOnThatSpaceWithoutLeavingTheOneOnScreen() throws {
+        let work = Space(id: UUID(), name: "Work", colour: 0)
+        browser.spaces.append(work)
+        let first = browser.spaceID
+        defer { Ask.typed = nil; Ask.testing = nil; Ask.asked = [] }
+        let menu = SpaceMenu.menu(for: browser, space: work.id, icon: true)
+        let rows = menu.items.filter { !$0.isSeparatorItem }.dropFirst(browser.spaces.count)
+        func fire(_ title: String) throws {
+            let item = try #require(rows.first { $0.title == title })
+            NSApp.sendAction(try #require(item.action), to: item.target, from: item)
+        }
+
+        #expect(rows.map(\.title) == [
+            "New Space…", "Rename “Work”…", "Change Icon…", "Move Left",
+            "Downloads Folder…", "Languages: Same as Settings…", "Delete “Work”…",
+        ])
+        #expect(browser.spaceID == first)
+
+        Ask.typed = "Studio"
+        try fire("Rename “Work”…")
+        #expect(browser.spaces.first { $0.id == work.id }?.name == "Studio")
+        #expect(browser.spaceID == first)
+
+        let at = try #require(browser.spaces.firstIndex { $0.id == work.id })
+        try fire("Move Left")
+        #expect(browser.spaces.firstIndex { $0.id == work.id } == at - 1)
+        #expect(browser.spaceID == first)
+
+        Ask.testing = true
+        try fire("Delete “Work”…")
+        #expect(!browser.spaces.contains { $0.id == work.id })
+        #expect(browser.spaceID == first)
+    }
+
+    @Test func theSpaceMenuShowsTheKeysInForceForEachSpace() throws {
+        let store = ShortcutStore.shared
+        defer { store.reset("spaces.1"); store.reset("spaces.2") }
+        browser.spaces.append(Space(id: UUID(), name: "Work", colour: 0))
+        store.assign(KeyCombo("1", option: true, control: true), to: "spaces.1")
+        store.clear("spaces.2")
+
+        let rows = SpaceMenu.menu(for: browser).items.prefix(2)
+
+        #expect(rows.map(\.keyEquivalent) == ["1", ""])
+        #expect(rows.first?.keyEquivalentModifierMask == [.command, .option, .control])
+    }
+
     @Test func theSpaceMenuKeepsTheCheckForSpacesAndPutsEachActionsSymbolInItsPlace() throws {
         browser.spaces[0].downloads = "/tmp/Invoices"
         browser.spaces.append(Space(id: UUID(), name: "Work", colour: 0))

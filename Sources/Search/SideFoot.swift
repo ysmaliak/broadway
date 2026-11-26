@@ -526,14 +526,7 @@ final class SpaceSpotView: KitHoverView {
 
     override func menu(for event: NSEvent) -> NSMenu? {
         guard case .space(let id) = kind else { return nil }
-        let menu = NSMenu()
-        menu.addItem(PlusMenu.item("Open Space Menu") { [weak browser] in
-            guard let browser else { return }
-            browser.switchSpace(to: id)
-            SpaceMenu.show(for: browser)
-        })
-        menu.addItem(PlusMenu.item("Change Icon…") { [weak browser] in browser?.iconPicker.pick(.space(id)) })
-        return menu
+        return SpaceMenu.menu(for: browser, space: id, icon: true)
     }
 }
 

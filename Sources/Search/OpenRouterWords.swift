@@ -16,8 +16,8 @@ enum AIGroupWords {
 
     static func sent(remoteDecides: Bool) -> String {
         remoteDecides
-            ? "Tab titles, site names, authors, folder names and searches go to OpenRouter, never addresses or pages"
-            : "A folder's tab titles, site names, authors and search go to OpenRouter, never addresses or pages"
+            ? "Tab titles, site names, folder names and searches go to OpenRouter, never addresses, authors or pages"
+            : "A folder's tab titles, site names and search go to OpenRouter, never addresses, authors or pages"
     }
 
     static func offer(remoteDecides: Bool) -> String {
@@ -36,12 +36,12 @@ enum AIGroupWords {
 
     static func stepLine(mac: Bool, remoteDecides: Bool) -> String {
         if remoteDecides, !mac {
-            return "A key is what turns on folders on this Mac. Only tab titles, site names, authors and searches go to OpenRouter. It costs a fraction of a cent a folder on your account, and the key stays in this Mac's Keychain."
+            return "A key is what turns on folders on this Mac. Only tab titles, site names and searches go to OpenRouter. It costs a fraction of a cent a folder on your account, and the key stays in this Mac's Keychain."
         }
         if remoteDecides {
-            return "OpenRouter sorts and names your folders. Only tab titles, site names, authors and searches are sent. It costs a fraction of a cent a folder on your account, and the key stays in this Mac's Keychain."
+            return "OpenRouter sorts and names your folders. Only tab titles, site names and searches are sent. It costs a fraction of a cent a folder on your account, and the key stays in this Mac's Keychain."
         }
-        return "OpenRouter names your folders. Only tab titles, site names, authors and searches are sent. It costs a fraction of a cent a folder on your account, and the key stays in this Mac's Keychain."
+        return "OpenRouter names your folders. Only tab titles, site names and searches are sent. It costs a fraction of a cent a folder on your account, and the key stays in this Mac's Keychain."
     }
 
     static let getKey = "Get a Key"

@@ -288,6 +288,25 @@ final class SplitRowDragTests {
         #expect(Browser.holds(landed, in: other.tabs))
     }
 
+    @Test func everyPickedTabGoesToTheOtherWindowInItsOrderAndOnlyTheFirstWakes() throws {
+        let world = try world()
+        let browser = world.browser
+        let other = makeBrowser()
+        Shared.prefs.newTabsAtBottom = false
+        other.newTab()
+        other.tabs.last?.restore(url: URL(string: "about:blank#elsewhere")!, title: "Elsewhere")
+        browser.extendTabSelection(to: world.loose[1], modifiers: .command)
+        let chosen = browser.menuTabs(for: world.loose[1])
+        #expect(chosen.map(\.id) == world.loose.map(\.id))
+
+        browser.moveToWindow(chosen, other)
+
+        #expect(!browser.tabs.contains { $0 === world.loose[0] || $0 === world.loose[1] })
+        #expect(other.tabs.filter { $0 === world.loose[0] || $0 === world.loose[1] }.map(\.id) == world.loose.map(\.id))
+        #expect(other.active === world.loose[0])
+        #expect(world.loose[1].asleep)
+    }
+
     private func otherWindow(_ names: [String], folder: String) throws -> (Browser, [Tab], UUID) {
         let other = makeBrowser()
         for (index, name) in names.enumerated() {
@@ -433,6 +452,63 @@ final class SplitRowDragTests {
         #expect(row.splits.contains { $0.id == pair.id })
         #expect(Browser.holds(pair, in: row.tabs))
         try undone(world, back: before)
+    }
+
+    @Test func theMenusSpaceItemMovesThePairWholeAndUndoBringsItBack() async throws {
+        let world = try world()
+        let browser = world.browser
+        let second = Space(id: UUID(), name: "Elsewhere", colour: 1, sharesSignIns: true)
+        browser.prefs.usesSpaces = true
+        browser.spaces.append(second)
+        let pair = try #require(browser.split(for: world.left))
+        let before = browser.arrangement
+        let menu = TabMenuItems.menu(browser: browser, tab: world.right, close: {})
+        let item = try #require(menuEntry("Elsewhere", in: menu))
+
+        gesture(browser) { NSApp.sendAction(item.action!, to: item.target, from: item) }
+
+        try await waitUntil("the pair did not reach the other space") { self.arrived(world, in: second) }
+        #expect(!browser.tabs.contains { $0 === world.left || $0 === world.right })
+        let row = try #require(browser.parked[second.id])
+        #expect(row.splits.contains { $0.id == pair.id })
+        #expect(Browser.holds(pair, in: row.tabs))
+        try undone(world, back: before)
+    }
+
+    @Test func aPickedTabWithOneHalfOfAPairTakesTheWholePairToTheSpace() async throws {
+        let world = try world()
+        let browser = world.browser
+        let second = Space(id: UUID(), name: "Elsewhere", colour: 1, sharesSignIns: true)
+        browser.prefs.usesSpaces = true
+        browser.spaces.append(second)
+        let pair = try #require(browser.split(for: world.left))
+        browser.select(world.loose[1])
+        browser.extendTabSelection(to: world.right, modifiers: .command)
+
+        browser.move(browser.menuTabs(for: world.right), toSpace: second.id)
+
+        try await waitUntil("the tabs did not reach the other space") {
+            self.arrived(world, in: second) && browser.parked[second.id]?.tabs.contains { $0 === world.loose[1] } == true
+        }
+        let row = try #require(browser.parked[second.id])
+        #expect(row.splits.contains { $0.id == pair.id })
+        #expect(Browser.holds(pair, in: row.tabs))
+        #expect(!browser.tabs.contains { $0 === world.left || $0 === world.right || $0 === world.loose[1] })
+    }
+
+    @Test func theMenusWindowItemMovesThePairWhole() throws {
+        let world = try world()
+        let other = makeBrowser()
+        other.newTab()
+        other.tabs.last?.restore(url: URL(string: "about:blank#elsewhere")!, title: "Elsewhere")
+        let pair = try #require(world.browser.split(for: world.left))
+
+        world.browser.moveToWindow([world.right], other)
+
+        #expect(!world.browser.tabs.contains { $0 === world.left || $0 === world.right })
+        let landed = try #require(other.split(for: world.left))
+        #expect(landed.tabs == pair.tabs)
+        #expect(Browser.holds(landed, in: other.tabs))
     }
 
     private func column(_ world: World) async throws -> NSWindow {

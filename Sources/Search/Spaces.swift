@@ -502,7 +502,7 @@ extension Browser {
     var freeIcon: TabIcon { TabIcon(symbol: Spaces.leastWorn(in: spaces)) }
 
     func addSpace(named name: String, icon: TabIcon? = nil, look: SpaceLook? = nil, sharesSignIns: Bool = true) {
-        let made = Space(id: UUID(), name: name, colour: 0, icon: icon ?? (makingSpace ? draftIcon : freeIcon), look: look,
+        let made = Space(id: UUID(), name: name, colour: 0, icon: icon ?? freeIcon, look: look,
                          sharesSignIns: sharesSignIns)
         makingSpace = false
         spaceDraftIcon = nil
@@ -647,12 +647,16 @@ enum SpaceMenu {
     }
 
     /// The menu itself, for show() to pop up, and for the bench to read.
-    static func menu(for browser: Browser) -> NSMenu {
+    static func menu(for browser: Browser, space id: UUID? = nil, icon: Bool = false) -> NSMenu {
         actions = []
         let menu = NSMenu()
         for (index, space) in browser.spaces.enumerated() {
-            let entry = item(space.name, key: index < 9 ? "\(index + 1)" : "", checked: space.id == browser.spaceID) {
+            let entry = item(space.name, checked: space.id == browser.spaceID) {
                 browser.goToSpace(space.id)
+            }
+            if index < 9, let key = ShortcutStore.shared.key(for: "spaces.\(index + 1)")?.menuKey {
+                entry.keyEquivalent = key.key
+                entry.keyEquivalentModifierMask = key.mask
             }
             entry.image = space.menuMark
             entry.preferredImageVisibility = .visible
@@ -661,11 +665,13 @@ enum SpaceMenu {
         menu.addItem(.separator())
         menu.addItem(item("New Space…") { browser.askForSpace() }.leadingSymbol(MenuSymbol.newSpace))
         menu.addItem(.separator())
-        let here = browser.space
+        let here = id.flatMap { id in browser.spaces.first { $0.id == id } } ?? browser.space
+        let shown = here.id == browser.spaceID
         menu.addItem(item("Rename “\(here.name)”…") {
             Ask.name("Rename Space", placeholder: here.name, initial: here.name, confirm: "Rename") { browser.renameSpace(here.id, to: $0) }
         }.leadingSymbol(MenuSymbol.rename))
-        menu.addItem(item("Edit Look…") { browser.editingLook = true }.leadingSymbol(MenuSymbol.look))
+        if icon { menu.addItem(item("Change Icon…") { browser.iconPicker.pick(.space(here.id)) }) }
+        if shown { menu.addItem(item("Edit Look…") { browser.editingLook = true }.leadingSymbol(MenuSymbol.look)) }
         // The order is the swipe's, and ⌃1–⌃9's.
         if let at = browser.spaces.firstIndex(where: { $0.id == here.id }) {
             let stacked = browser.prefs.stacksSpaces
@@ -679,7 +685,7 @@ enum SpaceMenu {
             }
         }
         // Every group of this space, folded or opened at once, as in Arc.
-        if browser.prefs.usesTabGroups, !browser.tabGroups.isEmpty {
+        if shown, browser.prefs.usesTabGroups, !browser.tabGroups.isEmpty {
             if browser.canFoldAllGroups {
                 menu.addItem(item("Shut All Folders") { browser.foldAllGroups(true) }.leadingSymbol(MenuSymbol.shutFolders))
             }

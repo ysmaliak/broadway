@@ -341,7 +341,8 @@ struct FootRowTests {
         #expect(view.hitTest(NSPoint(x: small.frame.midX, y: small.frame.midY)) === small)
         let press = try #require(NSEvent.mouseEvent(with: .rightMouseDown, location: .zero, modifierFlags: [], timestamp: 0,
                                                     windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
-        #expect(small.menu(for: press)?.items.map(\.title) == ["Open Space Menu", "Change Icon…"])
+        let titles = small.menu(for: press)?.items.map(\.title) ?? []
+        #expect(titles.contains("Rename “\(small.name)”…") && titles.contains("Change Icon…") && !titles.contains("Open Space Menu"))
 
         browser.makingSpace = true
         view.needsLayout = true

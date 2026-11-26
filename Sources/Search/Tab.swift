@@ -319,6 +319,8 @@ final class Tab: Identifiable {
     /// still loading, and that address must not vouch for what it wrote.
     /// A tab with no view (asleep, restored) has only its address to say.
     var restAddress: URL? { built == nil ? address : committed }
+    private(set) var ownLoad = false
+    var saidAddress: URL? { ownLoad ? address : restAddress }
 
     func didCommit() {
         retryCommitted()
@@ -341,6 +343,7 @@ final class Tab: Identifiable {
         // sending its window there, then writing) is that page's, not the
         // one before it, and is offered nothing that belonged to it.
         if let url = built?.url { committed = url }
+        if ownLoad { ownLoad = false }
         if !ClickedWindow.blank(built?.url) { shownPage = true }
         dropFillMarks()
         // A page arrived after all: the address is its own again.
@@ -932,6 +935,7 @@ final class Tab: Identifiable {
     }
 
     private func loadEnded() {
+        if ownLoad { ownLoad = false }
         if stuck.asked != nil { StuckRules.committed(&stuck) }
         if let shown = settle.loadEnded(at: CACurrentMediaTime()) { settled(shown) } else { scheduleSettle() }
     }
@@ -1554,6 +1558,7 @@ final class Tab: Identifiable {
         // stop being blank in the same frame the field disappears, or the empty
         // state flashes back for an instant on its way out.
         address = url
+        ownLoad = true
         held = nil
         title = ""
         stopSettling()
@@ -1880,6 +1885,7 @@ final class Tab: Identifiable {
             uncover(after: 4)
         }
         picture = nil
+        ownLoad = true
         loadAndVerify(url, state: state)
         return true
     }
@@ -1976,6 +1982,11 @@ final class Tab: Identifiable {
     func began(asked: Bool) {
         arrival = headed.map { LiveArrival(from: $0.from, type: $0.type, asked: asked) } ?? LiveArrival()
         headed = nil
+        if asked {
+            if !ownLoad { ownLoad = true }
+        } else if ownLoad, committed != nil {
+            ownLoad = false
+        }
     }
 
     func redirected() {

@@ -47,12 +47,22 @@ extension Browser {
         move(keyTabs, toSpace: space.id)
     }
 
+    func wholePairs(_ chosen: [Tab]) -> [Tab] {
+        let ids = Set(chosen.flatMap { tab in split(for: tab)?.tabs ?? [tab.id] })
+        return tabs.filter { ids.contains($0.id) }
+    }
+
     func move(_ chosen: [Tab], toSpace target: UUID, then: (() -> Void)? = nil) {
         guard showsSpaces, target != spaceID,
               let destination = spaces.first(where: { $0.id == target }) else { return }
-        let movers = chosen.filter(movable(toSpace:))
+        let whole = wholePairs(chosen)
+        let refused = Set(whole.filter { !movable(toSpace: $0) }.flatMap { tab in split(for: tab)?.tabs ?? [tab.id] })
+        let movers = whole.filter { !refused.contains($0.id) }
         guard !movers.isEmpty else { return }
         if movers.count == 1 { return move(movers[0], toSpace: target, then: then) }
+        if let pair = split(for: movers[0]), movers.count == pair.tabs.count, movers.allSatisfy({ pair.contains($0.id) }) {
+            return move(pair: pair, toSpace: target, then: then)
+        }
         let from = spaceID
         let complete: () -> Void = { [weak self] in
             guard let self, self.spaceID == from else { return }
@@ -87,6 +97,10 @@ extension Browser {
         guard !movers.isEmpty else { return }
         let mark = beginStep("Move to Space", carrying: movers.map(\.id), to: destination.id)
         defer { endStep(mark) }
+        var pairs: [TabSplit] = []
+        for tab in movers {
+            if let pair = split(for: tab), !pairs.contains(where: { $0.id == pair.id }) { pairs.append(pair) }
+        }
         clearTabSelection()
         let ids = Set(movers.map(\.id))
         if let here = active, ids.contains(here.id), let next = successor(of: here, without: ids) {
@@ -101,10 +115,50 @@ extension Browser {
             }
         }
         guard moved > 0 else { return }
+        for pair in pairs where !tabs.contains(where: { pair.contains($0.id) }) { keepPair(pair, in: destination.id) }
         writeSession(now: true)
         if let row = parked[destination.id] { writeSession(now: true, space: destination.id, row: row) }
         announce(moved == 1 ? "Moved to \(destination.name)" : "Moved \(moved) tabs to \(destination.name)")
         if let arrived { LinkArrivals.moved(arrived, to: destination.id, in: self) }
+    }
+
+    func moveToWindow(_ chosen: [Tab], _ target: Browser?) {
+        let movers = wholePairs(chosen).filter { $0.pin == nil && !$0.bench }
+        guard let first = movers.first else { return }
+        if let pair = split(for: first), movers.allSatisfy({ pair.contains($0.id) }) { return moveToWindow(pairOf: first, target) }
+        guard movers.count > 1 else { return moveToWindow(first, target) }
+        guard target?.isPopup != true, (target?.isPrivate ?? isPrivate) == isPrivate, target !== self,
+              target != nil || tabs.count > movers.count || movers.contains(where: { !$0.isBlank })
+        else { return }
+        let destination = target ?? Browser(record: WindowRecord(space: spaceID), privateStore: privateStore)
+        let ids = Set(movers.map(\.id))
+        if let here = active, ids.contains(here.id), let next = successor(of: here, without: ids) {
+            select(next, floatPrevious: false)
+        }
+        var gone: Set<Tab.ID> = []
+        var last: Tab?
+        for tab in movers where !gone.contains(tab.id) {
+            let halves = split(for: tab).map { pair in pair.tabs.compactMap { id in movers.first { $0.id == id } } } ?? []
+            let pair = split(for: tab).flatMap { halves.count == $0.tabs.count ? $0 : nil }
+            let unit = pair == nil ? [tab] : halves
+            for each in unit {
+                detach(each)
+                gone.insert(each.id)
+            }
+            if let last {
+                destination.take(unit, after: last, pair: pair)
+            } else if let pair {
+                destination.receive(pair: pair, unit)
+            } else {
+                destination.receive(tab)
+            }
+            last = unit.last
+        }
+        if target == nil {
+            Browsers.open(destination, frame: nil)
+        } else {
+            destination.window?.makeKeyAndOrderFront(nil)
+        }
     }
 
     func togglePin(_ chosen: [Tab], like tab: Tab) {

@@ -1080,7 +1080,7 @@ final class TabRowView: KitHoverView {
 
         title.isHidden = editing
         title.label = tab.label
-        title.rest = state.live && !editing ? AtRest.said(tab.restAddress, always: state.showsAddress) : nil
+        title.rest = state.live && !editing ? AtRest.said(tab.saidAddress, always: state.showsAddress) : nil
         title.shown = title.rest != nil
         title.hovering = hovering
         title.size = state.titleSize

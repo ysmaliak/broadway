@@ -379,7 +379,7 @@ extension Browser {
         KitChange.eased { move(tab, toSpace: id) }
     }
 
-    func move(pair: TabSplit, toSpace id: UUID) {
+    func move(pair: TabSplit, toSpace id: UUID, then: (() -> Void)? = nil) {
         guard showsSpaces, id != spaceID, let destination = spaces.first(where: { $0.id == id }) else { return }
         let halves = pair.tabs.compactMap { half in tabs.first { $0.id == half } }
         guard halves.count == pair.tabs.count,
@@ -391,6 +391,7 @@ extension Browser {
                   halves.allSatisfy({ half in self.tabs.contains { $0 === half } })
             else { return }
             self.finishPairMove(pair, halves, to: destination)
+            then?()
         }
         let store = Spaces.store(for: id)
         let asking = halves.filter { !$0.shy && $0.store !== store }
@@ -436,7 +437,7 @@ extension Browser {
         if let arrived { LinkArrivals.moved(arrived, to: destination.id, in: self) }
     }
 
-    private func keepPair(_ pair: TabSplit, in space: UUID) {
+    func keepPair(_ pair: TabSplit, in space: UUID) {
         guard var row = parked[space], !row.splits.contains(where: { $0.id == pair.id }) else { return }
         let rest = row.tabs.filter { !pair.contains($0.id) }
         let halves = pair.tabs.compactMap { id in row.tabs.first { $0.id == id } }
@@ -672,11 +673,16 @@ final class StackedHeaderView: NSView {
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let name = space.name
-        return KitMenu.make([
+        let menu = KitMenu.make([
             .action(folded ? "Unfold \(name)" : "Fold \(name)", modifiers: [], run: { [weak self] in self?.fold() }),
             .action("New Tab in \(name)", symbol: MenuSymbol.newTab, modifiers: [], run: { [weak self] in self?.newTab() }),
-            .action("Open Space Menu", modifiers: [], run: { [weak self] in self?.menu() }),
         ])
+        let own = SpaceMenu.menu(for: browser, space: space.id)
+        let rows = own.items
+        own.removeAllItems()
+        menu.addItem(.separator())
+        for row in rows { menu.addItem(row) }
+        return menu
     }
 
     override func accessibilityLabel() -> String? { space.name }
@@ -826,9 +832,7 @@ final class StackedHeaderView: NSView {
     }
 
     private func menu() {
-        browser.stackedEnter(space.id, announcing: false)
-        guard browser.spaceID == space.id else { return }
-        SpaceMenu.show(for: browser)
+        SpaceMenu.menu(for: browser, space: space.id).popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
     }
 }
 

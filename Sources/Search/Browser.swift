@@ -4483,7 +4483,7 @@ extension Browser {
     /// not — after that space's own groups. As Move to Space for one tab: a
     /// space with other sign-ins asks first only when a page has unsaved
     /// form entries, once for the group.
-    func move(group id: UUID, toSpace target: UUID) {
+    func move(group id: UUID, toSpace target: UUID, then: (() -> Void)? = nil) {
         guard showsSpaces, target != spaceID,
               let destination = spaces.first(where: { $0.id == target }),
               tabGroups.contains(where: { $0.id == id })
@@ -4495,6 +4495,7 @@ extension Browser {
         let complete: () -> Void = { [weak self] in
             guard let self, self.spaceID == from else { return }
             self.finishGroupMove(family, members.filter { tab in self.tabs.contains { $0.id == tab.id } }, to: destination)
+            then?()
         }
         let store = Spaces.store(for: target)
         guard members.contains(where: { !$0.shy && $0.store !== store }) else { return complete() }
@@ -4669,7 +4670,7 @@ extension Browser {
     }
 
     /// Out of this row, not closed: it is on its way to another window.
-    private func detach(_ tab: Tab) {
+    func detach(_ tab: Tab) {
         guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
         if let web = tab.built { cancelDisplay(for: web) }
         let partner = split(for: tab).flatMap { pair in tabs.first { $0.id == pair.partner(of: tab.id) } }
@@ -4718,6 +4719,18 @@ extension Browser {
         tabs = row
         putBackSplit(pair)
         if let focused = halves.first(where: { $0.id == pair.focused }) ?? halves.first { focusPane(focused) }
+        writeSession(now: true)
+    }
+
+    func take(_ unit: [Tab], after: Tab, pair: TabSplit?) {
+        guard var at = tabs.firstIndex(where: { $0 === after }) else { return }
+        for tab in unit {
+            prepare(tab)
+            if !tab.shy { tab.rehome(in: spaceID) }
+            at += 1
+            tabs.insert(tab, at: at)
+        }
+        if let pair { putBackSplit(pair) }
         writeSession(now: true)
     }
 
@@ -4793,7 +4806,7 @@ extension Browser {
     var canUnfoldAllGroups: Bool { prefs.usesTabGroups && tabGroups.contains { $0.collapsed } }
 
     func removeTabGroup(_ id: UUID) {
-        let mark = beginStep("Ungroup")
+        let mark = beginStep(tabGroups.first { $0.id == id }?.query == nil ? "Remove Folder" : "Ungroup")
         defer { endStep(mark) }
         guard let removed = tabGroups.first(where: { $0.id == id }) else { return }
         AIGroups.shared.ungrouped(removed, in: self)

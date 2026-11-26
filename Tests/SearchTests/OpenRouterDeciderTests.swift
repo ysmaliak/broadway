@@ -449,7 +449,7 @@ final class DecisionsStub: URLProtocol {
         let host = "malformed-\(abs(body.hashValue)).test"
         DecisionsStub.answer(host) { _, _ in DecisionsStub.Reply(body: Data(body.utf8)) }
         let ask = AIGroupAsk(groups: [], loose: [Self.tab("One", "a.com")], fresh: [Self.tab("Two", "b.com")])
-        await #expect(throws: ProviderError.failed("The answer from ~typesafe/jev-latest couldn't be read")) {
+        await #expect(throws: OpenRouterTrouble.nonsense) {
             _ = try await Self.decider(host).decide(ask)
         }
     }
@@ -463,24 +463,24 @@ final class DecisionsStub: URLProtocol {
     }
 
     @Test(arguments: [
-        (401, ProviderError.refused("OpenRouter didn't accept the key")),
-        (402, ProviderError.planOut("The OpenRouter account is out of credits")),
-        (403, ProviderError.refused("OpenRouter didn't allow the key to ask")),
-        (404, ProviderError.failed("OpenRouter has no model called ~typesafe/jev-latest")),
-        (400, ProviderError.failed("~typesafe/jev-latest didn't take the question")),
-        (429, ProviderError.planOut("OpenRouter is holding back requests for now")),
-        (500, ProviderError.failed("OpenRouter couldn't answer just now")),
-        (503, ProviderError.failed("OpenRouter couldn't answer just now")),
-        (524, ProviderError.failed("OpenRouter took too long")),
+        (401, OpenRouterTrouble.refused),
+        (402, OpenRouterTrouble.noCredit),
+        (403, OpenRouterTrouble.refused),
+        (404, OpenRouterTrouble.nonsense),
+        (400, OpenRouterTrouble.nonsense),
+        (429, OpenRouterTrouble.busy),
+        (500, OpenRouterTrouble.nonsense),
+        (503, OpenRouterTrouble.busy),
+        (524, OpenRouterTrouble.busy),
     ])
-    func aRefusedRequestSaysWhyWithoutTheKey(status: Int, expected: ProviderError) async throws {
+    func aRefusedRequestSaysWhyWithoutTheKey(status: Int, expected: OpenRouterTrouble) async throws {
         let host = "status-\(status).test"
         DecisionsStub.answer(host, DecisionsStub.failing(status))
         let ask = AIGroupAsk(groups: [], loose: [Self.tab("One", "a.com")], fresh: [Self.tab("Two", "b.com")])
         do {
             _ = try await Self.decider(host).decide(ask)
             Issue.record("no error for \(status)")
-        } catch let error as ProviderError {
+        } catch let error as OpenRouterTrouble {
             #expect(error == expected)
             #expect(!(error.errorDescription ?? "").contains("test-key"))
             #expect(!(error.errorDescription ?? "").contains(";"))

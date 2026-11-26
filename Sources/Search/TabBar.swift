@@ -393,7 +393,7 @@ enum TabMenuItems {
             && browser.pinnedSplit(of: tab) == nil
             && tab.address.flatMap({ Browser.extensionHost(of: $0) }) == nil
         let others = Browsers.all.filter { $0 !== browser && $0.isOpen && !$0.isPopup && $0.isPrivate == browser.isPrivate }
-        let alone = browser.tabs.count < 2
+        let alone = browser.tabs.count <= browser.wholePairs(chosen).count
         let windows = tab.pin == nil && !tab.bench && !(others.isEmpty && alone)
         let route = tab.isWeb && !tab.shy && !tab.bench && !browser.isPrivate ? LinkRouter.site(of: tab.address) : nil
         let shared = tab.pin != nil && chosen.count == 1 && browser.prefs.showsSharedPins
@@ -403,14 +403,14 @@ enum TabMenuItems {
         if spaces { items.append(space(browser, chosen)) }
         if windows {
             if others.isEmpty {
-                items.append(action("New Window") { browser.moveToWindow(tab, nil) })
+                items.append(action("New Window") { browser.moveToWindow(chosen, nil) })
             } else {
                 var list: [NSMenuItem] = []
                 if !alone {
-                    list.append(action("New Window") { browser.moveToWindow(tab, nil) })
+                    list.append(action("New Window") { browser.moveToWindow(chosen, nil) })
                     list.append(.separator())
                 }
-                list += others.map { other in action(other.windowName) { browser.moveToWindow(tab, other) } }
+                list += others.map { other in action(other.windowName) { browser.moveToWindow(chosen, other) } }
                 items.append(submenu("Window", list))
             }
         }

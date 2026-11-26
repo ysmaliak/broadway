@@ -184,4 +184,44 @@ final class SpaceDraftTests {
         #expect(spots.last?.icon == TabIcon(emoji: "🌱"))
         #expect(spots.filter { $0.here }.count == 1)
     }
+
+    @Test func aFoldersSpaceMenuEndsWithNewSpaceWhichTakesTheFolderToTheSpaceMade() async throws {
+        let groups = browser.prefs.usesTabGroups
+        browser.prefs.usesTabGroups = true
+        browser.folded = true
+        defer { browser.folded = false; browser.prefs.usesTabGroups = groups }
+        let tab = openPage()
+        let folder = browser.addTabGroup(containing: tab)
+        browser.editingGroupID = nil
+        let menu = FolderMenus.menu(browser: browser, group: try #require(browser.tabGroups.first { $0.id == folder }))
+        let move = try #require(menu.items.first { $0.title == "Move" }?.submenu)
+        let places = try #require(move.items.first { $0.title == "Space" }?.submenu)
+        let item = try #require(places.items.last)
+        #expect(item.title == "New Space…")
+
+        places.performActionForItem(at: places.index(of: item))
+        browser.addSpace(named: "Garden")
+        let garden = try #require(browser.spaces.last)
+        made.append(garden.id)
+
+        try await until { self.browser.spaceID == garden.id }
+        #expect(browser.tabGroups.contains { $0.id == folder })
+        #expect(browser.tabs.contains { $0 === tab })
+        #expect(tab.groupID == folder)
+    }
+
+    @Test func aSpaceMadeWithoutAnIconWhileTheCardIsUpGetsAFreeIconNotTheDraftOne() async throws {
+        _ = openPage()
+        try await makeSpace()
+        browser.spaceDraftIcon = TabIcon(emoji: "🌱")
+        let free = browser.freeIcon
+
+        browser.addSpace(named: "Research")
+        let space = try #require(browser.spaces.last)
+        made.append(space.id)
+
+        #expect(space.name == "Research")
+        #expect(space.icon == free)
+        #expect(space.icon != TabIcon(emoji: "🌱"))
+    }
 }

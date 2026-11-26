@@ -517,7 +517,7 @@ final class AddressLaneView: NSView {
     }
 
     static func line(_ tab: Tab, prefs: Preferences) -> String? {
-        guard !tab.isBlank, let url = tab.shownURL else { return nil }
+        guard !tab.isBlank, let url = tab.page?.url ?? tab.saidAddress else { return nil }
         return text(url, full: prefs.fullAddress)
     }
 

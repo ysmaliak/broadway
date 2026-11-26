@@ -56,11 +56,12 @@ struct AIGroupTab: Equatable, Sendable {
         var out = self
         out.query = ""
         out.path = ""
+        out.by = ""
         return out
     }
 
     var remoteLine: String {
-        "\"\(title.replacingOccurrences(of: "\"", with: "'"))\" — \(host)" + (by.isEmpty ? "" : " — by \(by)")
+        "\"\(title.replacingOccurrences(of: "\"", with: "'"))\" — \(host)"
     }
 }
 

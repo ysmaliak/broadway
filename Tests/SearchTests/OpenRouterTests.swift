@@ -166,7 +166,7 @@ final class OpenRouterTests {
         return made
     }
 
-    @Test func theNamerSendsOnlyTitlesSiteNamesAuthorsAndTheSearch() async throws {
+    @Test func theNamerSendsOnlyTitlesSiteNamesAndTheSearch() async throws {
         let stub = OpenRouterStub.naming("Kyoto Trip")
         let namer = OpenRouterNamer(key: "sk-or-good-1", client: stub.client, report: { _ in })
         let ask = AIGroupNameAsk(tabs: kyoto, current: "Japan", currentEmoji: "🗾", emoji: true, query: "kyoto trip")
@@ -184,7 +184,7 @@ final class OpenRouterTests {
         #expect(messages.map { $0["role"] } == ["system", "user"])
         #expect(messages[1]["content"] == """
         Tabs:
-        - "The 10 best hotels in Kyoto - Booking.com" — booking.com — by Booking Writer
+        - "The 10 best hotels in Kyoto - Booking.com" — booking.com
         - "Kyoto Travel Guide - japan-guide.com" — japan-guide.com
         Every tab has: Kyoto
         Searched for: kyoto trip
@@ -192,7 +192,7 @@ final class OpenRouterTests {
         Current emoji: 🗾
         """)
         let everything = messages.compactMap { $0["content"] }.joined()
-        for private_ in ["city/jp", "kyoto.html", "aid=", "private-token", "secret", "e2158"] {
+        for private_ in ["city/jp", "kyoto.html", "aid=", "private-token", "secret", "e2158", "Booking Writer"] {
             #expect(!everything.contains(private_))
         }
     }
@@ -357,6 +357,19 @@ final class OpenRouterTests {
         #expect(groups.naming == .thisMac)
     }
 
+    @Test func noAuthorGoesToOpenRouterEvenOneReadEarlierOnThisMac() async throws {
+        let remote = DecidingStub(local: false, fails: false)
+        let chain = AIGroupDeciderChain(remote: remote, mac: nil, report: { _ in })
+        let fresh = tab("Pasta at home - YouTube", "https://www.youtube.com/watch?v=1", by: "Sam Rowe")
+        let loose = tab("Bread at home - YouTube", "https://www.youtube.com/watch?v=2", by: "Sam Rowe")
+
+        _ = try await chain.decide(AIGroupAsk(groups: [], loose: [loose], fresh: [fresh]))
+
+        let asked = try #require(remote.asks.first)
+        #expect((asked.fresh + asked.loose).map(\.by) == ["", ""])
+        #expect(AIGroupNameAsk(tabs: [fresh, loose], current: nil, currentEmoji: nil, emoji: false).bare.tabs.map(\.by) == ["", ""])
+    }
+
     @Test func groupingGoesToOpenRouterOnlyWithAKeyAndFallsBackToThisMac() async throws {
         _ = browser()
         let keys = useKey("sk-or-good-6")
@@ -398,7 +411,10 @@ final class OpenRouterTests {
             (decider.reason(status: 403), .refused),
             (decider.reason(status: 402), .noCredit),
             (decider.reason(status: 429), .busy),
-            (decider.reason(status: 503), .unreachable),
+            (decider.reason(status: 503), .busy),
+            (decider.reason(status: 404), .nonsense),
+            (decider.reason(status: 400), .nonsense),
+            (decider.reason(status: 500), .nonsense),
             (OpenRouterDecider.reason(URLError(.notConnectedToInternet)), .unreachable),
             (ProviderError.failed("The answer from \(OpenRouterModels.grouping) couldn't be read"), .nonsense),
         ]
@@ -497,7 +513,7 @@ final class OpenRouterTests {
         #expect(!AIGroupWords.line(mac: true, key: true, remoteDecides: false).contains("Nothing leaves it"))
         #expect(AIGroupWords.line(mac: false, key: false, remoteDecides: false) == AIGroupWords.needs)
         #expect(AIGroupWords.keyLine(state: .saved, trouble: nil, remoteDecides: true)
-                == "Tab titles, site names, authors, folder names and searches go to OpenRouter, never addresses or pages")
+                == "Tab titles, site names, folder names and searches go to OpenRouter, never addresses, authors or pages")
         #expect(AIGroupWords.keyLine(state: .saved, trouble: "Your OpenRouter account is out of credit", remoteDecides: true)
                 == "Your OpenRouter account is out of credit")
         let row = SettingsIndex.item("groups.openrouter")

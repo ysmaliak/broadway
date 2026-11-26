@@ -310,7 +310,7 @@ struct UndoArrangementTests {
         }
     }
 
-    @Test func ungroupingAFolderBringsItBackWithItsTabs() throws {
+    @Test func removingAFolderKeepingItsTabsUndoesAsRemoveFolderAndBringsItBackWithItsTabs() throws {
         try withBrowser(groups: true) { browser, tabs, undo in
             let folder = browser.quietly { browser.addTabGroup(containing: tabs[1]) }
             browser.quietly {
@@ -323,7 +323,7 @@ struct UndoArrangementTests {
 
             act(undo) { browser.removeTabGroup(folder) }
 
-            #expect(undo.undoMenuItemTitle == "Undo Ungroup")
+            #expect(undo.undoMenuItemTitle == "Undo Remove Folder")
             #expect(browser.tabGroups.isEmpty)
 
             undo.undo()

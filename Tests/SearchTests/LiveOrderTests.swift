@@ -267,6 +267,25 @@ final class LiveOrderTests {
         #expect(titles().contains("Restore Automatic Order"))
     }
 
+    @Test func theColumnsRemoveFolderAsksTheQuestionSettingsAsksAndKeepsTheFolderUntilTheAnswerIsYes() throws {
+        let made = folder()
+        fill(made, [pull(1)])
+        defer { Ask.testing = nil; Ask.asked = [] }
+        let menu = FolderMenus.menu(browser: browser, group: try #require(browser.tabGroups.first { $0.id == made.id }))
+        let item = try #require(menu.items.first { $0.title == "Remove Folder…" })
+        let question = SettingsQuestion.liveFolder("Lantern", site: made.source.siteName)
+
+        Ask.testing = false
+        Ask.asked = []
+        NSApp.sendAction(try #require(item.action), to: item.target, from: item)
+        #expect(Ask.asked == [question.title])
+        #expect(LiveFolders.shared.folder(made.id) != nil)
+
+        Ask.testing = true
+        NSApp.sendAction(try #require(item.action), to: item.target, from: item)
+        #expect(LiveFolders.shared.folder(made.id) == nil)
+    }
+
     @Test func theKeptOrderForgetsTheOldestGoneItemsPastItsLimit() {
         let gone = (0..<LiveOrder.kept).map { "github:harbor/old#\($0)" }
         let items = [pull(1), pull(2)]

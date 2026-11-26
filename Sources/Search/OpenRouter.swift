@@ -29,7 +29,7 @@ enum OpenRouterTrouble: Error, LocalizedError, Equatable {
         case 200..<300: return nil
         case 401, 403: return .refused
         case 402: return .noCredit
-        case 408, 429, 502, 503, 504: return .busy
+        case 408, 429, 502, 503, 504, 524: return .busy
         default: return .nonsense
         }
     }

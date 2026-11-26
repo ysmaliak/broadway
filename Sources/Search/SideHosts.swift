@@ -469,13 +469,20 @@ enum FolderMenus {
                 .action(LinkCopy.title(style, count: links), run: { browser.copyFolderLinks(group.id, as: style) })
             }))
         }
-        let spaces = browser.showsSpaces && browser.spaces.count > 1
+        let spaces = browser.showsSpaces
         if spaces || group.parent != nil {
             var moves: [KitMenuItem] = []
             if spaces {
-                moves.append(.submenu("Space", browser.spaces.filter { $0.id != browser.spaceID }.map { space in
+                var places: [KitMenuItem] = browser.spaces.filter { $0.id != browser.spaceID }.map { space in
                     .action(space.name, run: { browser.move(group: group.id, toSpace: space.id) })
+                }
+                if !places.isEmpty { places.append(.separator) }
+                places.append(.action("New Space…", symbol: MenuSymbol.newSpace, run: {
+                    browser.askForSpace { space in
+                        browser.move(group: group.id, toSpace: space.id) { browser.switchSpace(to: space.id) }
+                    }
                 }))
+                moves.append(.submenu("Space", places))
             }
             if group.parent != nil {
                 moves.append(.action("Out of Folder", run: {
@@ -549,7 +556,11 @@ enum FolderMenus {
             items.append(.action("Restore Folder Icon", run: { browser.setIcon(nil, of: .folder(id)) }))
         }
         items.append(.separator)
-        items.append(.action("Remove Folder", symbol: MenuSymbol.close, run: { live.remove(id) }))
+        items.append(.action("Remove Folder…", symbol: MenuSymbol.close, run: {
+            SettingsQuestion.liveFolder(live.folder(id)?.name ?? folder.name, site: folder.source.siteName).ask(over: browser.window) {
+                live.remove(id)
+            }
+        }))
         return items
     }
 }

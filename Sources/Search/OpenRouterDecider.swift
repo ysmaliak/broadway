@@ -467,9 +467,7 @@ final class OpenRouterDecider: AIGroupDecider {
         }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard status == 200 else { throw reason(status: status) }
-        guard let heard = Self.read(data, asked: Set(body.questions.keys)) else {
-            throw ProviderError.failed("The answer from \(model) couldn't be read")
-        }
+        guard let heard = Self.read(data, asked: Set(body.questions.keys)) else { throw OpenRouterTrouble.nonsense }
         return heard
     }
 
@@ -506,18 +504,8 @@ final class OpenRouterDecider: AIGroupDecider {
         }
     }
 
-    func reason(status: Int) -> ProviderError {
-        switch status {
-        case 401: return .refused("OpenRouter didn't accept the key")
-        case 402: return .planOut("The OpenRouter account is out of credits")
-        case 403: return .refused("OpenRouter didn't allow the key to ask")
-        case 404: return .failed("OpenRouter has no model called \(model)")
-        case 408, 524: return .failed("OpenRouter took too long")
-        case 429: return .planOut("OpenRouter is holding back requests for now")
-        case 400, 413, 422: return .failed("\(model) didn't take the question")
-        case 500...599: return .failed("OpenRouter couldn't answer just now")
-        default: return .failed("OpenRouter answered with error \(status)")
-        }
+    func reason(status: Int) -> OpenRouterTrouble {
+        OpenRouterTrouble.of(status: status) ?? .nonsense
     }
 
     private func note(_ request: Request, _ heard: Heard) {
