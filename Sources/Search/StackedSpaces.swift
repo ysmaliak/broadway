@@ -516,6 +516,7 @@ final class StackedHeaderView: NSView {
     private let name = KitLabel("", font: .systemFont(ofSize: 15, weight: .semibold))
     private let chip = KitBox(fill: KitColor.ink.withAlphaComponent(0.07), corners: .capsule)
     private let tally = KitLabel("", font: .monospacedDigitSystemFont(ofSize: 11, weight: .medium), color: KitColor.muted)
+    private var carried: (NSRect, NSRect)?
     private let doors = NSView()
     private let add = KitButton(.plain(press: 0.86))
     private let more = KitButton(.plain(press: 0.86))
@@ -602,6 +603,10 @@ final class StackedHeaderView: NSView {
         x += shown.width + 8
         chip.frame = kitSnap(NSRect(x: x, y: row.minY + (row.height - 17) / 2, width: chipWidth, height: 17))
         tally.frame = kitSnap(NSRect(x: 6, y: (17 - chipText.height) / 2, width: chipText.width, height: chipText.height))
+        if let was = carried {
+            carried = nil
+            tally.rollCarry(chip, from: was.0, or: was.1)
+        }
         doors.frame = NSRect(x: row.maxX - 3 - 72, y: row.minY + (row.height - 24) / 2, width: 72, height: 24)
         for (index, button) in [add, more, turn].enumerated() {
             button.frame = NSRect(x: CGFloat(index) * 24, y: 0, width: 24, height: 24)
@@ -717,7 +722,12 @@ final class StackedHeaderView: NSView {
     private func refreshNow() {
         let name = space.name
         if mark.icon != space.shownIcon { mark.icon = space.shownIcon }
+        let was = chip.window == nil ? nil : (chip.convert(chip.bounds, to: nil), chip.frame)
         tally.roll("\(count)", for: space.id)
+        if tally.rolled?.busy == true {
+            carried = was
+            needsLayout = true
+        }
         add.setAccessibilityLabel("New Tab in \(name)")
         add.toolTip = "New Tab in \(name)"
         more.setAccessibilityLabel("\(name) Menu")

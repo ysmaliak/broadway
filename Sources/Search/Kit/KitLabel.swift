@@ -59,6 +59,7 @@ final class KitLabel: NSView {
     override func layout() {
         super.layout()
         updateFade()
+        placeRoll()
     }
 
     override func draw(_ dirtyRect: NSRect) {

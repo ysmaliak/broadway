@@ -123,6 +123,7 @@ final class LabelRollTests {
         word.roll("10m left", for: "call")
 
         word.roll("9m left", for: "call")
+        word.window?.contentView?.layoutSubtreeIfNeeded()
 
         #expect(word.text == "9m left")
         #expect((coming(word).first.flatMap(rise) ?? 0) < 0)
@@ -165,6 +166,130 @@ final class LabelRollTests {
         #expect([word.text, loose.text, hidden.text, away.text] == ["12m left", "4m left", "4m left", "4m left"])
     }
 
+    private func centred() -> (NSView, PinMeetingBadgeView) {
+        let badge = PinMeetingBadgeView(browser: nil)
+        let host = BadgeHost(badge)
+        host.frame = NSRect(x: 20, y: 10, width: 120, height: 30)
+        let shown = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 60), styleMask: .borderless, backing: .buffered, defer: false)
+        shown.isReleasedWhenClosed = false
+        shown.contentView?.wantsLayer = true
+        shown.contentView?.addSubview(host)
+        windows.append(shown)
+        return (host, badge)
+    }
+
+    private func show(_ text: String, on badge: PinMeetingBadgeView, in host: NSView) {
+        badge.show(.countdown(text), title: "", for: "meeting")
+        host.needsLayout = true
+        host.window?.contentView?.layoutSubtreeIfNeeded()
+    }
+
+    private func place(of index: Int, in word: KitLabel) -> CGFloat {
+        word.convert(NSPoint(x: KitLabel.offsets(word.runs)[index], y: 0), to: nil).x
+    }
+
+    private func capsule(_ badge: PinMeetingBadgeView) -> KitBox? {
+        badge.subviews.compactMap { $0 as? KitBox }.first { $0.layer?.animation(forKey: "roll.bounds") != nil }
+    }
+
+    @Test(arguments: [("9m", "10m"), ("10m", "9m")])
+    func aCentredBadgeStartsItsKeptCharactersWhereTheyWereAndGrowsItsCapsuleWithTheRoll(_ old: String, _ new: String) throws {
+        let (host, badge) = centred()
+        show(old, on: badge, in: host)
+        let word = try #require(badge.content as? KitLabel)
+        let before = place(of: old.count - 1, in: word)
+        let first = place(of: 0, in: word)
+        let oldRuns = word.runs
+        let wide = badge.frame.width
+
+        show(new, on: badge, in: host)
+        let kept = pieces(word).filter { $0.layer?.animation(forKey: "glide.position") != nil && $0.layer?.animation(forKey: "glide.opacity") == nil }
+        let slide = try #require(kept.first?.layer?.animation(forKey: "glide.position") as? CABasicAnimation)
+        let from = try #require((slide.fromValue as? NSValue)?.pointValue)
+        let to = try #require((slide.toValue as? NSValue)?.pointValue)
+        let began = place(of: new.count - 1, in: word) + (from.x - to.x)
+        let ground = try #require(capsule(badge))
+        let grow = try #require(ground.layer?.animation(forKey: "roll.bounds") as? CABasicAnimation)
+        let grewFrom = try #require((grow.fromValue as? NSValue)?.rectValue)
+
+        #expect(kept.count == 1)
+        #expect(abs(began - before) < 0.5)
+        #expect(abs((leaving(word).first.map { start(of: 0, in: $0, runs: oldRuns) } ?? .infinity) - first) < 0.5)
+        #expect(abs(grow.duration - slide.duration) < 0.0001)
+        #expect(abs(grewFrom.width - wide) < 0.5)
+        #expect(abs(ground.frame.width - badge.frame.width) < 0.5)
+        #expect(ground.layer?.animation(forKey: "roll.position") != nil)
+    }
+
+    private func start(of index: Int, in piece: NSView, runs: [KitLabel.Run]) -> CGFloat {
+        guard let copy = piece.subviews.first else { return .infinity }
+        return copy.convert(NSPoint(x: KitLabel.offsets(runs)[index], y: 0), to: nil).x
+    }
+
+    @Test func aChipAnchoredOnItsRightRollsItsLeavingDigitOutFromWhereItWasAndGrowsWithTheRoll() throws {
+        let chip = SideCountView()
+        let host = ChipHost(chip)
+        host.frame = NSRect(x: 20, y: 10, width: 120, height: 30)
+        let shown = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 60), styleMask: .borderless, backing: .buffered, defer: false)
+        shown.isReleasedWhenClosed = false
+        shown.contentView?.wantsLayer = true
+        shown.contentView?.addSubview(host)
+        windows.append(shown)
+        chip.count = 9
+        chip.fold(true, curve: .none)
+        host.needsLayout = true
+        shown.contentView?.layoutSubtreeIfNeeded()
+        let tally = try #require(chip.subviews.compactMap { $0 as? KitBox }.first?.subviews.compactMap { $0 as? KitLabel }.first)
+        let was = place(of: 0, in: tally)
+        let oldRuns = tally.runs
+        let wide = chip.frame.width
+
+        chip.count = 10
+        host.needsLayout = true
+        shown.contentView?.layoutSubtreeIfNeeded()
+        let gone = try #require(leaving(tally).first)
+        let box = try #require(chip.subviews.compactMap { $0 as? KitBox }.first)
+        let grow = try #require(box.layer?.animation(forKey: "roll.bounds") as? CABasicAnimation)
+        let grewFrom = try #require((grow.fromValue as? NSValue)?.rectValue)
+
+        #expect(chip.frame.width > wide)
+        #expect(abs(start(of: 0, in: gone, runs: oldRuns) - was) < 0.5)
+        #expect(abs(grewFrom.width - wide) < 0.5)
+        #expect(coming(tally).count == 1)
+    }
+
+    @Test func aLabelMovedWithItsRowRidesAlongInsteadOfStayingBehind() {
+        let word = label()
+        word.roll("4", for: "folder")
+        word.window?.contentView?.layoutSubtreeIfNeeded()
+        word.roll("5", for: "folder")
+        let made = pieces(word).map(\.frame)
+
+        word.setFrameOrigin(NSPoint(x: word.frame.minX + 30, y: word.frame.minY + 30))
+        word.window?.contentView?.layoutSubtreeIfNeeded()
+
+        #expect(!made.isEmpty)
+        #expect(pieces(word).map(\.frame) == made)
+        #expect(pieces(word).allSatisfy { piece in
+            guard let move = piece.layer?.animation(forKey: "glide.position") as? CABasicAnimation,
+                  let from = (move.fromValue as? NSValue)?.pointValue, let to = (move.toValue as? NSValue)?.pointValue else { return true }
+            return abs(from.x - to.x) < 0.01
+        })
+    }
+
+    @Test func underReduceMotionACentredBadgeChangesAtOnce() throws {
+        Store.settings.set(true, forKey: "motion.testReduced")
+        let (host, badge) = centred()
+        show("9m", on: badge, in: host)
+
+        show("10m", on: badge, in: host)
+        let word = try #require(badge.content as? KitLabel)
+
+        #expect(word.text == "10m")
+        #expect(word.rolled?.busy == false)
+        #expect(capsule(badge) == nil)
+    }
+
     @Test func theSameTextAgainChangesNothing() {
         let word = label()
         word.roll("3", for: "folder")
@@ -175,5 +300,49 @@ final class LabelRollTests {
 
         #expect(rolling > 0)
         #expect(pieces(word).count == rolling)
+    }
+}
+
+private final class BadgeHost: NSView {
+    let badge: PinMeetingBadgeView
+
+    init(_ badge: PinMeetingBadgeView) {
+        self.badge = badge
+        super.init(frame: .zero)
+        wantsLayer = true
+        addSubview(badge)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var isFlipped: Bool { true }
+
+    override func layout() {
+        super.layout()
+        let size = badge.intrinsicContentSize
+        badge.frame = NSRect(x: ((bounds.width - size.width) / 2 * 2).rounded() / 2, y: 4, width: size.width, height: size.height)
+    }
+}
+
+private final class ChipHost: NSView {
+    let chip: SideCountView
+
+    init(_ chip: SideCountView) {
+        self.chip = chip
+        super.init(frame: .zero)
+        wantsLayer = true
+        addSubview(chip)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var isFlipped: Bool { true }
+
+    override func layout() {
+        super.layout()
+        let width = chip.width
+        chip.kitSetFrame(NSRect(x: bounds.width - 10 - width, y: 6, width: width, height: SideCountView.height))
     }
 }

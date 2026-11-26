@@ -454,6 +454,7 @@ final class PinMeetingBadgeView: KitButton {
     private let ground = KitBox(fill: nil, corners: .capsule)
     private let word = KitLabel("", font: PinMeetingPlaces.font, color: .white)
     private var label: Meeting.PinLabel = .join
+    private var carried: (NSRect, NSRect)?
     var tile: CGFloat = .greatestFiniteMagnitude { didSet { if tile != oldValue { pad() } } }
 
     init(browser: Browser?) {
@@ -500,7 +501,9 @@ final class PinMeetingBadgeView: KitButton {
 
     private func say(_ text: String, _ color: NSColor, for key: AnyHashable?) {
         word.color = color
+        let was = ground.window == nil ? nil : (ground.convert(ground.bounds, to: nil), ground.frame)
         word.roll([KitLabel.Run(text: text, font: PinMeetingPlaces.font, color: color)], for: key)
+        carried = word.rolled?.busy == true ? was : nil
     }
 
     private func pad() {
@@ -518,6 +521,10 @@ final class PinMeetingBadgeView: KitButton {
     override func layout() {
         super.layout()
         ground.frame = bounds
+        if let was = carried {
+            carried = nil
+            word.rollCarry(ground, from: was.0, or: was.1)
+        }
     }
 
     override func viewDidChangeEffectiveAppearance() {
