@@ -43,7 +43,7 @@ extension Browser {
             return partner
         }
         if tab.agent {
-            return tabs.filter { lands($0) && !$0.asleep }.max { $0.touched < $1.touched } ?? tabs.first(where: lands)
+            return lastLooked(besides: tab, without: gone) ?? tabs.first(where: lands)
         }
         let order = landingOrder(around: tab)
         if let back = returning(from: tab, in: order, lands: lands) { return back }
@@ -53,6 +53,16 @@ extension Browser {
             return same
         }
         return nearest(in: row, at: at, where: lands) ?? tabs.first(where: lands)
+    }
+
+    func landing(after tab: Tab, at index: Int, partner: Tab?) -> Tab? {
+        partner ?? successor(of: tab) ?? (tabs.count > 1 ? tabs[index == tabs.count - 1 ? index - 1 : index + 1] : nil)
+    }
+
+    func lastLooked(besides tab: Tab, without gone: Set<Tab.ID> = [], bench: Bool = false, loose: Bool = false) -> Tab? {
+        let others = tabs.filter { $0.id != tab.id && !gone.contains($0.id) && !$0.asleep && !$0.agent && (bench || !$0.bench) }
+        let pool = loose && others.contains(where: { $0.pin == nil }) ? others.filter { $0.pin == nil } : others
+        return pool.max { $0.touched < $1.touched }
     }
 
     func returning(from tab: Tab, without gone: Set<Tab.ID> = []) -> Tab? {

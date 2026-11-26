@@ -25,6 +25,21 @@ struct ExtensionRowDetailTests {
         #expect(Extensions.updateCheck(in: page) == nil)
     }
 
+    @Test func theUpdateCheckAsksTheStoreForThisExtensionsVersion() throws {
+        let url = try #require(Crx.updateCheckURL(id: "abcdefghijklmnopabcdefghijklmnop", version: "1.2.3"))
+        let parts = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+
+        #expect(parts.scheme == "https")
+        #expect(parts.host == "clients2.google.com")
+        #expect(parts.path == "/service/update2/crx")
+        #expect(parts.queryItems == [
+            URLQueryItem(name: "response", value: "updatecheck"),
+            URLQueryItem(name: "prodversion", value: Crx.chromeVersion),
+            URLQueryItem(name: "acceptformat", value: "crx3"),
+            URLQueryItem(name: "x", value: "id=abcdefghijklmnopabcdefghijklmnop&v=1.2.3&uc"),
+        ])
+    }
+
     @Test func aStoreReplySayingNoUpdateIsAnAnswer() {
         let reply = Data(#"<?xml version="1.0"?><gupdate><app appid="abc" status="ok"><updatecheck status="noupdate"/></app></gupdate>"#.utf8)
 

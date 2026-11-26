@@ -355,42 +355,9 @@ enum Vault {
 
     // MARK: - taking in an export
 
-    /// A CSV as Google Password Manager, Chrome or Dia write it: name, url,
-    /// username, password, note. Read once, put in the keychain, and the file
-    /// is yours to delete — this never keeps a copy of it.
-    static func take(csv text: String) -> (kept: Int, skipped: Int) {
-        var rows = parse(csv: text)
-        guard !rows.isEmpty else { return (0, 0) }
-
-        let header = rows.removeFirst().map { $0.lowercased() }
-        func column(_ names: [String]) -> Int? {
-            header.firstIndex { names.contains($0) }
-        }
-        guard let urlAt = column(["url", "login_uri", "website", "site"]),
-              let userAt = column(["username", "login_username", "user", "email"]),
-              let passAt = column(["password", "login_password"])
-        else { return (0, rows.count) }
-
-        var kept = 0, skipped = 0
-        for row in rows {
-            guard row.count > max(urlAt, max(userAt, passAt)) else {
-                skipped += 1
-                continue
-            }
-            let (host, clear, port) = address(of: row[urlAt])
-            let password = row[passAt]
-            guard !host.isEmpty, !password.isEmpty else {
-                skipped += 1
-                continue
-            }
-            save(host: host, user: row[userAt], password: password, clear: clear, port: port) ? (kept += 1) : (skipped += 1)
-        }
-        return (kept, skipped)
-    }
-
     /// Called on the import worker. Parsing finishes before any keychain
     /// writes; cancellation between writes preserves an exact partial count.
-    static func take(csv text: String, control: ImportFile.Control) -> (kept: Int, skipped: Int) {
+    static func take(csv text: String, control: ImportFile.Control = ImportFile.Control()) -> (kept: Int, skipped: Int) {
         guard !control.isCancelled else { return (0, 0) }
         control.report(.init(message: "Reading passwords…", completed: 0))
         var rows = parse(csv: text, control: control)

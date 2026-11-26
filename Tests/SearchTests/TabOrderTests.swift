@@ -327,6 +327,38 @@ final class TabOrderTests {
         #expect(on == t[1].id)
     }
 
+    @Test func aPinPutDownGoesToALooseTabBeforeAPinLookedAtLater() {
+        let t = loaded("p", "q", "a")
+        browser.pin(t[0])
+        browser.pin(t[1])
+        browser.select(t[2])
+        browser.select(t[1])
+        browser.select(t[0])
+        browser.close(t[0])
+        #expect(on == t[2].id)
+    }
+
+    @Test func closingTheLastTabBesideOnlyAnAgentsTabLeavesANewOne() throws {
+        let t = row("a", "agent")
+        t[1].agent = true
+        browser.select(t[0])
+        browser.close(t[0])
+        let left = try #require(browser.active)
+        #expect(left.isBlank)
+        #expect(left.id != t[1].id)
+    }
+
+    @Test func movingTheSelectedTabAwayFromOnlyAnAgentsTabSelectsIt() {
+        let t = row("a", "agent")
+        t[1].agent = true
+        browser.select(t[0])
+        let other = Browser(record: WindowRecord())
+        other.leaveFiles()
+        defer { other.closeAll() }
+        browser.moveToWindow(t[0], other)
+        #expect(on == t[1].id)
+    }
+
     @Test func steppingPastTheEndsGoesRound() {
         let t = row("a", "b", "c")
         browser.select(t[2])

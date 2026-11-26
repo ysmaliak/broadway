@@ -1,3 +1,4 @@
+import BroadwayCLI
 import Foundation
 
 final class LineConnection {
@@ -193,16 +194,7 @@ final class UnixLineServer {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { return false }
         defer { close(fd) }
-        var address = sockaddr_un()
-        address.sun_family = sa_family_t(AF_UNIX)
-        let room = MemoryLayout.size(ofValue: address.sun_path)
-        guard path.utf8.count < room else { return false }
-        withUnsafeMutablePointer(to: &address.sun_path) { sun in
-            sun.withMemoryRebound(to: CChar.self, capacity: room) { _ = strlcpy($0, path, room) }
-        }
-        return withUnsafePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
-        } == 0
+        return UnixAddress.call(fd, path, { Darwin.connect($0, $1, $2) }) == 0
     }
 
     private func take(_ fd: Int32) {
@@ -221,22 +213,13 @@ final class UnixLineServer {
         unlink(path)
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { return nil }
-        var address = sockaddr_un()
-        address.sun_family = sa_family_t(AF_UNIX)
-        let room = MemoryLayout.size(ofValue: address.sun_path)
-        guard path.utf8.count < room else {
+        let mask = umask(0o177)
+        let bound = UnixAddress.call(fd, path, { bind($0, $1, $2) })
+        umask(mask)
+        guard let bound else {
             close(fd)
             return nil
         }
-        withUnsafeMutablePointer(to: &address.sun_path) { sun in
-            sun.withMemoryRebound(to: CChar.self, capacity: room) { _ = strlcpy($0, path, room) }
-        }
-        let size = socklen_t(MemoryLayout<sockaddr_un>.size)
-        let mask = umask(0o177)
-        let bound = withUnsafePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, size) }
-        }
-        umask(mask)
         guard bound == 0, chmod(path, 0o600) == 0, listen(fd, 16) == 0 else {
             close(fd)
             unlink(path)

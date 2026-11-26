@@ -1,4 +1,5 @@
 import AppKit
+import BroadwayCLI
 import Combine
 import AuthenticationServices
 import WebKit
@@ -163,19 +164,7 @@ final class Bench {
 
         let fd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { return }
-        var address = sockaddr_un()
-        address.sun_family = sa_family_t(AF_UNIX)
-        let room = MemoryLayout.size(ofValue: address.sun_path)
-        guard path.utf8.count < room else { close(fd); return }
-        withUnsafeMutablePointer(to: &address.sun_path) { sun in
-            sun.withMemoryRebound(to: CChar.self, capacity: room) { bytes in
-                _ = strlcpy(bytes, path, room)
-            }
-        }
-        let size = socklen_t(MemoryLayout<sockaddr_un>.size)
-        let bound = withUnsafePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, size) }
-        }
+        guard let bound = UnixAddress.call(fd, path, { bind($0, $1, $2) }) else { close(fd); return }
         guard bound == 0, chmod(path, 0o600) == 0, listen(fd, 8) == 0 else {
             close(fd)
             unlink(path)

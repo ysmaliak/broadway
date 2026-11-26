@@ -105,7 +105,7 @@ extension Browser {
 
     func settle(on tab: Tab) {
         if !tab.agent { return select(tab) }
-        if let back = tabs.filter({ !$0.agent && !$0.asleep }).max(by: { $0.touched < $1.touched }) {
+        if let back = lastLooked(besides: tab, bench: true) {
             select(back)
         } else {
             newTab()

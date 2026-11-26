@@ -96,6 +96,17 @@ enum Crx {
         return parts.url!
     }
 
+    static func updateCheckURL(id: String, version: String) -> URL? {
+        var parts = URLComponents(string: "https://clients2.google.com/service/update2/crx")!
+        parts.queryItems = [
+            URLQueryItem(name: "response", value: "updatecheck"),
+            URLQueryItem(name: "prodversion", value: chromeVersion),
+            URLQueryItem(name: "acceptformat", value: "crx3"),
+            URLQueryItem(name: "x", value: "id=\(id)&v=\(version)&uc"),
+        ]
+        return parts.url
+    }
+
     static func fetch(_ id: String) async throws -> Data {
         var request = URLRequest(url: downloadURL(for: id))
         request.timeoutInterval = 60

@@ -55,6 +55,35 @@ struct ExtensionPopupSizingTests {
         #expect(size == [800, 600])
     }
 
+    @Test func laterMeasuresFollowAWidthThePageNamesAndNoOther() async throws {
+        let (plain, plainWindow) = try await page("""
+            html { overflow-y: scroll; } ::-webkit-scrollbar { width: 15px; }
+            footer { width: 400px; padding: 10px; }
+            """, "<footer>Translation options</footer>")
+        defer { plainWindow.close() }
+        let unnamed = try #require(try await plain.evaluateJavaScript(ExtensionPopup.following) as? [Double])
+        #expect(unnamed.count == 3)
+        #expect(unnamed[0] == 435)
+        #expect(unnamed[2] == 0)
+
+        let (web, window) = try await page("""
+            html { width: 360px; overflow-y: scroll; } ::-webkit-scrollbar { width: 15px; }
+            """, "<p>Vault</p>")
+        defer { window.close() }
+        _ = try await web.evaluateJavaScript("document.documentElement.style.width = '280px'")
+        let named = try #require(try await web.evaluateJavaScript(ExtensionPopup.following) as? [Double])
+        #expect(named[0] == 295)
+        #expect(named[2] == 295)
+        _ = try await measure(web)
+        let remembered = try #require(try await web.evaluateJavaScript(ExtensionPopup.following) as? [Double])
+        #expect(remembered[2] == 295)
+        _ = try await web.evaluateJavaScript("window.__searchSizing.w = 0")
+        let forgotten = try #require(try await web.evaluateJavaScript(ExtensionPopup.following) as? [Double])
+        #expect(forgotten[2] == 0)
+        let style = try await web.evaluateJavaScript("document.documentElement.style.cssText") as? String
+        #expect(style == "width: 280px;")
+    }
+
     private func page(_ css: String, _ body: String, doctype: Bool = true) async throws -> (WKWebView, NSWindow) {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)

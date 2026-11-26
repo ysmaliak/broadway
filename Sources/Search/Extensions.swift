@@ -123,6 +123,7 @@ final class Extensions: NSObject {
     /// then are read as the new ones.
     static let scheme = "chrome-extension"
     static let formerScheme = "webkit-extension"
+    static let schemes: Set<String> = [scheme, formerScheme]
 
     static func current(_ url: URL) -> URL {
         guard url.scheme == formerScheme, var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
@@ -1211,14 +1212,7 @@ final class Extensions: NSObject {
         // Permission approval can wait past the next check; its staging folder must stay its own.
         guard updating.insert(item.id).inserted else { return }
         defer { updating.remove(item.id) }
-        var parts = URLComponents(string: "https://clients2.google.com/service/update2/crx")!
-        parts.queryItems = [
-            URLQueryItem(name: "response", value: "updatecheck"),
-            URLQueryItem(name: "prodversion", value: Crx.chromeVersion),
-            URLQueryItem(name: "acceptformat", value: "crx3"),
-            URLQueryItem(name: "x", value: "id=\(item.id)&v=\(item.version)&uc"),
-        ]
-        guard let url = parts.url, let (data, _) = try? await URLSession.shared.data(from: url),
+        guard let url = Crx.updateCheckURL(id: item.id, version: item.version), let (data, _) = try? await URLSession.shared.data(from: url),
               let check = Extensions.updateCheck(in: data) else {
             Store.settings.removeObject(forKey: "extensions.checked")
             return
@@ -1293,13 +1287,20 @@ final class Extensions: NSObject {
     /// APIs Search answers for it (history, bookmarks…) — an update that
     /// adds any of them is asked about again.
     static func grants(_ found: WKWebExtension, in folder: URL) -> [String] {
-        let added = Set((try? JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent(".search-added")))) as? [String] ?? [])
-        let declared = ((try? JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("manifest.json")))) as? [String: Any])?["permissions"] as? [String] ?? []
+        let added = searchAdded(in: folder), declared = declaredPermissions(in: folder)
         let ours = Set(Extensions.searchAnswered.map(\.0))
         var out = Set(found.requestedPermissions.map(\.rawValue).filter { !added.contains($0) })
         out.formUnion(found.allRequestedMatchPatterns.map { "site:" + $0.string })
         out.formUnion(declared.filter { ours.contains($0) && !added.contains($0) }.map { "search:" + $0 })
         return out.sorted()
+    }
+
+    static func searchAdded(in folder: URL) -> Set<String> {
+        Set((try? JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent(".search-added")))) as? [String] ?? [])
+    }
+
+    static func declaredPermissions(in folder: URL) -> Set<String> {
+        Set(((try? JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("manifest.json")))) as? [String: Any])?["permissions"] as? [String] ?? [])
     }
 
     /// Extension pages, as a pattern names them: another extension's
@@ -1308,7 +1309,7 @@ final class Extensions: NSObject {
     /// the question said; its own pages are its own without asking.
     nonisolated static func reachesExtensions(_ pattern: WKWebExtension.MatchPattern) -> Bool {
         guard let scheme = pattern.scheme?.lowercased() else { return false }
-        return [Extensions.scheme, Extensions.formerScheme, "webkit-extension"].contains(scheme)
+        return Extensions.schemes.contains(scheme)
     }
 
     /// Files on this Mac aren't an extension's to reach either, whatever its
@@ -1360,7 +1361,7 @@ final class Extensions: NSObject {
                 context.setPermissionStatus(.grantedExplicitly, for: web)
             }
         }
-        for scheme in Set([Extensions.scheme, Extensions.formerScheme, "webkit-extension"]) {
+        for scheme in Extensions.schemes {
             if let pages = try? WKWebExtension.MatchPattern(string: "\(scheme)://*/*") {
                 context.setPermissionStatus(.deniedExplicitly, for: pages)
             }
@@ -1414,8 +1415,7 @@ final class Extensions: NSObject {
     /// (ExtensionShims.prepare), and notes it in .search-added, so what it
     /// added there doesn't count as asked.
     static func asksForNative(_ context: WKWebExtensionContext) -> Bool {
-        let folder = Extensions.folder(for: context.uniqueIdentifier)
-        let added = Set((try? JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent(".search-added")))) as? [String] ?? [])
+        let added = searchAdded(in: Extensions.folder(for: context.uniqueIdentifier))
         let required = context.webExtension.requestedPermissions.contains(.nativeMessaging) && !added.contains("nativeMessaging")
         return required || context.webExtension.optionalPermissions.contains(.nativeMessaging)
     }
@@ -1424,7 +1424,7 @@ final class Extensions: NSObject {
     /// asking — which it never gets to see into.
     static func othersPage(_ url: URL?, for context: WKWebExtensionContext) -> Bool {
         guard let url, let scheme = url.scheme?.lowercased(),
-              [Extensions.scheme, Extensions.formerScheme, "webkit-extension"].contains(scheme)
+              Extensions.schemes.contains(scheme)
         else { return false }
         return url.host()?.lowercased() != context.uniqueIdentifier.lowercased()
     }
@@ -1446,8 +1446,7 @@ final class Extensions: NSObject {
     static func describe(_ found: WKWebExtension, in folder: URL) -> [String] {
         var out: [String] = []
         // Leaving out what Search itself added to the manifest.
-        let added = Set((try? JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent(".search-added")))) as? [String] ?? [])
-        let declared = Set(((try? JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("manifest.json")))) as? [String: Any])?["permissions"] as? [String] ?? [])
+        let added = searchAdded(in: folder), declared = declaredPermissions(in: folder)
         let patterns = found.allRequestedMatchPatterns
         if patterns.contains(where: { $0.matchesAllHosts || $0.matchesAllURLs }) {
             out.append("Read and change everything on every website")
@@ -1765,7 +1764,7 @@ extension Extensions: WKWebExtensionControllerDelegate {
         if popup {
             for url in configuration.tabURLs {
                 let scheme = url.scheme?.lowercased() ?? ""
-                let own = [Extensions.scheme, Extensions.formerScheme].contains(scheme)
+                let own = Extensions.schemes.contains(scheme)
                     && url.host()?.lowercased() == extensionContext.uniqueIdentifier.lowercased()
                 guard scheme == "https" || scheme == "http" || own || url.absoluteString == "about:blank" else {
                     throw NSError(domain: "Search", code: 3, userInfo: [NSLocalizedDescriptionKey: "A popup window shows a website or the extension's own page."])

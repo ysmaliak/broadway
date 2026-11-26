@@ -4029,10 +4029,7 @@ extension Browser {
     /// meant closing one pin landed you on another pin, and ⌘W bounced
     /// between the two instead of getting you out of them.
     private func leave(_ tab: Tab) {
-        if let back = returning(from: tab) { return select(back) }
-        let others = tabs.filter { $0.id != tab.id && !$0.asleep && !$0.agent && !$0.bench }
-        let loose = others.filter { $0.pin == nil }
-        if let back = (loose.isEmpty ? others : loose).max(by: { $0.touched < $1.touched }) {
+        if let back = returning(from: tab) ?? lastLooked(besides: tab, loose: true) {
             select(back)
         } else {
             newTab()
@@ -4147,16 +4144,12 @@ extension Browser {
             return
         }
 
-        let next = activeID == tab.id ? partner ?? successor(of: tab) : nil
+        let next = activeID == tab.id ? landing(after: tab, at: index, partner: partner) : nil
         remember(tab, at: index, partner: partner?.id, onLeft: pair?.left == tab.id, split: pair, live: live)
         tab.close()
         tabs.remove(at: index)
         removeEmptyGroup(tab.groupID)
-        if let next {
-            settle(on: next)
-        } else if activeID == tab.id {
-            settle(on: tabs[min(index, tabs.count - 1)])
-        }
+        if let next { settle(on: next) }
         rememberSession()
     }
 
@@ -4336,19 +4329,12 @@ extension Browser {
         var regrouped = false
         for ghost in members.reversed() {
             if let tab = reopenLive(ghost) {
-                noteCameBack(ghost.was, as: tab)
                 if let was = ghost.was { back[was] = tab }
                 if ghost.front { front = tab }
                 continue
             }
             let tab = makeTab()
-            prepare(tab)
-            let group = regroup(ghost)
-            tab.groupID = group.id
-            regrouped = regrouped || group.back
-            tab.muted = ghost.muted
-            tab.restore(url: ghost.url, title: ghost.title)
-            tab.cameBack = true
+            regrouped = rebuild(tab, from: ghost, resting: true) || regrouped
             tabs.insert(tab, at: safeInsertionIndex(ghost.index))
             noteCameBack(ghost.was, as: tab)
             if let was = ghost.was { back[was] = tab }
@@ -4387,20 +4373,15 @@ extension Browser {
         }
         ghosts.removeAll { $0.id == ghost.id }
         if let tab = reopenLive(ghost) {
-            noteCameBack(ghost.was, as: tab)
             select(tab)
             return
         }
         let tab = makeTab()
         noteCameBack(ghost.was, as: tab)
-        prepare(tab)
-        let group = regroup(ghost)
-        tab.groupID = group.id
-        tab.muted = ghost.muted
-        tab.cameBack = true
+        let regrouped = rebuild(tab, from: ghost, resting: false)
         leaving()
         tabs.insert(tab, at: safeInsertionIndex(ghost.index))
-        if group.back { arrangeGroupedTabs() }
+        if regrouped { arrangeGroupedTabs() }
         activeID = tab.id
         editing = false
         typed = ""
@@ -4421,7 +4402,19 @@ extension Browser {
               tabGroups.contains(where: { $0.id == live.folder && $0.live }),
               LiveFolders.shared.restore(live) else { return nil }
         syncLive()
-        return tabs.first { $0.groupID == live.folder && $0.liveKey == live.item.key }
+        let tab = tabs.first { $0.groupID == live.folder && $0.liveKey == live.item.key }
+        if let tab { noteCameBack(ghost.was, as: tab) }
+        return tab
+    }
+
+    private func rebuild(_ tab: Tab, from ghost: Ghost, resting: Bool) -> Bool {
+        prepare(tab)
+        let group = regroup(ghost)
+        tab.groupID = group.id
+        tab.muted = ghost.muted
+        if resting { tab.restore(url: ghost.url, title: ghost.title) }
+        tab.cameBack = true
+        return group.back
     }
 
     private func regroup(_ ghost: Ghost) -> (id: UUID?, back: Bool) {
@@ -4608,10 +4601,8 @@ extension Browser {
         if floating == tab.id { land() }
         if editingTab == tab.id { cancelTabEdit() }
         if activeID == tab.id {
-            if let next = partner ?? successor(of: tab) {
+            if let next = landing(after: tab, at: index, partner: partner) {
                 select(next, floatPrevious: false)
-            } else if tabs.count > 1 {
-                select(tabs[index == tabs.count - 1 ? index - 1 : index + 1], floatPrevious: false)
             } else {
                 activeID = nil
             }
@@ -4738,10 +4729,8 @@ extension Browser {
         if floating == tab.id { land() }
         if editingTab == tab.id { cancelTabEdit() }
         if activeID == tab.id {
-            if let next = partner ?? successor(of: tab) {
+            if let next = landing(after: tab, at: index, partner: partner) {
                 select(next, floatPrevious: false)
-            } else if tabs.count > 1 {
-                select(tabs[index == tabs.count - 1 ? index - 1 : index + 1], floatPrevious: false)
             } else {
                 activeID = nil
             }
@@ -8165,7 +8154,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
     /// last attempt's half-written file let go first.
     func retryDownload(_ entry: FetchEntry) {
         let folder = entry.destination?.deletingLastPathComponent() ?? downloadsFolder
-        guard let operation = fetches.beginRetry(entry, destination: { Self.free(entry.retryName, in: folder) }),
+        guard let operation = fetches.beginRetry(entry, destination: { DownloadPlace.free(entry.retryName, in: folder) }),
               let request = operation.request else { return }
         operation.webView.startDownload(using: request) { download in
             self.continueDownload(download, operation)
@@ -8876,21 +8865,6 @@ extension Browser: WKDownloadDelegate {
         guard let ended = fetches.fail(download, error: error, resumeData: resumeData) else { return }
         ended.owner.relinquish(download)
         if ended.announceFailure { announce("That download didn't finish", kind: .error) }
-    }
-
-    /// WebKit refuses to write over a file that is already there, so the name
-    /// gains a number rather than the download quietly failing.
-    private static func free(_ name: String, in folder: URL) -> URL {
-        let stem = (name as NSString).deletingPathExtension
-        let ext = (name as NSString).pathExtension
-        var candidate = folder.appendingPathComponent(name)
-        var n = 2
-        while FileManager.default.fileExists(atPath: candidate.path) {
-            let next = ext.isEmpty ? "\(stem) \(n)" : "\(stem) \(n).\(ext)"
-            candidate = folder.appendingPathComponent(next)
-            n += 1
-        }
-        return candidate
     }
 }
 

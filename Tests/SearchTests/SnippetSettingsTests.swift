@@ -19,6 +19,7 @@ struct SnippetSettingsTests {
             if let sheet = window.attachedSheet { window.endSheet(sheet) }
             window.close()
             NSApp.setActivationPolicy(policy)
+            Disk.drain()
             try? FileManager.default.removeItem(at: folder)
         }
 

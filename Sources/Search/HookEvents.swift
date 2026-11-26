@@ -181,15 +181,7 @@ enum HookDownloads {
 
     nonisolated static func move(_ file: URL, to folder: URL) -> URL? {
         guard file.deletingLastPathComponent().standardizedFileURL.resolvingSymlinksInPath() != folder else { return file }
-        let name = file.lastPathComponent
-        let stem = (name as NSString).deletingPathExtension
-        let ext = (name as NSString).pathExtension
-        var target = folder.appendingPathComponent(name)
-        var number = 2
-        while FileManager.default.fileExists(atPath: target.path) {
-            target = folder.appendingPathComponent(ext.isEmpty ? "\(stem) \(number)" : "\(stem) \(number).\(ext)")
-            number += 1
-        }
+        let target = DownloadPlace.free(file.lastPathComponent, in: folder)
         do {
             try FileManager.default.moveItem(at: file, to: target)
             return target

@@ -99,17 +99,18 @@ final class SnippetStore {
         var next = snippets
         if let index = next.firstIndex(where: { $0.id == saved.id }) { next[index] = saved }
         else { next.append(saved) }
-        return persist(next)
+        persist(next)
+        return nil
     }
 
     @discardableResult
     func delete(_ id: Snippet.ID) -> String? {
-        let trouble = persist(snippets.filter { $0.id != id })
-        if trouble == nil, uses[id] != nil {
+        persist(snippets.filter { $0.id != id })
+        if uses[id] != nil {
             uses[id] = nil
             persistUses()
         }
-        return trouble
+        return nil
     }
 
     func used(_ id: Snippet.ID) {
@@ -119,9 +120,8 @@ final class SnippetStore {
     }
 
     private func persistUses() {
-        try? FileManager.default.createDirectory(at: usesURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        guard (try? JSONEncoder().encode(uses).write(to: usesURL, options: .atomic)) != nil else { return }
-        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: usesURL.path)
+        let snapshot = uses
+        Disk.write(usesURL, mode: 0o600) { try? JSONEncoder().encode(snapshot) }
     }
 
     func listed(matching text: String) -> [Snippet] {
@@ -139,14 +139,9 @@ final class SnippetStore {
         }
     }
 
-    private func persist(_ next: [Snippet]) -> String? {
-        do {
-            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try JSONEncoder().encode(next).write(to: url, options: .atomic)
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
-            snippets = next
-            return nil
-        } catch { return "The snippets couldn't be saved. Try again." }
+    private func persist(_ next: [Snippet]) {
+        snippets = next
+        Disk.write(url, mode: 0o600) { try? JSONEncoder().encode(next) }
     }
 
     func matches(_ text: String) -> [Snippet] {

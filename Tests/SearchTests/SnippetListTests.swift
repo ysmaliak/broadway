@@ -200,6 +200,7 @@ final class SnippetUseCountTests {
     }
 
     private func tearDown() async {
+        Disk.drain()
         try? FileManager.default.removeItem(at: folder)
     }
 
@@ -207,13 +208,17 @@ final class SnippetUseCountTests {
         let store = SnippetStore(url: file)
         let snippet = Snippet(title: "Saved", keyword: "saved", text: "Text")
         #expect(store.save(snippet) == nil)
+        Disk.drain()
         let before = try Data(contentsOf: file)
 
         store.used(snippet.id)
         store.used(snippet.id)
+        Disk.drain()
         let reloaded = SnippetStore(url: file)
 
         #expect(reloaded.uses[snippet.id] == 2)
+        let uses = folder.appendingPathComponent("snippet-uses.json")
+        #expect((try FileManager.default.attributesOfItem(atPath: uses.path)[.posixPermissions] as? Int) == 0o600)
         #expect(reloaded.snippets == [snippet])
         #expect(try Data(contentsOf: file) == before)
     }
@@ -225,6 +230,7 @@ final class SnippetUseCountTests {
         store.used(snippet.id)
 
         store.delete(snippet.id)
+        Disk.drain()
 
         #expect(store.uses[snippet.id] == nil)
         #expect(SnippetStore(url: file).uses.isEmpty)

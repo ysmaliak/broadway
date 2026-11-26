@@ -17,6 +17,7 @@ final class SnippetStoreTests {
     }
 
     private func tearDown() async {
+        Disk.drain()
         try? FileManager.default.removeItem(at: folder)
         store = nil
     }
@@ -28,11 +29,13 @@ final class SnippetStoreTests {
         snippet.title = "Mailing address"
         snippet.text = "Updated\nАдрес\n"
         #expect(store.save(snippet) == nil)
+        Disk.drain()
         let reloaded = SnippetStore(url: file)
 
         #expect(reloaded.snippets == [Snippet(id: snippet.id, title: "Mailing address", keyword: "home", text: snippet.text)])
         #expect((try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int) == 0o600)
         #expect(reloaded.delete(snippet.id) == nil)
+        Disk.drain()
         #expect(SnippetStore(url: file).snippets.isEmpty)
     }
 
@@ -103,6 +106,7 @@ final class SnippetStoreTests {
 
         let reloaded = SnippetStore(url: file)
         #expect(reloaded.save(Snippet(title: "New", keyword: "new", text: "Text")) == nil)
+        Disk.drain()
 
         let aside = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
             .first { $0.lastPathComponent.hasPrefix("snippets.unreadable-") }

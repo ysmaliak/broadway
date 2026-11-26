@@ -360,6 +360,15 @@ enum Chromium {
     /// largest bitmap it kept for the page itself, or failing that for the
     /// site's front door. Read from a copy of its "Favicons" file.
     static func icons(in source: Source, profile: String? = nil, for urls: [URL], limit: Int = 400) -> [String: Data] {
+        icons("""
+        SELECT b.image_data FROM icon_mapping m
+        JOIN favicon_bitmaps b ON b.icon_id = m.icon_id
+        WHERE m.page_url = ? AND b.width BETWEEN 16 AND 256
+        ORDER BY b.width DESC LIMIT 1
+        """, files: { source.profiles(only: profile).compactMap { source.file("Favicons", in: $0) } }, for: urls, limit: limit)
+    }
+
+    static func icons(_ sql: String, files: () -> [URL], for urls: [URL], limit: Int) -> [String: Data] {
         var out: [String: Data] = [:]
         var wanted: [(host: String, url: URL)] = []
         var seen = Set<String>()
@@ -370,39 +379,22 @@ enum Chromium {
         }
         guard !wanted.isEmpty else { return out }
 
-        for profile in source.profiles(only: profile) {
-            guard let icons = source.file("Favicons", in: profile), FileManager.default.fileExists(atPath: icons.path),
-                  let copy = try? Snapshot(of: icons)
-            else { continue }
-            let temp = copy.file
-            defer { withExtendedLifetime(copy) {} }
-
-            var db: OpaquePointer?
-            guard sqlite3_open_v2(temp.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else { continue }
-            defer { sqlite3_close(db) }
-            let sql = """
-            SELECT b.image_data FROM icon_mapping m
-            JOIN favicon_bitmaps b ON b.icon_id = m.icon_id
-            WHERE m.page_url = ? AND b.width BETWEEN 16 AND 256
-            ORDER BY b.width DESC LIMIT 1
-            """
-            var statement: OpaquePointer?
-            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else { continue }
-            defer { sqlite3_finalize(statement) }
-
-            for (host, url) in wanted where out[host] == nil {
-                var doors = [url.absoluteString]
-                if let scheme = url.scheme, let home = Favicons.site(url) {
-                    doors.append("\(scheme)://\(home)/")
-                }
-                for door in doors {
-                    sqlite3_reset(statement)
-                    sqlite3_bind_text(statement, 1, door, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
-                    guard sqlite3_step(statement) == SQLITE_ROW, let bytes = sqlite3_column_blob(statement, 0) else { continue }
-                    let count = Int(sqlite3_column_bytes(statement, 0))
-                    guard count > 60 else { continue }
-                    out[host] = Data(bytes: bytes, count: count)
-                    break
+        for file in files() where FileManager.default.fileExists(atPath: file.path) {
+            try? Snapshot.statement(file, sql, failing: Trouble.unreadable) { statement in
+                for (host, url) in wanted where out[host] == nil {
+                    var doors = [url.absoluteString]
+                    if let scheme = url.scheme, let home = Favicons.site(url) {
+                        doors.append("\(scheme)://\(home)/")
+                    }
+                    for door in doors {
+                        sqlite3_reset(statement)
+                        sqlite3_bind_text(statement, 1, door, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
+                        guard sqlite3_step(statement) == SQLITE_ROW, let bytes = sqlite3_column_blob(statement, 0) else { continue }
+                        let count = Int(sqlite3_column_bytes(statement, 0))
+                        guard count > 60 else { continue }
+                        out[host] = Data(bytes: bytes, count: count)
+                        break
+                    }
                 }
             }
         }
@@ -430,33 +422,16 @@ enum Chromium {
     }
 
     private static func placeRows(in file: URL, limit: Int) throws -> [Place] {
-        let copy = try Snapshot(of: file)
-        let temp = copy.file
-        // Kept to the end: the copy goes with it, and SQLite is reading it.
-        defer { withExtendedLifetime(copy) {} }
-
-        var db: OpaquePointer?
-        guard sqlite3_open_v2(temp.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else {
-            throw Trouble.unreadable
-        }
-        defer { sqlite3_close(db) }
-
         let sql = """
         SELECT url, title, visit_count, last_visit_time FROM urls
         WHERE hidden = 0 AND visit_count > 0
         ORDER BY last_visit_time DESC LIMIT \(limit)
         """
-        var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else {
-            throw Trouble.unreadable
-        }
-        defer { sqlite3_finalize(statement) }
-
         var out: [Place] = []
-        while sqlite3_step(statement) == SQLITE_ROW {
+        try Snapshot.rows(file, sql, failing: Trouble.unreadable) { statement in
             guard let raw = sqlite3_column_text(statement, 0), let url = URL(string: String(cString: raw)),
                   url.scheme == "http" || url.scheme == "https"
-            else { continue }
+            else { return }
             let title = sqlite3_column_text(statement, 1).map { String(cString: $0) } ?? ""
             let count = Int(sqlite3_column_int(statement, 2))
             let stamp = sqlite3_column_int64(statement, 3)
@@ -496,15 +471,10 @@ enum Chromium {
     /// One number from a copy of a SQLite file; nothing for a file that
     /// isn't there or won't answer.
     static func count(_ sql: String, in file: URL) -> Int {
-        guard FileManager.default.fileExists(atPath: file.path), let copy = try? Snapshot(of: file) else { return 0 }
-        defer { withExtendedLifetime(copy) {} }
-        var db: OpaquePointer?
-        guard sqlite3_open_v2(copy.file.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else { return 0 }
-        defer { sqlite3_close(db) }
-        var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else { return 0 }
-        defer { sqlite3_finalize(statement) }
-        return sqlite3_step(statement) == SQLITE_ROW ? Int(sqlite3_column_int64(statement, 0)) : 0
+        guard FileManager.default.fileExists(atPath: file.path) else { return 0 }
+        return (try? Snapshot.statement(file, sql, failing: Trouble.unreadable) { statement in
+            sqlite3_step(statement) == SQLITE_ROW ? Int(sqlite3_column_int64(statement, 0)) : 0
+        }) ?? 0
     }
 
     /// The extensions a profile has from the Chrome Web Store, by id, to be
@@ -646,30 +616,12 @@ enum Chromium {
     }
 
     private static func rows(in file: URL) throws -> [Row] {
-        // A copy, next to nothing the other browser is watching.
-        let copy = try Snapshot(of: file)
-        let temp = copy.file
-        // Kept to the end: the copy goes with it, and SQLite is reading it.
-        defer { withExtendedLifetime(copy) {} }
-
-        var db: OpaquePointer?
-        guard sqlite3_open_v2(temp.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else {
-            throw Trouble.unreadable
-        }
-        defer { sqlite3_close(db) }
-
         let sql = """
         SELECT origin_url, username_value, password_value, blacklisted_by_user, date_last_used
         FROM logins
         """
-        var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else {
-            throw Trouble.unreadable
-        }
-        defer { sqlite3_finalize(statement) }
-
         var out: [Row] = []
-        while sqlite3_step(statement) == SQLITE_ROW {
+        try Snapshot.rows(file, sql, failing: Trouble.unreadable) { statement in
             let origin = sqlite3_column_text(statement, 0).map { String(cString: $0) } ?? ""
             let user = sqlite3_column_text(statement, 1).map { String(cString: $0) } ?? ""
             var blob = Data()
@@ -832,16 +784,6 @@ enum Mozilla {
     /// list. The toolbar's pages come first at the top, then the menu's, then
     /// Other and Mobile as folders — the same order Chromium's come in.
     private static func bookmarkNodes(in file: URL) throws -> [Bookmark] {
-        let copy = try Snapshot(of: file)
-        let temp = copy.file
-        defer { withExtendedLifetime(copy) {} }
-
-        var db: OpaquePointer?
-        guard sqlite3_open_v2(temp.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else {
-            throw Trouble.unreadable
-        }
-        defer { sqlite3_close(db) }
-
         let sql = """
         SELECT b.id, b.type, b.parent, b.title, p.url, b.guid
         FROM moz_bookmarks b
@@ -849,14 +791,8 @@ enum Mozilla {
         WHERE b.type IN (1, 2)
         ORDER BY b.position ASC
         """
-        var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else {
-            throw Trouble.unreadable
-        }
-        defer { sqlite3_finalize(statement) }
-
         var items: [Raw] = []
-        while sqlite3_step(statement) == SQLITE_ROW {
+        try Snapshot.rows(file, sql, failing: Trouble.unreadable) { statement in
             let id = sqlite3_column_int64(statement, 0)
             let type = Int(sqlite3_column_int(statement, 1))
             let parent = sqlite3_column_int64(statement, 2)
@@ -910,55 +846,15 @@ enum Mozilla {
     /// favicons.sqlite beside places.sqlite: the largest bitmap it kept for
     /// the page, or failing that for the site's front door.
     static func icons(in source: Source, profile: String? = nil, for urls: [URL], limit: Int = 400) -> [String: Data] {
-        var out: [String: Data] = [:]
-        var wanted: [(host: String, url: URL)] = []
-        var seen = Set<String>()
-        for url in urls {
-            guard let host = Favicons.site(url), seen.insert(host).inserted else { continue }
-            wanted.append((host, url))
-            if wanted.count >= limit { break }
-        }
-        guard !wanted.isEmpty else { return out }
-
-        for file in source.files(only: profile) {
-            let favicons = file.deletingLastPathComponent().appendingPathComponent("favicons.sqlite")
-            guard FileManager.default.fileExists(atPath: favicons.path),
-                  let copy = try? Snapshot(of: favicons)
-            else { continue }
-            let temp = copy.file
-            defer { withExtendedLifetime(copy) {} }
-
-            var db: OpaquePointer?
-            guard sqlite3_open_v2(temp.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else { continue }
-            defer { sqlite3_close(db) }
-            let sql = """
-            SELECT i.data FROM moz_pages_w_icons p
-            JOIN moz_icons_to_pages m ON m.page_id = p.id
-            JOIN moz_icons i ON i.id = m.icon_id
-            WHERE p.page_url = ? AND i.data IS NOT NULL
-            ORDER BY i.width DESC LIMIT 1
-            """
-            var statement: OpaquePointer?
-            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else { continue }
-            defer { sqlite3_finalize(statement) }
-
-            for (host, url) in wanted where out[host] == nil {
-                var doors = [url.absoluteString]
-                if let scheme = url.scheme, let home = Favicons.site(url) {
-                    doors.append("\(scheme)://\(home)/")
-                }
-                for door in doors {
-                    sqlite3_reset(statement)
-                    sqlite3_bind_text(statement, 1, door, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
-                    guard sqlite3_step(statement) == SQLITE_ROW, let bytes = sqlite3_column_blob(statement, 0) else { continue }
-                    let count = Int(sqlite3_column_bytes(statement, 0))
-                    guard count > 60 else { continue }
-                    out[host] = Data(bytes: bytes, count: count)
-                    break
-                }
-            }
-        }
-        return out
+        Chromium.icons("""
+        SELECT i.data FROM moz_pages_w_icons p
+        JOIN moz_icons_to_pages m ON m.page_id = p.id
+        JOIN moz_icons i ON i.id = m.icon_id
+        WHERE p.page_url = ? AND i.data IS NOT NULL
+        ORDER BY i.width DESC LIMIT 1
+        """, files: {
+            source.files(only: profile).map { $0.deletingLastPathComponent().appendingPathComponent("favicons.sqlite") }
+        }, for: urls, limit: limit)
     }
 
     // MARK: - where they have been
@@ -974,32 +870,16 @@ enum Mozilla {
     }
 
     private static func placeRows(in file: URL, limit: Int) throws -> [Chromium.Place] {
-        let copy = try Snapshot(of: file)
-        let temp = copy.file
-        defer { withExtendedLifetime(copy) {} }
-
-        var db: OpaquePointer?
-        guard sqlite3_open_v2(temp.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else {
-            throw Trouble.unreadable
-        }
-        defer { sqlite3_close(db) }
-
         let sql = """
         SELECT url, title, visit_count, last_visit_date FROM moz_places
         WHERE hidden = 0 AND visit_count > 0 AND last_visit_date IS NOT NULL
         ORDER BY last_visit_date DESC LIMIT \(limit)
         """
-        var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else {
-            throw Trouble.unreadable
-        }
-        defer { sqlite3_finalize(statement) }
-
         var out: [Chromium.Place] = []
-        while sqlite3_step(statement) == SQLITE_ROW {
+        try Snapshot.rows(file, sql, failing: Trouble.unreadable) { statement in
             guard let raw = sqlite3_column_text(statement, 0), let url = URL(string: String(cString: raw)),
                   url.scheme == "http" || url.scheme == "https"
-            else { continue }
+            else { return }
             let title = sqlite3_column_text(statement, 1).map { String(cString: $0) } ?? ""
             let count = Int(sqlite3_column_int(statement, 2))
             // Microseconds since 1970, Firefox's idea of a date — no 1601
@@ -1119,16 +999,10 @@ enum Mozilla {
     /// itself unwrapped from nssPrivate. Throws primaryPassword when the check
     /// fails, so the caller can say to export rather than ask for one.
     private static func masterKey(in key4: URL) throws -> [UInt8] {
-        let copy = try Snapshot(of: key4)
-        let temp = copy.file
-        defer { withExtendedLifetime(copy) {} }
+        try Snapshot.read(key4, failing: Trouble.unreadable) { db in try masterKey(from: db) }
+    }
 
-        var db: OpaquePointer?
-        guard sqlite3_open_v2(temp.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else {
-            throw Trouble.unreadable
-        }
-        defer { sqlite3_close(db) }
-
+    private static func masterKey(from db: OpaquePointer) throws -> [UInt8] {
         // The global salt, and the check the empty password has to pass.
         var globalSalt: [UInt8] = []
         var item2: [UInt8] = []
@@ -1586,4 +1460,28 @@ final class Snapshot {
     }
 
     deinit { try? FileManager.default.removeItem(at: folder) }
+
+    static func read<T>(_ file: URL, failing trouble: Error, _ body: (OpaquePointer) throws -> T) throws -> T {
+        let copy = try Snapshot(of: file)
+        defer { withExtendedLifetime(copy) {} }
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(copy.file.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else { throw trouble }
+        defer { sqlite3_close(db) }
+        return try body(db)
+    }
+
+    static func statement<T>(_ file: URL, _ sql: String, failing trouble: Error, _ body: (OpaquePointer) throws -> T) throws -> T {
+        try read(file, failing: trouble) { db in
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else { throw trouble }
+            defer { sqlite3_finalize(statement) }
+            return try body(statement)
+        }
+    }
+
+    static func rows(_ file: URL, _ sql: String, failing trouble: Error, _ row: (OpaquePointer) throws -> Void) throws {
+        try statement(file, sql, failing: trouble) { statement in
+            while sqlite3_step(statement) == SQLITE_ROW { try row(statement) }
+        }
+    }
 }

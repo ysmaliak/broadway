@@ -236,7 +236,7 @@ enum Disk {
 
     /// `encode` runs where the write does. `now` writes on the calling
     /// thread: quitting doesn't wait for a queue.
-    static func write(_ file: URL, now: Bool = false, _ encode: @escaping @Sendable () -> Data?) {
+    static func write(_ file: URL, now: Bool = false, mode: Int? = nil, _ encode: @escaping @Sendable () -> Data?) {
         lock.lock()
         count += 1
         let turn = count
@@ -250,6 +250,7 @@ enum Disk {
             guard newest[file] == turn else { return }
             try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? data.write(to: file, options: .atomic)
+            if let mode { try? FileManager.default.setAttributes([.posixPermissions: mode], ofItemAtPath: file.path) }
         }
         if now { put() } else { queue.async(execute: put) }
     }

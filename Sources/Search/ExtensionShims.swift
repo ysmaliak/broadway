@@ -4609,7 +4609,7 @@ enum ExtensionShims {
                 // Another extension's page stays blank, as WebKit keeps it
                 // (see the refusal in Extensions.load); its own are its own.
                 if let url = tab.address, let scheme = url.scheme?.lowercased(),
-                   [Extensions.scheme, Extensions.formerScheme].contains(scheme), url.host() != id {
+                   Extensions.schemes.contains(scheme), url.host() != id {
                     return ["url": "", "title": ""]
                 }
                 var described: [String: Any] = ["url": tab.address?.absoluteString ?? "", "title": tab.title]

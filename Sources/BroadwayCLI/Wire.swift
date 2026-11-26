@@ -24,20 +24,7 @@ final class Link {
     init?(path: String) {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { return nil }
-        var address = sockaddr_un()
-        address.sun_family = sa_family_t(AF_UNIX)
-        let room = MemoryLayout.size(ofValue: address.sun_path)
-        guard path.utf8.count < room else {
-            close(fd)
-            return nil
-        }
-        withUnsafeMutablePointer(to: &address.sun_path) { sun in
-            sun.withMemoryRebound(to: CChar.self, capacity: room) { _ = strlcpy($0, path, room) }
-        }
-        let joined = withUnsafePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
-        }
-        guard joined == 0 else {
+        guard UnixAddress.call(fd, path, { Darwin.connect($0, $1, $2) }) == 0 else {
             close(fd)
             return nil
         }
@@ -55,16 +42,7 @@ final class Link {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { return errno == EPERM || errno == EACCES }
         defer { close(fd) }
-        var address = sockaddr_un()
-        address.sun_family = sa_family_t(AF_UNIX)
-        let room = MemoryLayout.size(ofValue: address.sun_path)
-        guard path.utf8.count < room else { return false }
-        withUnsafeMutablePointer(to: &address.sun_path) { sun in
-            sun.withMemoryRebound(to: CChar.self, capacity: room) { _ = strlcpy($0, path, room) }
-        }
-        let joined = withUnsafePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
-        }
+        guard let joined = UnixAddress.call(fd, path, { Darwin.connect($0, $1, $2) }) else { return false }
         return joined != 0 && (errno == EPERM || errno == EACCES)
     }
 

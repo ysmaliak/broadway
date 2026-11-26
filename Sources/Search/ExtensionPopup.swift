@@ -161,6 +161,24 @@ final class ExtensionPopup: NSObject, WKUIDelegate, WKNavigationDelegate {
         return true
     }
 
+    static let named = """
+    ((d, v) => {
+      const m = window.__searchSizing || (window.__searchSizing = {}), w = d.getBoundingClientRect().width;
+      if (Math.abs(w - v.clientWidth) > 1) return m.w = w;
+      return m.w && Math.abs(m.w - v.clientWidth) <= 1 ? m.w : null;
+    })
+    """
+
+    static let narrowest = """
+    ((d) => {
+      const saved = d.getAttribute("style");
+      d.style.setProperty("width", "min-content", "important");
+      const narrowest = d.getBoundingClientRect().width;
+      saved === null ? d.removeAttribute("style") : d.setAttribute("style", saved);
+      return narrowest >= 100 ? narrowest : Math.max(narrowest, d.scrollWidth);
+    })
+    """
+
     /// The size Chrome would give the popup (Blink's auto-size, between
     /// 25 × 25 and 800 × 600), worked out in the page while its view is
     /// still the 25-point square: the width the page names for itself if it
@@ -175,19 +193,8 @@ final class ExtensionPopup: NSObject, WKUIDelegate, WKNavigationDelegate {
       const m = window.__searchSizing || (window.__searchSizing = {});
       const saved = d.getAttribute("style");
       const back = () => saved === null ? d.removeAttribute("style") : d.setAttribute("style", saved);
-      const box = d.getBoundingClientRect();
-      // A width the page sets for itself shows as one the view doesn't
-      // have, excluding its scrollbar; one equal to the view is either
-      // filling it or the width it was given last time, remembered.
-      let w;
-      if (Math.abs(box.width - v.clientWidth) > 1) w = m.w = box.width;
-      else if (m.w && Math.abs(m.w - v.clientWidth) <= 1) w = m.w;
-      else {
-        d.style.setProperty("width", "min-content", "important");
-        const narrowest = d.getBoundingClientRect().width;
-        back();
-        w = narrowest >= 100 ? narrowest : Math.max(narrowest, d.scrollWidth);
-      }
+      let w = \(named)(d, v);
+      if (w === null) w = \(narrowest)(d);
       const gutter = innerWidth - v.clientWidth;
       w = Math.min(800, Math.max(25, Math.ceil(w + gutter)));
       d.style.setProperty("width", (w - gutter) + "px", "important");
@@ -249,13 +256,11 @@ final class ExtensionPopup: NSObject, WKUIDelegate, WKNavigationDelegate {
       if (key === "height") return d.scrollHeight;
       const own = d.getBoundingClientRect().width, gutter = innerWidth - v.clientWidth;
       if (own > v.clientWidth + 1) return own + gutter;
-      const saved = d.getAttribute("style");
-      d.style.setProperty("width", "min-content", "important");
-      const narrowest = d.getBoundingClientRect().width;
-      saved === null ? d.removeAttribute("style") : d.setAttribute("style", saved);
-      return (narrowest >= 100 ? narrowest : Math.max(narrowest, d.scrollWidth)) + gutter;
+      return \(narrowest)(d) + gutter;
     })
     """
+
+    static let following = "[\(ExtensionPopup.reach)('width'), (() => { const d = document.documentElement; return d && d.scrollHeight > d.clientHeight ? d.scrollHeight : 0; })(), (() => { const d = document.documentElement, v = document.compatMode === 'BackCompat' ? document.body : d, w = \(named)(d, v), gutter = innerWidth - v.clientWidth; return w === null ? 0 : w + gutter; })()]"
 
     /// Measured again as the page builds itself, the way Chrome measures on
     /// each layout: for its first two seconds the popup follows it either
@@ -280,7 +285,7 @@ final class ExtensionPopup: NSObject, WKUIDelegate, WKNavigationDelegate {
         if ticks > 24, ticks % 4 != 0 { return }
         // a width the page names for itself, remembered as the first measure does, is followed both ways:
         // Bitwarden's narrow setting shrinks it.
-        web.evaluateJavaScript("[\(ExtensionPopup.reach)('width'), (() => { const d = document.documentElement; return d && d.scrollHeight > d.clientHeight ? d.scrollHeight : 0; })(), (() => { const m = window.__searchSizing || (window.__searchSizing = {}), d = document.documentElement, v = document.compatMode === 'BackCompat' ? document.body : d, w = d.getBoundingClientRect().width, gutter = innerWidth - v.clientWidth; if (Math.abs(w - v.clientWidth) > 1) return (m.w = w) + gutter; return m.w && Math.abs(m.w - v.clientWidth) <= 1 ? m.w + gutter : 0; })()]") { value, _ in
+        web.evaluateJavaScript(ExtensionPopup.following) { value, _ in
             MainActor.assumeIsolated {
                 guard let pair = value as? [Double], pair.count == 3 else { return }
                 let now = popup.size
