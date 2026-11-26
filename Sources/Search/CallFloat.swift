@@ -146,6 +146,7 @@ enum CallTiles {
     static func style(_ room: NSEdgeInsets, corner: CGFloat) -> String {
         """
         html[data-broadway-tiles], html[data-broadway-tiles] body { background: #000 !important; overflow: hidden !important; }
+        html[data-broadway-tiles], html[data-broadway-tiles] * { pointer-events: none !important; }
         [data-broadway-tiles-path] { visibility: visible !important; background: transparent !important; box-shadow: none !important; \
         transform: none !important; filter: none !important; \
         backdrop-filter: none !important; perspective: none !important; contain: none !important; will-change: auto !important; }

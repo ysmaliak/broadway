@@ -3,10 +3,12 @@
 
 Build first (`./build.sh`), then `python3 Tests/call_tiles.py [OUT]`. A fake Meet
 page (a header, a toolbar with Meet's aria labels, a side panel, a toast,
-captions and a grid of participant tiles) floats; the probe checks what is
-visible with tiles on and off, shoots the float both ways into OUT (default
+captions and a grid of participant tiles, each with a pill of its own that
+shows on hover or press) floats; the probe checks what is visible with tiles
+on and off, that no tile takes the pointer while the call floats, shoots the float both ways into OUT (default
 .context/call-tiles) and checks Meet's own UI comes back when the call lands.
 """
+import json
 import os
 import subprocess
 import sys
@@ -40,6 +42,8 @@ aside { width: 220px; background: #fff; color: #202124; border-radius: 8px; marg
 .bar .leave { background: #ea4335; width: 56px; }
 .toast { position: fixed; left: 16px; bottom: 90px; background: #e8eaed; color: #202124; padding: 10px 14px; border-radius: 6px; }
 .captions { position: absolute; left: 20%; right: 20%; bottom: 84px; background: #000c; padding: 8px; border-radius: 6px; }
+.pill { position: absolute; left: 50%; top: 50%; width: 140px; height: 45px; margin: -22px 0 0 -70px; border-radius: 23px; background: #202124e6; display: none; gap: 6px; align-items: center; justify-content: center; }
+.tile:hover .pill, .tile.hot .pill { display: flex; }
 </style>
 <div class=app>
   <header role=banner><span>10:24</span><span>Weekly sync</span><span class=grow></span>
@@ -72,6 +76,17 @@ navigator.mediaDevices.getUserMedia({video: true, audio: true}).then(s => {
   v1.srcObject = s; v2.srcObject = s;
 }).catch(e => { window.state = 'error ' + e.name; });
 window.end = () => { stream.getTracks().forEach(x => x.stop()); };
+window.reached = 0;
+document.querySelectorAll('.tile').forEach(tile => {
+  tile.insertAdjacentHTML('beforeend', '<div class=pill><button aria-label="Pin">p</button><button aria-label="Remove">r</button><button aria-label="More options">o</button></div>');
+  ['mouseover', 'mouseenter', 'pointerover', 'pointermove', 'pointerdown', 'mousedown'].forEach(name =>
+    tile.addEventListener(name, () => { window.reached++; tile.classList.add('hot'); }));
+});
+window.centres = () => JSON.stringify([...document.querySelectorAll('.tile')].map(el => {
+  const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }));
+window.hits = () => [...document.querySelectorAll('.tile')].filter(el => { const r = el.getBoundingClientRect();
+  const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!(hit && hit.closest('.tile')); }).length;
+window.pills = () => [...document.querySelectorAll('.pill')].filter(el => getComputedStyle(el).display !== 'none').length;
 window.seen = sel => { const el = document.querySelector(sel); if (!el) return 'missing';
   return getComputedStyle(el).visibility === 'visible' && el.getClientRects().length > 0 ? 'shown' : 'hidden'; };
 window.box = sel => { const r = document.querySelector(sel).getBoundingClientRect();
@@ -199,6 +214,15 @@ def main():
         state = call()
         t.ok("Broadway's own controls stay", state["leaves"] is True and state["mic"] is True, state)
         t.ok("shot after", shoot(out / "float-after.png"))
+        t.ok("no tile takes the pointer while it floats", sv.ev(meet, "hits()") == 0, sv.ev(meet, "hits()"))
+        sv.ev(meet, "window.reached = 0, document.querySelectorAll('.hot').forEach(el => el.classList.remove('hot')), 1")
+        for x, y in json.loads(sv.ev(meet, "centres()")):
+            for nudge in (-2, 0, 2):
+                sv.cmd({"do": "ui", "windowPointer": [(x + nudge) * state["zoom"], y * state["zoom"]], "pointerPhase": "move",
+                        "pointerWindow": state["window"]})
+        time.sleep(0.5)
+        t.ok("a pointer moving over the tiles reaches nothing on the page", sv.ev(meet, "window.reached") == 0, sv.ev(meet, "window.reached"))
+        t.ok("no tile's own pill shows", sv.ev(meet, "pills()") == 0, sv.ev(meet, "pills()"))
         sv.ev(meet, "document.querySelector('.grid').insertAdjacentHTML('beforeend', '<div class=tile data-participant-id=\"spaces/a/devices/9\"><span class=name>Eve</span></div>'), 1")
         sv.ev(meet, "document.body.insertAdjacentHTML('beforeend', '<div role=alert class=late>Eve joined</div>'), 1")
         t.ok("someone joining keeps the grid", until(lambda: sv.ev(meet, "seen('[data-participant-id=\"spaces/a/devices/9\"]')") == "shown"))
@@ -214,6 +238,7 @@ def main():
         for name, sel in CHROME.items():
             t.ok(f"{name} is back", sv.ev(meet, f"seen({sel!r})") == "shown", sv.ev(meet, f"seen({sel!r})"))
         t.ok("the grid is back in its place", sv.ev(meet, "box('.grid')") != "0,0,0,0", sv.ev(meet, "box('.grid')"))
+        t.ok("in its tab the tiles take the pointer again", sv.ev(meet, "hits()") > 0, sv.ev(meet, "hits()"))
     finally:
         sv.quit()
         sv.finish()
