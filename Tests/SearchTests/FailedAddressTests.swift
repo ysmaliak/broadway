@@ -25,7 +25,7 @@ struct FailedAddressTests {
         try await until { tab.failure != nil && !tab.loading }
         try await Task.sleep(for: .milliseconds(300))
         let failed = (address: tab.address, failure: tab.failure, back: tab.canGoBack, shown: tab.shownURL,
-                      kept: browser.tabsInSession.contains(tab.id))
+                      kept: browser.tabsInSession.contains(tab.id), label: tab.label)
 
         tab.reload()
         try await Task.sleep(for: .milliseconds(100))
@@ -34,17 +34,19 @@ struct FailedAddressTests {
         let again = (address: tab.address, failure: tab.failure)
 
         browser.back(tab)
-        let back = (address: tab.address, failure: tab.failure, title: tab.title)
+        let back = (address: tab.address, failure: tab.failure, title: tab.title, label: tab.label)
 
         #expect(failed.address == failing)
         #expect(failed.shown == failing)
         #expect(failed.failure != nil)
         #expect(failed.back)
         #expect(failed.kept)
+        #expect(failed.label == Address.pretty(failing))
         #expect(again.address == failing)
         #expect(again.failure != nil)
         #expect(back.address == before)
         #expect(back.failure == nil)
         #expect(back.title == "Before")
+        #expect(back.label == "Before")
     }
 }

@@ -380,7 +380,10 @@ final class Tab: Identifiable {
         heldOver = nil
         failure = nil
         address = built?.url
-        if let shown = built?.title, !shown.isEmpty { title = shown }
+        let shown = built?.title ?? ""
+        if !shown.isEmpty { title = shown }
+        heading = TitleSource.heading(known: shown.isEmpty ? nil : shown, url: address)
+        hinted = false
         steps()
     }
     private(set) var progress: Double = 0
