@@ -169,7 +169,7 @@ def main():
     sv.launch()
     try:
         sc.stage(True)
-        sv.cmd({"do": "ui", "spaces": True, "cards": True, "downloadsbutton": True, "sideWidth": sc.COLUMN})
+        sv.cmd({"do": "ui", "spaces": True, "cards": True, "sideWidth": sc.COLUMN})
         sv.cmd({"do": "space", "action": "rename", "name": "Personal", "icon": "house"})
         plain = sc.opened(base, "Example page")
         sv.cmd({"do": "ui", "lead": "import"})

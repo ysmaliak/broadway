@@ -7,7 +7,7 @@ import Testing
 final class FolderEmojiTests {
     private var browser: Browser!
     private var fake: FakeGroupEngine!
-    private var kept: (Bool, Bool, Bool)!
+    private var kept: (Bool, Bool)!
 
     init() async throws {
         keepSettings("ai", AIGroups.onKey, AIGroups.emojiKey)
@@ -19,8 +19,7 @@ final class FolderEmojiTests {
         browser.closeAll()
         browser.tabGroups = []
         browser.newTab()
-        kept = (browser.prefs.usesTabGroups, AIGroups.shared.on, AIGroups.shared.emoji)
-        browser.prefs.usesTabGroups = true
+        kept = (AIGroups.shared.on, AIGroups.shared.emoji)
         AIGroups.shared.on = false
         AIGroups.shared.emoji = true
         fake = FakeGroupEngine()
@@ -32,9 +31,8 @@ final class FolderEmojiTests {
         await settled()
         FolderEmojis.shared.standIn = nil
         browser.closeAll()
-        browser.prefs.usesTabGroups = kept.0
-        AIGroups.shared.on = kept.1
-        AIGroups.shared.emoji = kept.2
+        AIGroups.shared.on = kept.0
+        AIGroups.shared.emoji = kept.1
         browser = nil
     }
 
@@ -83,14 +81,10 @@ final class FolderEmojiTests {
         #expect(browser.tabGroups.first { $0.id == failed }?.icon == nil)
     }
 
-    @Test func theEmojiSwitchAndTabGroupsAreRespected() async {
+    @Test func theEmojiSwitchIsRespected() async {
         AIGroups.shared.emoji = false
 
         _ = browser.newFolder(named: "Off", editing: false)
-        await settled()
-        AIGroups.shared.emoji = true
-        browser.prefs.usesTabGroups = false
-        _ = browser.newFolder(named: "Groups off", editing: false)
         await settled()
 
         #expect(fake.nameAsks.isEmpty)

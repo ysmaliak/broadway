@@ -433,7 +433,7 @@ struct LiveOffersTests {
         let before = prefs.suggestsLiveFolders
         defer { prefs.suggestsLiveFolders = before }
 
-        let applied = SettingsIndex.apply("live.offers", true, to: prefs)
+        let applied = BenchSettings.set("live.offers", true, on: prefs)
 
         #expect(applied)
         #expect(prefs.suggestsLiveFolders)

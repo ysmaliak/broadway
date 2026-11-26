@@ -237,8 +237,6 @@ final class OmniboxRowView: NSView {
             return FieldLine.symbol("magnifyingglass", size: 10, weight: .medium)
         case .suggested:
             return FieldLine.symbol("magnifyingglass", size: 10, weight: .medium)
-        case .command:
-            return FieldLine.symbol("command", size: 10, weight: .medium)
         default:
             return MarkView(icon: Favicons.shared.cached(for: offer.url), letter: letter, size: 14)
         }

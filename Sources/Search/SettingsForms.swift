@@ -197,7 +197,7 @@ final class ShortcutsForm: SettingsForm {
     override var shape: AnyHashable {
         [AnyHashable(sections().map { [$0.0.rawValue] + $0.1.map(\.id) }),
          AnyHashable(ShortcutsList.extensionCommands(hunt: words, store: store).map(\.id)),
-         AnyHashable(ShortcutsList.showsReset(hunt: words, store: store, prefs: prefs))]
+         AnyHashable(ShortcutsList.showsReset(hunt: words, store: store))]
     }
 
     override func build() {
@@ -227,9 +227,9 @@ final class ShortcutsForm: SettingsForm {
                 }
             }
         }
-        if ShortcutsList.showsReset(hunt: words, store: store, prefs: prefs) {
+        if ShortcutsList.showsReset(hunt: words, store: store) {
             section {
-                row("reset") { ShortcutsResetRow(store: store, prefs: prefs) }
+                row("reset") { ShortcutsResetRow(store: store) }
             }
         }
     }

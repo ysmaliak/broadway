@@ -48,19 +48,6 @@ struct OldDataTests {
         #expect(SettingsIndex.item("ai.plan") == nil)
     }
 
-    @Test func aGroupEngineSavedAsClaudeOrChatGPTReadsAsAutomaticAndStaysOnDisk() {
-        keepSettings(AIGroups.engineKey, AIGroups.namerKey)
-        Store.settings.set("claude", forKey: AIGroups.engineKey)
-        Store.settings.set("chatGPT", forKey: AIGroups.namerKey)
-
-        let groups = AIGroups()
-
-        #expect(groups.engine == .auto)
-        #expect(groups.namer == .auto)
-        #expect(Store.settings.string(forKey: AIGroups.engineKey) == "claude")
-        #expect(Store.settings.string(forKey: AIGroups.namerKey) == "chatGPT")
-    }
-
     @Test func theFilesOfChatsTasksAndRemovedReviewsStayOnDiskUntouched() throws {
         let chats = Store.file("Chats")
         let chat = chats.appendingPathComponent("6f1c2d3e-0000-4000-8000-000000000001.json")

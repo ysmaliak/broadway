@@ -8,7 +8,6 @@ enum BenchFileChoice {
         guard Store.testing else { return answer(["error": "filebox only works on a --test run"]) }
         switch action {
         case "enable": Store.settings.set(true, forKey: "filebox.probe")
-        case "setting": browser.prefs.offersRecentFiles = values.first != "off"
         case "cancel": browser.fileChoice?.cancel()
         case "pick": browser.fileChoice?.pick()
         case "finder": browser.fileChoice?.chooseInFinder()

@@ -522,7 +522,7 @@ extension Browser {
     var liveVisitQuiet: String? {
         if isPrivate { return "private" }
         if isPopup { return "popup" }
-        if !prefs.liveFolders || !prefs.usesTabGroups { return "off" }
+        if !prefs.liveFolders { return "off" }
         if !prefs.suggestsLiveFolders { return "suggestions off" }
         if Onboarding.shared.showing { return "onboarding" }
         guard let tab = active else { return "no tab" }
@@ -563,7 +563,7 @@ extension Browser {
         return kitObserve(initial: true, { [weak self] in
             guard let self else { return 0 }
             _ = (self.activeID, self.spaceID, self.active?.address, self.spaceNext, self.makingSpace, self.peekTab == nil)
-            _ = (prefs.liveFolders, prefs.suggestsLiveFolders, prefs.usesTabGroups, self.linkNotice == nil)
+            _ = (prefs.liveFolders, prefs.suggestsLiveFolders, self.linkNotice == nil)
             _ = live.folders.map(\.id)
             _ = offers.past.count
             return 0

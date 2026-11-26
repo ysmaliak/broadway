@@ -153,17 +153,14 @@ final class SplitChipLookTests {
         NSApp.setActivationPolicy(.prohibited)
         let prefs = Shared.prefs
         if restorePreferences == nil {
-            let previous = (prefs.usesTabGroups, prefs.splitView, prefs.usesSpaces, prefs.addressBar, prefs.sideWidth, prefs.newTabPlace)
+            let previous = (prefs.splitView, prefs.usesSpaces, prefs.sideWidth)
             restorePreferences = {
-                (prefs.usesTabGroups, prefs.splitView, prefs.usesSpaces, prefs.addressBar, prefs.sideWidth, prefs.newTabPlace) = previous
+                (prefs.splitView, prefs.usesSpaces, prefs.sideWidth) = previous
             }
         }
-        prefs.usesTabGroups = false
         prefs.splitView = true
         prefs.usesSpaces = false
-        prefs.addressBar = true
         prefs.sideWidth = 258
-        prefs.newTabPlace = .end
         let browser = Browser(record: WindowRecord())
         browser.closeAll()
         let space = Space(id: UUID(), name: "Split chip fixture", colour: 0, sharesSignIns: true)

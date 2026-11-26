@@ -130,7 +130,7 @@ final class FileChoice: NSObject, NSOpenSavePanelDelegate, NSWindowDelegate {
         items = rules.recent(downloads: browser.loot.kept, uploads: Uploads.shared.kept,
                              privateDownloads: browser.privateFileDownloads, isPrivate: webView.flatMap { browser.anyTab(for: $0) }?.shy == true || webView?.configuration.websiteDataStore.isPersistent == false)
         selected = items.isEmpty ? [] : [0]
-        if finderOnly || rules.directories || !browser.prefs.offersRecentFiles { return chooseInFinder() }
+        if finderOnly || rules.directories { return chooseInFinder() }
         let hosting = FileChoiceCardView(choice: self, ground: false)
         let size = hosting.intrinsicContentSize
         let panel = ChoicePanel(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)

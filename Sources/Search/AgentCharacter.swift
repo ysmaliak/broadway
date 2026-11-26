@@ -176,8 +176,8 @@ enum AgentCharacter {
         return frame
     }
 
-    static func loops(_ mood: Mood, reduced: Bool, lowPower: Bool, window: Bool, column: Bool, scrolled: Bool) -> Bool {
-        !loops(mood).isEmpty && !reduced && !lowPower && window && column && scrolled
+    static func loops(_ mood: Mood, reduced: Bool, window: Bool, column: Bool, scrolled: Bool) -> Bool {
+        !loops(mood).isEmpty && !reduced && window && column && scrolled
     }
 
     enum Arrival: Equatable {
@@ -199,9 +199,8 @@ enum AgentCharacter {
     static let slump = KitSpring(response: 0.7, damping: 0.9)
     static let pop = KitSpring(response: 0.5, damping: 0.55)
 
-    static func curve(_ arrival: Arrival?, reduced: Bool, lowPower: Bool) -> KitCurve {
+    static func curve(_ arrival: Arrival?, reduced: Bool) -> KitCurve {
         guard let arrival, !reduced else { return .none }
-        if lowPower { return .easeOut(0.2) }
         switch arrival {
         case .slump: return .spring(slump)
         case .sleep: return .easeInOut(0.9)
@@ -209,8 +208,8 @@ enum AgentCharacter {
         }
     }
 
-    static func flourishes(_ arrival: Arrival?, reduced: Bool, lowPower: Bool) -> Bool {
-        guard let arrival, !reduced, !lowPower else { return false }
+    static func flourishes(_ arrival: Arrival?, reduced: Bool) -> Bool {
+        guard let arrival, !reduced else { return false }
         return arrival == .pop || arrival == .hop
     }
 
@@ -296,24 +295,6 @@ enum AgentCharacter {
     }
 }
 
-@MainActor
-@Observable
-final class LowPowerWatch {
-    static let shared = LowPowerWatch()
-
-    private(set) var on = Motion.light
-    @ObservationIgnored private var tokens: [NSObjectProtocol] = []
-
-    private init() {
-        let names = [Notification.Name.NSProcessInfoPowerStateDidChange, ProcessInfo.thermalStateDidChangeNotification]
-        tokens = names.map { name in
-            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
-                MainActor.assumeIsolated { LowPowerWatch.shared.on = Motion.light }
-            }
-        }
-    }
-}
-
 final class AgentCharacterFace: KitFlippedView {
     var mood: AgentCharacter.Mood = .idle {
         didSet {
@@ -387,8 +368,6 @@ final class AgentCharacterFace: KitFlippedView {
         recolour(animated: false)
     }
 
-    private var lowPower: Bool { LowPowerWatch.shared.on || Motion.light }
-
     static var shownInTests = false
 
     private var windowShown: Bool { window != nil && (shown.shown || (Store.testing && Self.shownInTests)) }
@@ -397,7 +376,7 @@ final class AgentCharacterFace: KitFlippedView {
 
     var benchState: [String: Any] {
         ["mood": mood.rawValue, "looping": looping, "loops": loopKeys.count, "window": window != nil, "shown": shown.shown,
-         "column": columnShown, "inView": inView, "visible": window?.occlusionState.contains(.visible) ?? false, "size": [laid.width, laid.height].map(Double.init), "lowPower": lowPower,
+         "column": columnShown, "inView": inView, "visible": window?.occlusionState.contains(.visible) ?? false, "size": [laid.width, laid.height].map(Double.init),
          "reduced": Motion.reduced]
     }
 
@@ -410,7 +389,7 @@ final class AgentCharacterFace: KitFlippedView {
         if bounds.size != laid { lay() }
         if onScreen, !greeted {
             greeted = true
-            if mood == .hello, AgentCharacter.flourishes(.pop, reduced: Motion.reduced, lowPower: lowPower) { flourish(.pop) }
+            if mood == .hello, AgentCharacter.flourishes(.pop, reduced: Motion.reduced) { flourish(.pop) }
         }
         relive()
     }
@@ -464,9 +443,9 @@ final class AgentCharacterFace: KitFlippedView {
         let arrival = AgentCharacter.arrival(from: old, to: mood)
         let live = onScreen
         let reduced = Motion.reduced
-        apply(AgentCharacter.still(mood), curve: live ? AgentCharacter.curve(arrival, reduced: reduced, lowPower: lowPower) : .none)
-        if live, AgentCharacter.flourishes(arrival, reduced: reduced, lowPower: lowPower), let arrival { flourish(arrival) }
-        if live, mood == .done, !reduced, !lowPower { drawTick() }
+        apply(AgentCharacter.still(mood), curve: live ? AgentCharacter.curve(arrival, reduced: reduced) : .none)
+        if live, AgentCharacter.flourishes(arrival, reduced: reduced), let arrival { flourish(arrival) }
+        if live, mood == .done, !reduced { drawTick() }
         relive(force: true)
     }
 
@@ -537,7 +516,7 @@ final class AgentCharacterFace: KitFlippedView {
     }
 
     private func relive(force: Bool = false) {
-        let wanted = laid.width > 0 && AgentCharacter.loops(mood, reduced: Motion.reduced, lowPower: lowPower, window: windowShown,
+        let wanted = laid.width > 0 && AgentCharacter.loops(mood, reduced: Motion.reduced, window: windowShown,
                                                             column: columnShown, scrolled: inView)
         let key = (mood: mood, seed: seed, size: laid)
         if wanted, looping, !force, let loopsFor, loopsFor == key { return }

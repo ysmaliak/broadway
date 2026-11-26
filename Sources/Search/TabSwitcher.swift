@@ -620,12 +620,12 @@ private final class SwitcherCard: NSView {
         paired = partner != nil
         func picture(_ view: SwitcherPicture, _ page: Tab) {
             view.show(image: switcher.preview(for: page.id, address: page.address),
-                      icon: prefs.glyph == .icons || page.customIcon != nil ? page.icon : nil, letter: page.monogram)
+                      icon: page.icon, letter: page.monogram)
         }
         picture(first, tab)
         if let partner { picture(second, partner) }
         second.isHidden = partner == nil
-        showsMark = prefs.glyph == .icons && !tab.isBlank
+        showsMark = !tab.isBlank
         mark.isHidden = !showsMark
         if showsMark {
             mark.icon = tab.icon

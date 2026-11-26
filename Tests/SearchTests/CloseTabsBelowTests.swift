@@ -68,7 +68,6 @@ struct CloseTabsBelowTests {
 
     @Test func closesFoldedGroupsBelowInTheirDisplayOrder() {
         withBrowser { browser, tabs in
-            browser.prefs.usesTabGroups = true
             let below = browser.addTabGroup(containing: tabs[0])
             browser.move(tabs[1], toGroup: below)
             let above = browser.addTabGroup(containing: tabs[2])
@@ -134,7 +133,6 @@ struct CloseTabsBelowTests {
 
     @Test func reopeningRestoresMultipleGroupsAndPartiallyClosedGroup() {
         withBrowser(count: 6) { browser, tabs in
-            browser.prefs.usesTabGroups = true
             let first = browser.addTabGroup(containing: tabs[0])
             browser.move(tabs[1], toGroup: first)
             let second = browser.addTabGroup(containing: tabs[2])
@@ -154,7 +152,6 @@ struct CloseTabsBelowTests {
 
     @Test func closeGroupKeepsItsBatchLabelAndHistoryAction() throws {
         try withBrowser { browser, tabs in
-            browser.prefs.usesTabGroups = true
             let group = browser.addTabGroup(containing: tabs[0])
             browser.move(tabs[1], toGroup: group)
             browser.select(tabs[0])
@@ -173,17 +170,12 @@ struct CloseTabsBelowTests {
         NSApp.setActivationPolicy(.prohibited)
         let browser = Browser(record: WindowRecord())
         let prefs = browser.prefs
-        keepSetting(prefs, \.newTabPlace, "tabs.newPlace")
-        let saved = (prefs.usesTabGroups, prefs.splitView, prefs.newTabPlace)
+        let saved = prefs.splitView
         defer {
             browser.closeAll()
-            prefs.usesTabGroups = saved.0
-            prefs.splitView = saved.1
-            prefs.newTabPlace = saved.2
+            prefs.splitView = saved
         }
-        prefs.usesTabGroups = false
         prefs.splitView = false
-        prefs.newTabPlace = .end
         for number in 1...count {
             if number > 1 { browser.newTab() }
             browser.tabs.last?.restore(url: URL(string: "about:blank#\(number)")!, title: "Tab \(number)")

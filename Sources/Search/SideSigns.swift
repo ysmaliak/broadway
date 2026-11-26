@@ -3,7 +3,6 @@ import Combine
 
 @MainActor
 enum SideSigns {
-    static func popupSign(browser: Browser, tab: Tab) -> NSView { PopupSignView(browser: browser, tab: tab) }
     static func translateSign(tab: Tab) -> NSView { TranslateSignView(tab: tab) }
     static func callTimeLeft(browser: Browser, tab: Tab, changed: @escaping () -> Void) -> NSView {
         CallLeftSign(browser: browser, tab: tab, changed: changed)

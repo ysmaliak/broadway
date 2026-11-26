@@ -9,15 +9,11 @@ final class AIGroups {
 
     nonisolated static let onKey = "ai.groups"
     nonisolated static let emojiKey = "ai.groups.emoji"
-    nonisolated static let engineKey = "ai.groups.engine"
-    nonisolated static let namerKey = "ai.groups.namer"
 
     private let store = Store.settings
 
     private var stored: Bool?
     var emoji: Bool { didSet { store.set(emoji, forKey: Self.emojiKey) } }
-    var engine: AIGroupEngineKind { didSet { store.set(engine.rawValue, forKey: Self.engineKey) } }
-    var namer: AIGroupEngineKind { didSet { store.set(namer.rawValue, forKey: Self.namerKey) } }
     private(set) var note: String?
     private(set) var veiled: Set<UUID> = []
 
@@ -39,8 +35,6 @@ final class AIGroups {
     init() {
         stored = store.object(forKey: Self.onKey) as? Bool
         emoji = store.object(forKey: Self.emojiKey) as? Bool ?? true
-        engine = store.string(forKey: Self.engineKey).flatMap(AIGroupEngineKind.init(rawValue:)) ?? .auto
-        namer = store.string(forKey: Self.namerKey).flatMap(AIGroupEngineKind.init(rawValue:)) ?? .auto
     }
 
     var on: Bool {
@@ -104,7 +98,7 @@ final class AIGroups {
     }
 
     func active(_ browser: Browser) -> Bool {
-        browser.prefs.usesTabGroups && on
+        on
     }
 
     func grouper(for browser: Browser) -> AIGrouper {

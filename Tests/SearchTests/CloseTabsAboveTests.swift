@@ -55,7 +55,6 @@ struct CloseTabsAboveTests {
 
     @Test func aPinnedFolderTheTabIsNotInIsLeftAlone() {
         withBrowser { browser, tabs in
-            browser.prefs.usesTabGroups = true
             let pinned = browser.addTabGroup(containing: tabs[0], pinned: true)
             browser.editingGroupID = nil
 
@@ -68,7 +67,6 @@ struct CloseTabsAboveTests {
 
     @Test func aFolderAboveGoesWholeAndComesBack() {
         withBrowser { browser, tabs in
-            browser.prefs.usesTabGroups = true
             let folder = browser.addTabGroup(containing: tabs[0])
             browser.move(tabs[1], toGroup: folder)
             browser.editingGroupID = nil
@@ -139,17 +137,12 @@ struct CloseTabsAboveTests {
         NSApp.setActivationPolicy(.prohibited)
         let browser = Browser(record: WindowRecord())
         let prefs = browser.prefs
-        keepSetting(prefs, \.newTabPlace, "tabs.newPlace")
-        let saved = (prefs.usesTabGroups, prefs.splitView, prefs.newTabPlace)
+        let saved = prefs.splitView
         defer {
             browser.closeAll()
-            prefs.usesTabGroups = saved.0
-            prefs.splitView = saved.1
-            prefs.newTabPlace = saved.2
+            prefs.splitView = saved
         }
-        prefs.usesTabGroups = false
         prefs.splitView = false
-        prefs.newTabPlace = .end
         for number in 1...count {
             if number > 1 { browser.newTab() }
             browser.tabs.last?.restore(url: URL(string: "about:blank#\(number)")!, title: "Tab \(number)")

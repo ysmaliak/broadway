@@ -10,12 +10,12 @@ struct ReloadPickedTests {
         NSApp.setActivationPolicy(.prohibited)
         let browser = Browser(record: WindowRecord())
         let prefs = browser.prefs
-        let saved = (prefs.usesTabGroups, prefs.splitView)
+        let saved = prefs.splitView
         defer {
             browser.closeAll()
-            (prefs.usesTabGroups, prefs.splitView) = saved
+            prefs.splitView = saved
         }
-        (prefs.usesTabGroups, prefs.splitView) = (false, false)
+        prefs.splitView = false
         for number in 1...4 {
             if number > 1 { browser.newTab() }
             browser.tabs.last?.restore(url: URL(string: "about:blank#\(number)")!, title: "Tab \(number)")

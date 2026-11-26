@@ -15,7 +15,6 @@ final class PullSignsTests {
         setenv("SEARCH_PROBE", "1", 1)
         browser = Browser(record: WindowRecord())
         browser.leaveFiles()
-        browser.prefs.usesTabGroups = true
         browser.prefs.liveFolders = true
         LiveRefs.known = [:]
         for folder in LiveFolders.shared.folders { LiveFolders.shared.remove(folder.id) }

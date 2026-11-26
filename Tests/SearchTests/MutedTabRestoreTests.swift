@@ -46,7 +46,6 @@ struct MutedTabRestoreTests {
 
     @Test func closedGroupKeepsMutedTabState() throws {
         try withBrowser { browser, tabs in
-            browser.prefs.usesTabGroups = true
             tabs[2].toggleMute()
             let group = browser.addTabGroup(containing: tabs[1])
             browser.move(tabs[2], toGroup: group)
@@ -128,12 +127,9 @@ struct MutedTabRestoreTests {
 
     private func withBrowser(_ body: (Browser, [Tab]) throws -> Void) rethrows {
         let browser = makeBrowser()
-        let groups = browser.prefs.usesTabGroups
         defer {
             browser.closeAll()
-            browser.prefs.usesTabGroups = groups
         }
-        browser.prefs.usesTabGroups = false
         try body(browser, browser.tabs)
     }
 

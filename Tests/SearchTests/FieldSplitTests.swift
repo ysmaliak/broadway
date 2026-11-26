@@ -24,7 +24,7 @@ struct FieldSplitTests {
     }
 
     @Test func rowsThatDoSomethingElseDoWhatReturnDoes() {
-        let kinds: [Suggestion.Kind] = [.command(.settings), .action("reader"),
+        let kinds: [Suggestion.Kind] = [.action("reader"),
                                         .answer(FieldAnswer(kind: .sum, expression: "2+2", answer: "4", copy: "4")),
                                         .snippet(Snippet(title: "Hello", keyword: "hi", text: "Hello there")),
                                         placed(.downloads), placed(.snippets)]

@@ -13,15 +13,12 @@ final class FolderTabCloseTests {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
         browser = Browser(record: WindowRecord())
-        savedGroups = browser.prefs.usesTabGroups
-        browser.prefs.usesTabGroups = true
         browser.closeAll()
     }
 
     private func tearDown() {
         browser?.closeAll()
         browser?.tabGroups = []
-        browser?.prefs.usesTabGroups = savedGroups
         browser = nil
     }
 

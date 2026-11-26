@@ -108,7 +108,7 @@ final class ShieldLists {
 
     func refresh(force: Bool) async {
         if let running { return await running.value }
-        let wanted = Shield.shared.enabled && (Store.settings.object(forKey: "shield.lists") as? Bool ?? true)
+        let wanted = Shield.shared.enabled
         guard force || (wanted && Self.due(checked: saved.checked, missing: missing)) else { return }
         let work = Task { await update() }
         running = work

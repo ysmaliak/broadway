@@ -13,7 +13,6 @@ final class SwitcherCloseTests {
     init() {
         keepSetting(Shared.prefs, \.usesSpaces, "spaces")
         keepSetting(Shared.prefs, \.splitView, "splitView")
-        keepSetting(Shared.prefs, \.usesTabGroups, "tabs.groups")
         addTeardownBlock { self.tearDown() }
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
@@ -21,7 +20,6 @@ final class SwitcherCloseTests {
         browser.closeAll()
         browser.prefs.usesSpaces = true
         browser.prefs.splitView = false
-        browser.prefs.usesTabGroups = false
         first = browser.spaceID
         browser.spaces = [Space(id: first, name: "First", colour: 0, icon: TabIcon(emoji: "🏠")),
                           Space(id: second, name: "Second", colour: 1, icon: TabIcon(emoji: "🌿"))]
@@ -116,7 +114,6 @@ final class SwitcherCloseTests {
     }
 
     @Test func theTabInFrontInAFolderIsPutAwayNotClosed() throws {
-        browser.prefs.usesTabGroups = true
         let (_, _, c, d) = twoSpaces()
         let group = browser.addTabGroup(containing: d)
         browser.setFolderPinned(group, true)

@@ -17,9 +17,6 @@ enum PersonGroups {
         },
         PersonVerb("groups", "regroup", .arrange, first: { call in
             let settings = AIGroups.shared
-            guard call.browser.prefs.usesTabGroups else {
-                throw PersonRefusal("refused", "Tab groups are off")
-            }
             guard settings.on else {
                 throw PersonRefusal("refused", "Grouping tabs automatically is off", hint: "Turn it on with broadway settings open ai.groups")
             }

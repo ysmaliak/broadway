@@ -7,7 +7,6 @@ import Testing
 struct FolderNewTabTests {
     init() {
         keepSetting(Shared.prefs, \.floatingNewTab, "newtab.floating")
-        keepSetting(Shared.prefs, \.newTabPlace, "tabs.newPlace")
     }
 
     private func withBrowser(_ body: (Browser, [Tab], UUID) throws -> Void) rethrows {
@@ -15,14 +14,13 @@ struct FolderNewTabTests {
         NSApp.setActivationPolicy(.prohibited)
         let browser = Browser(record: WindowRecord())
         let prefs = browser.prefs
-        let saved = (prefs.usesTabGroups, prefs.splitView)
+        let saved = prefs.splitView
         defer {
             browser.closeAll()
-            (prefs.usesTabGroups, prefs.splitView) = saved
+            prefs.splitView = saved
         }
-        (prefs.usesTabGroups, prefs.splitView) = (true, false)
+        prefs.splitView = false
         prefs.floatingNewTab = false
-        prefs.newTabPlace = .end
         for number in 1...4 {
             if number > 1 { browser.newTab() }
             browser.tabs.last?.restore(url: URL(string: "about:blank#\(number)")!, title: "Tab \(number)")

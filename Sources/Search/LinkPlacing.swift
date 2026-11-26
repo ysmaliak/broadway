@@ -84,11 +84,7 @@ extension Browser {
         row.tabs.append(tab)
         if row.active == nil { row.active = tab.id }
         parked[space] = row
-        if prefs.lazyTabs {
-            tab.restore(url: url, title: knownTitle(for: url) ?? "")
-        } else {
-            tab.go(to: Browser.page(url))
-        }
+        tab.go(to: Browser.page(url))
         writeSession(now: true, space: space, row: row)
         return tab
     }
@@ -160,7 +156,7 @@ extension Browsers {
                 world.apps.insert(bundle)
             }
         }
-        if browser.prefs.liveFolders, browser.prefs.usesTabGroups {
+        if browser.prefs.liveFolders {
             let shown = Set(windows.map(\.spaceID) + (browser.isPrivate ? [] : [browser.spaceID]))
             for space in world.spaces where world.usesSpaces || shown.contains(space.id) {
                 for folder in LiveFolders.shared.folders where folder.space == space.id {
@@ -453,7 +449,7 @@ extension Browser {
     }
 
     func rowsTake(_ source: Tab) -> Bool {
-        LinkRules.shared.settings.goesToLiveRow && prefs.liveFolders && prefs.usesTabGroups && !source.agent
+        LinkRules.shared.settings.goesToLiveRow && prefs.liveFolders && !source.agent
             && tabs.contains { $0.id == source.id } && LiveFolders.shared.folders.contains { !$0.items.isEmpty }
     }
 

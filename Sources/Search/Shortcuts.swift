@@ -297,7 +297,7 @@ struct Command: Identifiable {
             browser.moveToNewWindow(tab)
         },
         Command("tabs.newFolder", "New Folder", .tabs, nil) { browser in
-            if browser.prefs.usesTabGroups { browser.newFolder() }
+            browser.newFolder()
         },
         Command("tabs.renameFolder", "Rename Folder", .tabs, nil) { browser in
             if let folder = browser.frontFolder { browser.editingGroupID = folder.id }

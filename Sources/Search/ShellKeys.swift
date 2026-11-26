@@ -17,8 +17,7 @@ extension ContentView {
             if browser.floater.handleKey(event) { return nil }
             if CallFloat.shared.handleKey(event) { return nil }
             guard event.type == .keyDown else {
-                let held = browser.prefs.showsTabShortcuts && event.modifierFlags.contains(.command)
-                if browser.commandHeld != held { browser.commandHeld = held }
+                if browser.commandHeld { browser.commandHeld = false }
                 if browser.tabSwitcher.active, !ShortcutStore.shared.recentHeld(event.modifierFlags) {
                     browser.commitTabSwitch()
                 }
@@ -26,19 +25,11 @@ extension ContentView {
                 return event
             }
             if event.keyCode == 53, browser.escapesSide(event) { return nil }
-            if event.keyCode == 53, let page = ContentView.pageFillingScreen(event) {
+            if event.keyCode == 53, ContentView.pageFillingScreen(event) != nil {
                 if browser.tabSwitcher.active { browser.tabSwitcher.cancel() }
-                guard browser.prefs.escapeTwice else { return event }
-                return FullScreenEscape.shared.passes(event, to: page) ? event : nil
+                return event
             }
             if browser.holdKey(event) { return nil }
-            if event.keyCode == 53, browser.prefs.escapeTwice, let window, event.window === window,
-               window.styleMask.contains(.fullScreen) {
-                if event.isARepeat { return nil }
-                if take(event) { return nil }
-                FullScreenEscape.shared.press(event, leaving: window)
-                return nil
-            }
             return take(event) ? nil : event
         }
         ContentView.keyHooks[id] = { [weak self] event in

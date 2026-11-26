@@ -4,31 +4,25 @@ import Testing
 
 @Suite(.timeLimit(.minutes(5))) struct TroubleHostTests {
     @Test func theTabInFrontLeavesItsHostToTheAddressField() {
-        let shows = TroubleHost.fieldShows(inFront: true, split: false, addressBar: true, folded: false)
+        let shows = TroubleHost.fieldShows(inFront: true, split: false, folded: false)
 
         #expect(shows)
     }
 
     @Test func aFoldedColumnShowsNoAddress() {
-        let shows = TroubleHost.fieldShows(inFront: true, split: false, addressBar: true, folded: true)
-
-        #expect(!shows)
-    }
-
-    @Test func aColumnWithItsAddressBarTurnedOffShowsNoAddress() {
-        let shows = TroubleHost.fieldShows(inFront: true, split: false, addressBar: false, folded: false)
+        let shows = TroubleHost.fieldShows(inFront: true, split: false, folded: true)
 
         #expect(!shows)
     }
 
     @Test func theFocusedPaneOfASplitShowsItsHostInItsBarWithNoAddressInTheColumn() {
-        let shows = TroubleHost.fieldShows(inFront: true, split: true, addressBar: false, folded: true)
+        let shows = TroubleHost.fieldShows(inFront: true, split: true, folded: true)
 
         #expect(shows)
     }
 
     @Test func theOtherPaneOfASplitShowsNoAddress() {
-        let shows = TroubleHost.fieldShows(inFront: false, split: true, addressBar: true, folded: false)
+        let shows = TroubleHost.fieldShows(inFront: false, split: true, folded: false)
 
         #expect(!shows)
     }

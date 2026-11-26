@@ -5,29 +5,15 @@ import Testing
 @Suite(.sharedWorld, .timeLimit(.minutes(5)))
 @MainActor
 struct TabShortcutHintTests {
-    @Test func theCutFixesTheHintsOff() {
-        let saved = Store.settings.object(forKey: "tabs.shortcuts")
-        defer { Store.settings.set(saved, forKey: "tabs.shortcuts") }
-        Store.settings.set(true, forKey: "tabs.shortcuts")
-
-        let prefs = Preferences()
-
-        #expect(!prefs.showsTabShortcuts)
-    }
-
     @Test func numbersFollowVisibleTabsIncludingPinsGroupsAndSplits() {
         _ = NSApplication.shared
         let browser = Browser(record: WindowRecord())
         let prefs = browser.prefs
-        let saved = (prefs.showsTabShortcuts, prefs.usesTabGroups, prefs.splitView)
+        let saved = prefs.splitView
         defer {
             browser.closeAll()
-            prefs.showsTabShortcuts = saved.0
-            prefs.usesTabGroups = saved.1
-            prefs.splitView = saved.2
+            prefs.splitView = saved
         }
-        prefs.showsTabShortcuts = true
-        prefs.usesTabGroups = false
         browser.commandHeld = true
         for count in 1...11 {
             if count > 1 { browser.newTab() }
@@ -42,7 +28,6 @@ struct TabShortcutHintTests {
         browser.pair(right, with: left, onLeft: false)
         #expect(browser.tabShortcutNumbers[right.id] == nil)
         assertNumbers(browser)
-        prefs.usesTabGroups = true
         let grouped = browser.tabs.filter { $0.pin == nil && $0.id != left.id && $0.id != right.id }.prefix(2)
         let group = browser.addTabGroup(containing: grouped.first!)
         browser.move(grouped.last!, toGroup: group)
@@ -54,18 +39,13 @@ struct TabShortcutHintTests {
         assertNumbers(browser)
         browser.commandHeld = false
         #expect(browser.tabShortcutNumbers.isEmpty)
-        browser.commandHeld = true
-        prefs.showsTabShortcuts = false
-        #expect(browser.tabShortcutNumbers.isEmpty)
     }
 
     @Test func commandEventsAndFocusLoss() async throws {
         _ = NSApplication.shared
         let browser = Browser(record: WindowRecord())
         let prefs = browser.prefs
-        let saved = (prefs.showsTabShortcuts, prefs.usesTabGroups, prefs.splitView)
-        prefs.showsTabShortcuts = true
-        prefs.usesTabGroups = false
+        let saved = prefs.splitView
         prefs.splitView = true
         for number in 1...11 {
             if number > 1 { browser.newTab() }
@@ -84,13 +64,13 @@ struct TabShortcutHintTests {
             window.contentView = nil
             window.close()
             browser.closeAll()
-            prefs.showsTabShortcuts = saved.0
-            prefs.usesTabGroups = saved.1
-            prefs.splitView = saved.2
+            prefs.splitView = saved
         }
         try await settle()
         try await flags(.command, in: window)
-        #expect(browser.commandHeld)
+        #expect(!browser.commandHeld)
+        #expect(browser.tabShortcutNumbers.isEmpty)
+        browser.commandHeld = true
         #expect(browser.tabShortcutNumbers.count == 9)
         for number in [2, 9] {
             let hinted = try #require(browser.tabShortcutNumbers.first { $0.value == number }?.key)
@@ -101,7 +81,6 @@ struct TabShortcutHintTests {
         browser.pin(tabs[4])
         defer { browser.unpin(tabs[4]) }
         browser.pair(tabs[1], with: tabs[0], onLeft: false)
-        prefs.usesTabGroups = true
         let splitGroup = browser.addTabGroup(containing: tabs[0])
         let group = browser.addTabGroup(containing: tabs[2])
         browser.move(tabs[3], toGroup: group)
@@ -157,16 +136,11 @@ struct TabShortcutHintTests {
         #expect(browser.tabGroups.first { $0.id == splitGroup }?.collapsed == true)
         try await flags([], in: window)
         #expect(!browser.commandHeld)
-        try await flags(.command, in: window)
+        browser.commandHeld = true
         NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: window)
         #expect(!browser.commandHeld)
-        try await flags(.command, in: window)
+        browser.commandHeld = true
         NotificationCenter.default.post(name: NSApplication.didResignActiveNotification, object: NSApp)
-        #expect(!browser.commandHeld)
-        try await flags(.command, in: window)
-        prefs.showsTabShortcuts = false
-        #expect(browser.tabShortcutNumbers.isEmpty)
-        try await flags(.command, in: window)
         #expect(!browser.commandHeld)
     }
 

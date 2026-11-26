@@ -39,7 +39,7 @@ extension KitLabel {
         let new = next.map(\.text).joined()
         let fits = lines == 1 && alignment != .center && alignment != .right && !old.isEmpty
             && measure(width: .greatestFiniteMagnitude).width <= bounds.width + 0.5
-        let move = AddressMove.tick(old, new, same: same && fits, shown: rollShown, reduced: Motion.reduced, light: Motion.light)
+        let move = AddressMove.tick(old, new, same: same && fits, shown: rollShown, reduced: Motion.reduced)
         settleRoll()
         runs = next
         guard move != .still else { return }

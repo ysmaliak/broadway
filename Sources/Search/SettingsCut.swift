@@ -13,10 +13,12 @@ enum SettingsCut {
         "swipe.history",
         "commandbar", "autoscroll", "fullscreen.escapeTwice",
         "passkeys", "passkeys.for", "passkeys.entitled",
-        "sidebar.icons", "ai.defaultView", "ai", "links.show", "float.flicks",
+        "sidebar.icons", "ai.defaultView", "ai", "links.show", "float.flicks", "motion.light",
     ]
 
-    nonisolated static let lowPowerKey = "motion.light"
+    nonisolated static let markKey = "settings.cut"
+    nonisolated static let mark = 1
+    nonisolated static let leftBehind = ["inspector", "mind.model", "mind.effort", "mind.acting", "mind.width", "mind.open"]
 
     nonisolated static let retiredPrefix = "brief."
     nonisolated static let retiredKeys = ["weather.api"]
@@ -37,22 +39,25 @@ enum SettingsCut {
 
     nonisolated static func migrate(_ store: UserDefaults, testing: Bool) {
         guard !testing else { return }
-        let save = store.object(forKey: "passwords.save") as? Bool ?? true
-        let fill = store.object(forKey: "passwords.fill") as? Bool ?? true
-        if !save || !fill {
-            store.set(false, forKey: "passwords.save")
-            store.set(false, forKey: "passwords.fill")
-        }
         if store.bool(forKey: "meetings.next") || store.object(forKey: "meetings.alerts") as? Bool == true {
             store.set(true, forKey: "meetings.next")
             store.set(true, forKey: "meetings.alerts")
         }
-        if store.object(forKey: "ai") as? Bool == false {
-            store.set(false, forKey: "ai.groups")
-            store.set(false, forKey: "ai.groups.emoji")
-            store.set(false, forKey: "agents.on")
+        if store.integer(forKey: markKey) < mark {
+            let save = store.object(forKey: "passwords.save") as? Bool ?? true
+            let fill = store.object(forKey: "passwords.fill") as? Bool ?? true
+            if !save || !fill {
+                store.set(false, forKey: "passwords.save")
+                store.set(false, forKey: "passwords.fill")
+            }
+            if store.object(forKey: "ai") as? Bool == false {
+                store.set(false, forKey: "ai.groups")
+                store.set(false, forKey: "ai.groups.emoji")
+                store.set(false, forKey: "agents.on")
+            }
+            for key in leftBehind { store.removeObject(forKey: key) }
+            store.set(mark, forKey: markKey)
         }
         for key in fixed { store.removeObject(forKey: key) }
-        store.set(false, forKey: lowPowerKey)
     }
 }

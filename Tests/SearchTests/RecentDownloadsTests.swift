@@ -34,35 +34,6 @@ final class RecentDownloadsTests {
         loot.forget(loot.kept[0])
     }
 
-    @Test func buttonGoesWithTheLastRecentDownload() {
-        let loot = Loot()
-        let fetches = Fetches(loot: loot)
-        let prefs = Shared.prefs
-        let always = prefs.alwaysShowsDownloads
-        defer { prefs.alwaysShowsDownloads = always }
-        prefs.alwaysShowsDownloads = false
-        loot.add(keep("recent-two.zip", after(loot, 3600)))
-        #expect(FetchDoorView.shows(fetches, prefs))
-
-        loot.clearRecent(at: after(loot, 7200))
-
-        #expect(!FetchDoorView.shows(fetches, prefs))
-        loot.forget(loot.kept[0])
-    }
-
-    @Test func alwaysShowingKeepsTheButtonAfterClearing() {
-        let loot = Loot()
-        let fetches = Fetches(loot: loot)
-        let prefs = Shared.prefs
-        let always = prefs.alwaysShowsDownloads
-        defer { prefs.alwaysShowsDownloads = always }
-        prefs.alwaysShowsDownloads = true
-
-        loot.clearRecent(at: after(loot, 7200))
-
-        #expect(FetchDoorView.shows(fetches, prefs))
-    }
-
     @Test func onlyTheNewestFewAreRecent() {
         let loot = Loot()
         let start = after(loot, 3600)

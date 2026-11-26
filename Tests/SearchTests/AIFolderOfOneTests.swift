@@ -229,7 +229,7 @@ struct AIFolderOfOneTests {
         NSApp.setActivationPolicy(.prohibited)
         let browser = Browser(record: WindowRecord())
         let prefs = browser.prefs
-        let saved = (prefs.usesTabGroups, prefs.splitView, prefs.newTabPlace, prefs.usesSpaces)
+        let saved = (prefs.splitView, prefs.usesSpaces)
         let first = browser.spaceID
         let second = UUID()
         let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 640, height: 400),
@@ -241,14 +241,10 @@ struct AIFolderOfOneTests {
             for tab in browser.tabs where tab.pin != nil { browser.unpin(tab) }
             browser.closeAll()
             window.close()
-            prefs.usesTabGroups = saved.0
-            prefs.splitView = saved.1
-            prefs.newTabPlace = saved.2
-            prefs.usesSpaces = saved.3
+            prefs.splitView = saved.0
+            prefs.usesSpaces = saved.1
         }
-        prefs.usesTabGroups = true
         prefs.splitView = false
-        prefs.newTabPlace = .end
         prefs.usesSpaces = true
         browser.spaces = [Space(id: first, name: "First", colour: 0), Space(id: second, name: "Second", colour: 1)]
         for number in 1...4 {

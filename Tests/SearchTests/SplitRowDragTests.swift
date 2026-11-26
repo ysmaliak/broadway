@@ -47,20 +47,14 @@ final class SplitRowDragTests {
         _ = NSApplication.shared
         let prefs = Shared.prefs
         if restorePreferences == nil {
-            let previous = (prefs.usesTabGroups, prefs.splitView, prefs.usesSpaces, prefs.addressBar, prefs.sideWidth, prefs.newTabPlace,
-                            prefs.newTabsAtBottom)
+            let previous = (prefs.splitView, prefs.usesSpaces, prefs.sideWidth)
             restorePreferences = {
-                (prefs.usesTabGroups, prefs.splitView, prefs.usesSpaces, prefs.addressBar, prefs.sideWidth, prefs.newTabPlace,
-                 prefs.newTabsAtBottom) = previous
+                (prefs.splitView, prefs.usesSpaces, prefs.sideWidth) = previous
             }
         }
-        prefs.usesTabGroups = true
         prefs.splitView = true
         prefs.usesSpaces = false
-        prefs.addressBar = true
         prefs.sideWidth = 258
-        prefs.newTabPlace = .end
-        prefs.newTabsAtBottom = true
         let browser = Browser(record: WindowRecord())
         browser.closeAll()
         let space = Space(id: UUID(), name: "Split drag fixture", colour: 0, sharesSignIns: true)
@@ -292,7 +286,6 @@ final class SplitRowDragTests {
         let world = try world()
         let browser = world.browser
         let other = makeBrowser()
-        Shared.prefs.newTabsAtBottom = false
         other.newTab()
         other.tabs.last?.restore(url: URL(string: "about:blank#elsewhere")!, title: "Elsewhere")
         browser.extendTabSelection(to: world.loose[1], modifiers: .command)

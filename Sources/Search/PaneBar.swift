@@ -450,7 +450,7 @@ private final class PaneTitle: NSView {
         let before = text
         text = next
         let move = animated ? AddressMove.between(before, next, cause: .navigation(back: back),
-                                                  reduced: Motion.reduced, light: Motion.light) : .still
+                                                  reduced: Motion.reduced) : .still
         leaving?.removeFromSuperview()
         leaving = nil
         guard move != .still else {
@@ -466,9 +466,9 @@ private final class PaneTitle: NSView {
         old.setAccessibilityElement(false)
         layoutLabels()
         let shift: CGFloat = if case let .slide(back) = move { back ? -20 : 20 } else { 0 }
-        let curve: KitCurve = move == .fade ? .easeOut(0.16) : Motion.kitRoll
-        let times: (leave: Double, start: Double, end: Double) = move == .fade ? (0.05, 0.016, 0.08) : (0.077, 0.039, 0.129)
-        let length: Double = move == .fade ? 0.16 : 0.3
+        let curve: KitCurve = Motion.kitRoll
+        let times: (leave: Double, start: Double, end: Double) = (0.077, 0.039, 0.129)
+        let length: Double = 0.3
         if shift != 0 {
             if let arrive = curve.animation("transform.translation.x", from: shift, to: 0) { made.layer?.add(arrive, forKey: "slide") }
             if let go = curve.animation("transform.translation.x", from: 0, to: -shift) {

@@ -22,10 +22,8 @@ struct HintsSettingTests {
         NSApp.setActivationPolicy(.prohibited)
         let prefs = Shared.prefs
         keepSetting(prefs, \.hints, Preferences.hintsKey)
-        keepSetting(prefs, \.newTabPlace, "tabs.newPlace")
         keepSetting(prefs, \.splitView)
         prefs.hints = hints
-        prefs.newTabPlace = .end
         prefs.splitView = true
         HintBook.shared.forget()
         HintClock.advance(Hints.afterStart + 24 * 60 * 60)
@@ -70,8 +68,8 @@ struct HintsSettingTests {
         for words in ["hints", "tips", "faster way"] {
             #expect(SettingsIndex.find(words).contains { $0.id == Preferences.hintsKey }, "\(words)")
         }
-        #expect(SettingsIndex.apply(Preferences.hintsKey, false, to: prefs))
-        #expect(SettingsIndex.values(prefs)[Preferences.hintsKey] as? Bool == false)
+        #expect(BenchSettings.set(Preferences.hintsKey, false, on: prefs))
+        #expect(BenchSettings.values(prefs)[Preferences.hintsKey] as? Bool == false)
         #expect(PersonSettings.refusal(Preferences.hintsKey, value: "true") == nil)
         #expect(PersonSettings.table[Preferences.hintsKey]?.write?(prefs, "true") == true)
         #expect(prefs.hints)

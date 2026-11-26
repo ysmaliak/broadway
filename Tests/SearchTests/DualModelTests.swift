@@ -83,18 +83,18 @@ struct DualModelTests {
 
     @Test func aPreferenceIsTracked() async {
         let prefs = Shared.prefs
-        let saved = prefs.showsTabShortcuts
-        let watch = Watch { prefs.showsTabShortcuts }
+        let saved = prefs.hints
+        let watch = Watch { prefs.hints }
         var heard: [Bool] = []
-        let bag = kitObserve(initial: false, { prefs.showsTabShortcuts }) { heard.append($0) }
+        let bag = kitObserve(initial: false, { prefs.hints }) { heard.append($0) }
 
-        prefs.showsTabShortcuts = !saved
+        prefs.hints = !saved
         let invalidated = watch.invalidated
         await turn()
 
         #expect(invalidated)
         #expect(heard == [!saved])
-        prefs.showsTabShortcuts = saved
+        prefs.hints = saved
         _ = bag
     }
 

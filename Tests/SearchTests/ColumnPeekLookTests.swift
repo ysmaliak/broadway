@@ -69,14 +69,11 @@ final class ColumnPeekLookTests {
         let browser = Browser(record: WindowRecord())
         browser.closeAll()
         let prefs = browser.prefs
-        let saved = (prefs.usesTabGroups, prefs.splitView, prefs.sideWidth, prefs.addressBar, prefs.sidePosition, prefs.sideHides)
-        restore = { (prefs.usesTabGroups, prefs.splitView, prefs.sideWidth, prefs.addressBar, prefs.sidePosition, prefs.sideHides) = saved }
-        prefs.usesTabGroups = true
+        let saved = (prefs.splitView, prefs.sideWidth, prefs.sidePosition)
+        restore = { (prefs.splitView, prefs.sideWidth, prefs.sidePosition) = saved }
         prefs.splitView = false
         prefs.sideWidth = 258
-        prefs.addressBar = true
         prefs.sidePosition = .left
-        prefs.sideHides = false
         for index in 0..<4 {
             browser.newTab()
             browser.tabs.last?.restore(url: URL(string: "about:blank#row-\(index)")!, title: "row \(index)")

@@ -7,20 +7,18 @@ import Testing
 @MainActor
 final class TabOrderTests {
     private var browser: Browser!
-    private var old: (groups: Bool, split: Bool, floating: Bool, back: Bool)
+    private var old: (split: Bool, floating: Bool)
 
     init() {
-        keepSettings("tabs.closeGoesBack", "spaces", "tabs.groups", "splitView", "newtab.floating")
+        keepSettings("spaces", "tabs.groups", "splitView", "newtab.floating")
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
         browser = Browser(record: WindowRecord())
         browser.leaveFiles()
         let prefs = browser.prefs
-        old = (prefs.usesTabGroups, prefs.splitView, prefs.floatingNewTab, prefs.closeGoesBack)
-        prefs.usesTabGroups = true
+        old = (prefs.splitView, prefs.floatingNewTab)
         prefs.splitView = true
         prefs.floatingNewTab = false
-        prefs.closeGoesBack = false
         browser.closeAll()
         addTeardownBlock { self.tearDown() }
     }
@@ -28,7 +26,7 @@ final class TabOrderTests {
     private func tearDown() {
         browser?.closeAll()
         if let prefs = browser?.prefs {
-            (prefs.usesTabGroups, prefs.splitView, prefs.floatingNewTab, prefs.closeGoesBack) = old
+            (prefs.splitView, prefs.floatingNewTab) = old
         }
         browser = nil
     }

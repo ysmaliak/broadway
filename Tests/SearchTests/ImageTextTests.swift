@@ -99,7 +99,6 @@ struct ImageTextTests {
 
     @Test func puttingAGroupedTabAwayCancelsCopyTask() async throws {
         try await checkCopyCancellation { browser, tab in
-            browser.prefs.usesTabGroups = true
             let group = browser.newFolder(named: "OCR", editing: false, pinned: true)
             addTeardownBlock { if let group { browser.removeTabGroup(group) } }
             tab.groupID = group
@@ -108,23 +107,10 @@ struct ImageTextTests {
         }
     }
 
-    @Test func lastWindowCloseCancelsCopyEvenWhenSleepingIsOff() async throws {
-        try await checkCopyCancellation { browser, _ in
-            browser.prefs.sleepsTabs = false
-            browser.shut = true
-            browser.sleepShut(again: false)
-        }
-    }
-
     private func checkCopyCancellation(_ close: (Browser, Tab) -> Void) async throws {
-        keepSettings("tabs.sleep")
         let browser = Browser(record: WindowRecord())
-        let groups = browser.prefs.usesTabGroups
-        let sleeping = browser.prefs.sleepsTabs
         defer {
             browser.closeAll()
-            browser.prefs.usesTabGroups = groups
-            browser.prefs.sleepsTabs = sleeping
         }
         let tab = Tab(configuration: Web.configuration(space: browser.spaceID))
         tab.restore(url: URL(string: "about:blank#image-text")!, title: "Picture")

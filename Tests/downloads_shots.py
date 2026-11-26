@@ -54,7 +54,7 @@ def start(theme):
     sv.started.update(sv.running() - before)
     pid = next(iter(sv.holding() & sv.running()))
     sv.cmd({"do": "resize", "width": SIZE[0], "height": SIZE[1], "steps": 1})
-    sv.cmd({"do": "ui", "downloadsbutton": True, "windowAt": "bottom"})
+    sv.cmd({"do": "ui", "windowAt": "bottom"})
     sv.sp("open", url=f"{sv.BASE}/page")
     time.sleep(1)
     number = sv.cmd({"do": "idle", "action": "unhide"})["number"]

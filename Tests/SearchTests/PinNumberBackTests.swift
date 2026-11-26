@@ -22,13 +22,11 @@ struct PinNumberBackTests {
         _ = NSApplication.shared
         let browser = Browser(record: WindowRecord())
         let prefs = browser.prefs
-        let saved = (prefs.pinNumberGoesBack, prefs.usesTabGroups)
+        let saved = prefs.pinNumberGoesBack
         defer {
             browser.closeAll()
-            prefs.pinNumberGoesBack = saved.0
-            prefs.usesTabGroups = saved.1
+            prefs.pinNumberGoesBack = saved
         }
-        prefs.usesTabGroups = false
         for number in 1...4 {
             if number > 1 { browser.newTab() }
             browser.tabs.last?.restore(url: URL(string: "about:blank#\(number)")!, title: "Tab \(number)")

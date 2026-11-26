@@ -17,7 +17,6 @@ final class TalkPlaceTests {
         Store.settings.set(false, forKey: "motion.testReduced")
         browser = Browser(record: WindowRecord())
         browser.leaveFiles()
-        browser.prefs.usesTabGroups = true
         browser.prefs.liveFolders = true
         LiveRefs.known = [:]
         for folder in LiveFolders.shared.folders { LiveFolders.shared.remove(folder.id) }

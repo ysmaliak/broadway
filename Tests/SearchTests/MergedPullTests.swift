@@ -14,7 +14,6 @@ final class MergedPullTests {
         setenv("SEARCH_PROBE", "1", 1)
         browser = Browser(record: WindowRecord())
         browser.leaveFiles()
-        browser.prefs.usesTabGroups = true
         browser.prefs.liveFolders = true
         MergedCrowd.forget()
         for folder in LiveFolders.shared.folders { LiveFolders.shared.remove(folder.id) }

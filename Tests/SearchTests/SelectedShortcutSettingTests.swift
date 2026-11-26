@@ -24,18 +24,18 @@ struct SelectedShortcutSettingTests {
         prefs.selectedShortcut = false
         let item = try #require(SettingsIndex.item("sidebar.selected"))
 
-        let applied = SettingsIndex.apply("sidebar.selected", true, to: prefs)
+        let applied = BenchSettings.set("sidebar.selected", true, on: prefs)
 
         #expect(applied)
         #expect(prefs.selectedShortcut)
-        #expect(SettingsIndex.values(prefs)["sidebar.selected"] as? Bool == true)
+        #expect(BenchSettings.values(prefs)["sidebar.selected"] as? Bool == true)
         #expect(!item.findOnly && item.kind == .control && item.page == .appearance && item.group == "sidebar")
         #expect(item.title == "Selected tab shortcut")
         #expect(item.detail == "When the selected tab scrolls out of view, show it at the edge of the list")
         for words in ["selected tab", "show selected tab", "scroll to tab"] {
             #expect(SettingsIndex.find(words).contains { $0.id == "sidebar.selected" }, "\(words)")
         }
-        #expect(!SettingsIndex.apply("sidebar.selected", "nope", to: prefs))
+        #expect(!BenchSettings.set("sidebar.selected", "nope", on: prefs))
         #expect(PersonSettings.refusal("sidebar.selected", value: "true") == nil)
         #expect(SettingsStageMap.claim("sidebar.selected") == .spot(.tabs))
     }

@@ -558,7 +558,7 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
     }
 
     private var ghostOffer: LiveOffer? {
-        guard prefs.usesTabGroups, !(embedded && preview != nil), let offer = LiveOffers.shared.offer(for: browser),
+        guard !(embedded && preview != nil), let offer = LiveOffers.shared.offer(for: browser),
               offer.space == preview?.space ?? browser.spaceID else { return nil }
         return offer
     }
@@ -593,7 +593,7 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
     }
 
     private var blankLeads: Bool { looseTabs.contains(where: \.isBlank) }
-    private var newTabBelow: Bool { prefs.newTabsAtBottom && !blankLeads }
+    private var newTabBelow: Bool { !blankLeads }
     private var heldLead = Metrics.sideGap
     private var heldRoom: CGFloat { newTabBelow ? rowHeight + heldLead : 0 }
     var heldRoomNow: CGFloat { heldRoom }
@@ -625,11 +625,7 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
         state.ground = ground
         state.hoverCards = prefs.hoverCards
         state.splitView = prefs.splitView
-        state.icons = prefs.glyph == .icons
-        state.showsAddress = prefs.showsAddress
         state.floatingNewTab = prefs.floatingNewTab
-        state.addressBar = prefs.addressBar
-        state.tabsGive = prefs.tabsGive
         state.nextMeeting = prefs.nextMeeting
         return state
     }
@@ -648,8 +644,6 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
         state.height = rowHeight
         state.ground = ground
         state.hoverCards = prefs.hoverCards
-        state.icons = prefs.glyph == .icons
-        state.tabsGive = prefs.tabsGive
         state.nextMeeting = prefs.nextMeeting
         return state
     }
@@ -885,15 +879,7 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
             at += height
         }
         if !folders.isEmpty { divider() }
-        let topNew = !blankLeads && !prefs.newTabsAtBottom
-        newTabTop.isHidden = !topNew
-        if topNew {
-            lead(.row)
-            styleNew(newTabTop)
-            put(newTabTop, NSRect(x: Self.inset, y: at, width: inner, height: rowHeight))
-            blocks.append(("row", NSRect(x: Self.inset, y: at, width: inner, height: rowHeight)))
-            at += rowHeight
-        }
+        newTabTop.isHidden = true
         let loose = looseTabs
         let items = listItems
         let places = Dictionary(uniqueKeysWithValues: loose.enumerated().map { ($1.id, $0) })
@@ -1868,7 +1854,7 @@ extension SidePageView {
         animateNext = true
         switch block {
         case .loose:
-            if browser.prefs.usesTabGroups { browser.move(tab, within: nil, to: index) } else { browser.moveDisplayedTab(tab, to: index + browser.squarePins.count) }
+            browser.move(tab, within: nil, to: index)
         case .folder(let group): browser.move(tab, within: group, to: index)
         case .pins: browser.moveDisplayedTab(tab, to: index)
         case .task: break
@@ -1879,7 +1865,7 @@ extension SidePageView {
         guard let carry else { return }
         let tab = carry.tab
         _ = destination(tab, at: point)
-        guard carry.block == .loose, browser.prefs.usesTabGroups, dropOn == nil else {
+        guard carry.block == .loose, dropOn == nil else {
             hold.over(nil) { [weak self] in self?.joining = $0 }
             return
         }
@@ -1951,7 +1937,6 @@ extension SidePageView {
 
     fileprivate func destination(_ tab: Tab, at point: NSPoint) -> GroupDropTarget? {
         guard tab.pin == nil else { return nil }
-        let grouped = browser.prefs.usesTabGroups
         let carried = lifted(tab)
         if carried, var carry = carry, !carry.leftHome {
             if let home = carry.home.map({ listDocument.convert($0, to: self) }), home.contains(point) {
@@ -1961,10 +1946,9 @@ extension SidePageView {
             carry.leftHome = true
             self.carry = carry
         }
-        guard grouped || carried else { return nil }
-        var frames = grouped ? dropFrames() : [:]
+        var frames = dropFrames()
         if carried { frames[tab.id] = nil }
-        let groups = grouped ? browser.tabGroups.filter { !$0.live || $0.id == tab.groupID && tab.liveKey != nil } : []
+        let groups = browser.tabGroups.filter { !$0.live || $0.id == tab.groupID && tab.liveKey != nil }
         let place = carried || browser.group(of: tab) != nil
             ? ListDrop.resolve(point, items: itemsNow, below: raisedNow.map(\.maxY).max() ?? -.greatestFiniteMagnitude,
                                frames: frames, groups: groups, excluding: tab.id,
@@ -2003,7 +1987,7 @@ extension SidePageView {
             browser.move(tab, toGroup: target)
         } else if let looseOn {
             animateNext = true
-            if browser.prefs.usesTabGroups, browser.group(of: tab) != nil {
+            if browser.group(of: tab) != nil {
                 browser.moveOut(tab, before: looseOn.before)
             } else {
                 browser.moveLoose(tab, before: looseOn.before)
@@ -2027,7 +2011,6 @@ extension SidePageView {
     }
 
     private func shifted(_ tab: Tab, _ width: CGFloat) -> Bool {
-        guard browser.prefs.usesTabGroups else { return false }
         let steps = Int((width / (16 * 1.5)).rounded(.towardZero))
         animateNext = true
         return browser.shiftLevel(tab, by: steps)
@@ -2196,11 +2179,9 @@ extension SidePageView {
             return .squares(browser.pinSlot(tab, proposed: slot))
         case .loose:
             guard tab.pin != nil else { return nil }
-            if browser.prefs.usesTabGroups {
-                for (id, rect) in cardFrames where rect.contains(point) {
-                    guard let group = browser.tabGroups.first(where: { $0.id == id }), !group.live else { continue }
-                    return .group(id)
-                }
+            for (id, rect) in cardFrames where rect.contains(point) {
+                guard let group = browser.tabGroups.first(where: { $0.id == id }), !group.live else { continue }
+                return .group(id)
             }
             let loose = looseOrder
             guard !loose.isEmpty, let top = looseTop else { return .loose(0) }
@@ -3333,7 +3314,7 @@ extension SidePageView {
             return
         }
         let id = tab.id
-        shortcut.show(tab, ground: ground, titleSize: prefs.sideTitle, icons: prefs.glyph == .icons,
+        shortcut.show(tab, ground: ground, titleSize: prefs.sideTitle, icons: true,
                       radius: rows[id]?.state.radius ?? Metrics.sideRadius)
         let across = listDocument.convert(row, to: self)
         let band = SelectedShortcut.band(edge, offset: 0, visible: listVisible, height: rowHeight, gap: Self.gap)

@@ -250,11 +250,11 @@ struct Parked {
     /// front, if that is in it — then the loose tabs. Drawn flat, every tab
     /// in a folded group came out for the length of the swipe and went back
     /// in as the space landed. A pair's other half isn't a row of its own.
-    @MainActor func drawn(groupsOn: Bool, splitView: Bool) -> (groups: [DrawnGroup], loose: [Tab]) {
+    @MainActor func drawn(splitView: Bool) -> (groups: [DrawnGroup], loose: [Tab]) {
         let stands: (Tab) -> Bool = { tab in
             !splitView || !splits.contains { $0.tabs.contains(tab.id) && $0.left != tab.id }
         }
-        let kept = groupsOn ? FolderTree.ordered(FolderTree.lasting(groups ?? [], holding: Set(tabs.compactMap(\.groupID)))) : []
+        let kept = FolderTree.ordered(FolderTree.lasting(groups ?? [], holding: Set(tabs.compactMap(\.groupID))))
         let shown = drawnGroups(kept, splitView: splitView)
         let inGroups = Set(kept.map(\.id))
         let loose = tabs.filter { tab in
@@ -263,11 +263,11 @@ struct Parked {
         return (shown, loose)
     }
 
-    @MainActor func list(groupsOn: Bool, splitView: Bool) -> (raised: [DrawnGroup], items: [DrawnItem]) {
+    @MainActor func list(splitView: Bool) -> (raised: [DrawnGroup], items: [DrawnItem]) {
         let stands: (Tab) -> Bool = { tab in
             !splitView || !splits.contains { $0.tabs.contains(tab.id) && $0.left != tab.id }
         }
-        let kept = groupsOn ? FolderTree.ordered(FolderTree.lasting(groups ?? [], holding: Set(tabs.compactMap(\.groupID)))) : []
+        let kept = FolderTree.ordered(FolderTree.lasting(groups ?? [], holding: Set(tabs.compactMap(\.groupID))))
         let raised = drawnGroups(kept.filter { FolderTree.raised($0.id, in: kept) }, splitView: splitView)
         let inGroups = Set(kept.map(\.id))
         var items: [DrawnItem] = []
@@ -671,7 +671,7 @@ enum SpaceMenu {
             }
         }
         // Every group of this space, folded or opened at once, as in Arc.
-        if shown, browser.prefs.usesTabGroups, !browser.tabGroups.isEmpty {
+        if shown, !browser.tabGroups.isEmpty {
             if browser.canFoldAllGroups {
                 menu.addItem(item("Shut All Folders") { browser.foldAllGroups(true) }.leadingSymbol(MenuSymbol.shutFolders))
             }

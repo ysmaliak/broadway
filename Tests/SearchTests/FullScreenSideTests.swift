@@ -179,10 +179,9 @@ final class FullScreenSideTests {
         let browser = Browser(record: WindowRecord())
         browser.closeAll()
         let prefs = browser.prefs
-        let saved = (prefs.splitView, prefs.sideHides, prefs.sidePosition, prefs.sideWidth)
-        restore = { (prefs.splitView, prefs.sideHides, prefs.sidePosition, prefs.sideWidth) = saved }
+        let saved = (prefs.splitView, prefs.sidePosition, prefs.sideWidth)
+        restore = { (prefs.splitView, prefs.sidePosition, prefs.sideWidth) = saved }
         prefs.splitView = false
-        prefs.sideHides = false
         prefs.sidePosition = .left
         prefs.sideWidth = 258
         for index in 0..<2 {

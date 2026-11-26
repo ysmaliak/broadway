@@ -7,15 +7,12 @@ import Testing
 @MainActor
 final class ShortcutTests {
     init() async throws {
-        keepSettings("links.peek", "links.peekClick")
         addTeardownBlock { await self.tearDown() }
         Store.settings.removeObject(forKey: "shortcuts")
-        Store.settings.removeObject(forKey: "links.peekClick")
     }
 
     private func tearDown() async {
         Store.settings.removeObject(forKey: "shortcuts")
-        Store.settings.removeObject(forKey: "links.peekClick")
     }
 
     @Test func noTwoCommandsShareADefaultKey() {
@@ -146,30 +143,16 @@ final class ShortcutTests {
         #expect(KeyCombo(event: event) == KeyCombo("1", command: false, control: true))
     }
 
-    @Test func theCutFixesPeekToShift() {
-        let saved = Store.settings.object(forKey: "links.peekClick")
-        defer { Store.settings.set(saved, forKey: "links.peekClick") }
-        Store.settings.set(PeekClick.optionShift.rawValue, forKey: "links.peekClick")
-
-        let prefs = Preferences()
-
-        #expect(prefs.peekClick == .shift)
-    }
-
-    @Test func navigationUsesChosenPeekClickAndKeepsOtherActions() async throws {
+    @Test func aShiftClickPeeksAndOtherClicksKeepTheirActions() async throws {
         _ = NSApplication.shared
         let server = try LocalDownloadServer()
         defer { server.stop() }
         let browser = Browser(record: WindowRecord())
         let tab = browser.benchOpen(server.url("page"))
         browser.activeID = tab.id
-        let peeks = browser.prefs.peeksLinks, click = browser.prefs.peekClick
-        browser.prefs.peeksLinks = true
         defer {
             browser.closePeek()
             browser.closeAll()
-            browser.prefs.peeksLinks = peeks
-            browser.prefs.peekClick = click
         }
         let target = server.url("destination")
 
@@ -183,34 +166,26 @@ final class ShortcutTests {
             }
         }
 
-        for choice in PeekClick.allCases {
-            browser.prefs.peekClick = choice
-            let result = await policy(choice.flags)
-            #expect(result == .cancel)
-            for _ in 0..<50 where browser.peekTab == nil {
-                try await Task.sleep(for: .milliseconds(10))
-            }
-            #expect(browser.peekTab?.address == target)
-            browser.closePeek()
+        let result = await policy(.shift)
+        #expect(result == .cancel)
+        for _ in 0..<50 where browser.peekTab == nil {
+            try await Task.sleep(for: .milliseconds(10))
         }
-        browser.prefs.peekClick = .optionShift
+        #expect(browser.peekTab?.address == target)
+        browser.closePeek()
         let ordinary = await policy([])
         #expect(ordinary == .allow)
-        let old = await policy(.shift)
-        #expect(old == .allow)
-        let script = await policy([.option, .shift], type: .other)
+        let other = await policy([.option, .shift])
+        #expect(other == .allow)
+        let script = await policy(.shift, type: .other)
         #expect(script == .allow)
-        let download = await policy([.option, .shift], download: true)
+        let download = await policy(.shift, download: true)
         #expect(download == .download)
         #expect(browser.peekTab == nil)
         let count = browser.tabs.count
         let command = await policy(.command)
         #expect(command == .cancel)
         #expect(browser.tabs.count == (count + 1))
-        #expect(browser.peekTab == nil)
-        browser.prefs.peeksLinks = false
-        let disabled = await policy([.option, .shift])
-        #expect(disabled == .allow)
         #expect(browser.peekTab == nil)
     }
 }

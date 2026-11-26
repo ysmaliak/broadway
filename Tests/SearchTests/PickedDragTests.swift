@@ -75,7 +75,6 @@ final class PickedDragTests {
     @Test func pickedRowsCarriedOntoAFolderAllJoinItWithACountOnTheCarriedRow() async throws {
         let browser = makeBrowser(count: 6)
         let t = browser.tabs
-        browser.prefs.usesTabGroups = true
         let folder = browser.addTabGroup(containing: t[0], pinned: false)
         browser.editingGroupID = nil
         browser.select(t[2])
@@ -333,20 +332,17 @@ final class PickedDragTests {
         NSApp.setActivationPolicy(.prohibited)
         let prefs = Shared.prefs
         if restorePreferences == nil {
-            let previous = (prefs.usesTabGroups, prefs.splitView, prefs.usesSpaces, prefs.sharesPins,
-                            prefs.addressBar, prefs.sideWidth, prefs.newTabPlace)
+            let previous = (prefs.splitView, prefs.usesSpaces, prefs.sharesPins,
+                            prefs.sideWidth)
             restorePreferences = {
-                (prefs.usesTabGroups, prefs.splitView, prefs.usesSpaces, prefs.sharesPins,
-                 prefs.addressBar, prefs.sideWidth, prefs.newTabPlace) = previous
+                (prefs.splitView, prefs.usesSpaces, prefs.sharesPins,
+                 prefs.sideWidth) = previous
             }
         }
-        prefs.usesTabGroups = false
         prefs.splitView = false
         prefs.usesSpaces = false
         prefs.sharesPins = false
-        prefs.addressBar = true
         prefs.sideWidth = 258
-        prefs.newTabPlace = .end
         let browser = Browser(record: WindowRecord())
         browser.closeAll()
         let space = Space(id: UUID(), name: "Picked drag fixture", colour: 0, sharesSignIns: true)

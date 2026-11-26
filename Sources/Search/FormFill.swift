@@ -94,10 +94,6 @@ final class FormFill {
     func begin() {
         if preview != nil { return confirm() }
         guard let tab = browser?.active else { return }
-        guard book.fillsForms else {
-            browser?.announce("Form filling is off in Settings › Passwords")
-            return
-        }
         guard let page = pageFor(tab) else { return }
         Task { await prepare(tab, page) }
     }
@@ -212,7 +208,7 @@ final class FormFill {
     }
 
     func hint(for tab: Tab, field: FormField?) -> String? {
-        guard book.fillsForms, let field, field.count >= 3 else { return nil }
+        guard let field, field.count >= 3 else { return nil }
         if case .fill(let kind) = FormClassifier.verdict(field) {
             if kind.isCard {
                 guard CardRules.fill(on: tab.pageAddress, privateTab: tab.shy) != .refused else { return nil }
@@ -224,7 +220,7 @@ final class FormFill {
     }
 
     private func answered(_ fields: [FormField], values: [String: String], tab: Tab) {
-        guard book.fillsForms, !tab.shy, let page = tab.pageAddress, FormMemory.site(of: page) != nil else { return }
+        guard !tab.shy, let page = tab.pageAddress, FormMemory.site(of: page) != nil else { return }
         let taken = FormMemory.taken(fields, values: values)
         guard !taken.isEmpty else { return }
         answeredTurn += 1
@@ -257,7 +253,7 @@ final class FormFill {
     }
 
     private func held(_ fields: [FormField], values: [String: String], tab: Tab) {
-        guard book.fillsForms, CardRules.mayOfferToSave(on: tab.pageAddress, privateTab: tab.shy),
+        guard CardRules.mayOfferToSave(on: tab.pageAddress, privateTab: tab.shy),
               let keep = FormCapture.keep(fields, values: values), isNew(keep)
         else { return }
         heldTurn += 1

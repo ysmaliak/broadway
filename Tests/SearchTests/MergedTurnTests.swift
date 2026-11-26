@@ -16,7 +16,6 @@ final class MergedTurnTests {
         setenv("SEARCH_PROBE", "1", 1)
         browser = Browser(record: WindowRecord())
         browser.leaveFiles()
-        browser.prefs.usesTabGroups = true
         browser.prefs.liveFolders = true
         LiveFolders.shared.reader = { _ in .failed }
         LiveFolders.shared.stackStagger = 0
@@ -317,26 +316,6 @@ final class MergedTurnTests {
         #expect(turned.mergedForm == .full)
         let alpha = Double(ground.alphaComponent)
         #expect(alpha >= MergedWash.lit(dark: false) - 0.001 && alpha <= MergedWash.most + 0.001, "\(alpha) \(column.kitDark)")
-    }
-
-    @Test func aRowDrawnWithLettersInPlaceOfIconsIsWashedToo() throws {
-        keepSetting(Shared.prefs, \.glyph, "glyph")
-        browser.prefs.glyph = .letters
-        let made = prs([pull(1), pull(2)])
-        let (column, window) = shown(made)
-        defer {
-            window.contentView = nil
-            window.close()
-        }
-        let turned = try #require(row(1, in: column))
-
-        merge(1, column: column)
-
-        #expect(badge(turned)?.isHidden != false)
-        #expect(turned.mergedForm == .full)
-        #expect(turned.mergedLayers == 2)
-        #expect(turned.plays == 1)
-        #expect(turned.kitSubviews(of: BylineView.self).first?.stateTint != nil)
     }
 
     @Test func aRowThatIsMergedButNotTurningKeepsThePurpleCheckAndTheWord() throws {

@@ -324,18 +324,16 @@ final class SelectedShortcutTests {
         let browser = Browser(record: WindowRecord())
         browser.closeAll()
         let prefs = browser.prefs
-        let saved = (prefs.usesTabGroups, prefs.splitView, prefs.sideWidth, prefs.sidePosition, prefs.sideHides, prefs.stackedSpaces,
+        let saved = (prefs.splitView, prefs.sideWidth, prefs.sidePosition, prefs.stackedSpaces,
                      prefs.selectedShortcut)
         restore = {
-            (prefs.usesTabGroups, prefs.splitView, prefs.sideWidth, prefs.sidePosition, prefs.sideHides, prefs.stackedSpaces,
+            (prefs.splitView, prefs.sideWidth, prefs.sidePosition, prefs.stackedSpaces,
              prefs.selectedShortcut) = saved
         }
         prefs.selectedShortcut = on
-        prefs.usesTabGroups = folder
         prefs.splitView = false
         prefs.sideWidth = 258
         prefs.sidePosition = .left
-        prefs.sideHides = false
         prefs.stackedSpaces = false
         for number in 0..<40 {
             browser.newTab()

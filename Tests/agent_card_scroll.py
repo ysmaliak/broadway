@@ -524,7 +524,6 @@ def main():
         for key in ("bench", "agents.on"):
             subprocess.run(["defaults", "write", SUITE, key, "-bool", "true"], check=True)
         subprocess.run(["defaults", "write", SUITE, "motion.testReduced", "-bool", "false"], check=True)
-        subprocess.run(["defaults", "write", SUITE, "motion.testLowPower", "-bool", "false"], check=True)
         subprocess.run(["defaults", "write", SUITE, "sidebar.width", "-float", str(SIDE)], check=True)
         subprocess.run(["open", "-n", "-g", "-j", "--env", f"SEARCH_PROBE={WORLD}", str(APP)], check=True)
         wait_for(lambda: (FOLDER / "bench.sock").exists(), 30)

@@ -245,7 +245,6 @@ final class AIGroupSubjectTests {
         NSApp.setActivationPolicy(.prohibited)
         let browser = Browser(record: WindowRecord())
         browser.leaveFiles()
-        browser.prefs.usesTabGroups = true
         let pages = [("Alfama loft with river view - Airbnb", "https://www.airbnb.com/rooms/1"),
                      ("Sourdough starter in seven days", "https://bread.example/starter"),
                      ("Berlin to Lisbon | Google Flights", "https://www.google.com/travel/flights"),

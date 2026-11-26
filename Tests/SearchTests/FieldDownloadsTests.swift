@@ -307,11 +307,6 @@ final class FieldDownloadsTests {
         #expect(browser.picked == 0)
         browser.quitField()
 
-        browser.edit()
-        browser.take(.command(.downloads))
-        onDownloads(tabs: tabs)
-        browser.quitField()
-
         browser.downloadsOpen = true
         browser.hoarding = true
         #expect(!browser.downloadsOpen)
@@ -351,11 +346,6 @@ final class FieldDownloadsTests {
 
         #expect(tab.page == nil)
         #expect(browser.fieldPlace == nil)
-    }
-
-    @Test func theAddressCommandKeepsTheField() {
-        #expect(AddressCommand.downloads.keepsField)
-        #expect(!AddressCommand.history.keepsField)
     }
 
     @Test func aLongListMakesOnlyTheRowsNearTheScreen() throws {

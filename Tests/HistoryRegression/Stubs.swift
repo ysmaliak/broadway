@@ -10,12 +10,6 @@ final class Favicons {
     func forget(_ url: URL) {}
 }
 
-enum AddressCommand {
-    case settings
-
-    var title: String { "Settings" }
-}
-
 enum Store {
     private static let testRoot: URL = {
         guard let path = ProcessInfo.processInfo.environment["SEARCH_HISTORY_TEST_ROOT"] else {

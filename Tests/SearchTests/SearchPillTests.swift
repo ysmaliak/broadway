@@ -32,8 +32,8 @@ struct SearchPillTests {
         let browser = Browser(record: WindowRecord())
         browser.leaveFiles()
         let prefs = browser.prefs
-        let previous = (prefs.usesTabGroups, prefs.usesSpaces, prefs.splitView, prefs.sharesPins, prefs.addressBar, prefs.fullAddress)
-        (prefs.usesTabGroups, prefs.usesSpaces, prefs.splitView, prefs.sharesPins, prefs.addressBar, prefs.fullAddress) = (false, true, false, false, true, false)
+        let previous = (prefs.usesSpaces, prefs.splitView, prefs.sharesPins)
+        (prefs.usesSpaces, prefs.splitView, prefs.sharesPins) = (true, false, false)
         let window = NSWindow(contentRect: NSRect(x: -20_000, y: -20_000, width: 900, height: 600), styleMask: .borderless, backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         browser.window = window
@@ -41,7 +41,7 @@ struct SearchPillTests {
             window.contentView = nil
             window.close()
             browser.closeAll()
-            (prefs.usesTabGroups, prefs.usesSpaces, prefs.splitView, prefs.sharesPins, prefs.addressBar, prefs.fullAddress) = previous
+            (prefs.usesSpaces, prefs.splitView, prefs.sharesPins) = previous
             NSApp.setActivationPolicy(policy)
         }
         let first = browser.spaceID

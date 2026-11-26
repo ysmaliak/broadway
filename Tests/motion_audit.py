@@ -171,7 +171,7 @@ def motions(made):
         ("load", load, 2.6, top),
         ("find-in", lambda: ui(finding=True), 1.2, find),
         ("find-out", lambda: ui(finding=False), 1.0, find),
-        ("downloads-in", lambda: ui(downloadsbutton=True, recentdownloads=True), 1.2, foot),
+        ("downloads-in", lambda: ui(recentdownloads=True), 1.2, foot),
         ("downloads-out", lambda: ui(recentdownloads=False), 1.0, foot),
         ("plus-in", lambda: ui(plus=True), 1.2, foot),
         ("plus-out", lambda: ui(plus=False), 1.0, foot),

@@ -1,8 +1,8 @@
 import Foundation
 
 enum TroubleHost {
-    static func fieldShows(inFront: Bool, split: Bool, addressBar: Bool, folded: Bool) -> Bool {
-        inFront && (split || (addressBar && !folded))
+    static func fieldShows(inFront: Bool, split: Bool, folded: Bool) -> Bool {
+        inFront && (split || !folded)
     }
 
     static func onPage(_ host: String?, fieldShows: Bool) -> String? {
@@ -19,7 +19,7 @@ enum TroubleHost {
 extension Browser {
     func troubleHost(for tab: Tab) -> String? {
         let shown = TroubleHost.fieldShows(inFront: tab.id == activeID, split: activeSplit?.contains(tab.id) == true,
-                                           addressBar: prefs.addressBar, folded: folded)
+                                           folded: folded)
         return TroubleHost.onPage(tab.address?.host() ?? tab.pending?.host(), fieldShows: shown)
     }
 }

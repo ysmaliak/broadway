@@ -184,12 +184,9 @@ final class NewTabsNoticeTests {
         let browser = Browser(record: WindowRecord())
         browser.closeAll()
         let prefs = browser.prefs
-        let saved = (prefs.splitView, prefs.sideHides, prefs.lazyTabs, prefs.addressBar)
-        restore = { (prefs.splitView, prefs.sideHides, prefs.lazyTabs, prefs.addressBar) = saved }
+        let saved = prefs.splitView
+        restore = { prefs.splitView = saved }
         prefs.splitView = false
-        prefs.sideHides = false
-        prefs.lazyTabs = true
-        prefs.addressBar = true
         for index in 0..<2 {
             browser.newTab()
             browser.tabs.last?.restore(url: URL(string: "about:blank#row-\(index)")!, title: "row \(index)")

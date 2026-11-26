@@ -988,7 +988,6 @@ final class Bench {
             }
             out["folded"] = browser.folded
             out["peeking"] = browser.peeking
-            out["sideHides"] = browser.prefs.sideHides
             // The page as a card (see Browser.asCards), and what it is made of.
             out["cards"] = ["switch": browser.prefs.cards, "fullScreen": browser.fullScreen, "on": browser.asCards,
                             "windowFullScreen": (browser.window ?? Links.window)?.styleMask.contains(.fullScreen) ?? false]
@@ -1519,7 +1518,6 @@ final class Bench {
                 case .visited: "visited"
                 case .bookmark: "bookmark"
                 case .known: "known"
-                case .command: "command"
                 case .passage: "passage"
                 case .action: "action"
                 case .answer: "answer"
@@ -1738,7 +1736,8 @@ final class Bench {
                     out["undecrypted"] = read.undecrypted
                 case .failure(let error): out["error"] = "\(error)"
                 }
-                browser.took(outcome, from: source.name)
+                let said = ImportModel.passwordsSaid(outcome, from: source.name, into: browser)
+                browser.announce(said.text, kind: said.ok ? nil : .error)
                 out["saved"] = browser.saved.count
             }
             if what.contains("spaces") {
@@ -1921,12 +1920,12 @@ final class Bench {
             // row moves it; the merged values read back. Test runs only.
             guard Store.testing else { answer(["error": "settings only works on a --test run"]); return }
             if let id = request["set"] as? String {
-                guard let value = request["value"], SettingsIndex.apply(id, value, to: browser.prefs) else {
+                guard let value = request["value"], BenchSettings.set(id, value, on: browser.prefs) else {
                     answer(["error": "settings set ID VALUE: unknown id or value"]); return
                 }
             }
             if request["forget"] as? Bool == true { browser.forgetCaptureChoices() }
-            var reply: [String: Any] = ["values": SettingsIndex.values(browser.prefs),
+            var reply: [String: Any] = ["values": BenchSettings.values(browser.prefs),
                                         "settingsPage": browser.settingsPage.rawValue,
                                         "speeds": Dictionary(uniqueKeysWithValues: VideoSpeed.sites().map { ($0.site, $0.rate) }),
                                         "lastQuality": VideoQuality.last() ?? 0]
@@ -2947,7 +2946,7 @@ final class Bench {
             let tabsMenu = NSApp.mainMenu?.items.first(where: { $0.title == "Tabs" })?.submenu
             let brackets = ["Back", "Forward"].map { title in tabsMenu?.items.first { $0.title == title }?.keyEquivalent ?? "" }
             answer(["viewItems": items(view), "spaceItems": items(SpaceMenu.menu(for: browser)), "brackets": brackets,
-                    "on": browser.prefs.usesTabGroups, "groups": browser.tabGroups.map { group in
+                    "on": true, "groups": browser.tabGroups.map { group in
                 ["id": String(group.id.uuidString.prefix(8)).lowercased(), "name": group.name, "collapsed": group.collapsed,
                  "tabs": browser.tabs(in: group.id).map(Bench.short)] as [String: Any]
             }])
@@ -3555,18 +3554,10 @@ final class Bench {
                                     switch via {
                                     case "switch": browser.select(out ? other! : tab)
                                     case "app":
-                                        let away = browser.prefs.floatsAway
-                                        browser.prefs.floatsAway = true
                                         if out { browser.appLeft() } else { browser.appBack() }
-                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                            browser.prefs.floatsAway = away
-                                        }
                                     case "sight":
-                                        let away = browser.prefs.floatsAway
-                                        browser.prefs.floatsAway = true
                                         browser.sightForBench = !out
                                         browser.judgeSight()
-                                        browser.prefs.floatsAway = away
                                     default: browser.toggleFloat()
                                     }
                                 }
@@ -3853,8 +3844,6 @@ final class Bench {
                     DispatchQueue.main.asyncAfter(deadline: .now() + every * 16) { SpaceSwipe.shared.ended() }
                 case "ask": browser.askForSpace()
                 case "leave": browser.leaveSpaceCreation()
-                case "addressBar":
-                    browser.prefs.addressBar.toggle()
                 default: break
                 }
             }
@@ -4017,7 +4006,6 @@ final class Bench {
             }
             address.benchPillHover(request["on"] as? Bool ?? true)
             if let down = request["press"] as? Bool { address.benchPress(down) }
-            if let full = request["fullAddress"] as? Bool { browser.prefs.fullAddress = full }
             answer(["frame": address.window.map { _ in let f = address.convert(address.bounds, to: nil); return [f.minX, f.minY, f.width, f.height] } ?? []])
 
         case "rowhover":
@@ -4307,7 +4295,7 @@ final class Bench {
                 // Each space off screen as a swipe draws it passing by
                 // (Parked.drawn): its groups, folded or not, and their tabs.
                 "drawn": Dictionary(browser.parked.map { id, row in
-                    let (groups, loose) = row.drawn(groupsOn: browser.prefs.usesTabGroups, splitView: browser.prefs.splitView)
+                    let (groups, loose) = row.drawn(splitView: browser.prefs.splitView)
                     return (browser.spaces.first { $0.id == id }?.name ?? id.uuidString, [
                         "groups": groups.map { ["name": $0.group.name, "collapsed": $0.group.collapsed,
                                                 "tabs": $0.tabs.map(Bench.short)] as [String: Any] },
@@ -4480,7 +4468,6 @@ final class Bench {
                 browser.linkStatus.show(link == "off" ? nil : link, over: browser.active?.built, space: browser.spaceID, privateTab: browser.active?.shy == true)
             }
             if Store.testing, let text = request["announce"] as? String { browser.announce(text) }
-            if Store.testing, let on = request["downloadsbutton"] as? Bool { browser.prefs.alwaysShowsDownloads = on }
             if Store.testing, let on = request["plus"] as? Bool { browser.plusOpen = on }
             if Store.testing, let bars = request["glassBars"] as? [String] { BenchGlass.show(bars, browser) }
             if Store.testing, let dark = request["glassDark"] as? Bool { BenchGlass.dark(dark) }
@@ -4514,7 +4501,7 @@ final class Bench {
                 }
                 browser.prefs.sidePosition = position
             }
-            if let mode = (request["pages120"] as? String).flatMap(FastPages.init) { browser.prefs.fastPages = mode }
+            if let mode = (request["pages120"] as? String).flatMap(FastPages.init) { FrameRate.mode = mode }
             if let on = request["dusk"] as? Bool { browser.prefs.darkensPages = on }
             // Swipe between pages, standing in for the Mac's own setting.
             if let on = request["swipepages"] as? Bool, Store.testing { Swipe.testing = on }
@@ -4529,24 +4516,17 @@ final class Bench {
                 button.performClick(nil)
             }
             if let on = request["spaces"] as? Bool { browser.prefs.usesSpaces = on }
-            if let on = request["groups"] as? Bool, Store.testing { browser.prefs.usesTabGroups = on }
             if let on = request["sharedpins"] as? Bool { browser.prefs.sharesPins = on }
-            if let on = request["hides"] as? Bool { browser.prefs.sideHides = on }
             if let on = request["cards"] as? Bool { browser.prefs.cards = on }
             if Store.testing, let on = request["unclip"] as? Bool, let root = browser.window?.contentView?.superview {
                 SelectedLook.unclip(on, in: root)
             }
             if let on = request["bookmarksBar"] as? Bool, Store.testing { browser.prefs.bookmarksBar = on }
-            if let on = request["address"] as? Bool { browser.prefs.showsAddress = on }
-            if Store.testing, let bar = request["addressBar"] as? String {
-                browser.prefs.addressBar = bar != "hidden"
-                browser.prefs.fullAddress = bar == "full"
-            }
             // Settings › Videos wait for a click, moved as its switch moves it.
-            if let on = request["waits"] as? Bool, Store.testing { browser.prefs.waitsForPlay = on }
-            // Settings › Privacy's two switches (see Privacy.swift).
-            if let on = request["gpc"] as? Bool, Store.testing { browser.prefs.sendsPrivacySignal = on }
-            if let on = request["clickids"] as? Bool, Store.testing { browser.prefs.removesClickIDs = on }
+            if let on = request["waits"] as? Bool, Store.testing {
+                Store.settings.set(on, forKey: Preferences.waitsKey)
+                DispatchQueue.main.async { for tab in browser.tabs + browser.parkedTabs { tab.playbackChanged() } }
+            }
             if let on = request["folded"] as? Bool { browser.folded = on }
             // The window's own full screen as the chrome sees it, without
             // the window going there: a test run never takes the screen.
@@ -5538,7 +5518,7 @@ final class Bench {
             // it says it now: the setting on, the tab you're on, not edited
             // (see AtRest.swift).
             "atRest": AtRest.of(tab.saidAddress)?.text ?? "",
-            "atRestShown": browser.map { tab.id == $0.activeID && $0.editingTab != tab.id && AtRest.said(tab.saidAddress, always: $0.prefs.showsAddress) != nil } ?? false,
+            "atRestShown": browser.map { tab.id == $0.activeID && $0.editingTab != tab.id && AtRest.said(tab.saidAddress, always: false) != nil } ?? false,
             "asleep": tab.asleep,
             "shy": tab.shy,
             "noisy": tab.noisy,

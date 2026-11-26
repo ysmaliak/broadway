@@ -11,18 +11,17 @@ final class LabelRollTests {
         addTeardownBlock { await self.tearDown() }
         Store.settings.set(true, forKey: "roll.testShown")
         Store.settings.set(false, forKey: "motion.testReduced")
-        Store.settings.set(false, forKey: "motion.testLowPower")
     }
 
     private func tearDown() async {
-        for key in ["roll.testShown", "motion.testReduced", "motion.testLowPower"] { Store.settings.removeObject(forKey: key) }
+        for key in ["roll.testShown", "motion.testReduced"] { Store.settings.removeObject(forKey: key) }
         for window in windows { window.contentView = nil }
         windows = []
     }
 
     private func tick(_ old: String, _ new: String, same: Bool = true, shown: Bool = true,
-                      reduced: Bool = false, light: Bool = false) -> AddressMove {
-        AddressMove.tick(old, new, same: same, shown: shown, reduced: reduced, light: light)
+                      reduced: Bool = false) -> AddressMove {
+        AddressMove.tick(old, new, same: same, shown: shown, reduced: reduced)
     }
 
     private func label(in window: Bool = true) -> KitLabel {
@@ -86,7 +85,6 @@ final class LabelRollTests {
 
     @Test func underReduceMotionTheTextChangesAtOnce() {
         #expect(tick("5m left", "4m left", reduced: true) == .still)
-        #expect(tick("5m left", "4m left", light: true) == .fade)
     }
 
     @Test func aLabelDoesNotRollWhenItFirstAppearsOrIsNotSeen() {

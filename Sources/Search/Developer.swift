@@ -189,8 +189,8 @@ final class Developer {
         Store.settings.set(servers, forKey: Self.key)
     }
 
-    func arrived(_ tab: Tab, offers: Bool) {
-        guard offers, !tab.shy, !tab.agent, LocalServer.isLocal(tab.pageAddress), let key = LocalServer.key(tab.pageAddress),
+    func arrived(_ tab: Tab) {
+        guard !tab.shy, !tab.agent, LocalServer.isLocal(tab.pageAddress), let key = LocalServer.key(tab.pageAddress),
               servers[key] == nil, !offered.contains(key) else { return }
         offered.insert(key)
         offer = key

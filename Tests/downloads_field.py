@@ -164,7 +164,6 @@ def case_doors(tabs):
     on_downloads("History, Downloads in the menu", tabs)
     close()
 
-    sv.cmd({"do": "ui", "downloadsbutton": True})
     time.sleep(0.4)
     sv.cmd({"do": "ui", "recentdownloads": True})
     found = until(popover_rows, 6) or []
@@ -350,7 +349,6 @@ def start():
     time.sleep(2)
     sv.started.update(sv.running() - before)
     sv.cmd({"do": "resize", "width": 1000, "height": 720, "steps": 1})
-    sv.cmd({"do": "ui", "downloadsbutton": True})
     tab = sv.page("page")
     sv.cmd({"do": "idle", "action": "unhide"})
     time.sleep(1)

@@ -222,10 +222,7 @@ def main():
         hover(True)
         time.sleep(0.5)
         shoot("narrow-dark-near-hover")
-        hover(True, fullAddress=True)
-        time.sleep(0.6)
-        shoot("narrow-dark-near-hover-long")
-        hover(False, fullAddress=False)
+        hover(False)
         (OUT / "measure.json").write_text(json.dumps(report, indent=1))
         print(OUT)
     finally:

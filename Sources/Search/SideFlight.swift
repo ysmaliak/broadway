@@ -231,14 +231,14 @@ final class PinMorphView: NSView {
 
 extension SidePageView {
     static var morphChange: KitCurve {
-        Motion.reduced ? .none : Motion.light ? .easeOut(0.14 * PinMorph.slow) : .spring(KitSpring(response: 0.22 * PinMorph.slow, damping: 0.9))
+        Motion.reduced ? .none : .spring(KitSpring(response: 0.22 * PinMorph.slow, damping: 0.9))
     }
 
     static var morphLanding: KitCurve {
-        Motion.reduced ? .none : Motion.light ? .easeOut(0.16 * PinMorph.slow) : .spring(KitSpring(response: 0.26 * PinMorph.slow, damping: 0.86))
+        Motion.reduced ? .none : .spring(KitSpring(response: 0.26 * PinMorph.slow, damping: 0.86))
     }
 
     static var morphFlight: KitCurve {
-        Motion.reduced ? .none : Motion.light ? .easeOut(0.16) : .spring(.settle)
+        Motion.reduced ? .none : .spring(.settle)
     }
 }

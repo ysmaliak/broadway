@@ -10,7 +10,7 @@ struct FieldSection: Identifiable, Equatable {
 extension Suggestion {
     var primary: String {
         switch kind {
-        case .search, .suggested, .open, .command, .action, .snippet: return key
+        case .search, .suggested, .open, .action, .snippet: return key
         case .answer(let answer): return answer.answer
         case .placed(let item): return item.title
         default: return title.isEmpty ? Address.withoutWWW(key) : title
@@ -19,7 +19,7 @@ extension Suggestion {
 
     var secondary: String {
         switch kind {
-        case .open, .command, .action, .snippet: return title
+        case .open, .action, .snippet: return title
         case .search: return title
         case .suggested: return ""
         case .passage: return note
@@ -339,8 +339,6 @@ final class FieldPlainRowView: NSView {
         case .search, .suggested:
             if offer.kind == .search, let found = Favicons.shared.cached(for: offer.url) { return .mark(found, "") }
             return .symbol("magnifyingglass")
-        case .command:
-            return .symbol("command")
         case .snippet:
             return .symbol("text.insert")
         case .action where !offer.symbol.isEmpty:
@@ -475,7 +473,7 @@ final class FieldBarView: NSView {
         if offer.pickIsSwitch { return "Switch to Tab" }
         switch offer.kind {
         case .search, .suggested: return "Search"
-        case .command, .action: return "Run"
+        case .action: return "Run"
         default: return "Open"
         }
     }

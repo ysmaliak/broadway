@@ -11,7 +11,6 @@ final class FolderPinTests {
         NSApp.setActivationPolicy(.prohibited)
         let browser = Browser(record: WindowRecord())
         browser.leaveFiles()
-        browser.prefs.usesTabGroups = true
         for number in 0..<count {
             if number > 0 { browser.newTab() }
             browser.tabs.last?.restore(url: URL(string: "https://\(number).example/")!, title: "\(number)")

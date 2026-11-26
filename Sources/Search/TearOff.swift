@@ -165,7 +165,7 @@ extension Browser {
         switch place {
         case .folder(let target): move(tab, toGroup: target)
         case .loose(let loose):
-            if prefs.usesTabGroups, group(of: tab) != nil {
+            if group(of: tab) != nil {
                 moveOut(tab, before: loose.before)
             } else {
                 moveLoose(tab, before: loose.before)

@@ -64,7 +64,6 @@ final class Favorites {
             return Favorite(id: id, title: offer.key, detail: offer.title, address: nil, action: id,
                             symbol: offer.symbol.isEmpty ? nil : offer.symbol)
         }
-        if case .command = offer.kind { return nil }
         let url = PageHit.plain(offer.url)
         guard url != FieldAction.nowhere else { return nil }
         return Favorite(id: History.identity(for: url), title: offer.primary, detail: Address.editable(url),

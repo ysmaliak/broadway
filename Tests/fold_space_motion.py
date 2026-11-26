@@ -26,7 +26,7 @@ for key,value in {'bench':True,'spaces':True,'tabs.groups':True,'tabs.aiGroups':
  subprocess.run(['defaults','write',sv.SUITE,key,'-bool',str(value).lower()],check=True)
 subprocess.run(['defaults','write',sv.SUITE,'look','-string',dark],check=True)
 subprocess.run(['defaults','write',sv.SUITE,'sidebar.width','-float','252'],check=True)
-for key,value in {'motion.testReduced':policy=='reduced','motion.testLowPower':policy=='power'}.items():
+for key,value in {'motion.testReduced':policy=='reduced'}.items():
  subprocess.run(['defaults','write',sv.SUITE,key,'-bool',str(value).lower()],check=True)
 subprocess.run(['open','-n','-g','--env',f'SEARCH_PROBE={sv.W}','--env','SEARCH_SHOWN=1',sv.APP],check=True)
 for _ in range(200):

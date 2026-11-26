@@ -411,20 +411,11 @@ def main():
             subprocess.run(["defaults", "write", sv.SUITE, "motion.testReduced", "-bool", "true" if on else "false"], check=True)
             time.sleep(0.6)
 
-        def low(on):
-            subprocess.run(["defaults", "write", sv.SUITE, "motion.testLowPower", "-bool", "true" if on else "false"], check=True)
-            time.sleep(0.6)
-
         sv.sp("select", id=m)
         reduced(True)
         pinning("reduced-pin", m)
         unpinning("reduced-unpin", m)
         reduced(False)
-        low(True)
-        for n in range(2):
-            pinning(f"low-pin-{n}", m)
-            unpinning(f"low-unpin-{n}", m)
-        low(False)
         for name in ["reduced-pin", "reduced-unpin"]:
             r = summary.get(name)
             if r and checking:

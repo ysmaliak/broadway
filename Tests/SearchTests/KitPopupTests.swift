@@ -7,12 +7,10 @@ import Testing
 struct KitPopupTests {
     private func moving(_ reduced: Bool) {
         Store.settings.set(reduced, forKey: "motion.testReduced")
-        Store.settings.set(false, forKey: "motion.testLowPower")
     }
 
     private func still() {
         Store.settings.removeObject(forKey: "motion.testReduced")
-        Store.settings.removeObject(forKey: "motion.testLowPower")
     }
 
     private func world() -> (NSWindow, NSView) {

@@ -3118,9 +3118,6 @@ final class PageView: WKWebView {
     /// How far the fingers have gone up (or down, below nought) since the
     /// last step through the list.
     private var climbed: CGFloat = 0
-    /// Settings › General › Hold a swipe to pick from history. Off unless
-    /// asked for; off, a held swipe is a swipe like any other.
-    static var holdsHistory = false
     /// How long armed before the list, and how far up or down a step is.
     private static let hold: TimeInterval = 0.45
     private static let step: CGFloat = 22
@@ -3349,7 +3346,7 @@ final class PageView: WKWebView {
         }
 
         let armed = travel >= PageView.arm
-        if PageView.holdsHistory, stops == nil, armed != armedNow {
+        if stops == nil, armed != armedNow {
             holding?.cancel()
             holding = nil
             if armed {

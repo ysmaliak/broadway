@@ -35,7 +35,6 @@ struct SideScene {
 
     @MainActor
     static func live(_ browser: Browser) -> SideScene {
-        let groupsOn = browser.prefs.usesTabGroups
         let gathered = browser.gatheredTabs
         let displayed = browser.displayedTabs
         let shown = displayed.filter { !gathered.contains($0.id) }
@@ -44,10 +43,10 @@ struct SideScene {
             pins: browser.squarePins,
             tabs: browser.tabs,
             groups: browser.tabGroups,
-            tops: groupsOn ? browser.folderRows.filter { $0.kind == .heading && $0.depth == 0 && $0.group.isPinned }.map(\.group) : [],
-            listFolders: groupsOn ? browser.tabGroups.filter { $0.parent == nil && !$0.isPinned } : [],
+            tops: browser.folderRows.filter { $0.kind == .heading && $0.depth == 0 && $0.group.isPinned }.map(\.group),
+            listFolders: browser.tabGroups.filter { $0.parent == nil && !$0.isPinned },
             tasks: browser.taskFolders,
-            loose: displayed.filter { $0.pin == nil && !gathered.contains($0.id) && (!groupsOn || browser.group(of: $0) == nil) },
+            loose: displayed.filter { $0.pin == nil && !gathered.contains($0.id) && browser.group(of: $0) == nil },
             items: browser.listItems(shown),
             splits: browser.splits,
             active: browser.activeID,
@@ -58,12 +57,11 @@ struct SideScene {
 
     @MainActor
     static func parked(_ row: Parked, prefs: Preferences) -> SideScene {
-        let groupsOn = prefs.usesTabGroups
         let splitOn = prefs.splitView
         let stands: (Tab) -> Bool = { tab in
             !splitOn || !row.splits.contains { $0.tabs.contains(tab.id) && $0.tabs.first != tab.id }
         }
-        let kept = groupsOn ? FolderTree.ordered(FolderTree.lasting(row.groups ?? [], holding: Set(row.tabs.compactMap(\.groupID)))) : []
+        let kept = FolderTree.ordered(FolderTree.lasting(row.groups ?? [], holding: Set(row.tabs.compactMap(\.groupID))))
         let ids = Set(kept.map(\.id))
         let front = row.splits.first { pair in row.active.map(pair.tabs.contains) ?? false }?.tabs.first ?? row.active
         let linked = Set(AgentLinks.shared.links.map(\.id))

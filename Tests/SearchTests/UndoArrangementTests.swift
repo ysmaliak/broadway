@@ -54,7 +54,7 @@ struct UndoArrangementTests {
     }
 
     @Test func movingAFolderIsUndoneToItsPlace() throws {
-        try withBrowser(groups: true) { browser, tabs, undo in
+        try withBrowser { browser, tabs, undo in
             let folder = browser.quietly { browser.addTabGroup(containing: tabs[2], pinned: false) }
             browser.editingGroupID = nil
             let before = browser.listItems(browser.displayedTabs)
@@ -127,7 +127,7 @@ struct UndoArrangementTests {
     }
 
     @Test func aSearchResultFiledIntoItsFolderLeavesNothingToUndo() throws {
-        try withBrowser(groups: true) { browser, tabs, undo in
+        try withBrowser { browser, tabs, undo in
             tabs[0].restore(url: URL(string: "https://www.google.com/search?q=lisbon+hotels")!, title: "lisbon hotels - Google Search")
 
             act(undo) { browser.fileSearchResult(tabs[1], from: tabs[0]) }
@@ -186,7 +186,7 @@ struct UndoArrangementTests {
     }
 
     @Test func aTabPinnedFromAFolderGoesBackIntoIt() throws {
-        try withBrowser(groups: true) { browser, tabs, undo in
+        try withBrowser { browser, tabs, undo in
             let folder = browser.quietly { browser.addTabGroup(containing: tabs[1]) }
             browser.quietly { browser.move(tabs[2], toGroup: folder) }
             browser.editingGroupID = nil
@@ -216,7 +216,7 @@ struct UndoArrangementTests {
     }
 
     @Test func movingATabIntoAFolderIsUndone() throws {
-        try withBrowser(groups: true) { browser, tabs, undo in
+        try withBrowser { browser, tabs, undo in
             let folder = browser.quietly { browser.addTabGroup(containing: tabs[1]) }
             browser.editingGroupID = nil
             let before = ids(browser)
@@ -234,7 +234,7 @@ struct UndoArrangementTests {
     }
 
     @Test func takingATabOutOfAFolderPutsItBackInItsPlaceThere() throws {
-        try withBrowser(groups: true) { browser, tabs, undo in
+        try withBrowser { browser, tabs, undo in
             let folder = browser.quietly { browser.addTabGroup(containing: tabs[1]) }
             browser.quietly {
                 browser.move(tabs[2], toGroup: folder)
@@ -255,7 +255,7 @@ struct UndoArrangementTests {
     }
 
     @Test func aFolderLeftEmptyByAMoveComesBackWithItsName() throws {
-        try withBrowser(groups: true) { browser, tabs, undo in
+        try withBrowser { browser, tabs, undo in
             let folder = browser.quietly { browser.addTabGroup(containing: tabs[1]) }
             browser.quietly { browser.renameTabGroup(folder, to: "Work") }
             browser.editingGroupID = nil
@@ -272,7 +272,7 @@ struct UndoArrangementTests {
     }
 
     @Test func makingAFolderFromATabIsUndone() throws {
-        try withBrowser(groups: true) { browser, tabs, undo in
+        try withBrowser { browser, tabs, undo in
             var folder: UUID?
             act(undo) { folder = browser.addTabGroup(containing: tabs[2]) }
 
@@ -288,7 +288,7 @@ struct UndoArrangementTests {
     }
 
     @Test func makingAFolderWithPickedTabsIsOneStep() throws {
-        try withBrowser(groups: true) { browser, tabs, undo in
+        try withBrowser { browser, tabs, undo in
             act(undo) { _ = browser.newFolder(with: [tabs[1], tabs[3]]) }
 
             #expect(browser.undoSteps.count == 1)
@@ -302,7 +302,7 @@ struct UndoArrangementTests {
     }
 
     @Test func makingAnEmptyFolderIsUndone() throws {
-        try withBrowser(groups: true) { browser, _, undo in
+        try withBrowser { browser, _, undo in
             act(undo) { _ = browser.newFolder() }
             undo.undo()
 
@@ -311,7 +311,7 @@ struct UndoArrangementTests {
     }
 
     @Test func removingAFolderKeepingItsTabsUndoesAsRemoveFolderAndBringsItBackWithItsTabs() throws {
-        try withBrowser(groups: true) { browser, tabs, undo in
+        try withBrowser { browser, tabs, undo in
             let folder = browser.quietly { browser.addTabGroup(containing: tabs[1]) }
             browser.quietly {
                 browser.move(tabs[3], toGroup: folder)
@@ -336,7 +336,7 @@ struct UndoArrangementTests {
     }
 
     @Test func closingAFolderStaysOneCloseStep() throws {
-        try withBrowser(groups: true) { browser, tabs, undo in
+        try withBrowser { browser, tabs, undo in
             let folder = browser.quietly { browser.addTabGroup(containing: tabs[1]) }
             browser.editingGroupID = nil
 
@@ -364,7 +364,7 @@ struct UndoArrangementTests {
     }
 
     @Test func renamingAFolderIsUndone() throws {
-        try withBrowser(groups: true) { browser, tabs, undo in
+        try withBrowser { browser, tabs, undo in
             let folder = browser.quietly { browser.addTabGroup(containing: tabs[1]) }
             browser.editingGroupID = nil
             let before = try #require(browser.tabGroups.first { $0.id == folder })
@@ -382,7 +382,7 @@ struct UndoArrangementTests {
     }
 
     @Test func aFolderFoldedSinceARenameStaysFoldedWhenTheRenameIsUndone() throws {
-        try withBrowser(groups: true) { browser, tabs, undo in
+        try withBrowser { browser, tabs, undo in
             let folder = browser.quietly { browser.addTabGroup(containing: tabs[1]) }
             browser.editingGroupID = nil
             act(undo) { browser.renameTabGroup(folder, to: "Work") }
@@ -422,7 +422,7 @@ struct UndoArrangementTests {
     }
 
     @Test func aTabMovedOutOfItsFolderToAnotherSpaceComesBackIntoIt() throws {
-        try withBrowser(groups: true) { browser, tabs, undo, second in
+        try withBrowser { browser, tabs, undo, second in
             let folder = browser.quietly { browser.addTabGroup(containing: tabs[1]) }
             browser.quietly { browser.renameTabGroup(folder, to: "Work") }
             browser.editingGroupID = nil
@@ -480,16 +480,16 @@ struct UndoArrangementTests {
 
     private func ids(_ browser: Browser) -> [Tab.ID] { browser.tabs.map(\.id) }
 
-    private func withBrowser(groups: Bool = false, _ body: (Browser, [Tab], UndoManager) throws -> Void) throws {
-        try withBrowser(groups: groups) { browser, tabs, undo, _ in try body(browser, tabs, undo) }
+    private func withBrowser(_ body: (Browser, [Tab], UndoManager) throws -> Void) throws {
+        try withBrowser { browser, tabs, undo, _ in try body(browser, tabs, undo) }
     }
 
-    private func withBrowser(groups: Bool = false, _ body: (Browser, [Tab], UndoManager, UUID) throws -> Void) throws {
+    private func withBrowser(_ body: (Browser, [Tab], UndoManager, UUID) throws -> Void) throws {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
         let browser = Browser(record: WindowRecord())
         let prefs = browser.prefs
-        let saved = (prefs.usesTabGroups, prefs.splitView, prefs.newTabPlace, prefs.usesSpaces)
+        let saved = (prefs.splitView, prefs.usesSpaces)
         let first = browser.spaceID
         let second = UUID()
         let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 640, height: 400),
@@ -501,14 +501,10 @@ struct UndoArrangementTests {
             for tab in browser.tabs where tab.pin != nil { browser.unpin(tab) }
             browser.closeAll()
             window.close()
-            prefs.usesTabGroups = saved.0
-            prefs.splitView = saved.1
-            prefs.newTabPlace = saved.2
-            prefs.usesSpaces = saved.3
+            prefs.splitView = saved.0
+            prefs.usesSpaces = saved.1
         }
-        prefs.usesTabGroups = groups
         prefs.splitView = false
-        prefs.newTabPlace = .end
         prefs.usesSpaces = true
         browser.spaces = [Space(id: first, name: "First", colour: 0), Space(id: second, name: "Second", colour: 1)]
         for number in 1...4 {

@@ -107,7 +107,7 @@ extension Browser {
             heldDialogs.removeValue(forKey: page.id)?.forEach { $0.dismiss() }
             dropQuestions(for: page.id)
             if floating == page.id { land(covering: false) }
-            page.rest(at: prefs.pinsGoHome || prefs.pinsPeek ? page.home : nil)
+            page.rest(at: page.home)
         }
         if members.contains(where: { $0.id == activeID }) {
             let gone = Set(members.map(\.id))

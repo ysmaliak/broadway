@@ -81,7 +81,6 @@ final class Fold: NSView {
         var out: Bool
         var right: Bool
         var columnWidth: CGFloat
-        var sideHides: Bool
         var editing: Tab.ID?
         var bookmarksOpen: Bool
     }
@@ -149,7 +148,7 @@ final class Fold: NSView {
     private var current: Seen {
         let prefs = browser.prefs
         return Seen(folded: browser.folded, out: browser.columnPeek.out, right: prefs.sidePosition == .right,
-                    columnWidth: prefs.columnWidth, sideHides: prefs.sideHides,
+                    columnWidth: prefs.columnWidth,
                     editing: browser.editingTab, bookmarksOpen: browser.bookmarksOpen)
     }
 
@@ -179,13 +178,6 @@ final class Fold: NSView {
         if was.columnWidth != now.columnWidth {
             if browser.folded { hideLights() }
             needsLayout = true
-        }
-        if was.sideHides != now.sideHides {
-            resetPending()
-            let hides = now.sideHides
-            browser.columnPeek.docking = browser.folded && browser.peeking && !hides
-            browser.peeking = false
-            browser.folded = hides
         }
         if was.editing != nil, now.editing == nil, !inside, browser.peeking { peek(false) }
         if was.bookmarksOpen, !now.bookmarksOpen, !inside, browser.peeking { peek(false) }
@@ -281,7 +273,7 @@ final class Fold: NSView {
     }
 
     private func arrive(resting: Bool = false) {
-        guard resting || browser.prefs.sideHides || browser.fullScreen else { return peek(true) }
+        guard resting || browser.fullScreen else { return peek(true) }
         pass()
         let coming = DispatchWorkItem { [weak self] in
             self?.arriving = nil

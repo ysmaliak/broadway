@@ -14,7 +14,6 @@ final class LinkRulesTests {
 
     init() async throws {
         keepSetting(Shared.prefs, \.usesSpaces, "spaces")
-        keepSetting(Shared.prefs, \.usesTabGroups, "tabs.groups")
         addTeardownBlock { await self.tearDown() }
         setenv("SEARCH_PROBE", "1", 1)
         _ = NSApplication.shared
@@ -172,7 +171,6 @@ final class LinkRulesTests {
     }
 
     @Test func aRuleIntoAFolderPutsTheTabInIt() throws {
-        browser.prefs.usesTabGroups = true
         _ = page("https://example.com")
         let folder = try #require(browser.newFolder(editing: false, pinned: false))
         store.add(LinkRule(match: .site("linear.app"), target: .space(first, folder: folder)))

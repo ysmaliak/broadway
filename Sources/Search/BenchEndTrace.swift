@@ -23,7 +23,6 @@ final class EndTrace: NSObject {
             answer(["rows": rows(in: root)])
         case "command":
             let on = ask["on"] as? Bool ?? false
-            if on { browser.prefs.showsTabShortcuts = true }
             browser.commandHeld = on
             answer(["ok": true])
         default:

@@ -16,7 +16,6 @@ final class PullPageStateTests {
         setenv("SEARCH_PROBE", "1", 1)
         browser = Browser(record: WindowRecord())
         browser.leaveFiles()
-        browser.prefs.usesTabGroups = true
         browser.prefs.liveFolders = true
         for folder in LiveFolders.shared.folders { LiveFolders.shared.remove(folder.id) }
         LiveFolders.shared.reader = { [weak self] folder in

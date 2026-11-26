@@ -10,9 +10,9 @@ struct AddressMoveTests {
     private let second = UUID()
 
     private func move(_ old: AddressMove.Mark, _ new: AddressMove.Mark, step: AddressMove.TabStep? = nil,
-                      back: Bool = false, reduced: Bool = false, light: Bool = false) -> AddressMove {
+                      back: Bool = false, reduced: Bool = false) -> AddressMove {
         let cause = AddressMove.cause(from: old, to: new, step: step, back: back)
-        return AddressMove.between(old.text, new.text, cause: cause, reduced: reduced, light: light)
+        return AddressMove.between(old.text, new.text, cause: cause, reduced: reduced)
     }
 
     @Test func aTabBelowRollsDown() {
@@ -120,18 +120,6 @@ struct AddressMoveTests {
 
         #expect(tab == .still)
         #expect(link == .still)
-    }
-
-    @Test func lowPowerCrossfades() {
-        let old = AddressMark(tab: first, space: space, text: "example.com")
-        let new = AddressMark(tab: second, space: space, text: "wikipedia.org")
-        let step = AddressMove.TabStep(to: second, fromPlace: 0, toPlace: 1)
-
-        let tab = move(old, new, step: step, light: true)
-        let link = move(old, AddressMark(tab: first, space: space, text: "swift.org"), back: true, light: true)
-
-        #expect(tab == .fade)
-        #expect(link == .fade)
     }
 }
 

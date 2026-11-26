@@ -77,7 +77,6 @@ struct TabKeysTests {
 
     @Test func moveUpAndDownStaysInItsFolder() {
         withBrowser { browser, tabs in
-            browser.prefs.usesTabGroups = true
             let folder = browser.addTabGroup(containing: tabs[1])
             browser.move(tabs[2], toGroup: folder)
             browser.select(tabs[2])
@@ -117,7 +116,6 @@ struct TabKeysTests {
             #expect(tabs[3].pin == nil)
             #expect(browser.tabs.firstIndex { $0.id == tabs[1].id }! < browser.tabs.firstIndex { $0.id == tabs[3].id }!)
 
-            browser.prefs.usesTabGroups = true
             let folder = browser.addTabGroup(containing: tabs[0])
             browser.move(chosen, toGroup: folder)
 
@@ -156,7 +154,6 @@ struct TabKeysTests {
             #expect(board.string(forType: .string) == "https://one.example/")
             #expect(board.string(forType: .html)?.contains(">Tab 1</a>") == true)
 
-            browser.prefs.usesTabGroups = true
             let folder = browser.addTabGroup(containing: tabs[1])
             browser.move(tabs[3], toGroup: folder)
             browser.copyFolderLinks(folder, as: .address)
@@ -188,17 +185,12 @@ struct TabKeysTests {
         NSApp.setActivationPolicy(.prohibited)
         let browser = Browser(record: WindowRecord())
         let prefs = browser.prefs
-        keepSetting(prefs, \.newTabPlace, "tabs.newPlace")
-        let saved = (prefs.usesTabGroups, prefs.splitView, prefs.newTabPlace)
+        let saved = prefs.splitView
         defer {
             browser.closeAll()
-            prefs.usesTabGroups = saved.0
-            prefs.splitView = saved.1
-            prefs.newTabPlace = saved.2
+            prefs.splitView = saved
         }
-        prefs.usesTabGroups = false
         prefs.splitView = false
-        prefs.newTabPlace = .end
         let tabs = ["one", "two", "three", "four"].enumerated().map { index, word in
             let tab = Tab(configuration: Web.configuration(space: browser.spaceID))
             tab.restore(url: URL(string: "https://\(word).example/" + (index == 0 ? "?utm_source=x" : ""))!, title: "Tab \(index + 1)")

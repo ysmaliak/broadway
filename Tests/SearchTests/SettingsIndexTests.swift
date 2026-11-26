@@ -169,20 +169,18 @@ struct SettingsIndexTests {
         let browser = Browser(record: WindowRecord())
         let prefs = browser.prefs
         let groups = AIGroups.shared
-        let was = (groups.standIn, groups.macAvailable, prefs.agentsOn, prefs.usesTabGroups)
+        let was = (groups.standIn, groups.macAvailable, prefs.agentsOn)
         keepSetting(groups, \.on, AIGroups.onKey)
         defer {
             groups.standIn = was.0
             groups.macAvailable = was.1
             prefs.agentsOn = was.2
-            prefs.usesTabGroups = was.3
             browser.closeAll()
         }
         groups.standIn = nil
         groups.macAvailable = { true }
         groups.on = true
         prefs.agentsOn = true
-        prefs.usesTabGroups = true
 
         #expect(prefs.agentsAllowed)
         #expect(groups.active(browser))
@@ -340,7 +338,6 @@ struct SettingsIndexTests {
         defaults.set("dark", forKey: "look")
         defaults.set(false, forKey: "passwords.save")
         defaults.set(true, forKey: "meetings.alerts")
-        defaults.set(true, forKey: SettingsCut.lowPowerKey)
 
         SettingsCut.migrate(defaults, testing: false)
 
@@ -351,7 +348,6 @@ struct SettingsIndexTests {
         #expect(defaults.object(forKey: "passwords.fill") as? Bool == false)
         #expect(defaults.bool(forKey: "meetings.next"))
         #expect(defaults.bool(forKey: "meetings.alerts"))
-        #expect(defaults.object(forKey: SettingsCut.lowPowerKey) as? Bool == false)
     }
 
     @Test func showWhereLinksGoAndFlickTheFloatingVideoAreOnWhateverWasStoredBefore() {
@@ -398,6 +394,32 @@ struct SettingsIndexTests {
         #expect(kept["ai"] == nil)
         #expect(kept["ai.groups"] == nil)
         #expect(defaults.bool(forKey: "agents.on"))
+    }
+
+    @Test func theCleanUpsRunOnceAndTheCutAndMeetingsMergeAtEveryLaunch() {
+        let (defaults, _) = store()
+        defaults.set(true, forKey: "inspector")
+        defaults.set("opus", forKey: "mind.model")
+        defaults.set(false, forKey: "tabs.give")
+
+        SettingsCut.migrate(defaults, testing: false)
+
+        #expect(defaults.object(forKey: "inspector") == nil)
+        #expect(defaults.object(forKey: "mind.model") == nil)
+        #expect(defaults.object(forKey: "tabs.give") == nil)
+        #expect(defaults.integer(forKey: SettingsCut.markKey) == SettingsCut.mark)
+
+        defaults.set(true, forKey: "inspector")
+        defaults.set(false, forKey: "tabs.give")
+        defaults.set(false, forKey: "passwords.save")
+        defaults.set(true, forKey: "meetings.alerts")
+
+        SettingsCut.migrate(defaults, testing: false)
+
+        #expect(defaults.object(forKey: "inspector") as? Bool == true)
+        #expect(defaults.object(forKey: "tabs.give") == nil)
+        #expect(defaults.object(forKey: "passwords.fill") == nil)
+        #expect(defaults.bool(forKey: "meetings.next"))
     }
 
     @Test func theCutLeavesTestWorldsAlone() {

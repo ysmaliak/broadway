@@ -224,7 +224,6 @@ final class CopiedLink {
 
 extension Browser {
     func nowRows(at now: Date = Date()) -> [Suggestion] {
-        guard prefs.nowRows else { return [] }
         return NowBoard.rows(for: self, at: now).map { row in
             var made = Suggestion(key: row.title, title: row.detail, url: row.url ?? FieldAction.nowhere,
                                   kind: .action("now:" + row.id))
@@ -240,7 +239,6 @@ extension Browser {
     }
 
     func noticeClipboard() {
-        guard prefs.nowRows else { return }
         CopiedLink.shared.look(skipping: active?.shy == true) { [weak self] in
             guard let self, !self.fieldShowing, self.typed.isEmpty, !self.summoning else { return }
             self.retype()

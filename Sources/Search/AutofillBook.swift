@@ -189,9 +189,6 @@ final class AutofillBook {
     private(set) var hasProfile = false
     private(set) var cards: [CardRow] = []
     var editing: Editing?
-    var fillsForms = Store.settings.object(forKey: "autofill.forms") as? Bool ?? true {
-        didSet { Store.settings.set(fillsForms, forKey: "autofill.forms") }
-    }
     var codesFromGmail = Store.settings.object(forKey: "codes.gmail") as? Bool ?? true {
         didSet { Store.settings.set(codesFromGmail, forKey: "codes.gmail") }
     }

@@ -78,7 +78,7 @@ def motions(made):
         ui(announce="Copied")
 
     def downloads():
-        ui(downloadsbutton=True, recentdownloads=True)
+        ui(recentdownloads=True)
         time.sleep(0.6)
         ui(recentdownloads=False)
 

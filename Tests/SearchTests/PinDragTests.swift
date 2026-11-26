@@ -178,7 +178,6 @@ final class PinDragTests {
     @Test func aTabCarriedFromTheListJoinsAPinnedFolderAboveIt() async throws {
         let browser = makeBrowser(count: 6)
         let t = browser.tabs
-        browser.prefs.usesTabGroups = true
         let folder = browser.addTabGroup(containing: t[0], pinned: true)
         browser.move(t[1], toGroup: GroupDropTarget(group: folder))
         browser.select(t[3])
@@ -255,7 +254,6 @@ final class PinDragTests {
     @Test func pinnedFoldersAndTheTabsShareOneScroll() async throws {
         let browser = makeBrowser(count: 30)
         let t = browser.tabs
-        browser.prefs.usesTabGroups = true
         let folder = browser.addTabGroup(containing: t[0], pinned: true)
         browser.move(t[1], toGroup: GroupDropTarget(group: folder))
         browser.select(t[3])
@@ -285,7 +283,6 @@ final class PinDragTests {
     @Test func theDividerStandsBetweenThePinnedFoldersAndTheListAndGoesWithThem() async throws {
         let browser = makeBrowser(count: 6)
         let t = browser.tabs
-        browser.prefs.usesTabGroups = true
         let folder = browser.addTabGroup(containing: t[0], pinned: true)
         browser.move(t[1], toGroup: GroupDropTarget(group: folder))
         browser.select(t[3])
@@ -315,7 +312,6 @@ final class PinDragTests {
     @Test func aFolderPinnedFromTheListKeepsItsOpenChevron() async throws {
         let browser = makeBrowser(count: 6)
         let t = browser.tabs
-        browser.prefs.usesTabGroups = true
         browser.select(t[5])
         let window = makeWindow(browser)
         let first = browser.addTabGroup(containing: t[0], pinned: false)
@@ -348,7 +344,6 @@ final class PinDragTests {
     @Test func aTabCarriedFromAPinnedFolderJoinsAFolderInTheList() async throws {
         let browser = makeBrowser(count: 6)
         let t = browser.tabs
-        browser.prefs.usesTabGroups = true
         let pinned = browser.addTabGroup(containing: t[0], pinned: true)
         browser.move(t[1], toGroup: GroupDropTarget(group: pinned))
         let listed = browser.addTabGroup(containing: t[4], pinned: false)
@@ -375,7 +370,6 @@ final class PinDragTests {
     @Test func aTabShiftedOutOfAPinnedFolderLandsInTheList() async throws {
         let browser = makeBrowser(count: 6)
         let t = browser.tabs
-        browser.prefs.usesTabGroups = true
         let folder = browser.addTabGroup(containing: t[0], pinned: true)
         browser.move(t[1], toGroup: GroupDropTarget(group: folder))
         browser.select(t[3])
@@ -419,20 +413,17 @@ final class PinDragTests {
         NSApp.setActivationPolicy(.prohibited)
         let prefs = Shared.prefs
         if restorePreferences == nil {
-            let previous = (prefs.usesTabGroups, prefs.splitView, prefs.usesSpaces, prefs.sharesPins,
-                            prefs.addressBar, prefs.sideWidth, prefs.newTabPlace)
+            let previous = (prefs.splitView, prefs.usesSpaces, prefs.sharesPins,
+                            prefs.sideWidth)
             restorePreferences = {
-                (prefs.usesTabGroups, prefs.splitView, prefs.usesSpaces, prefs.sharesPins,
-                 prefs.addressBar, prefs.sideWidth, prefs.newTabPlace) = previous
+                (prefs.splitView, prefs.usesSpaces, prefs.sharesPins,
+                 prefs.sideWidth) = previous
             }
         }
-        prefs.usesTabGroups = false
         prefs.splitView = false
         prefs.usesSpaces = false
         prefs.sharesPins = false
-        prefs.addressBar = true
         prefs.sideWidth = 258
-        prefs.newTabPlace = .end
         let browser = Browser(record: WindowRecord())
         browser.closeAll()
         let space = Space(id: UUID(), name: "Drag fixture", colour: 0, sharesSignIns: true)
@@ -459,7 +450,7 @@ final class PinDragTests {
     }
 
     /// A point given from the column's top-left, in the window's terms.
-    private var rowsAbove: Int { Shared.prefs.newTabsAtBottom ? 0 : 1 }
+    private var rowsAbove: Int { 0 }
 
     private var columnTop: CGFloat { Metrics.strip + SpaceTitleSize.room + Metrics.sidePill - 3 + 8 }
     private var rowStep: CGFloat { Metrics.sideRowHeight + 5 }

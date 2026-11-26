@@ -21,7 +21,7 @@ final class FolderEmojis {
             await Task.yield()
             guard let self, self.requests[id] == token else { return }
             defer { if self.requests[id] == token { self.requests[id] = nil } }
-            guard let browser, browser.prefs.usesTabGroups, AIGroups.shared.emoji,
+            guard let browser, AIGroups.shared.emoji,
                   let group = browser.tabGroups.first(where: { $0.id == id }),
                   !group.ai, !group.live, !group.userIcon, group.icon == nil,
                   let engine = self.engine else { return }
@@ -34,7 +34,7 @@ final class FolderEmojis {
             guard let said = try? await AIGrouper.within(AIGroups.shared.timeout, { try await engine.name(ask) }),
                   let mark = said.emoji.flatMap(AIGroupName.emoji(in:)),
                   self.requests[id] == token, browser.spaceID == space,
-                  browser.prefs.usesTabGroups, AIGroups.shared.emoji,
+                  AIGroups.shared.emoji,
                   let index = browser.tabGroups.firstIndex(where: { $0.id == id }),
                   browser.tabGroups[index].name == group.name,
                   !browser.tabGroups[index].userIcon, browser.tabGroups[index].icon == nil,

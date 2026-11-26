@@ -68,19 +68,18 @@ struct AgentCharacterTests {
         #expect(AgentCharacter.loops(.waving).contains(.sway))
     }
 
-    @Test func noLoopRunsUnderReduceMotionOrLowPowerOrOffScreen() {
-        let shown = moods.filter { AgentCharacter.loops($0, reduced: false, lowPower: false, window: true, column: true, scrolled: true) }
+    @Test func noLoopRunsUnderReduceMotionOrOffScreen() {
+        let shown = moods.filter { AgentCharacter.loops($0, reduced: false, window: true, column: true, scrolled: true) }
 
         let hidden = [
-            AgentCharacter.loops(.idle, reduced: true, lowPower: false, window: true, column: true, scrolled: true),
-            AgentCharacter.loops(.idle, reduced: false, lowPower: true, window: true, column: true, scrolled: true),
-            AgentCharacter.loops(.idle, reduced: false, lowPower: false, window: false, column: true, scrolled: true),
-            AgentCharacter.loops(.idle, reduced: false, lowPower: false, window: true, column: false, scrolled: true),
-            AgentCharacter.loops(.idle, reduced: false, lowPower: false, window: true, column: true, scrolled: false)
+            AgentCharacter.loops(.idle, reduced: true, window: true, column: true, scrolled: true),
+            AgentCharacter.loops(.idle, reduced: false, window: false, column: true, scrolled: true),
+            AgentCharacter.loops(.idle, reduced: false, window: true, column: false, scrolled: true),
+            AgentCharacter.loops(.idle, reduced: false, window: true, column: true, scrolled: false)
         ]
 
         #expect(shown.count == moods.count - 1)
-        #expect(hidden == [false, false, false, false, false])
+        #expect(hidden == [false, false, false, false])
     }
 
     @Test func everyLoopEndsWhereItStartsSoItNeverJumps() {
@@ -151,7 +150,7 @@ struct AgentCharacterTests {
         #expect(arrival(.done, .ended) == .sleep)
         #expect(arrival(.hello, .reading) == .settle)
         #expect(arrival(.waving, .driving) == .settle)
-        #expect(AgentCharacter.curve(.settle, reduced: false, lowPower: false) == .spring(AgentCharacter.spring))
+        #expect(AgentCharacter.curve(.settle, reduced: false) == .spring(AgentCharacter.spring))
         #expect(AgentCharacter.spring.damping < 1 && AgentCharacter.spring.damping > 0.6)
         #expect(AgentCharacter.hopHeights.first == 0 && AgentCharacter.hopHeights.last == 0)
     }
@@ -159,13 +158,10 @@ struct AgentCharacterTests {
     @Test func reduceMotionChangesTheExpressionWithoutMovement() {
         let arrivals: [AgentCharacter.Arrival] = [.pop, .hop, .slump, .sleep, .settle]
 
-        let reduced = arrivals.map { AgentCharacter.curve($0, reduced: true, lowPower: false) }
-        let light = arrivals.map { AgentCharacter.curve($0, reduced: false, lowPower: true) }
+        let reduced = arrivals.map { AgentCharacter.curve($0, reduced: true) }
 
         #expect(reduced.allSatisfy { $0 == .none })
-        #expect(light.allSatisfy { $0 == .easeOut(0.2) })
-        #expect(arrivals.allSatisfy { !AgentCharacter.flourishes($0, reduced: true, lowPower: false) })
-        #expect(arrivals.allSatisfy { !AgentCharacter.flourishes($0, reduced: false, lowPower: true) })
+        #expect(arrivals.allSatisfy { !AgentCharacter.flourishes($0, reduced: true) })
     }
 
     @Test func aFaceShowsEachStatesExpressionAndRunsNothingOffScreen() {
@@ -187,9 +183,8 @@ struct AgentCharacterTests {
     }
 
     @Test func aShownFaceLoopsOnCoreAnimationAndStopsWhenHiddenOrEnded() {
-        keepSettings("motion.testReduced", "motion.testLowPower")
+        keepSettings("motion.testReduced")
         Store.settings.set(false, forKey: "motion.testReduced")
-        Store.settings.set(false, forKey: "motion.testLowPower")
         AgentCharacterFace.shownInTests = true
         defer { AgentCharacterFace.shownInTests = false }
         let face = AgentCharacterFace(frame: NSRect(x: 0, y: 0, width: 16, height: 16))

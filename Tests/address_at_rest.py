@@ -73,9 +73,6 @@ def main():
         key = subprocess.run(["defaults", "read", sv.SUITE, "tabs.address"], capture_output=True, text=True)
         t.ok("off by default: no setting written", key.returncode != 0, key.stdout)
         t.ok("off by default: the front tab keeps its title", shown() == [], shown())
-        # Turned off, as some will.
-        ui(address=False)
-        time.sleep(0.3)
         t.ok("off: no tab says its address", shown() == [], shown())
         t.ok("off: the line is still worked out for the bench", tabs()[first]["atRest"] == f"localhost:{PORT}", tabs()[first])
 
@@ -102,87 +99,6 @@ def main():
         time.sleep(0.4)
         t.ok("off: localhost over http is this Mac, not a warning", shown() == [], shown())
 
-        ui(address=True)
-        time.sleep(0.3)
-        key = subprocess.run(["defaults", "read", sv.SUITE, "tabs.address"], capture_output=True, text=True).stdout.strip()
-        t.ok("the switch is kept", key == "1", key)
-        t.ok("on: the front tab says its site", shown() == [first], shown())
-
-        two = sv.sp("open", url=f"http://127.0.0.1:{PORT}/two")["resultID"]
-        time.sleep(0.8)
-        t.ok("a new front tab: only it says its site", shown() == [two], shown())
-        t.ok("by its address", tabs()[two]["atRest"] == f"127.0.0.1:{PORT}", tabs()[two]["atRest"])
-        sv.sp("select", id=first)
-        time.sleep(0.4)
-        t.ok("switching tabs moves it", shown() == [first], shown())
-
-        # A look-alike in Cyrillic letters is shown as the punycode it is.
-        fake = sv.sp("open", url="https://xn--80ak6aa92e.com/")["resultID"]
-        time.sleep(1)
-        said = tabs()[fake]["atRest"]
-        t.ok("homograph: shown as punycode", said == "xn--80ak6aa92e.com", said)
-        t.ok("homograph: no Cyrillic in what is shown", all(ord(c) < 128 for c in said), said)
-        t.ok("homograph: shown on the front tab", shown() == [fake], shown())
-        picture("punycode")
-
-        # Plain http, somewhere other than this Mac.
-        plain = sv.sp("open", url="http://example.com/")["resultID"]
-        time.sleep(1.5)
-        said = tabs()[plain]["atRest"]
-        t.ok("http: marked Not secure", said.startswith("Not secure, ") and said.endswith("example.com"), said)
-        picture("http")
-
-        # A subdomain: all of the host, the site last.
-        docs = sv.sp("open", url="https://docs.github.com/en")["resultID"]
-        time.sleep(0.5)
-        t.ok("subdomain kept before the site", tabs()[docs]["atRest"] == "docs.github.com", tabs()[docs]["atRest"])
-        picture("subdomain")
-
-        # Editing the address: the field, not the line.
-        ui(edittab="docs.github.com/en")
-        time.sleep(0.3)
-        t.ok("editing: not said while the field is there", docs not in shown(), shown())
-        ui(finishedit=True)
-        time.sleep(0.4)
-        t.ok("after editing: said again", shown() == [docs], shown())
-
-        # Split View: the half you're on says its site, the other doesn't.
-        sv.sp("pair", **{"id": two, "with": first, "side": "right"})
-        time.sleep(0.8)
-        sv.sp("focus", id=two)
-        time.sleep(0.5)
-        t.ok("split: the focused half says it", shown() == [two], shown())
-        picture("split")
-        sv.sp("focus", id=first)
-        time.sleep(0.5)
-        t.ok("split: focus moves it", shown() == [first], shown())
-
-        # A private tab says it too; nothing about it is kept.
-        quiet = sv.sp("private")
-        time.sleep(0.6)
-        n, shy = quiet["window"], quiet["activeID"]
-        t.ok("private: a private tab", tabs(n)[shy]["shy"], tabs(n)[shy])
-        t.ok("private: blank says nothing", shown(n) == [], shown(n))
-        sv.cmd({"do": "go", "id": shy, "url": f"http://localhost:{PORT}/secret"})
-        time.sleep(1)
-        t.ok("private: its site", shown(n) == [shy] and tabs(n)[shy]["atRest"] == f"localhost:{PORT}", (shown(n), tabs(n)[shy]))
-        picture("private")
-
-        # Typing in the field, a key at a time: no slower with it on.
-        sv.sp("select", id=docs)
-        time.sleep(0.4)
-        on, off = [], []
-        for _ in range(3):
-            ui(address=False); time.sleep(0.3); off += typing(1)
-            ui(address=True); time.sleep(0.3); on += typing(1)
-        mo, mf = statistics.median(on), statistics.median(off)
-        print(f"  typing, ms per key to rest: on median {mo:.2f} p90 {sorted(on)[int(len(on)*0.9)]:.2f}"
-              f" | off median {mf:.2f} p90 {sorted(off)[int(len(off)*0.9)]:.2f} ({len(on)} keys each)")
-        t.ok("typing: no slower with it on (within 1 ms or 25%)", mo <= max(mf * 1.25, mf + 1), (mo, mf))
-
-        ui(address=False)
-        time.sleep(0.3)
-        t.ok("off again: nothing said", shown() == [], shown())
     finally:
         sv.finish()
     t.done()

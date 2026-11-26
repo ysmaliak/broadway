@@ -186,10 +186,8 @@ final class SpaceDraftTests {
     }
 
     @Test func aFoldersSpaceMenuEndsWithNewSpaceWhichTakesTheFolderToTheSpaceMade() async throws {
-        let groups = browser.prefs.usesTabGroups
-        browser.prefs.usesTabGroups = true
         browser.folded = true
-        defer { browser.folded = false; browser.prefs.usesTabGroups = groups }
+        defer { browser.folded = false }
         let tab = openPage()
         let folder = browser.addTabGroup(containing: tab)
         browser.editingGroupID = nil

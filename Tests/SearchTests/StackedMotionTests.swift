@@ -365,25 +365,22 @@ final class StackedMotionTests {
             NSApp.setActivationPolicy(.prohibited)
         }
         let prefs = Shared.prefs
-        let previous = (prefs.usesTabGroups, prefs.splitView, prefs.usesSpaces, prefs.stackedSpaces, prefs.sharesPins,
-                        prefs.addressBar, prefs.sideWidth, prefs.newTabPlace)
+        let previous = (prefs.splitView, prefs.usesSpaces, prefs.stackedSpaces, prefs.sharesPins,
+                        prefs.sideWidth)
         restore.append {
-            (prefs.usesTabGroups, prefs.splitView, prefs.usesSpaces, prefs.stackedSpaces, prefs.sharesPins,
-             prefs.addressBar, prefs.sideWidth, prefs.newTabPlace) = previous
+            (prefs.splitView, prefs.usesSpaces, prefs.stackedSpaces, prefs.sharesPins,
+             prefs.sideWidth) = previous
         }
-        for key in ["motion.testReduced", "motion.testLowPower"] {
+        for key in ["motion.testReduced"] {
             let saved = Store.settings.object(forKey: key)
             restore.append { Store.settings.set(saved, forKey: key) }
             Store.settings.set(false, forKey: key)
         }
-        prefs.usesTabGroups = true
         prefs.splitView = false
         prefs.usesSpaces = true
         prefs.stackedSpaces = true
         prefs.sharesPins = false
-        prefs.addressBar = true
         prefs.sideWidth = 258
-        prefs.newTabPlace = .end
         let browser = Browser(record: WindowRecord())
         browser.closeAll()
         let ids = [UUID(), UUID(), UUID()]

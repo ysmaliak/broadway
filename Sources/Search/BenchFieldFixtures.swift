@@ -20,7 +20,6 @@ enum BenchFieldFixtures {
             Suggestion(key: "developer.apple.com/documentation/observation", title: "Observation | Apple Developer Documentation",
                        url: URL(string: "https://developer.apple.com/documentation/observation")!, kind: .visited),
             Suggestion(key: "news.ycombinator.com", title: "Hacker News", url: URL(string: "https://news.ycombinator.com")!, kind: .bookmark),
-            Suggestion(key: "Settings", title: "Open Settings", url: FieldAction.nowhere, kind: .command(.settings)),
             action,
             Suggestion(key: "sig", title: "Email signature", url: FieldAction.nowhere, kind: .snippet(Snippet(title: "Email signature", keyword: "sig", text: "Best"))),
             Suggestion(key: answer.answer, title: answer.expression, url: FieldAction.nowhere, kind: .answer(answer)),

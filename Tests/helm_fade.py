@@ -58,7 +58,7 @@ for key, value in {"bench": True, "spaces": True, "tabs.groups": False, "tabs.ai
     subprocess.run(["defaults", "write", sv.SUITE, key, "-bool", str(value).lower()], check=True)
 subprocess.run(["defaults", "write", sv.SUITE, "look", "-string", LOOK], check=True)
 subprocess.run(["defaults", "write", sv.SUITE, "sidebar.width", "-float", "252"], check=True)
-for key, value in {"motion.testReduced": POLICY == "reduced", "motion.testLowPower": POLICY == "power"}.items():
+for key, value in {"motion.testReduced": POLICY == "reduced"}.items():
     subprocess.run(["defaults", "write", sv.SUITE, key, "-bool", str(value).lower()], check=True)
 if FILM:
     subprocess.run(["swiftc", "-parse-as-library", "Tests/WindowCapture.swift", "-o", str(CAPTURE)], check=True)

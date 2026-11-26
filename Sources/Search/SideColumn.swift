@@ -89,8 +89,7 @@ final class SideColumnView: NSView {
     private var prefs: Preferences { browser.prefs }
     private var inset: CGFloat { Metrics.sideInset }
     private var strip: CGFloat { Metrics.strip }
-    private var showsPill: Bool { prefs.addressBar }
-    private var addressRoom: CGFloat { showsPill ? Metrics.sidePill - 3 + 8 : 0 }
+    private var addressRoom: CGFloat { Metrics.sidePill - 3 + 8 }
     var columnHeight: CGFloat { max(40, (bounds.height / 40).rounded() * 40) }
 
     var footHeight: CGFloat {
@@ -229,7 +228,7 @@ final class SideColumnView: NSView {
             titles.frame = NSRect(x: inset, y: y - SpaceTitleSize.lift, width: width - 2 * inset, height: SpaceTitleSize.height)
             y += SpaceTitleSize.room
         }
-        address.isHidden = !showsPill
+        address.isHidden = false
         let addressFrame = NSRect(x: inset, y: y - 3, width: width - 2 * inset, height: Metrics.sidePill)
         if address.frame != addressFrame { address.frame = addressFrame }
         y += addressRoom

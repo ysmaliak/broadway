@@ -92,8 +92,8 @@ struct ColumnMemoryTests {
         let browser = Browser(record: WindowRecord())
         browser.leaveFiles()
         let prefs = browser.prefs
-        let previous = (prefs.usesTabGroups, prefs.usesSpaces, prefs.splitView, prefs.sharesPins)
-        (prefs.usesTabGroups, prefs.usesSpaces, prefs.splitView, prefs.sharesPins) = (true, true, false, false)
+        let previous = (prefs.usesSpaces, prefs.splitView, prefs.sharesPins)
+        (prefs.usesSpaces, prefs.splitView, prefs.sharesPins) = (true, false, false)
         let first = browser.spaceID
         for index in 0..<26 {
             if browser.tabs.last?.isBlank == false { browser.newTab() }
@@ -112,7 +112,7 @@ struct ColumnMemoryTests {
             window.contentView = nil
             window.close()
             browser.closeAll()
-            (prefs.usesTabGroups, prefs.usesSpaces, prefs.splitView, prefs.sharesPins) = previous
+            (prefs.usesSpaces, prefs.splitView, prefs.sharesPins) = previous
             NSApp.setActivationPolicy(policy)
         }
         func scrolls(_ view: NSView) -> [NSScrollView] {

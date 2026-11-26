@@ -183,14 +183,12 @@ final class MeetingSpacesTests {
     }
 
     @Test func joinStayingHereWithALiveFoldersRowInFrontOpensTheCallLoose() throws {
-        let groups = browser.prefs.usesTabGroups, live = browser.prefs.liveFolders
-        browser.prefs.usesTabGroups = true
+        let live = browser.prefs.liveFolders
         browser.prefs.liveFolders = true
         let made = LiveFolders.shared.add(name: "PRs", source: LiveSource(kind: .pullRequests, address: "http://127.0.0.1:9/pulls"),
                                           space: first)
         defer {
             LiveFolders.shared.remove(made.id)
-            browser.prefs.usesTabGroups = groups
             browser.prefs.liveFolders = live
         }
         LiveFolders.shared.apply(.items([LiveItem(key: "http://127.0.0.1:9/acme/rocket/pull/1", title: "PR 1")], nil), to: made.id)

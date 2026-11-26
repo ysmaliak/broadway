@@ -42,7 +42,6 @@ struct UndoCloseTabTests {
 
     @Test func closingAGroupIsUndoneAsAGroup() throws {
         try withBrowser { browser, tabs, undo in
-            browser.prefs.usesTabGroups = true
             let group = browser.quietly { browser.addTabGroup(containing: tabs[1]) }
             browser.quietly { browser.move(tabs[2], toGroup: group) }
 
@@ -88,20 +87,16 @@ struct UndoCloseTabTests {
         NSApp.setActivationPolicy(.prohibited)
         let browser = Browser(record: WindowRecord())
         let prefs = browser.prefs
-        let saved = (prefs.usesTabGroups, prefs.splitView, prefs.newTabPlace)
+        let saved = prefs.splitView
         let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 640, height: 400),
                               styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         defer {
             browser.closeAll()
             window.close()
-            prefs.usesTabGroups = saved.0
-            prefs.splitView = saved.1
-            prefs.newTabPlace = saved.2
+            prefs.splitView = saved
         }
-        prefs.usesTabGroups = false
         prefs.splitView = false
-        prefs.newTabPlace = .end
         for number in 1...4 {
             if number > 1 { browser.newTab() }
             browser.tabs.last?.restore(url: URL(string: "about:blank#\(number)")!, title: "Tab \(number)")

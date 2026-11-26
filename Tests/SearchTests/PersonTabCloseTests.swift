@@ -11,7 +11,6 @@ final class PersonTabCloseTests {
     private var tabs: [Tab] = []
 
     init() {
-        keepSetting(Shared.prefs, \.usesTabGroups, "tabs.groups")
         addTeardownBlock { self.tearDown() }
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
@@ -22,7 +21,6 @@ final class PersonTabCloseTests {
             return tab
         }
         browser.showRow(tabs, active: tabs[0].id)
-        browser.prefs.usesTabGroups = false
         socket = AgentSocket()
         socket.box.browser = browser
     }
@@ -74,7 +72,6 @@ final class PersonTabCloseTests {
     }
 
     @Test func closingATabInAPinnedFolderPutsItAway() async throws {
-        browser.prefs.usesTabGroups = true
         let folder = browser.addTabGroup(containing: tabs[1])
         browser.setFolderPinned(folder, true)
         browser.select(tabs[1])

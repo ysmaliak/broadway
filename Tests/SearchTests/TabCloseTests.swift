@@ -10,25 +10,21 @@ import Testing
 final class TabCloseTests {
     private var browser: Browser!
     private var oldSplitView = false
-    private var oldCloseGoesBack = false
 
     init() {
-        keepSettings("tabs.closeGoesBack", "spaces")
+        keepSettings("spaces")
         addTeardownBlock { self.tearDown() }
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
         browser = Browser(record: WindowRecord())
         oldSplitView = browser.prefs.splitView
-        oldCloseGoesBack = browser.prefs.closeGoesBack
         browser.prefs.splitView = false
-        browser.prefs.closeGoesBack = true
         browser.closeAll()
     }
 
     private func tearDown() {
         browser?.closeAll()
         browser?.prefs.splitView = oldSplitView
-        browser?.prefs.closeGoesBack = oldCloseGoesBack
         browser = nil
     }
 
@@ -50,23 +46,8 @@ final class TabCloseTests {
     }
 
     @Test func offClosingCurrentSelectsNeighbour() {
-        browser.prefs.closeGoesBack = false
         let (_, b, c) = viewedBAC()
         browser.close(c)
-        #expect(browser.activeID == b.id)
-    }
-
-    @Test func closingCurrentGoesBackToLastViewed() {
-        let (a, _, c) = viewedBAC()
-        browser.close(c)
-        #expect(browser.activeID == a.id)
-    }
-
-    @Test func successiveClosesKeepGoingBack() {
-        let (a, b, c) = viewedBAC()
-        browser.close(c)
-        #expect(browser.activeID == a.id)
-        browser.close(a)
         #expect(browser.activeID == b.id)
     }
 
@@ -76,14 +57,6 @@ final class TabCloseTests {
         #expect(browser.activeID == c.id)
         browser.close(c)
         #expect(browser.activeID == b.id)
-    }
-
-    @Test func orderInTheRowDoesNotMatter() {
-        let (a, b, c) = viewedBAC()
-        browser.move(c, to: 1)
-        #expect(browser.tabs.map(\.id) == [a.id, c.id, b.id])
-        browser.close(c)
-        #expect(browser.activeID == a.id)
     }
 
     @Test func splitPartnerStaysFirst() {
@@ -98,16 +71,6 @@ final class TabCloseTests {
         #expect(browser.activeSplit == nil)
     }
 
-    @Test func sleepingTabGoneBackToWakes() {
-        let (a, _, c) = viewedBAC()
-        a.rest()
-        #expect(a.asleep)
-        browser.close(c)
-        #expect(browser.activeID == a.id)
-        #expect(!a.asleep)
-        #expect(a.built != nil)
-    }
-
     @Test func noHistoryKeepsNeighbour() {
         let (_, b, c) = viewedBAC()
         browser.select(b)
@@ -116,35 +79,9 @@ final class TabCloseTests {
         #expect(browser.activeID == c.id)
     }
 
-    @Test func staysInItsSpace() {
-        let oldUsesSpaces = browser.prefs.usesSpaces
-        let oldSpaces = browser.spaces
-        defer {
-            browser.prefs.usesSpaces = oldUsesSpaces
-            browser.spaces = oldSpaces
-        }
-        browser.prefs.usesSpaces = true
-        let firstID = browser.spaceID
-        let secondID = UUID()
-        browser.spaces = [Space(id: firstID, name: "First", colour: 0), Space(id: secondID, name: "Second", colour: 1)]
-
-        let (a, _, c) = viewedBAC()
-        browser.switchSpace(to: secondID)
-        let (d, e) = (tab("D"), tab("E"))
-        browser.showRow([d, e], active: d.id)
-        browser.select(e)
-        browser.select(d)
-
-        browser.switchSpace(to: firstID)
-        browser.close(c)
-        #expect(browser.activeID == a.id)
-        #expect(browser.spaceID == firstID)
-    }
-
     /// ⌘Y from a tab in the middle of the row: History opens beside it, and
     /// closing History goes back to that tab, switch or no switch.
     @Test func ownPageGoesBackWithSwitchOff() {
-        browser.prefs.closeGoesBack = false
         let (a, b, c, d) = (tab("A"), tab("B"), tab("C"), tab("D"))
         browser.showRow([a, b, c, d], active: b.id)
         let history = browser.show(InternalPage(.history))
@@ -157,7 +94,6 @@ final class TabCloseTests {
     /// History already open at the end of the row, brought forward from a
     /// tab in the middle: closing it went to the last tab.
     @Test func ownPageAlreadyOpenGoesBack() {
-        browser.prefs.closeGoesBack = false
         let (a, b, c) = (tab("A"), tab("B"), tab("C"))
         browser.showRow([a, b, c], active: c.id)
         let history = browser.show(InternalPage(.history))
@@ -169,7 +105,6 @@ final class TabCloseTests {
 
     /// A web page still goes to its neighbour with the switch off.
     @Test func webPageKeepsNeighbourWithSwitchOff() {
-        browser.prefs.closeGoesBack = false
         let (a, b, c) = (tab("A"), tab("B"), tab("C"))
         browser.showRow([a, b, c], active: a.id)
         browser.select(b)

@@ -1155,14 +1155,6 @@ extension PaneStage {
     }
 
     private static func slide(_ key: String, from: Any, to: Any) -> CAAnimation {
-        if Motion.light {
-            let ease = CABasicAnimation(keyPath: key)
-            ease.fromValue = from
-            ease.toValue = to
-            ease.duration = 0.16
-            ease.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            return ease
-        }
         let spring = CASpringAnimation(keyPath: key)
         spring.mass = 1
         spring.stiffness = 1218

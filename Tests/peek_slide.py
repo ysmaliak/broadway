@@ -144,8 +144,6 @@ def run_side(side, out, runs, look, policy, tag, glass=True, place=False):
              "tabs.cards": False, "start.fresh": False, "split": False, "spaces": True}
     if policy == "reduced":
         prefs["motion.testReduced"] = True
-    if policy == "power":
-        prefs["motion.testLowPower"] = True
     sv.setup(**prefs)
     subprocess.run(["defaults", "write", sv.SUITE, "look", "-string", look], check=True)
     subprocess.run(["defaults", "write", sv.SUITE, "sidebar.width", "-float", "252"], check=True)
@@ -166,7 +164,7 @@ def run_side(side, out, runs, look, policy, tag, glass=True, place=False):
         giver = pi.front_pid()
         if giver and giver != pid:
             c(do="idle", action="give", pid=giver)
-        c(do="ui", hides=True, pointerless=True)
+        c(do="ui", folded=True, pointerless=True)
         time.sleep(1.5)
         traces = {"in": [], "out": []}
         for n in range(runs * 2):
@@ -179,7 +177,6 @@ def run_side(side, out, runs, look, policy, tag, glass=True, place=False):
         print(side, "trace", json.dumps(result["trace"]), flush=True)
         probe = state()
         result["folded"] = probe.get("folded")
-        result["sideHides"] = probe.get("sideHides")
         size = ma.film(pid, f"{tag}-{side}-window", out, 0.4, lambda: None).get("window", ma.SIZE)
         width, height = size
         crop = (0, 0, 330, height) if side == "left" else (width - 330, 0, 330, height)

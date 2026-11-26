@@ -10,7 +10,6 @@ final class PersonCommandsTests {
     private var box: BrowserToolbox!
 
     init() async throws {
-        keepSetting(Shared.prefs, \.tabsGive, "tabs.give")
         addTeardownBlock { await self.tearDown() }
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)

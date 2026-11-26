@@ -16,7 +16,7 @@ extension Browser {
     }
 
     func peeksFromPin(_ url: URL, in tab: Tab, on page: URL?) -> Bool {
-        guard prefs.pinsPeek, tab.pin != nil, peekTab == nil, Browser.peekable(url),
+        guard tab.pin != nil, peekTab == nil, Browser.peekable(url),
               let there = url.host()?.lowercased(),
               let here = page?.host()?.lowercased()
         else { return false }
@@ -42,7 +42,7 @@ extension Browser {
     }
 
     func followsPeek(_ url: URL, in tab: Tab) -> Bool {
-        guard prefs.pinsPeek, tab.pin != nil, let peeked = tab.peeked,
+        guard tab.pin != nil, let peeked = tab.peeked,
               Date().timeIntervalSince(peeked.at) < 3,
               let host = url.host()?.lowercased()
         else { return false }
@@ -65,7 +65,7 @@ extension Browser {
         guard let page = peekTab else { return }
         let from = active
         let place = placeForNew()
-        if prefs.usesTabGroups, !page.shy, let from = active { page.groupID = from.groupID }
+        if !page.shy, let from = active { page.groupID = from.groupID }
         do {
             peekTab = nil
             peekFrom = nil

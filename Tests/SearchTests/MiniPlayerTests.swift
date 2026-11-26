@@ -534,13 +534,13 @@ struct MiniPlayerTests {
         let before = (prefs.miniSkip, prefs.miniSpoken)
         defer { prefs.miniSkip = before.0; prefs.miniSpoken = before.1 }
 
-        let wrote = SettingsIndex.apply(Preferences.miniSkipKey, 30, to: prefs)
-        let refused = SettingsIndex.apply(Preferences.miniSkipKey, 20, to: prefs)
-        let spoken = SettingsIndex.apply(Preferences.miniSpokenKey, "tracks", to: prefs)
+        let wrote = BenchSettings.set(Preferences.miniSkipKey, 30, on: prefs)
+        let refused = BenchSettings.set(Preferences.miniSkipKey, 20, on: prefs)
+        let spoken = BenchSettings.set(Preferences.miniSpokenKey, "tracks", on: prefs)
 
         #expect(wrote && !refused && spoken)
         #expect(prefs.miniSkip == 30)
         #expect(prefs.miniSpoken == .tracks)
-        #expect(SettingsIndex.values(prefs)[Preferences.miniSkipKey] as? Int == 30)
+        #expect(BenchSettings.values(prefs)[Preferences.miniSkipKey] as? Int == 30)
     }
 }

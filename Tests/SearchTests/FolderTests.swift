@@ -14,7 +14,6 @@ final class FolderTests {
         NSApp.setActivationPolicy(.prohibited)
         let browser = Browser(record: WindowRecord())
         browser.leaveFiles()
-        browser.prefs.usesTabGroups = true
         for number in 0..<count {
             if number > 0 { browser.newTab() }
             browser.tabs.last?.restore(url: URL(string: "https://\(number).example/")!, title: "\(number)")
@@ -302,7 +301,7 @@ final class FolderTests {
         _ = browser.addTabGroup(containing: tabs[1], inside: top)
         let parked = Parked(tabs: browser.tabs, active: tabs[2].id, groups: browser.tabGroups)
 
-        let drawn = parked.drawn(groupsOn: true, splitView: false)
+        let drawn = parked.drawn(splitView: false)
 
         #expect(drawn.groups.filter { $0.heading }.map(\.depth) == [0, 1])
         #expect(drawn.groups.flatMap { $0.tabs }.map(\.id) == [tabs[1].id, tabs[0].id])

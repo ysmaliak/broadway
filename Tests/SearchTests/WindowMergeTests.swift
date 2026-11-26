@@ -8,10 +8,7 @@ struct WindowMergeTests {
     init() {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
-        keepSetting(Shared.prefs, \.newTabPlace, "tabs.newPlace")
-        keepSetting(Shared.prefs, \.newTabsAtBottom, Preferences.newAtBottomKey)
         keepSetting(Shared.prefs, \.splitView)
-        keepSetting(Shared.prefs, \.usesTabGroups)
     }
 
     private func window(_ names: [String]) -> Browser {
@@ -66,31 +63,8 @@ struct WindowMergeTests {
         #expect(!WindowMerge.canMerge(into: lone))
     }
 
-    @Test func theOtherWindowsTabsGoToTheEndInTheirOrderWithNewTabsAtTheBottom() {
-        both(["a", "b"], ["c", "d", "e"]) { front, other in
-            front.prefs.newTabPlace = .end
-            front.select(front.tabs[0])
-
-            WindowMerge.carry(from: other, into: front)
-
-            #expect(names(front.tabs) == ["a", "b", "c", "d", "e"])
-            #expect(other.tabs.isEmpty)
-        }
-    }
-
-    @Test func theOtherWindowsTabsKeepTheirOrderWithNewTabsAtTheTop() {
-        both(["a", "b"], ["c", "d"]) { front, other in
-            front.prefs.newTabPlace = .top
-
-            WindowMerge.carry(from: other, into: front)
-
-            #expect(names(front.tabs) == ["c", "d", "a", "b"])
-        }
-    }
-
     @Test func theOtherWindowsTabsGoAfterTheTabInFrontWithNewTabsNextToIt() {
         both(["a", "b"], ["c", "d"]) { front, other in
-            front.prefs.newTabPlace = .next
             front.select(front.tabs[0])
 
             WindowMerge.carry(from: other, into: front)
@@ -102,7 +76,6 @@ struct WindowMergeTests {
     @Test func twoOtherWindowsFollowEachOtherInTheOrderTheyWereOpened() {
         let front = window(["a", "b"]), second = window(["c", "d"]), third = window(["e"])
         defer { front.closeAll(); second.closeAll(); third.closeAll() }
-        front.prefs.newTabPlace = .next
         front.select(front.tabs[0])
 
         let last = WindowMerge.carry(from: second, into: front)
@@ -129,7 +102,6 @@ struct WindowMergeTests {
     @Test func aSplitViewPairStaysAPair() throws {
         try both(["a"], ["b", "c", "d"]) { front, other in
             front.prefs.splitView = true
-            front.prefs.newTabPlace = .end
             let left = other.tabs[1], right = other.tabs[2]
             other.putBackSplit(TabSplit(tabs: [left.id, right.id]))
 
@@ -143,7 +115,6 @@ struct WindowMergeTests {
 
     @Test func aFolderAndTheFolderInsideItStayFolders() throws {
         try both(["a"], ["b", "c", "d"]) { front, other in
-            front.prefs.usesTabGroups = true
             let outer = other.addTabGroup(containing: other.tabs[0])
             let inner = other.addTabGroup(containing: other.tabs[1], inside: outer)
             other.editingGroupID = nil

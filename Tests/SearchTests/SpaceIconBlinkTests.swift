@@ -50,12 +50,10 @@ struct SpaceIconBlinkTests {
         let browser = Browser(record: WindowRecord())
         browser.leaveFiles()
         let prefs = browser.prefs
-        let previous = (prefs.usesTabGroups, prefs.usesSpaces, prefs.splitView, prefs.sharesPins)
-        (prefs.usesTabGroups, prefs.usesSpaces, prefs.splitView, prefs.sharesPins) = (false, true, false, false)
+        let previous = (prefs.usesSpaces, prefs.splitView, prefs.sharesPins)
+        (prefs.usesSpaces, prefs.splitView, prefs.sharesPins) = (true, false, false)
         let reduced = Store.settings.object(forKey: "motion.testReduced")
-        let low = Store.settings.object(forKey: "motion.testLowPower")
         Store.settings.set(false, forKey: "motion.testReduced")
-        Store.settings.set(false, forKey: "motion.testLowPower")
         let window = NSWindow(contentRect: NSRect(x: -20_000, y: -20_000, width: 900, height: 600), styleMask: .borderless, backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         browser.window = window
@@ -63,9 +61,8 @@ struct SpaceIconBlinkTests {
             window.contentView = nil
             window.close()
             browser.closeAll()
-            (prefs.usesTabGroups, prefs.usesSpaces, prefs.splitView, prefs.sharesPins) = previous
+            (prefs.usesSpaces, prefs.splitView, prefs.sharesPins) = previous
             Store.settings.set(reduced, forKey: "motion.testReduced")
-            Store.settings.set(low, forKey: "motion.testLowPower")
             NSApp.setActivationPolicy(policy)
         }
         let first = browser.spaceID

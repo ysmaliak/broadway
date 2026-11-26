@@ -235,7 +235,6 @@ def launch():
     sv.setup()
     sv.launch()
     sv.page("page")
-    sv.cmd({"do": "ui", "downloadsbutton": True})
     time.sleep(0.4)
 
 

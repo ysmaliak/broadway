@@ -100,7 +100,7 @@ final class SplitTabItemView: KitHoverView {
         for chip in chips {
             chip.show(SplitChipView.State(focused: focused == chip.tab.id, interactive: setup.interactive,
                                           editing: editing == chip.tab.id, picked: lit.contains(chip.tab.id),
-                                          asking: asking.contains(chip.tab.id), icons: browser.prefs.glyph == .icons,
+                                          asking: asking.contains(chip.tab.id), icons: true,
                                           title: browser.prefs.sideTitle - 1, number: setup.interactive ? setup.numbers[chip.tab.id] : nil,
                                           onFrame: setup.onFrame, ink: setup.ink, greys: setup.greys,
                                           zone: setup.interactive && browser.prefs.splitView),

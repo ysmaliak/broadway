@@ -389,7 +389,7 @@ enum TabMenuItems {
     }
 
     private static func move(_ browser: Browser, _ tab: Tab, _ chosen: [Tab]) -> NSMenuItem? {
-        let folders = browser.prefs.usesTabGroups && tab.pin == nil && !tab.shy && !tab.bench
+        let folders = tab.pin == nil && !tab.shy && !tab.bench
         let spaces = browser.prefs.usesSpaces && !browser.isPrivate && !tab.bench && !tab.everywhere
             && browser.pinnedSplit(of: tab) == nil
             && tab.address.flatMap({ Browser.extensionHost(of: $0) }) == nil

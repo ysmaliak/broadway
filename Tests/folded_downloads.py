@@ -57,7 +57,6 @@ def main():
     t.launch()
     try:
         t.page("long")
-        t.cmd({"do": "ui", "downloadsbutton": True})
         time.sleep(0.5)
         opened("sidebar shown")
         t.cmd({"do": "ui", "toggleFold": True})

@@ -181,6 +181,25 @@ final class ImportModel {
         return added == 1 ? "1 new \(one), \(already.formatted()) already here" : "\(added.formatted()) new \(one)s, \(already.formatted()) already here"
     }
 
+    @MainActor static func passwordsSaid(_ outcome: Result<Chromium.Found, Error>, from name: String, into browser: Browser) -> Said {
+        switch outcome {
+        case .success(let found):
+            let (kept, here) = browser.keep(found)
+            ImportRecords.note(name, passwords: kept)
+            let skipped = found.skipped > 0 ? ", \(found.skipped.formatted()) skipped with no address" : ""
+            let locked = found.undecrypted > 0
+                ? ", and \(found.undecrypted.formatted()) couldn't be decrypted with \(name)'s key" : ""
+            return Said(ok: kept > 0 || found.undecrypted == 0,
+                        text: counted(kept, already: here, "password") + skipped + locked + leftOut(found.lockedProfiles, from: name))
+        case .failure(Chromium.Trouble.noPassphrase):
+            return Said(ok: false, text: "macOS didn't hand over \(name)'s key. Allow it and try again.")
+        case .failure(Mozilla.Trouble.primaryPassword):
+            return Said(ok: false, text: "\(name) has a primary password. Export your passwords from it and bring in the CSV file.")
+        case .failure:
+            return Said(ok: false, text: "No passwords readable in \(name)")
+        }
+    }
+
     static func leftOut(_ profiles: Int, from name: String) -> String {
         guard profiles > 0 else { return "" }
         let what = profiles == 1
@@ -304,23 +323,7 @@ final class ImportModel {
             DispatchQueue.global(qos: .userInitiated).async {
                 let outcome = Result { try source.read(profile: profile) }
                 DispatchQueue.main.async {
-                    switch outcome {
-                    case .success(let found):
-                        let (kept, here) = browser.keep(found)
-                        ImportRecords.note(source.name, passwords: kept)
-                        let skipped = found.skipped > 0 ? ", \(found.skipped.formatted()) skipped with no address" : ""
-                        let locked = found.undecrypted > 0
-                            ? ", and \(found.undecrypted.formatted()) couldn't be decrypted with \(source.name)'s key" : ""
-                        said[0] = Said(ok: kept > 0 || found.undecrypted == 0,
-                                       text: ImportModel.counted(kept, already: here, "password") + skipped + locked
-                                           + ImportModel.leftOut(found.lockedProfiles, from: source.name))
-                    case .failure(Chromium.Trouble.noPassphrase):
-                        said[0] = Said(ok: false, text: "macOS didn't hand over \(source.name)'s key. Allow it and try again.")
-                    case .failure(Mozilla.Trouble.primaryPassword):
-                        said[0] = Said(ok: false, text: "\(source.name) has a primary password. Export your passwords from it and bring in the CSV file.")
-                    case .failure:
-                        said[0] = Said(ok: false, text: "No passwords readable in \(source.name)")
-                    }
+                    said[0] = ImportModel.passwordsSaid(outcome, from: source.name, into: browser)
                     group.leave()
                 }
             }

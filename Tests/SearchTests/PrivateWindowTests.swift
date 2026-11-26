@@ -135,21 +135,16 @@ struct PrivateWindowTests {
         #expect(!browser.sidePanelShown)
     }
 
-    @Test(arguments: FloatStyle.allCases)
-    func aVideoFloatsOnItsOwnOnlyOutsidePrivateWindows(_ style: FloatStyle) {
+    @Test func aVideoFloatsOnItsOwnOnlyOutsidePrivateWindows() {
         let quiet = quiet()
         let open = Browser(record: WindowRecord())
         let prefs = quiet.prefs
-        let saved = (prefs.floatsOnLeave, prefs.floatsAway, prefs.floatStyle)
+        let saved = prefs.floatsOnLeave
         prefs.floatsOnLeave = true
-        prefs.floatsAway = true
-        prefs.floatStyle = style
         defer {
             quiet.closeAll()
             open.closeAll()
-            prefs.floatsOnLeave = saved.0
-            prefs.floatsAway = saved.1
-            prefs.floatStyle = saved.2
+            prefs.floatsOnLeave = saved
         }
         quiet.sightForBench = false
 
@@ -169,6 +164,5 @@ struct PrivateWindowTests {
         #expect(command.title == "New Private Window")
         #expect(command.defaultKey == KeyCombo("n", shift: true))
         #expect(Command.named("file.newPrivateTab") == nil)
-        #expect(AddressCommand.allCases.contains(.newPrivateWindow))
     }
 }

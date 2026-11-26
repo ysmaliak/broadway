@@ -1968,7 +1968,7 @@ extension Browser {
             live.run(on)
             self?.syncLive()
         }
-        let moved = kitObserve(initial: false, { [weak self] in (self?.spaceID, prefs.usesTabGroups) }) { [weak self] _ in
+        let moved = kitObserve(initial: false, { [weak self] in self?.spaceID }) { [weak self] _ in
             self?.syncLive()
             if prefs.liveFolders { live.tick() }
         }
@@ -2063,14 +2063,14 @@ extension Browser {
         guard !isPopup else { return }
         let live = LiveFolders.shared
         var changed = retireLive(live.retired)
-        let asked = prefs.liveFolders && prefs.usesTabGroups ? live.folders.filter { $0.space == spaceID } : []
+        let asked = prefs.liveFolders ? live.folders.filter { $0.space == spaceID } : []
         let liveIDs = Set(tabGroups.filter(\.live).map(\.id))
         for tab in tabs where tab.liveKey != nil && !(tab.groupID.map(liveIDs.contains) ?? false) && liveIDs.count + asked.count > 0 {
             if let key = tab.liveKey { live.hide(key, space: spaceID) }
             tab.liveKey = nil
             tab.liveItem = nil
         }
-        let wanted = prefs.liveFolders && prefs.usesTabGroups ? live.folders.filter { $0.space == spaceID } : []
+        let wanted = prefs.liveFolders ? live.folders.filter { $0.space == spaceID } : []
         live.syncing = true
         defer { live.syncing = false }
         for group in tabGroups where group.live && !wanted.contains(where: { $0.id == group.id }) {

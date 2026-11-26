@@ -10,11 +10,11 @@ struct NewTabLeftTests {
         let browser = Browser(record: WindowRecord())
         browser.leaveFiles()
         let prefs = browser.prefs
-        let previous = (prefs.usesTabGroups, prefs.usesSpaces, prefs.splitView, prefs.floatingNewTab)
-        (prefs.usesTabGroups, prefs.usesSpaces, prefs.splitView, prefs.floatingNewTab) = (true, true, true, false)
+        let previous = (prefs.usesSpaces, prefs.splitView, prefs.floatingNewTab)
+        (prefs.usesSpaces, prefs.splitView, prefs.floatingNewTab) = (true, true, false)
         defer {
             browser.closeAll()
-            (prefs.usesTabGroups, prefs.usesSpaces, prefs.splitView, prefs.floatingNewTab) = previous
+            (prefs.usesSpaces, prefs.splitView, prefs.floatingNewTab) = previous
         }
         let first = browser.open(URL(string: "about:blank#first")!, foreground: true)
         let second = browser.open(URL(string: "about:blank#second")!, foreground: true)

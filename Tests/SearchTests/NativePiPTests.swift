@@ -8,16 +8,6 @@ import Testing
 @Suite(.sharedWorld, .timeLimit(.minutes(5)))
 @MainActor
 struct NativePiPTests {
-    @Test func theCutFixesSearchsWindow() {
-        let saved = Store.settings.object(forKey: "float.style")
-        defer { Store.settings.set(saved, forKey: "float.style") }
-        Store.settings.set(FloatStyle.system.rawValue, forKey: "float.style")
-
-        let prefs = Preferences()
-
-        #expect(prefs.floatStyle == .search)
-    }
-
     @Test func scriptsAskOnlyForPictureInPicture() {
         let held = NativePiP.held(toggle: false)
         #expect(held.contains("var toggle = false"))

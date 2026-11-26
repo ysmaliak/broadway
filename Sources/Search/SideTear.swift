@@ -7,9 +7,8 @@ extension SidePageView {
             clearListDrop()
             return nil
         }
-        let grouped = browser.prefs.usesTabGroups
         let place = ListDrop.resolve(point, items: itemsNow, below: raisedNow.map(\.maxY).max() ?? -.greatestFiniteMagnitude,
-                                     frames: grouped ? dropFrames() : [:], groups: grouped ? browser.tabGroups.filter { !$0.live } : [],
+                                     frames: dropFrames(), groups: browser.tabGroups.filter { !$0.live },
                                      excluding: tab.id, band: 0)
         var target: GroupDropTarget?
         var loose: LoosePlace?

@@ -15,7 +15,6 @@ final class LiveLinkLandingTests {
 
     init() async throws {
         keepSetting(Shared.prefs, \.usesSpaces, "spaces")
-        keepSetting(Shared.prefs, \.usesTabGroups, "tabs.groups")
         keepSetting(Shared.prefs, \.liveFolders, "live.on")
         keepSetting(Shared.prefs, \.splitView, "splitView")
         addTeardownBlock { await self.tearDown() }
@@ -24,7 +23,6 @@ final class LiveLinkLandingTests {
         browser = Browser(record: WindowRecord())
         browser.leaveFiles()
         browser.prefs.usesSpaces = true
-        browser.prefs.usesTabGroups = true
         browser.prefs.liveFolders = true
         window = NSWindow(contentRect: NSRect(x: -20_000, y: -20_000, width: 900, height: 600), styleMask: .borderless,
                           backing: .buffered, defer: false)

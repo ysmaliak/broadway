@@ -157,17 +157,6 @@ final class FormFillTests {
         #expect(forms.preview == nil)
     }
 
-    @Test func theSwitchTurnsItAllOff() async {
-        _ = tab("https://shop.example/pay")
-        keepSetting(forms.book, \.fillsForms, "autofill.forms")
-        forms.book.fillsForms = false
-
-        forms.begin()
-        await settle()
-
-        #expect(forms.preview == nil)
-    }
-
     @Test func undoReachesThePageAndTheBarGoes() async {
         let tab = tab("https://shop.example/pay")
         forms.book.prove = { _, done in done(true) }

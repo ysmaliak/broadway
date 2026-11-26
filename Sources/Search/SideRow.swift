@@ -31,10 +31,7 @@ struct RowState: Equatable {
     var hoverCards = true
     var splitView = false
     var icons = true
-    var showsAddress = false
     var floatingNewTab = false
-    var addressBar = true
-    var tabsGive = true
     var nextMeeting = false
 }
 
@@ -490,7 +487,6 @@ final class TabRowView: KitHoverView {
     private var shortcut: ShortcutNumberView?
     private var talk: TalkMarkView?
     private var agentFace: NSView?
-    private var popupSign: NSView?
     private var translateSign: NSView?
     private var callLeft: NSView?
     private var peekBadge: NSView?
@@ -1064,14 +1060,6 @@ final class TabRowView: KitHoverView {
         record.isHidden = editing || !tab.recording
         record.toolTip = tab.recording ? "Recording" : nil
 
-        if !editing, !state.addressBar, !tab.blockedPopups.isEmpty {
-            let sign = popupSign ?? SideSigns.popupSign(browser: browser, tab: tab)
-            if popupSign == nil { content.addSubview(sign); popupSign = sign }
-            SideSigns.update(sign, colour: colour, ground: state.ground)
-        } else if let sign = popupSign {
-            sign.removeFromSuperview()
-            popupSign = nil
-        }
         if !editing, tab.translation != nil {
             let sign = translateSign ?? SideSigns.translateSign(tab: tab)
             if translateSign == nil { content.addSubview(sign); translateSign = sign }
@@ -1083,7 +1071,7 @@ final class TabRowView: KitHoverView {
 
         title.isHidden = editing
         title.label = tab.label
-        title.rest = state.live && !editing ? AtRest.said(tab.saidAddress, always: state.showsAddress) : nil
+        title.rest = state.live && !editing ? AtRest.said(tab.saidAddress, always: false) : nil
         title.shown = title.rest != nil
         title.hovering = hovering
         title.size = state.titleSize
@@ -1411,7 +1399,6 @@ final class TabRowView: KitHoverView {
             if let agentFace { put(agentFace, width: 14, height: 14) }
             if !flask.isHidden { put(flask, width: flask.intrinsicContentSize.width) }
             if !record.isHidden { put(record, width: record.intrinsicContentSize.width) }
-            if let popupSign { put(popupSign, width: popupSign.fittingSize.width, height: popupSign.fittingSize.height) }
             if let translateSign { put(translateSign, width: translateSign.fittingSize.width, height: translateSign.fittingSize.height) }
             let titleWidth = max(0, innerRight - cursor)
             let lineHeight = SideLook.titleLine
@@ -1526,7 +1513,7 @@ final class TabRowView: KitHoverView {
     }
 
     private func give(_ down: Bool) {
-        let sink = RowRun.sink(pressed: down, gives: state.tabsGive, calm: Motion.calm)
+        let sink = RowRun.sink(pressed: down, gives: true, calm: Motion.calm)
         let curve = sink < 1 ? Motion.kitQuick : Motion.kitSettle
         face.kitScale(sink, curve: curve)
     }
@@ -1588,9 +1575,7 @@ final class TabRowView: KitHoverView {
             browser.openInSplit(tab)
             return
         }
-        if state.live {
-            if !state.addressBar { browser.beginTabEdit(tab) }
-        } else {
+        if !state.live {
             browser.select(tab)
         }
     }

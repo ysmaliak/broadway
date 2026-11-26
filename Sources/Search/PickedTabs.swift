@@ -263,11 +263,9 @@ extension Browser {
         let peers: [Tab]
         if lead.pin != nil {
             peers = shown.filter { $0.pin != nil && $0.everywhere == lead.everywhere }
-        } else if prefs.usesTabGroups {
+        } else {
             let folder = group(of: lead)
             peers = shown.filter { $0.pin == nil && group(of: $0) == folder }
-        } else {
-            peers = shown.filter { $0.pin == nil }
         }
         guard let from = peers.firstIndex(where: { $0.id == lead.id }) else { return }
         let to = from + step

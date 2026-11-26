@@ -148,27 +148,17 @@ final class BlockedPopupsTests {
         #expect(page.blockedPopups.isEmpty)
     }
 
-    @Test func theRowShowsTheSignOnlyWhenThereIsNoAddressPill() {
+    @Test func theRowLeavesTheSignToTheAddressPill() {
         let page = tab("https://example.com/")
         page.noteBlocked(URL(string: "https://ads.example.com/pop"))
         let row = TabRowView(frame: NSRect(x: 0, y: 0, width: 220, height: Metrics.sideRowHeight))
         var state = RowState()
         state.live = true
 
-        state.addressBar = true
         row.show(page, in: browser, state: state)
         row.layoutSubtreeIfNeeded()
 
         #expect(row.kitSubviews(of: PopupSignView.self).isEmpty)
-
-        state.addressBar = false
-        row.show(page, in: browser, state: state)
-        row.layoutSubtreeIfNeeded()
-
-        let sign = row.kitSubviews(of: PopupSignView.self).first
-        #expect(sign != nil)
-        #expect(sign.map { !($0 is PopupDoorView) } ?? false)
-        #expect(sign?.intrinsicContentSize == NSSize(width: 17, height: 15))
     }
 
     @Test func theDoorSignIsAPillDoorWithTheSameMenuAndWords() {

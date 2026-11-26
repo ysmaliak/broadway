@@ -147,7 +147,6 @@ enum Burst {
         NSApp.setActivationPolicy(.prohibited)
         let browser = Browser(record: WindowRecord())
         browser.leaveFiles()
-        browser.prefs.usesTabGroups = true
         for (index, page) in pages.enumerated() {
             if index > 0 { browser.newTab() }
             browser.tabs.last?.restore(url: URL(string: page.url)!, title: "")
@@ -396,7 +395,6 @@ final class AIGroupTwinTests {
         NSApp.setActivationPolicy(.prohibited)
         let browser = Browser(record: WindowRecord())
         browser.leaveFiles()
-        browser.prefs.usesTabGroups = true
         for (index, page) in pages.enumerated() {
             if index > 0 { browser.newTab() }
             browser.tabs.last?.restore(url: URL(string: page.1)!, title: page.0)

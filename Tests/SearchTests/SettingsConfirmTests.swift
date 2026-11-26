@@ -414,7 +414,7 @@ final class SettingsConfirmTests {
         let store = ShortcutStore()
         store.resetAll()
         store.assign(KeyCombo("j", command: true, shift: true, option: true), to: "file.newPrivateWindow")
-        let reset = try pill("Reset All to Defaults…", in: ShortcutsResetRow(store: store, prefs: browser.prefs))
+        let reset = try pill("Reset All to Defaults…", in: ShortcutsResetRow(store: store))
 
         answer(false) { _ = reset.accessibilityPerformPress() }
         let kept = store.anyChanged

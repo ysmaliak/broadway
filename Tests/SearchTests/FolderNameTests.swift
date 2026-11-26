@@ -26,7 +26,6 @@ final class FolderNameTests {
         NSApp.setActivationPolicy(.prohibited)
         let browser = Browser(record: WindowRecord())
         browser.leaveFiles()
-        browser.prefs.usesTabGroups = true
         for (index, page) in pages.enumerated() {
             if index > 0 { browser.newTab() }
             browser.tabs.last?.restore(url: URL(string: page.1)!, title: page.0)
@@ -177,10 +176,8 @@ final class FolderNameTests {
 
     @Test func withoutANamerTheFolderKeepsItsName() async throws {
         let browser = browser(Self.lisbon)
-        keepSetting(AIGroups.shared, \.namer, AIGroups.namerKey)
         AIGroups.shared.standIn = nil
         AIGroups.shared.macAvailable = { false }
-        AIGroups.shared.namer = .thisMac
         try #require(AIGroups.shared.namerEngine() == nil)
 
         let id = browser.newFolder(with: [titled(browser, "Lisbon flights"), titled(browser, "Lisbon hotels")], editing: false)

@@ -287,7 +287,7 @@ def main():
     scenes = []
     try:
         stage(False)
-        sv.cmd({"do": "ui", "spaces": True, "cards": True, "downloadsbutton": True, "sideWidth": COLUMN})
+        sv.cmd({"do": "ui", "spaces": True, "cards": True, "sideWidth": COLUMN})
         sv.cmd({"do": "space", "action": "rename", "name": "Personal", "icon": "house"})
         plain = opened(base, "Example page")
         sv.cmd({"do": "ui", "lead": "import"})

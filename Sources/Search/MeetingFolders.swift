@@ -56,7 +56,7 @@ extension Browser {
         let added = tabs.filter { !before.contains(ObjectIdentifier($0)) }
         guard !added.isEmpty else { return }
         let fresh = MeetingFolders.shared.firstSeen(added).filter { $0.linkedFrom != nil || $0.opener != nil }
-        guard !fresh.isEmpty, prefs.meetingFolders, prefs.usesTabGroups, !isPrivate else { return }
+        guard !fresh.isEmpty, prefs.meetingFolders, !isPrivate else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             for tab in fresh { self.gatherForMeeting(tab) }
@@ -64,7 +64,7 @@ extension Browser {
     }
 
     func gatherForMeeting(_ tab: Tab) {
-        guard prefs.usesTabGroups, tabs.contains(where: { $0 === tab }) else { return }
+        guard tabs.contains(where: { $0 === tab }) else { return }
         var pages: [UUID: MeetingFolderPage] = [:]
         for each in tabs { pages[each.id] = meetingPage(each) }
         guard let opened = pages[tab.id],
@@ -120,7 +120,7 @@ extension Browser {
             MeetingFolders.shared.joined(tab, link: link, event: event)
             guard let folder = MeetingFolderRule.joining(self.meetingPage(tab), folders: self.meetingFolderIDs,
                                                          declined: MeetingFolders.shared.declined,
-                                                         on: self.prefs.meetingFolders && self.prefs.usesTabGroups,
+                                                         on: self.prefs.meetingFolders,
                                                          isPrivate: self.isPrivate)
             else { return }
             self.undoQuiet += 1

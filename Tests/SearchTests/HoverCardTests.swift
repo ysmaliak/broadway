@@ -15,7 +15,6 @@ final class HoverCardTests {
         setenv("SEARCH_PROBE", "1", 1)
         browser = Browser(record: WindowRecord())
         browser.leaveFiles()
-        browser.prefs.usesTabGroups = true
         browser.prefs.hoverCards = true
         HoverCards.dwell = 10
     }

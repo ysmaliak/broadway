@@ -9,13 +9,10 @@ struct TabGroupDropTests {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
         let browser = Browser(record: WindowRecord())
-        let grouped = browser.prefs.usesTabGroups
         let split = browser.prefs.splitView
         defer {
-            browser.prefs.usesTabGroups = grouped
             browser.prefs.splitView = split
         }
-        browser.prefs.usesTabGroups = true
         for number in 0..<6 {
             if number > 0 { browser.newTab() }
             browser.tabs.last?.restore(url: URL(string: "https://\(number).example/")!, title: "\(number)")

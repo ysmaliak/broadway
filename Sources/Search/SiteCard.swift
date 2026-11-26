@@ -227,7 +227,7 @@ final class SiteCard: NSObject, NSMenuDelegate {
         guard let url = tab.pageAddress else { return keepsAwakeRow || browser.canDusk(tab) }
         let web = ["http", "https"].contains(url.scheme?.lowercased()) && url.host() != nil && !tab.shy
         let sounds = web && !Store.settings.bool(forKey: Preferences.waitsKey)
-        let floats = web && (browser.prefs.floatsOnLeave || browser.prefs.floatsAway) && Players.knows(url)
+        let floats = web && Players.knows(url)
         return sounds || floats || browser.canDusk(tab) || keepsAwakeRow || clearable
     }
 
@@ -242,7 +242,7 @@ final class SiteCard: NSObject, NSMenuDelegate {
             item.toolTip = call ? CallSound.always : "Takes effect from the next page"
             out.append(item)
         }
-        if !tab.shy, browser.prefs.floatsOnLeave || browser.prefs.floatsAway, web,
+        if !tab.shy, web,
            let url = tab.pageAddress, Players.knows(url), let host = url.host() {
             let on = Grounded.holds(host)
             out.append(action("Don't Float Videos Here", on: on) { Grounded.set(!on, for: host) })

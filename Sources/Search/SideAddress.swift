@@ -518,7 +518,7 @@ final class AddressLaneView: NSView {
 
     static func line(_ tab: Tab, prefs: Preferences) -> String? {
         guard !tab.isBlank, let url = tab.page?.url ?? tab.saidAddress else { return nil }
-        return text(url, full: prefs.fullAddress)
+        return text(url, full: false)
     }
 
     static func text(_ url: URL, full: Bool) -> String {
@@ -530,7 +530,7 @@ final class AddressLaneView: NSView {
         let prefs = browser.prefs
         let tab = browser.shownTab
         let host = tab.flatMap { Self.line($0, prefs: prefs) }
-        let next = AddressMove.Mark(tab: tab?.id, space: browser.spaceID, text: host, full: prefs.fullAddress)
+        let next = AddressMove.Mark(tab: tab?.id, space: browser.spaceID, text: host, full: false)
         let inset = Metrics.sideInset
         let frame = NSRect(x: inset, y: 0, width: max(0, width - 2 * inset), height: Metrics.sidePill)
         if here.frame != frame {
@@ -545,7 +545,7 @@ final class AddressLaneView: NSView {
         if let old = mark, old != next {
             turn(from: old, to: next, frame: words)
         } else if mark == nil {
-            here.words.whole = prefs.fullAddress
+            here.words.whole = false
             here.host = .some(host)
             shown = .some(host)
         }
@@ -560,7 +560,7 @@ final class AddressLaneView: NSView {
             cause = .tab(from: order.firstIndex(of: old.space), to: order.firstIndex(of: new.space))
         }
         let before = shown ?? old.text
-        let move = AddressMove.between(before, new.text, cause: cause, reduced: Motion.reduced, light: Motion.light)
+        let move = AddressMove.between(before, new.text, cause: cause, reduced: Motion.reduced)
         shown = .some(new.text)
         let shift: CGSize
         let curve: KitCurve
@@ -578,9 +578,6 @@ final class AddressLaneView: NSView {
         case let .slide(back):
             shift = CGSize(width: back ? -28 : 28, height: 0)
             curve = Motion.kitRoll
-        case .fade:
-            shift = .zero
-            curve = .easeOut(0.16)
         }
         leaving?.removeFromSuperview()
         let out = AddressWordsView(frame: frame)
@@ -633,7 +630,7 @@ final class AddressLaneView: NSView {
             }()
             view.ground = ground(index)
             view.doors.follow(active?.blockedPopups.isEmpty == false ? active : nil, browser: browser)
-            view.words.whole = prefs.fullAddress
+            view.words.whole = false
             view.host = .some(words)
             view.show(words != nil, animated: false)
             view.setLane(frame, shift: side * prefs.columnWidth)

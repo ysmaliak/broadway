@@ -26,9 +26,9 @@ struct DeveloperTests {
         let mine = Tab(configuration: Web.configuration(space: UUID()))
         mine.restore(url: url, title: "App")
 
-        developer.arrived(agent, offers: true)
+        developer.arrived(agent)
         let onAgent = developer.offer
-        developer.arrived(mine, offers: true)
+        developer.arrived(mine)
 
         #expect(onAgent == nil)
         #expect(developer.offer == "localhost:\(port)")

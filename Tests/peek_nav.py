@@ -78,7 +78,7 @@ try:
     results = {}
     for side in ("left", "right"):
         c(do="ui", side=side)
-        c(do="ui", hides=True, pointerless=True)
+        c(do="ui", folded=True, pointerless=True)
         time.sleep(1.2)
         for run in range(2):
             results[f"{side}-out-{run}"] = c(do="ui", peektrace={"out": True, "seconds": 0.6, "rigid": True})
@@ -93,7 +93,7 @@ try:
         time.sleep(0.6)
         results[f"{side}-dock"] = c(do="ui", peektrace={"toggle": True, "seconds": 0.7, "rigid": True})
         time.sleep(0.5)
-        c(do="ui", hides=False, pointerless=True, covered=True)
+        c(do="ui", pointerless=True, covered=True)
         time.sleep(0.8)
         c(do="ui", folded=False)
         time.sleep(0.8)

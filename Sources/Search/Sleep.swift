@@ -112,7 +112,6 @@ extension Browser {
     /// Every tab that has gone long enough without being looked at, the one
     /// left longest first.
     func sleepIdle(within given: TimeInterval? = nil) {
-        guard prefs.sleepsTabs else { return }
         let wait = given ?? Browser.idleWait(critical: squeezed)
         let now = Date()
         // The rows of the other spaces too: parked is not the same as used.
@@ -134,7 +133,6 @@ extension Browser {
         guard shut else { return }
         for tab in tabs + parkedTabs { tab.cancelImageText() }
         peekTab?.cancelImageText()
-        guard prefs.sleepsTabs else { return }
         var loading = false
         for tab in tabs + parkedTabs {
             if awake(because: tab) == "still loading" { loading = true }

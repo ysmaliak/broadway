@@ -243,16 +243,12 @@ final class SettingsPageView: SettingsFormStack {
     @discardableResult
     func row(_ id: String, control: NSView? = nil, wide: Bool = false, detail: (() -> String)? = nil) -> SettingsRowView {
         let item = SettingsIndex.item(id)
-        let base = item?.detail ?? ""
-        let made = SettingsRowView(id: id, symbol: item?.icon, title: item?.title ?? id, detail: base,
+        let made = SettingsRowView(id: id, symbol: item?.icon, title: item?.title ?? id, detail: item?.detail ?? "",
                                    more: item?.more, wide: wide || item?.kind == .wide, control: control)
         made.lit = shell.lit == id
         if let control, !(control is SettingsPopUp) { control.kitAccess(id: "settings." + id, label: item?.title ?? id) }
         if let detail {
-            update { [weak made] in
-                let said = detail()
-                made?.say(said)
-            }
+            update { [weak made] in made?.say(detail()) }
         }
         if let item, !SettingsIndex.applies(item, prefs) {
             made.say(SettingsIndex.needs(item))

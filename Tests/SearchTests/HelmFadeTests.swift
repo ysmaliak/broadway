@@ -19,9 +19,8 @@ final class HelmFadeTests {
     init() {
         keepSetting(Shared.prefs, \.usesSpaces, "spaces")
         keepSetting(Shared.prefs, \.splitView, "splitView")
-        keepSettings("motion.testReduced", "motion.testLowPower")
+        keepSettings("motion.testReduced")
         Store.settings.set(false, forKey: "motion.testReduced")
-        Store.settings.set(false, forKey: "motion.testLowPower")
         addTeardownBlock { self.tearDown() }
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)

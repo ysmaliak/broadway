@@ -118,20 +118,6 @@ final class NowTests {
         #expect(browser.picked == nil)
     }
 
-    @Test func theSwitchLeavesTheRestOfTheField() {
-        let browser = fresh()
-        defer { browser.closeAll() }
-        let saved = browser.prefs.nowRows
-        defer { browser.prefs.nowRows = saved }
-        NowBoard.add("test") { _, _ in [NowRow(id: "test:3", title: "Row", detail: "", symbol: "star") { _ in }] }
-        defer { NowBoard.remove("test") }
-
-        browser.prefs.nowRows = false
-        let rows = browser.nowRows()
-
-        #expect(rows.isEmpty)
-    }
-
     @Test func aPrivateWindowShowsNoNowRows() {
         _ = NSApplication.shared
         let browser = Browser(record: WindowRecord(), privateStore: .nonPersistent())

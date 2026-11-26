@@ -318,9 +318,9 @@ final class LiveQuietTests {
         let before = prefs.liveEvery
         defer { prefs.liveEvery = before }
 
-        let applied = SettingsIndex.apply(LiveEvery.key, 15, to: prefs)
+        let applied = BenchSettings.set(LiveEvery.key, 15, on: prefs)
         let chosen = prefs.liveEvery
-        let refused = SettingsIndex.apply(LiveEvery.key, 7, to: prefs)
+        let refused = BenchSettings.set(LiveEvery.key, 7, on: prefs)
         let access = PersonSettings.table[LiveEvery.key]
         let item = SettingsIndex.item(LiveEvery.key)
         let neighbour = PersonSettings.table["live.offers"]
@@ -334,7 +334,7 @@ final class LiveQuietTests {
         #expect(access != nil)
         #expect(access?.bar == neighbour?.bar)
         #expect(access?.takes == "1, 5, 15, 30, 60 minutes")
-        #expect(SettingsIndex.values(prefs)[LiveEvery.key] as? Int == 15)
+        #expect(BenchSettings.values(prefs)[LiveEvery.key] as? Int == 15)
         #expect(SettingsIndex.find("how often").contains { $0.id == LiveEvery.key })
     }
 

@@ -9,7 +9,7 @@ final class MeetingFoldersTests {
     private var window: NSWindow!
     private let call = URL(string: "http://call.invalid/qwe-rtyu-iop")!
     private let notes = URL(string: "http://notes.invalid/agenda")!
-    private var saved: (groups: Bool, spaces: Bool, folders: Bool)!
+    private var saved: (spaces: Bool, folders: Bool)!
     private var live: [UUID] = []
 
     init() async throws {
@@ -21,8 +21,7 @@ final class MeetingFoldersTests {
         keepSetting(Shared.prefs, \.liveFolders, "live.on")
         browser = Browser(record: WindowRecord())
         browser.leaveFiles()
-        saved = (browser.prefs.usesTabGroups, browser.prefs.usesSpaces, browser.prefs.meetingFolders)
-        browser.prefs.usesTabGroups = true
+        saved = (browser.prefs.usesSpaces, browser.prefs.meetingFolders)
         browser.prefs.usesSpaces = false
         browser.prefs.meetingFolders = true
         window = NSWindow(contentRect: NSRect(x: -20_000, y: -20_000, width: 900, height: 600), styleMask: .borderless,
@@ -36,7 +35,6 @@ final class MeetingFoldersTests {
         for id in live { LiveFolders.shared.remove(id) }
         MeetingLink.testHosts = [:]
         MeetingFolders.shared.forget()
-        browser.prefs.usesTabGroups = saved.groups
         browser.prefs.usesSpaces = saved.spaces
         browser.prefs.meetingFolders = saved.folders
         window.contentView = nil
@@ -249,7 +247,7 @@ final class MeetingFoldersTests {
         let prefs = Preferences()
         let before = prefs.meetingFolders
         defer { prefs.meetingFolders = before }
-        #expect(SettingsIndex.apply(Preferences.meetingFoldersKey, false, to: prefs))
+        #expect(BenchSettings.set(Preferences.meetingFoldersKey, false, on: prefs))
         #expect(!prefs.meetingFolders)
     }
 

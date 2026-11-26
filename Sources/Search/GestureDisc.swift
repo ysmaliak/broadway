@@ -232,7 +232,7 @@ final class GestureDisc: NSView {
         let pop = CAKeyframeAnimation(keyPath: "sublayerTransform")
         pop.values = [1, GestureDisc.pop, 1].map { NSValue(caTransform3D: scaled($0)) }
         pop.keyTimes = [0, 0.35, 1]
-        pop.duration = Motion.light ? 0.16 : 0.26
+        pop.duration = 0.26
         pop.timingFunctions = [CAMediaTimingFunction(name: .easeOut), CAMediaTimingFunction(name: .easeInEaseOut)]
         layer.add(pop, forKey: "pop")
     }

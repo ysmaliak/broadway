@@ -10,7 +10,6 @@ final class SearchFolderTests {
         NSApp.setActivationPolicy(.prohibited)
         let browser = Browser(record: WindowRecord())
         browser.leaveFiles()
-        browser.prefs.usesTabGroups = true
         keepSetting(AIGroups.shared, \.on, AIGroups.onKey)
         AIGroups.shared.on = false
         addTeardownBlock { @MainActor in

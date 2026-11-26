@@ -127,7 +127,7 @@ extension Browser {
     func closeParkedCard(_ tab: Tab) { closeParked(tab, remembering: true) }
 
     func putsAwayParked(_ tab: Tab) -> Bool {
-        guard prefs.usesTabGroups, tab.pin == nil, let folder = tab.groupID,
+        guard tab.pin == nil, let folder = tab.groupID,
               let groups = parked.first(where: { $0.value.tabs.contains { $0 === tab } })?.value.groups,
               groups.contains(where: { $0.id == folder }) else { return false }
         return FolderTree.raised(folder, in: groups) && !tab.asleep && !tab.isBlank && !tab.bench && tab.address != nil

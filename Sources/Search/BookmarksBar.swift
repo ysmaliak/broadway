@@ -120,9 +120,7 @@ final class BookmarksBar: NSView {
                     for url in urls { browser.open(url, foreground: false, atEnd: true, from: browser.active, mayWait: true) }
                 })
                 items.append(.action("Open All in New Window") { browser.openInNewWindow(urls) })
-                if browser.prefs.usesTabGroups {
-                    items.append(.action("Open All in Folder") { browser.openInTabGroup(urls, named: node.title) })
-                }
+                items.append(.action("Open All in Folder") { browser.openInTabGroup(urls, named: node.title) })
                 items.append(.separator)
             }
             items.append(.action("Rename…", symbol: MenuSymbol.rename) { bookmarks.askRename(node) })

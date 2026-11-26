@@ -46,8 +46,12 @@ enum PersonSettings {
         onOff(bar, read: { $0[keyPath: path] }, apply: { $0[keyPath: path] = $1 })
     }
 
-    private static func held(_ path: KeyPath<Preferences, Bool>) -> SettingAccess {
-        SettingAccess(bar: .always, read: { $0[keyPath: path] })
+    private static func held(_ path: ReferenceWritableKeyPath<Preferences, Bool>) -> SettingAccess {
+        SettingAccess(bar: .always, read: { $0[keyPath: path] }, write: { prefs, text in
+            guard let on = yes(text) else { return false }
+            prefs[keyPath: path] = on
+            return true
+        }, check: { yes($0) != nil })
     }
 
     private static func choice<Value: CaseIterable & RawRepresentable>(_ path: ReferenceWritableKeyPath<Preferences, Value>) -> SettingAccess where Value.RawValue == String {
@@ -120,7 +124,7 @@ enum PersonSettings {
         "agents.connected": SettingAccess(bar: .always, instead: "broadway agents list reads them"),
         "agents.mode": SettingAccess(bar: .always, read: { $0.agentMode.rawValue }),
         "agents.signIn": SettingAccess(bar: .always, read: { $0.agentsAskSignIn }),
-        "agents.give": SettingAccess(bar: .always, read: { $0.agentsGivePasswords }),
+        "agents.give": held(\.agentsGivePasswords),
         "agents.sites": SettingAccess(bar: .always, instead: "broadway agents status reads them"),
         "agents.hooks": SettingAccess(bar: .always, instead: "broadway hooks list reads them"),
         "ai.agents": held(\.agentsOn),
@@ -279,6 +283,11 @@ enum PersonSettings {
             return .person("A custom search address sees every search, so only the person can set one", where: place)
         }
         return nil
+    }
+
+    static func setForTests(_ id: String, _ text: String, on prefs: Preferences) -> Bool {
+        guard Store.testing, let access = table[id], access.check?(text) ?? true else { return false }
+        return access.write?(prefs, text) == true
     }
 
     static func canSet(_ access: SettingAccess) -> Bool {
@@ -532,7 +541,7 @@ enum PersonSettings {
             throw PersonRefusal.person("Whether an extension runs in private windows is the person's to say", where: "Settings › Extensions")
         },
         PersonVerb("shields", "list", .look) { call in
-            ["on": call.browser.prefs.shielded, "lists": call.browser.prefs.shieldLists, "trouble": Shield.shared.trouble ?? "",
+            ["on": call.browser.prefs.shielded, "lists": true, "trouble": Shield.shared.trouble ?? "",
              "lists_trouble": ShieldLists.shared.trouble ?? "", "lists_checked": PersonCommands.stamp(ShieldLists.shared.saved.checked),
              "sites": Shield.shared.paused.sorted().map { ["site": $0] }]
         },

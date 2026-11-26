@@ -42,14 +42,6 @@ final class SidebarPressTests {
         try await send(.leftMouseDown, at: point, in: window)
         try await send(.leftMouseUp, at: point, in: window)
         #expect(browser.editingTab == nil, "With the address pill up, the pill edits, not the row")
-        let pill = browser.prefs.addressBar
-        defer { browser.prefs.addressBar = pill }
-        browser.prefs.addressBar = false
-        try await settle()
-        let bare = NSPoint(x: point.x, y: point.y + Metrics.sidePill - 3 + 8)
-        try await send(.leftMouseDown, at: bare, in: window)
-        try await send(.leftMouseUp, at: bare, in: window)
-        #expect(browser.editingTab == first.id, "Without the pill, a click on the active row edits")
     }
 
     @Test func optionClickOpensTheRowInSplitViewBesideThePageInFront() async throws {
@@ -468,7 +460,7 @@ final class SidebarPressTests {
 
     private func motionOn() -> () -> Void {
         let store = Store.settings
-        let saved = ["motion.testReduced", "motion.testLowPower"].map { ($0, store.object(forKey: $0)) }
+        let saved = ["motion.testReduced"].map { ($0, store.object(forKey: $0)) }
         for (key, _) in saved { store.set(false, forKey: key) }
         return { for (key, value) in saved { store.set(value, forKey: key) } }
     }
@@ -503,9 +495,6 @@ final class SidebarPressTests {
 
     @Test func aFaviconArrivingMidCarryKeepsThePinInHand() async throws {
         let browser = makeBrowser()
-        let glyph = browser.prefs.glyph
-        defer { browser.prefs.glyph = glyph }
-        browser.prefs.glyph = .icons
         let (first, second) = (browser.tabs[0], browser.tabs[1])
         browser.pin(first)
         browser.pin(second)
@@ -534,9 +523,6 @@ final class SidebarPressTests {
 
     @Test func aFaviconArrivingMidCarryKeepsTheRowInHand() async throws {
         let browser = makeBrowser()
-        let glyph = browser.prefs.glyph
-        defer { browser.prefs.glyph = glyph }
-        browser.prefs.glyph = .icons
         let first = browser.tabs[0]
         let window = makeWindow(browser)
         try await settle()
@@ -604,14 +590,13 @@ final class SidebarPressTests {
         NSApp.setActivationPolicy(.prohibited)
         let prefs = Shared.prefs
         if restorePreferences == nil {
-            let previous = (prefs.usesTabGroups, prefs.splitView)
+            let previous = prefs.splitView
             restorePreferences = {
-                (prefs.usesTabGroups, prefs.splitView) = previous
+                prefs.splitView = previous
             }
         }
         let browser = Browser(record: WindowRecord())
         browsers.append(browser)
-        browser.prefs.usesTabGroups = false
         browser.prefs.splitView = false
         for word in ["one", "two", "three"] {
             if browser.tabs.last?.isBlank == false { browser.newTab() }
@@ -630,7 +615,7 @@ final class SidebarPressTests {
         return window
     }
 
-    private var rowsAbove: Int { Shared.prefs.newTabsAtBottom ? 0 : 1 }
+    private var rowsAbove: Int { 0 }
 
     private var columnTop: CGFloat { Metrics.strip + SpaceTitleSize.room + Metrics.sidePill - 3 + 8 }
 

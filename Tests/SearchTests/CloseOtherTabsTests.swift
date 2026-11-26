@@ -21,7 +21,6 @@ struct CloseOtherTabsTests {
 
     @Test func aFolderClosedWithTheOtherTabsComesBackAsAFolder() {
         withBrowser { browser, tabs in
-            browser.prefs.usesTabGroups = true
             let folder = browser.addTabGroup(containing: tabs[1])
             browser.move(tabs[2], toGroup: folder)
             browser.closeOthers(but: tabs[0])
@@ -38,17 +37,12 @@ struct CloseOtherTabsTests {
         NSApp.setActivationPolicy(.prohibited)
         let browser = Browser(record: WindowRecord())
         let prefs = browser.prefs
-        keepSetting(prefs, \.newTabPlace, "tabs.newPlace")
-        let saved = (prefs.usesTabGroups, prefs.splitView, prefs.newTabPlace)
+        let saved = prefs.splitView
         defer {
             browser.closeAll()
-            prefs.usesTabGroups = saved.0
-            prefs.splitView = saved.1
-            prefs.newTabPlace = saved.2
+            prefs.splitView = saved
         }
-        prefs.usesTabGroups = false
         prefs.splitView = false
-        prefs.newTabPlace = .end
         for number in 1...count {
             if number > 1 { browser.newTab() }
             browser.tabs.last?.restore(url: URL(string: "about:blank#\(number)")!, title: "Tab \(number)")

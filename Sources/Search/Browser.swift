@@ -1462,26 +1462,6 @@ final class Browser: NSObject {
         return (kept, here)
     }
 
-    /// The same, said as it lands.
-    func took(_ outcome: Result<Chromium.Found, Error>, from name: String) {
-        switch outcome {
-        case .success(let found):
-            let (kept, here) = keep(found)
-            ImportRecords.note(name, passwords: kept)
-            let locked = found.undecrypted > 0 ? ", \(found.undecrypted) couldn't be decrypted" : ""
-            let landed = kept == 0 ? (here == 0 ? "Nothing new in \(name)" : "Every password from \(name) was already here")
-                : here == 0 ? (kept == 1 ? "1 password from \(name)" : "\(kept) passwords from \(name)")
-                : (kept == 1 ? "1 new password from \(name), \(here) already here" : "\(kept) new passwords from \(name), \(here) already here")
-            announce(landed + locked)
-        case .failure(Chromium.Trouble.noPassphrase):
-            announce("\(name) didn't give up its keychain key", kind: .error)
-        case .failure(Mozilla.Trouble.primaryPassword):
-            announce("\(name) has a primary password. Export your passwords from its Settings › Passwords › ⋯ › Export, then bring in the CSV file.")
-        case .failure:
-            announce("Nothing readable in \(name)")
-        }
-    }
-
     /// The other browser's history, into this one's. Off the main thread for
     /// the reading; the merge itself is a moment.
     func takePlaces(from source: ImportSource, profile: String? = nil, then done: @escaping (_ added: Int, _ already: Int) -> Void) {
@@ -1945,13 +1925,11 @@ final class Browser: NSObject {
         defer { endStep(mark) }
         guard tab.pin != nil, tabs.contains(where: { $0.id == tab.id }) else { return false }
         if let pair = shownPinnedSplit(of: tab) { unpinSplit(pair) } else { unpin(tab) }
-        if let group, prefs.usesTabGroups, tabGroups.contains(where: { $0.id == group }) {
+        if let group, tabGroups.contains(where: { $0.id == group }) {
             move(tab, toGroup: group)
-        } else if prefs.usesTabGroups {
+        } else {
             let peers = tabs(in: nil).filter(standsInRow)
             move(tab, within: nil, to: min(max(0, slot), peers.count - 1))
-        } else {
-            moveDisplayedTab(tab, to: min(squarePins.count + max(0, slot), displayedTabs.count - 1))
         }
         writeSession(now: true)
         return true
@@ -2021,9 +1999,7 @@ final class Browser: NSObject {
     func takeTabOffer(_ offer: Suggestion) {
         guard let id = editingTab, let tab = tabs.first(where: { $0.id == id }) else { return }
         cancelTabEdit()
-        if case .command(let command) = offer.kind {
-            command.run(on: self)
-        } else if let open = offer.tab, let other = tabs.first(where: { $0.id == open }) {
+        if let open = offer.tab, let other = tabs.first(where: { $0.id == open }) {
             select(other)
         } else {
             tab.go(to: offer.url)
@@ -2395,7 +2371,6 @@ final class Browser: NSObject {
         if first {
             Shield.shared.enabled = prefs.shielded
             Shield.shared.compile()
-            LocalNetworkGuard.shared.enabled = prefs.asksLocalNetwork
             LocalNetworkGuard.shared.compile()
             Extensions.shared.start(for: self)
             AgentSocket.shared.start(for: self)
@@ -2423,8 +2398,6 @@ final class Browser: NSObject {
             // What a deleted space left behind, if WebKit wouldn't let it go then.
             Spaces.sweep()
         }
-        // Asked to stay out of the way: it starts that way (see Fold.swift).
-        folded = prefs.sideHides
 
         // A page's passkeys for under its field, arriving while the caret
         // is already there, or going with the page's request.
@@ -2634,13 +2607,6 @@ extension Browser {
         // what it is now.
         kitObserve(initial: false, { [prefs] in (prefs.sharesPins, prefs.usesSpaces) }) { [weak self] _ in self?.sharedPinsChanged() }
             .store(in: &bag)
-        prefs.onSet(\.usesTabGroups) { [weak self] on in
-                guard let self, on else { return }
-                // Sent before the setting changes, so it is passed on.
-                arrangeGroupedTabs(on)
-                writeSession(now: true)
-            }
-            .store(in: &bag)
         prefs.onSet(\.splitView) { [weak self] on in
                 // Off, the pairs stay, as groups do; back on, the ones that
                 // came apart meanwhile go. The others' files are looked at
@@ -2654,11 +2620,6 @@ extension Browser {
                     if let row = parked[key] { parked[key]?.splits = row.splits.filter { Browser.holds($0, in: row.tabs) } }
                 }
                 writeSession(now: true)
-            }
-            .store(in: &bag)
-        prefs.onSet(\.asksLocalNetwork) { on in
-                LocalNetworkGuard.shared.enabled = on
-                LocalNetworkGuard.shared.refitAll()
             }
             .store(in: &bag)
         prefs.onSet(\.shielded) { [weak self] on in
@@ -2688,26 +2649,6 @@ extension Browser {
                 guard let self else { return }
                 if on { Bench.shared.start(for: self) } else { Bench.shared.stop() }
                 announce(on ? "Scripts can drive Broadway" : "Scripts can no longer drive Broadway")
-            }
-            .store(in: &bag)
-
-        // Every tab's next page, and the page each is showing now (see AutoScroll.swift).
-        prefs.onSet(\.autoScroll) { [weak self] on in
-                guard let self else { return }
-                for tab in tabs + parkedTabs {
-                    tab.arm(hiding: curtain.css(on: curtain.host(of: tab.address)))
-                    tab.built?.evaluateInSearch(on ? AutoScroll.script : AutoScroll.off)
-                }
-            }
-            .store(in: &bag)
-
-        prefs.onSet(\.videoKeys) { [weak self] on in
-                guard let self else { return }
-                for tab in tabs + parkedTabs {
-                    tab.arm(hiding: curtain.css(on: curtain.host(of: tab.address)))
-                    tab.built?.evaluateInSearch(on ? Tempo.script : Tempo.off)
-                }
-                if on { DispatchQueue.main.async { [weak self] in Extensions.shared.handOffTempo(in: self) } }
             }
             .store(in: &bag)
 
@@ -2750,13 +2691,6 @@ extension Browser {
                     tab.arm(hiding: curtain.css(on: curtain.host(of: tab.address)))
                 }
                 announce(on ? "Passkeys are offered again. Reload the page." : "Sites will ask for a password instead")
-            }
-            .store(in: &bag)
-
-        // Videos waiting for a click: every tab's next page view follows.
-        prefs.onSet(\.waitsForPlay) { [weak self] _ in
-                guard let self else { return }
-                DispatchQueue.main.async { for tab in self.tabs + self.parkedTabs { tab.playbackChanged() } }
             }
             .store(in: &bag)
 
@@ -3738,7 +3672,7 @@ extension Browser {
 
     func newTabInFolder(_ id: UUID? = nil) {
         let folder = id ?? active.flatMap { group(of: $0) }
-        guard prefs.usesTabGroups, !isPrivate, let folder,
+        guard !isPrivate, let folder,
               let index = tabGroups.firstIndex(where: { $0.id == folder && !$0.live }) else { return launch() }
         if id == nil, let here = active, here.isBlank {
             editing = false
@@ -3793,13 +3727,13 @@ extension Browser {
         }
         // A folded group opens for the tab you go to in it. With groups off,
         // they are kept as they were and nothing about them is saved.
-        if unfoldGroup, prefs.usesTabGroups, let id = tab.groupID,
+        if unfoldGroup, let id = tab.groupID,
            let folder = tabGroups.first(where: { $0.id == id }),
            folder.collapsed || FolderTree.ancestors(of: id, in: tabGroups).contains(where: \.collapsed) {
             unfoldFolder(id)
             writeSession(now: true)
         }
-        if unfoldGroup, prefs.usesTabGroups { unfoldStack(holding: tab) }
+        if unfoldGroup { unfoldStack(holding: tab) }
         if !tab.shy, !isPrivate, let key = tab.liveKey {
             LiveFolders.shared.opened(key, space: spaceID)
         } else if !tab.shy, !isPrivate, prefs.liveFolders, let url = tab.address {
@@ -3867,7 +3801,7 @@ extension Browser {
     /// open in a group, with groups on. Not an empty tab, which has nothing
     /// to come back to, nor one already put away or asleep: that one goes.
     func putsAway(_ tab: Tab) -> Bool {
-        guard prefs.usesTabGroups, let folder = group(of: tab) else { return false }
+        guard let folder = group(of: tab) else { return false }
         return FolderTree.raised(folder, in: tabGroups) && !tab.asleep && !tab.isBlank && !tab.bench && tab.address != nil
     }
 
@@ -3942,7 +3876,7 @@ extension Browser {
             // Put down is also gone home with Settings › Tabs › Pins stay on
             // their site, as Arc's pins are: the pin wakes on the page it was
             // pinned at, not wherever its links had taken it.
-            tab.rest(at: prefs.pinsGoHome || prefs.pinsPeek ? tab.home : nil)
+            tab.rest(at: tab.home)
             if activeID == tab.id { leave(tab) }
             writeSession(now: true)
             return
@@ -3981,9 +3915,8 @@ extension Browser {
         // the window, holding the groups, stays open.
         let kept: (Tab) -> Bool = { $0.pin != nil || self.group(of: $0) != nil }
         let besideGroups = tabs.contains { $0.id != tab.id && $0.pin == nil && self.group(of: $0) != nil }
-        let onlyPins = prefs.newTabAfterLast && !tabs.contains { $0.id != tab.id && $0.pin == nil }
         let onlyKept = besideGroups && !kept(tab) && !tabs.contains { $0.id != tab.id && !kept($0) }
-        if activeID == tab.id, onlyPins || onlyKept, returning(from: tab) == nil {
+        if activeID == tab.id, onlyKept, returning(from: tab) == nil {
             if tab.isBlank {
                 if besideGroups {
                     typed = ""
@@ -4261,7 +4194,7 @@ extension Browser {
     /// (closedGroups), named as it was and where it was, opened; `back` says
     /// so, for the row to be arranged around it.
     private func reopenLive(_ ghost: Ghost) -> Tab? {
-        guard let live = ghost.live, prefs.liveFolders, prefs.usesTabGroups,
+        guard let live = ghost.live, prefs.liveFolders,
               tabGroups.contains(where: { $0.id == live.folder && $0.live }),
               LiveFolders.shared.restore(live) else { return nil }
         syncLive()
@@ -4283,7 +4216,7 @@ extension Browser {
     private func regroup(_ ghost: Ghost) -> (id: UUID?, back: Bool) {
         guard ghost.live == nil else { return (nil, false) }
         var back = false
-        if prefs.usesTabGroups, let id = ghost.groupID, !tabGroups.contains(where: { $0.id == id }),
+        if let id = ghost.groupID, !tabGroups.contains(where: { $0.id == id }),
            let closed = closedGroups.removeValue(forKey: id) {
             var group = closed.group
             group.collapsed = false
@@ -4292,7 +4225,7 @@ extension Browser {
             for tab in tabs where left.contains(tab.id) && tab.pin == nil && tab.groupID == group.parent { tab.groupID = id }
             back = true
         }
-        let id = prefs.usesTabGroups && tabGroups.contains(where: { $0.id == ghost.groupID }) ? ghost.groupID : nil
+        let id = tabGroups.contains(where: { $0.id == ghost.groupID }) ? ghost.groupID : nil
         return (id, back)
     }
 
@@ -4714,8 +4647,8 @@ extension Browser {
     }
 
     /// Whether Fold All Groups or Unfold All Groups has anything to do.
-    var canFoldAllGroups: Bool { prefs.usesTabGroups && tabGroups.contains { !$0.collapsed } }
-    var canUnfoldAllGroups: Bool { prefs.usesTabGroups && tabGroups.contains { $0.collapsed } }
+    var canFoldAllGroups: Bool { tabGroups.contains { !$0.collapsed } }
+    var canUnfoldAllGroups: Bool { tabGroups.contains { $0.collapsed } }
 
     func removeTabGroup(_ id: UUID) {
         let mark = beginStep(tabGroups.first { $0.id == id }?.query == nil ? "Remove Folder" : "Ungroup")
@@ -4854,9 +4787,7 @@ extension Browser {
     /// The row in the order it is shown: the pins, each group's tabs in the
     /// groups' order, then the tabs in none. The one place that order is
     /// made, run after every change to the row (see `tabs`) and to a group.
-    /// Nothing while groups are off: the row stays as you left it.
-    func arrangeGroupedTabs(_ on: Bool? = nil) {
-        guard on ?? prefs.usesTabGroups else { return }
+    func arrangeGroupedTabs() {
         AIGroups.shared.membershipChanged(in: self)
         let representatives = displayedTabs
         let pins = representatives.filter { $0.pin != nil }
@@ -4890,7 +4821,6 @@ extension Browser {
     }
 
     func placeJoined(_ joined: [Tab], leading: Bool = false) {
-        guard prefs.usesTabGroups else { return }
         var row = tabs
         for tab in joined {
             guard let id = group(of: tab), !FolderTree.raised(id, in: tabGroups) else { continue }
@@ -4907,7 +4837,7 @@ extension Browser {
     }
 
     func placeLeft(_ left: [Tab], from group: UUID) {
-        guard prefs.usesTabGroups, !left.isEmpty else { return }
+        guard !left.isEmpty else { return }
         let ids = Set(left.map(\.id))
         let moving = tabs.filter { ids.contains($0.id) }
         var row = tabs.filter { !ids.contains($0.id) }
@@ -4933,12 +4863,10 @@ extension Browser {
     }
 
     func listItems(_ shown: [Tab]) -> [ListItem] {
-        guard prefs.usesTabGroups else { return shown.filter { $0.pin == nil }.map { .tab($0.id) } }
         return FolderTree.listed(shown.filter { $0.pin == nil }, group: { self.group(of: $0) }, in: tabGroups) { .tab($0.id) }
     }
 
     func pinnedFolders() -> [TabGroup] {
-        guard prefs.usesTabGroups else { return [] }
         return tabGroups.filter { $0.parent == nil && $0.isPinned }
     }
 
@@ -5050,7 +4978,7 @@ extension Browser {
             lonesWaiting.insert(id)
             return
         }
-        guard prefs.usesTabGroups, editingGroupID != id,
+        guard editingGroupID != id,
               let at = tabGroups.firstIndex(where: { $0.id == id }), Browser.dissolves(tabGroups[at]),
               !tabGroups.contains(where: { $0.parent == id }) else { return }
         let members = tabs.filter { $0.groupID == id }
@@ -5092,7 +5020,6 @@ extension Browser {
     /// in a group are not among them. Tab cycling and selection ranges count
     /// these; number shortcuts also give folded groups a place of their own.
     var shownTabs: [Tab] {
-        guard prefs.usesTabGroups else { return displayedTabs }
         return inDisplayOrder(tab: { [$0] }, group: { self.visibleTabs(in: $0) })
     }
 
@@ -5117,7 +5044,6 @@ extension Browser {
     /// Number shortcuts count a folded group once, even while its active tab
     /// is shown below its heading. Other tab navigation keeps using shownTabs.
     var tabShortcutTargets: [(id: UUID, tab: Tab)] {
-        guard prefs.usesTabGroups else { return displayedTabs.map { ($0.id, $0) } }
         return inDisplayOrder(tab: { [($0.id, $0)] }, group: { group -> [(id: UUID, tab: Tab)] in
             guard !FolderTree.ancestors(of: group.id, in: tabGroups).contains(where: \.collapsed) else { return [] }
             guard group.collapsed else { return tabs(in: group.id).filter(standsInRow).map { ($0.id, $0) } }
@@ -5130,7 +5056,7 @@ extension Browser {
 
     /// Only nine hints, worked out once for the window rather than by each tab.
     var tabShortcutNumbers: [UUID: Int] {
-        guard prefs.showsTabShortcuts, commandHeld else { return [:] }
+        guard commandHeld else { return [:] }
         let shown = tabShortcutTargets
         var numbers = Dictionary(uniqueKeysWithValues: shown.prefix(8).enumerated().map { ($0.element.id, $0.offset + 1) })
         if shown.count > 8, let last = shown.last { numbers[last.id] = 9 }
@@ -5398,7 +5324,7 @@ extension Browser {
         prepare(tab)
         // A link opened from a grouped tab joins its group, only while groups
         // are on: turned off, they sleep, and nothing new goes into one.
-        if prefs.usesTabGroups, let source, !tab.shy, !tab.bench {
+        if let source, !tab.shy, !tab.bench {
             tab.groupID = meetingKeepsLoose(from: source, link: link) ? nil : source.groupID
             tab.bornIn = tab.groupID
         }
@@ -5406,11 +5332,7 @@ extension Browser {
         tabs.insert(tab, at: atEnd ? tabs.count : front ? placeForFront() : link ? placeForLink(from: source) : placeForNew())
         if link, !atEnd, !foreground { noteLink(tab, from: source) }
         if foreground || link { noteReturn(tab, front: foreground, from: source, once: !link) }
-        if mayWait, !foreground, prefs.lazyTabs, page == nil {
-            tab.restore(url: url, title: TitleSource.best(history: knownTitle(for: url), named: title) ?? "")
-        } else {
-            tab.go(to: url, known: title)
-        }
+        tab.go(to: url, known: title)
         if foreground {
             leaving()
             activeID = tab.id
@@ -5593,7 +5515,7 @@ extension Browser {
     func openInTabGroup(_ urls: [URL], named name: String) {
         undoQuiet += 1
         defer { undoQuiet -= 1 }
-        guard prefs.usesTabGroups, !urls.isEmpty else { return }
+        guard !urls.isEmpty else { return }
         let opened = urls.enumerated().map { index, url in
             open(url, foreground: index == 0, atEnd: true, mayWait: true)
         }
@@ -5780,7 +5702,7 @@ extension Browser {
             // pins going home, a pin comes back at the page it was pinned at,
             // wherever it had been taken since.
             let home = Browser.home(of: entry, at: saved)
-            let url = prefs.pinsGoHome ? home ?? saved : saved
+            let url = home ?? saved
             let tab = makeTab(space: space)
             prepare(tab)
             tab.restore(url: url, title: url == saved ? entry.title : url.host ?? "", name: entry.name,
@@ -5844,7 +5766,7 @@ extension Browser {
     /// them. A link from another app, with a pin in front, landed between two
     /// (#219).
     func placeForNew() -> Int {
-        guard prefs.newTabPlace == .next, let here = tabs.firstIndex(where: { $0.id == activeID }) else { return placeForFront() }
+        guard let here = tabs.firstIndex(where: { $0.id == activeID }) else { return placeForFront() }
         let after = activeSplit.flatMap { pair in tabs.firstIndex { $0.id == pair.right } } ?? here
         return max(after + 1, pinnedCount)
     }
@@ -5853,7 +5775,7 @@ extension Browser {
     /// of you: the end of the row, as always, unless the top was chosen.
     /// After current is for links opened from the tab you are on.
     func placeForFront() -> Int {
-        prefs.newTabsAtBottom ? tabs.count : pinnedCount
+        tabs.count
     }
 
     /// Where a link opened behind its page goes — ⌘-click, the middle button,
@@ -5866,8 +5788,6 @@ extension Browser {
     func placeForLink(from source: Tab?, beside: Bool = false) -> Int {
         guard let source = source.flatMap({ source in tabs.first { $0.id == source.id } }) ?? active,
               let here = tabs.firstIndex(where: { $0.id == source.id }) else { return placeForNew() }
-        let joins = prefs.usesTabGroups && source.groupID != nil && !source.shy
-        guard beside || joins || prefs.newTabPlace == .next else { return placeForFront() }
         var anchor = here
         if let run = linkRun, run.opener == source.id,
            let last = tabs.firstIndex(where: { $0.id == run.last }), last > here,
@@ -6008,7 +5928,7 @@ extension Browser {
             if liftedAway, let id = pictured, id == activeID { unpicture() }
             return
         }
-        guard prefs.floatsAway, !outOfSight, !shut else { return }
+        guard !outOfSight, !shut else { return }
         outOfSight = true
         liftedAway = !floater.showing && pictured == nil
         if liftCall(active) || liftCall(otherPane) { return }
@@ -6059,10 +5979,6 @@ extension Browser {
     func toggleFloat() {
         if floater.showing {
             land()
-            return
-        }
-        if prefs.floatStyle == .system {
-            picture(active, quietly: false, toggle: true, otherwise: otherPane)
             return
         }
         lift(active, quietly: false, otherwise: otherPane)
@@ -6155,9 +6071,9 @@ extension Browser {
             return
         }
         floatMiss?.trying = true
-        guard prefs.floatStyle != .system, !floater.showing, floating == nil, !CallFloat.shared.showing else { return }
+        guard !floater.showing, floating == nil, !CallFloat.shared.showing else { return }
         if miss.quietly {
-            guard prefs.floatsOnLeave || prefs.floatsAway, !visibleTabIDs.contains(tab.id) || outOfSight else { return }
+            guard !visibleTabIDs.contains(tab.id) || outOfSight else { return }
         }
         lift(tab, quietly: miss.quietly)
     }
@@ -6171,7 +6087,6 @@ extension Browser {
             if let otherwise { lift(otherwise, quietly: quietly) }
             return
         }
-        if prefs.floatStyle == .system { return picture(tab, quietly: quietly, otherwise: otherwise) }
         // A tab just put down with ⌘W has no page to lift a video out of, and
         // asking it would only build an empty view to ask.
         guard let tab, tab.isWeb, !tab.asleep, !floater.showing else {
@@ -6778,22 +6693,13 @@ extension Browser {
                 )
             }
         }
-        // First, not last: typing "settings" to reach Settings is the whole
-        // point, and it would otherwise sit under a search for the word.
-        let command = prefs.commandBar ? AddressCommand.matching(typed, in: self) : nil
-        if let command { list.insert(.command(command), at: 0) }
-        if command == nil, Address.url(from: typed) == nil, let ref = issueRef(for: typed) {
+        if Address.url(from: typed) == nil, let ref = issueRef(for: typed) {
             list.insert(Suggestion(key: typed, title: "Open \(ref.said)", url: ref.url, kind: .known), at: 0)
         }
-        // Neither a page already open nor a command has an address to
-        // complete towards. And with a command on top, Return runs it: a
-        // grey ending in the field ("history" finishing as history.com)
-        // would promise a place Return doesn't go to.
         // Towards where you have been first, as before bookmarks were here,
         // then towards a bookmark.
-        let places = list.filter { $0.kind != .open && !$0.kind.isCommand }
-        let ending = command != nil ? nil
-            : history.completion(for: typed, among: places.filter { $0.kind != .bookmark } + places.filter { $0.kind == .bookmark })
+        let places = list.filter { $0.kind != .open }
+        let ending = history.completion(for: typed, among: places.filter { $0.kind != .bookmark } + places.filter { $0.kind == .bookmark })
         return (list, ending)
     }
 
@@ -6845,10 +6751,7 @@ extension Browser {
             runFieldAction(id)
             return
         }
-        if case .command(let command) = offer.kind {
-            command.run(on: self)
-            if command.keepsField { return }
-        } else if let id = offer.tab, let tab = tabs.first(where: { $0.id == id }) {
+        if let id = offer.tab, let tab = tabs.first(where: { $0.id == id }) {
             if fillsPair(with: tab) { return }
             if !switchFromNewTab(to: tab) { select(tab) }
         } else if launching {
@@ -7079,14 +6982,6 @@ extension Browser {
         }
         if case .action(let id) = chosen?.kind, picked != nil || chosen?.leads == true {
             runFieldAction(id)
-            return
-        }
-        if case .command(let command) = chosen?.kind {
-            command.run(on: self)
-            if command.keepsField { return }
-            editing = false
-            typed = ""
-            picked = nil
             return
         }
 
@@ -7386,9 +7281,9 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         // The chosen modified click: a peek at the link, over this
         // page (see Peek.swift). Only from a tab in the row — within a peek,
         // a link just goes.
-        if prefs.peeksLinks, action.navigationType == .linkActivated,
+        if action.navigationType == .linkActivated,
            ["http", "https"].contains(scheme),
-           action.modifierFlags.intersection([.shift, .command, .option, .control]) == prefs.peekClick.flags,
+           action.modifierFlags.intersection([.shift, .command, .option, .control]) == .shift,
            let from = tab(for: webView), peekTab == nil {
             decisionHandler(.cancel)
             DispatchQueue.main.async { [weak self] in self?.peek(url, from: from) }
@@ -7664,7 +7559,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
             tracePopup(opener, action, "meeting", clicked: clicked, sized: popup)
             return nil
         }
-        if clicked, !behind, !beside, !popup, prefs.pinsPeek, peekTab == nil, opener.pin != nil,
+        if clicked, !behind, !beside, !popup, peekTab == nil, opener.pin != nil,
            [.linkActivated, .other].contains(action.navigationType),
            action.modifierFlags.intersection([.shift, .command, .option, .control]).isEmpty,
            let url = action.request.url, Browser.peekable(url) {
@@ -7691,7 +7586,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         // ⌘-click's goes (see open(_:foreground:)).
         prepare(tab)
         if behind || beside {
-            if prefs.usesTabGroups, !tab.shy, !tab.bench {
+            if !tab.shy, !tab.bench {
                 tab.groupID = opener.groupID
                 tab.bornIn = tab.groupID
             }
@@ -7700,7 +7595,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
             noteReturn(tab, front: false, from: opener)
             if beside { pair(tab, with: opener, onLeft: false) }
         } else {
-            if prefs.usesTabGroups, !tab.shy, !tab.bench {
+            if !tab.shy, !tab.bench {
                 tab.groupID = opener.groupID
                 tab.bornIn = tab.groupID
             }
@@ -7810,7 +7705,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
                split(for: tab) == nil, let at = tabs.firstIndex(where: { $0.id == tab.id }) {
                 if !foreground, run?.opener == source.id { linkRun = run }
                 tabs.remove(at: at)
-                if prefs.usesTabGroups, !tab.shy, !tab.bench {
+                if !tab.shy, !tab.bench {
                     tab.groupID = source.groupID
                     tab.bornIn = tab.groupID
                 }
@@ -8285,7 +8180,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
             action.responds(to: NSSelectorFromString("_mainFrameNavigation")) && (action.value(forKey: "_mainFrameNavigation") as AnyObject?) === started
         } ?? false
         return LocalNetwork.step(source: page, target: url, userInitiated: own || flag("_isUserInitiated"), redirect: flag("_isRedirect"),
-                                 type: action.navigationType, on: prefs.asksLocalNetwork, answer: answer,
+                                 type: action.navigationType, on: true, answer: answer,
                                  developer: Developer.shared.isOn(page))
     }
 
@@ -8434,7 +8329,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         (webView as? PageView)?.showUnlessBlank()
         guard let tab = anyTab(for: webView), let url = tab.address else { return }
         tab.uncover()
-        if tab.id == activeID { Developer.shared.arrived(tab, offers: prefs.offersDeveloperMode) }
+        if tab.id == activeID { Developer.shared.arrived(tab) }
         // And again once it has all come in, for a page that drew its look
         // late, or never had a first frame to say so.
         duskLook(tab)

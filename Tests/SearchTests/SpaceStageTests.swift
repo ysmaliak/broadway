@@ -103,20 +103,15 @@ struct SpaceStageTests {
     @Test func calmPoliciesCanBeProbedWithoutChangingTheMac() {
         let store = Store.settings
         let reduced = store.object(forKey: "motion.testReduced")
-        let lowPower = store.object(forKey: "motion.testLowPower")
-        defer {
-            store.set(reduced, forKey: "motion.testReduced")
-            store.set(lowPower, forKey: "motion.testLowPower")
-        }
+        defer { store.set(reduced, forKey: "motion.testReduced") }
         store.set(false, forKey: "motion.testReduced")
-        store.set(true, forKey: "motion.testLowPower")
 
-        let powerIsCalm = Motion.calm
-        let powerFade = Motion.pageChange
+        let movingIsCalm = Motion.calm
         store.set(true, forKey: "motion.testReduced")
 
-        #expect(powerIsCalm)
-        #expect(powerFade == nil)
+        #expect(!movingIsCalm)
+        #expect(Motion.calm)
+        #expect(Motion.pageChange == nil)
         #expect(Motion.reduced)
         #expect(Motion.kitSettle == .none)
         #expect(Motion.kitGlide == .none)

@@ -499,7 +499,7 @@ final class PinSquareView: KitHoverView {
     }
 
     private func give(_ down: Bool) {
-        let sink = RowRun.sink(pressed: down, gives: state.tabsGive, calm: Motion.calm)
+        let sink = RowRun.sink(pressed: down, gives: true, calm: Motion.calm)
         let curve = sink < 1 ? Motion.kitQuick : Motion.kitSettle
         for view in [shadowHolder, liveFace, mark, second] as [NSView] {
             view.kitScale(sink, curve: curve, around: CGPoint(x: bounds.midX - view.frame.minX, y: bounds.midY - view.frame.minY))

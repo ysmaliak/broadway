@@ -8,7 +8,6 @@ enum ShortcutsList {
         if command.section == .spaces, !prefs.usesSpaces { return false }
         if Command.dusk.contains(command.id), !browser.prefs.darkensPages { return false }
         if Command.meeting.contains(command.id), !browser.prefs.nextMeeting { return false }
-        if Command.folders.contains(command.id), !browser.prefs.usesTabGroups { return false }
         let words = hunt.trimmingCharacters(in: .whitespaces)
         guard !words.isEmpty else { return true }
         let key = store.key(for: command.id)?.display ?? ""
@@ -34,13 +33,12 @@ enum ShortcutsList {
         }
     }
 
-    static func showsReset(hunt: String, store: ShortcutStore, prefs: Preferences) -> Bool {
-        (store.anyChanged || prefs.peekClick != .shift) && hunt.isEmpty
+    static func showsReset(hunt: String, store: ShortcutStore) -> Bool {
+        store.anyChanged && hunt.isEmpty
     }
 
-    static func resetAll(store: ShortcutStore, prefs: Preferences) {
+    static func resetAll(store: ShortcutStore) {
         store.resetAll()
-        prefs.peekClick = .shift
     }
 
     static func resetToDefault(store: ShortcutStore, id: String) -> String? {
@@ -90,11 +88,11 @@ final class ShortcutLineView: NSView, KitFits {
 final class ShortcutsResetRow: NSView, KitFits {
     private let button: KitBroadwayButton
 
-    init(store: ShortcutStore, prefs: Preferences) {
+    init(store: ShortcutStore) {
         button = KitBroadwayButton("Reset All to Defaults…")
         super.init(frame: .zero)
         button.action = { [weak self] in
-            SettingsQuestion.shortcuts.ask(over: self?.window) { ShortcutsList.resetAll(store: store, prefs: prefs) }
+            SettingsQuestion.shortcuts.ask(over: self?.window) { ShortcutsList.resetAll(store: store) }
         }
         addSubview(button)
     }

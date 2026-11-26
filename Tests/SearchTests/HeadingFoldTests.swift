@@ -174,20 +174,17 @@ final class HeadingFoldTests {
         NSApp.setActivationPolicy(.prohibited)
         let prefs = Shared.prefs
         if restorePreferences == nil {
-            let previous = (prefs.usesTabGroups, prefs.splitView, prefs.usesSpaces, prefs.sharesPins,
-                            prefs.addressBar, prefs.sideWidth, prefs.newTabPlace)
+            let previous = (prefs.splitView, prefs.usesSpaces, prefs.sharesPins,
+                            prefs.sideWidth)
             restorePreferences = {
-                (prefs.usesTabGroups, prefs.splitView, prefs.usesSpaces, prefs.sharesPins,
-                 prefs.addressBar, prefs.sideWidth, prefs.newTabPlace) = previous
+                (prefs.splitView, prefs.usesSpaces, prefs.sharesPins,
+                 prefs.sideWidth) = previous
             }
         }
-        prefs.usesTabGroups = true
         prefs.splitView = false
         prefs.usesSpaces = false
         prefs.sharesPins = false
-        prefs.addressBar = true
         prefs.sideWidth = 258
-        prefs.newTabPlace = .end
         let browser = Browser(record: WindowRecord())
         browser.closeAll()
         let space = Space(id: UUID(), name: "Heading fixture", colour: 0, sharesSignIns: true)

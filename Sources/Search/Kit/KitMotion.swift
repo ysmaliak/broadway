@@ -77,10 +77,10 @@ extension Motion {
         return (animation as? CAPropertyAnimation)?.keyPath == "opacity"
     }
 
-    static var kitGlide: KitCurve { reduced ? .none : light ? .easeOut(0.16) : .spring(.glide) }
-    static var kitSettle: KitCurve { reduced ? .none : light ? .easeOut(0.16) : .spring(.settle) }
-    static var kitRoll: KitCurve { reduced ? .none : light ? .easeOut(0.16) : .spring(.roll) }
-    static var kitCover: KitCurve { reduced ? .none : light ? .easeOut(0.2) : .spring(.cover) }
+    static var kitGlide: KitCurve { reduced ? .none : .spring(.glide) }
+    static var kitSettle: KitCurve { reduced ? .none : .spring(.settle) }
+    static var kitRoll: KitCurve { reduced ? .none : .spring(.roll) }
+    static var kitCover: KitCurve { reduced ? .none : .spring(.cover) }
     static var kitQuick: KitCurve { reduced ? .none : .easeOut(quick) }
     static var kitEdge: KitCurve { reduced ? .none : .easeOut(edge) }
     static var kitSlide: KitCurve { reduced ? .none : .easeOut(slide) }

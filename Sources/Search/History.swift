@@ -32,21 +32,14 @@ struct Suggestion: Identifiable, Equatable {
         /// Words the engine itself suggested, from what was typed so far
         /// (Settings › General › Suggestions from your search engine).
         case suggested
-        /// Not a place either: something the app itself does.
-        case command(AddressCommand)
         case passage
         case action(String)
         case answer(FieldAnswer)
         case snippet(Snippet)
         case placed(FieldPlaceItem)
-
-        var isCommand: Bool { if case .command = self { return true }; return false }
     }
 
-    /// A command's row can read the same as the search for the same word
-    /// ("Settings" typed with its capital), and two rows can't share a name.
     var id: String {
-        if kind.isCommand { return "command " + key }
         if case .suggested = kind { return "suggested " + key }
         if case .passage = kind { return "passage " + History.identity(for: url) }
         if case .action(let action) = kind { return "action " + action }
@@ -56,13 +49,6 @@ struct Suggestion: Identifiable, Equatable {
         if case .visited = kind { return History.identity(for: url) }
         if case .bookmark = kind { return History.identity(for: url) }
         return key
-    }
-
-    /// A command goes nowhere, but the field still needs *a* URL to carry;
-    /// `take` and `submit` read the kind first and never follow this one.
-    @MainActor
-    static func command(_ command: AddressCommand) -> Suggestion {
-        Suggestion(key: command.title, title: "", url: URL(string: "about:blank")!, kind: .command(command))
     }
 }
 

@@ -3,7 +3,6 @@ import QuartzCore
 
 enum AddressMove: Equatable {
     case still
-    case fade
     case roll(down: Bool)
     case slide(back: Bool)
 
@@ -14,7 +13,7 @@ enum AddressMove: Equatable {
         case style
     }
 
-    static func between(_ old: String?, _ new: String?, cause: Cause, reduced: Bool, light: Bool) -> AddressMove {
+    static func between(_ old: String?, _ new: String?, cause: Cause, reduced: Bool) -> AddressMove {
         guard old != new else { return .still }
         let move: AddressMove
         switch cause {
@@ -26,7 +25,6 @@ enum AddressMove: Equatable {
             move = .slide(back: back)
         }
         if reduced { return .still }
-        if light { return .fade }
         return move
     }
 
@@ -56,15 +54,13 @@ enum AddressMove: Equatable {
     var curve: KitCurve {
         switch self {
         case .still: .none
-        case .fade: .easeOut(0.16)
         case .roll, .slide: Motion.kitRoll
         }
     }
 
-    static func tick(_ old: String, _ new: String, same: Bool, shown: Bool, reduced: Bool, light: Bool) -> AddressMove {
+    static func tick(_ old: String, _ new: String, same: Bool, shown: Bool, reduced: Bool) -> AddressMove {
         guard old != new, same, shown, !old.isEmpty else { return .still }
         if reduced { return .still }
-        if light { return .fade }
         return .roll(down: !Ticks.shrinks(old, new))
     }
 

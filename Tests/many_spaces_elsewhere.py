@@ -178,7 +178,7 @@ def main():
     sv.launch()
     try:
         stage()
-        sv.cmd({"do": "ui", "spaces": True, "cards": True, "downloadsbutton": True, "sideWidth": 258})
+        sv.cmd({"do": "ui", "spaces": True, "cards": True, "sideWidth": 258})
         space(action="rename", name=name_of(1))
         made = 1
         for count in (12, 30):

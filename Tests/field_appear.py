@@ -2,7 +2,7 @@
 """The floating field's appear and close, filmed and timed, and its first keys.
 
 Build first (`./build.sh`), then `python3 Tests/field_appear.py --out DIR
-[--runs N] [--modes normal,power]`. A world of its own (perf_idle's, local
+[--runs N] [--modes normal]`. A world of its own (perf_idle's, local
 pages only, drawn behind the app in front with SEARCH_SHOWN), with New tabs
 show: Floating field. The field is opened with ⌘T over a playing video and
 over a still page, with a full resting list (recent tabs, frequent, quick
@@ -154,8 +154,6 @@ def summarise(shots):
 
 def run_mode(mode, out, runs, tints=False):
     prefs = {"sidebar": True, "newtab.floating": True}
-    if mode == "power":
-        prefs["motion.testLowPower"] = True
     sv.setup(**prefs)
     pids = pi.launch_shown()
     if len(pids) != 1:
@@ -281,7 +279,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
     ap.add_argument("--runs", type=int, default=4)
-    ap.add_argument("--modes", default="normal,power")
+    ap.add_argument("--modes", default="normal")
     ap.add_argument("--tints", action="store_true")
     a = ap.parse_args()
     out = Path(a.out)

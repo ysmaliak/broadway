@@ -9,7 +9,7 @@ enum FieldSplit {
             return true
         case .placed(let item):
             return item.place == .history || item.place == .bookmarks
-        case .command, .action, .answer, .snippet:
+        case .action, .answer, .snippet:
             return false
         }
     }

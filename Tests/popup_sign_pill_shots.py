@@ -96,7 +96,7 @@ def main():
             return out
 
         for theme in ("light", "dark"):
-            sv.cmd({"do": "ui", "look": theme, "addressBar": "host"})
+            sv.cmd({"do": "ui", "look": theme})
             sv.cmd({"do": "ui", "windowPointer": [900, 600], "pointerPhase": "move"})
             sv.cmd({"do": "select", "id": page})
             time.sleep(1.2)
@@ -105,18 +105,10 @@ def main():
             time.sleep(0.5)
             shoot(f"{theme}-hover")
             sv.cmd({"do": "addresshover", "on": False})
-            sv.cmd({"do": "ui", "addressBar": "full"})
-            time.sleep(0.8)
-            shoot(f"{theme}-full")
-            sv.cmd({"do": "ui", "addressBar": "host"})
             sv.cmd({"do": "select", "id": plain})
             time.sleep(1.0)
             shoot(f"{theme}-plain")
             sv.cmd({"do": "select", "id": page})
-            sv.cmd({"do": "ui", "addressBar": "hidden"})
-            time.sleep(1.0)
-            shoot(f"{theme}-row")
-            sv.cmd({"do": "ui", "addressBar": "host"})
         t.ok("the sign is still there", sv.cmd({"do": "popups", "id": page}).get("sign") is True)
         print(OUT)
     finally:

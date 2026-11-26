@@ -43,7 +43,7 @@ final class TabTearOffTests {
         if hid { NSApp.unhideWithoutActivation() }
     }
 
-    private func makeBrowser(count: Int, isPrivate: Bool = false, splitView: Bool = false, groups: Bool = false) -> Browser {
+    private func makeBrowser(count: Int, isPrivate: Bool = false, splitView: Bool = false) -> Browser {
         _ = NSApplication.shared
         if activationPolicy == nil {
             activationPolicy = NSApp.activationPolicy()
@@ -51,20 +51,17 @@ final class TabTearOffTests {
         }
         let prefs = Shared.prefs
         if restorePreferences == nil {
-            let previous = (prefs.usesTabGroups, prefs.splitView, prefs.usesSpaces, prefs.sharesPins,
-                            prefs.addressBar, prefs.sideWidth, prefs.newTabPlace)
+            let previous = (prefs.splitView, prefs.usesSpaces, prefs.sharesPins,
+                            prefs.sideWidth)
             restorePreferences = {
-                (prefs.usesTabGroups, prefs.splitView, prefs.usesSpaces, prefs.sharesPins,
-                 prefs.addressBar, prefs.sideWidth, prefs.newTabPlace) = previous
+                (prefs.splitView, prefs.usesSpaces, prefs.sharesPins,
+                 prefs.sideWidth) = previous
             }
         }
-        prefs.usesTabGroups = groups
         prefs.splitView = splitView
         prefs.usesSpaces = false
         prefs.sharesPins = false
-        prefs.addressBar = true
         prefs.sideWidth = 258
-        prefs.newTabPlace = .end
         let browser = isPrivate ? Browser(record: WindowRecord(), privateStore: .nonPersistent()) : Browser(record: WindowRecord())
         browser.closeAll()
         browsers.append(browser)
@@ -235,8 +232,8 @@ final class TabTearOffTests {
     }
 
     @Test func aTabLetGoOnAnotherWindowsFolderRowGoesIntoThatFolderInFront() async throws {
-        let source = makeBrowser(count: 3, groups: true)
-        let target = makeBrowser(count: 4, groups: true)
+        let source = makeBrowser(count: 3)
+        let target = makeBrowser(count: 4)
         let folder = folded(target, [target.tabs[0], target.tabs[1]])
         let from = makeWindow(source, x: -20_000)
         let to = makeWindow(target, x: -19_000)
@@ -266,8 +263,8 @@ final class TabTearOffTests {
     }
 
     @Test func aTabLetGoOnALooseRowBesideAFolderStaysLooseWhereTheLineShowed() async throws {
-        let source = makeBrowser(count: 3, groups: true)
-        let target = makeBrowser(count: 4, groups: true)
+        let source = makeBrowser(count: 3)
+        let target = makeBrowser(count: 4)
         let folder = folded(target, [target.tabs[0], target.tabs[1]])
         let from = makeWindow(source, x: -20_000)
         let to = makeWindow(target, x: -19_000)
@@ -288,7 +285,7 @@ final class TabTearOffTests {
     }
 
     @Test func aRowInALiveFolderNeverComesAwayEvenWithoutItsKey() async throws {
-        let browser = makeBrowser(count: 3, groups: true)
+        let browser = makeBrowser(count: 3)
         let folder = folded(browser, [browser.tabs[0]])
         let index = try #require(browser.tabGroups.firstIndex { $0.id == folder })
         browser.tabGroups[index].live = true

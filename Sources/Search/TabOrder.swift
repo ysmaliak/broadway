@@ -47,7 +47,7 @@ extension Browser {
         }
         let order = landingOrder(around: tab)
         if let back = returning(from: tab, in: order, lands: lands) { return back }
-        if prefs.closeGoesBack || tab.page != nil, let back = tabBefore(tab), lands(back) { return back }
+        if tab.page != nil, let back = tabBefore(tab), lands(back) { return back }
         guard let (row, at) = order else { return tabs.first(where: lands) }
         if let folder = group(of: tab), let same = nearest(in: row, at: at, where: { lands($0) && self.group(of: $0) == folder }) {
             return same

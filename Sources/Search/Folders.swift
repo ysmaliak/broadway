@@ -233,7 +233,7 @@ extension Browser {
     }
 
     var frontFolder: TabGroup? {
-        guard prefs.usesTabGroups, let tab = active, let id = group(of: tab) else { return nil }
+        guard let tab = active, let id = group(of: tab) else { return nil }
         return tabGroups.first { $0.id == id }
     }
 
@@ -301,7 +301,7 @@ extension Browser {
     func placeFolder(_ id: UUID, pinned: Bool, before item: ListItem? = nil) {
         let mark = beginStep("Move Folder")
         defer { endStep(mark) }
-        guard prefs.usesTabGroups, let index = tabGroups.firstIndex(where: { $0.id == id }),
+        guard let index = tabGroups.firstIndex(where: { $0.id == id }),
               !tabGroups[index].live, item != .folder(id) else { return }
         let items = listItems(displayedTabs).filter { $0 != .folder(id) }
         var groups = tabGroups
@@ -341,14 +341,14 @@ extension Browser {
     func moveOut(_ tab: Tab, before item: ListItem?) {
         let mark = beginStep("Remove from Folder")
         defer { endStep(mark) }
-        guard prefs.usesTabGroups, tabs.contains(where: { $0 === tab }), group(of: tab) != nil else { return }
+        guard tabs.contains(where: { $0 === tab }), group(of: tab) != nil else { return }
         placeInList(tab, before: item, leaving: true)
     }
 
     func moveLoose(_ tab: Tab, before item: ListItem?) {
         let mark = beginStep("Move Tab")
         defer { endStep(mark) }
-        guard tabs.contains(where: { $0 === tab }), tab.pin == nil, !prefs.usesTabGroups || group(of: tab) == nil else { return }
+        guard tabs.contains(where: { $0 === tab }), tab.pin == nil, group(of: tab) == nil else { return }
         if case .tab(let id)? = item, id == tab.id { return }
         placeInList(tab, before: item, leaving: false)
     }

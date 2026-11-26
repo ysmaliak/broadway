@@ -365,7 +365,6 @@ struct ImportFileTests {
         let browser = makeImportTestBrowser()
         let previousRecords = Store.settings.data(forKey: "import.records")
         let previousUsesSpaces = browser.prefs.usesSpaces
-        let previousUsesTabGroups = browser.prefs.usesTabGroups
         let previousSpaces = browser.spaces
         let suffix = UUID().uuidString
         let workName = "Arc Engineering \(suffix)"
@@ -382,7 +381,6 @@ struct ImportFileTests {
             browser.spaces = previousSpaces
             Spaces.write(previousSpaces)
             browser.prefs.usesSpaces = previousUsesSpaces
-            browser.prefs.usesTabGroups = previousUsesTabGroups
             if let oldArcFile { try? oldArcFile.write(to: Arc.file, options: .atomic) }
             else {
                 try? FileManager.default.removeItem(at: Arc.file)
@@ -398,7 +396,6 @@ struct ImportFileTests {
         let sidebar = try makeArcSidebarFixture(workName: workName, personalName: personalName)
         try sidebar.write(to: Arc.file, options: .atomic)
         browser.prefs.usesSpaces = false
-        browser.prefs.usesTabGroups = true
 
         let imported = try #require(source.arcSidebar(profile: nil))
         #expect(source.arcCounts(profile: nil)?.spaces == 2)

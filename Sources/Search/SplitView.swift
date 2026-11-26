@@ -435,7 +435,7 @@ final class SplitStageView: NSView {
     }
 
     private func land(_ done: PaneShuffle) {
-        let wait: TimeInterval = Motion.reduced ? 0 : Motion.light ? 0.17 : 0.3
+        let wait: TimeInterval = Motion.reduced ? 0 : 0.3
         DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
             guard let self, shuffle == done else { return }
             CATransaction.begin()

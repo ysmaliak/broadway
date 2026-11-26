@@ -755,9 +755,6 @@ final class FetchDoorView: KitButton {
 
     private enum Face: Equatable { case rest, done, fraction, turning }
 
-    static func shows(_ fetches: Fetches, _ prefs: Preferences) -> Bool {
-        fetches.showing || fetches.waiting || !fetches.entries.isEmpty || prefs.alwaysShowsDownloads
-    }
 
     init(browser: Browser, fetches: Fetches, always: Bool = false) {
         self.browser = browser
@@ -822,7 +819,7 @@ final class FetchDoorView: KitButton {
     }
 
     override func layout() {
-        isHidden = !(always || Self.shows(fetches, browser.prefs))
+        isHidden = false
         super.layout()
         ground.frame = bounds
         let across = glyph - 2

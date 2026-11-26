@@ -213,22 +213,6 @@ struct TitleFadeTests {
         #expect(zone.ready())
     }
 
-    @Test func theAddressLineOfTheSelectedRowStillEndsAtTheRowsPad() throws {
-        let stage = staged(Self.long, live: true)
-        let title = try #require(stage.row.kitSubviews(of: RowTitleView.self).first)
-        let close = Metrics.closeSquare(Metrics.sideRowHeight) + Metrics.closeInset(Metrics.sideRowHeight)
-
-        stage.row.state.showsAddress = true
-        try #require(title.rest != nil)
-        let rest = try ends(stage)
-        point(stage, over: true)
-        let over = try ends(stage)
-
-        #expect(abs(rest.gone - RowTitleFade.whole) < 0.01)
-        #expect(abs(rest.whole - rest.gone - RowTitleFade.width) < 0.01)
-        #expect(abs(over.gone - close - 2) < 0.01)
-    }
-
     private static let long = "A title long enough to run well past the end of any row the column can show it in"
 
     @Test(arguments: [false, true])

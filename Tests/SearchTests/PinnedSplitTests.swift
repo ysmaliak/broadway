@@ -443,7 +443,6 @@ final class PinnedSplitPlacesTests {
         browser = Browser(record: WindowRecord())
         browser.leaveFiles()
         browser.prefs.splitView = true
-        browser.prefs.usesTabGroups = false
         browser.closeAll()
     }
 

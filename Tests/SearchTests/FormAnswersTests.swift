@@ -128,16 +128,6 @@ final class FormAnswersTests {
         #expect(answers.siteCount == 0)
     }
 
-    @Test func nothingIsRememberedWithFormFillOff() async {
-        let tab = tab("https://signup.example/join")
-        keepSetting(forms.book, \.fillsForms, "autofill.forms")
-        forms.book.fillsForms = false
-
-        await send([project], [":0": "APX-7"], from: tab)
-
-        #expect(answers.siteCount == 0)
-    }
-
     @Test func theProfileKeepsItsBoxesAndARememberedAnswerFillsTheRest() async {
         var profile = AutofillProfile()
         profile.name = "Ada Lovelace"

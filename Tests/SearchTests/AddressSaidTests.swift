@@ -56,7 +56,7 @@ final class AddressSaidTests {
 
         #expect(tab.committed == server.url("/start"))
         #expect(tab.saidAddress == other.url("/slow"))
-        #expect(pill(tab) == AddressLaneView.text(other.url("/slow"), full: browser.prefs.fullAddress))
+        #expect(pill(tab) == AddressLaneView.text(other.url("/slow"), full: false))
     }
 
     @Test func anAddressHeldForTheTabWithoutLoadingItIsNamedByThePillAndTheRow() async throws {
@@ -67,7 +67,7 @@ final class AddressSaidTests {
 
         #expect(tab.committed == server.url("/start"))
         #expect(tab.saidAddress == asked)
-        #expect(pill(tab) == AddressLaneView.text(asked, full: browser.prefs.fullAddress))
+        #expect(pill(tab) == AddressLaneView.text(asked, full: false))
     }
 
     @Test func aLoadThePageStartedLeavesThePillAndTheRowOnThePageOnScreenUntilTheNewOneArrives() async throws {
@@ -78,7 +78,7 @@ final class AddressSaidTests {
 
         #expect(tab.committed == server.url("/start"))
         #expect(tab.saidAddress == server.url("/start"))
-        #expect(pill(tab) == AddressLaneView.text(server.url("/start"), full: browser.prefs.fullAddress))
+        #expect(pill(tab) == AddressLaneView.text(server.url("/start"), full: false))
 
         try await until { tab.committed == self.other.url("/slow") }
         #expect(tab.saidAddress == other.url("/slow"))

@@ -40,8 +40,6 @@ enum AIGroupsBench {
         case "mac":
             settings.standIn = nil
             settings.namerStandIn = nil
-            settings.engine = .thisMac
-            settings.namer = .thisMac
         case "jev":
             guard let bench = OpenRouterBench(request) else { answer(["error": "aigroups jev needs a key"]); return }
             settings.standIn = bench

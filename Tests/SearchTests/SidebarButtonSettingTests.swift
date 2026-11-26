@@ -34,17 +34,17 @@ struct SidebarButtonSettingTests {
         prefs.sideButton = true
         let item = try #require(SettingsIndex.item("sidebar.button"))
 
-        let applied = SettingsIndex.apply("sidebar.button", false, to: prefs)
+        let applied = BenchSettings.set("sidebar.button", false, on: prefs)
 
         #expect(applied)
         #expect(!prefs.sideButton)
-        #expect(SettingsIndex.values(prefs)["sidebar.button"] as? Bool == false)
+        #expect(BenchSettings.values(prefs)["sidebar.button"] as? Bool == false)
         #expect(!item.findOnly && item.kind == .control && item.page == .appearance)
         #expect(item.title == "Sidebar button")
         for words in ["sidebar button", "hide sidebar", "toggle sidebar", "collapse"] {
             #expect(SettingsIndex.find(words).contains { $0.id == "sidebar.button" }, "\(words)")
         }
-        #expect(!SettingsIndex.apply("sidebar.button", "nope", to: prefs))
+        #expect(!BenchSettings.set("sidebar.button", "nope", on: prefs))
         #expect(PersonSettings.refusal("sidebar.button", value: "false") == nil)
     }
 

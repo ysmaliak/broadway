@@ -23,7 +23,6 @@ struct ClosedTabMediaTests {
                 browser.closeTab(tab)
                 browser.unpin(tab)
             case .putAway:
-                browser.prefs.usesTabGroups = true
                 let group = browser.addTabGroup(containing: tab)
                 browser.setFolderPinned(group, true)
                 #expect(browser.putsAway(tab))
@@ -72,8 +71,7 @@ struct ClosedTabMediaTests {
 
         let browser = Browser(record: WindowRecord())
         let prefs = browser.prefs
-        let saved = (prefs.usesTabGroups, prefs.floatsOnLeave)
-        prefs.usesTabGroups = false
+        let saved = prefs.floatsOnLeave
         prefs.floatsOnLeave = false
         let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 640, height: 400),
                               styleMask: [.borderless], backing: .buffered, defer: false)
@@ -81,8 +79,7 @@ struct ClosedTabMediaTests {
         defer {
             browser.closeAll()
             window.close()
-            prefs.usesTabGroups = saved.0
-            prefs.floatsOnLeave = saved.1
+            prefs.floatsOnLeave = saved
         }
         browser.active?.restore(url: URL(string: "about:blank#first")!, title: "First")
         let tab = browser.benchOpen(page)

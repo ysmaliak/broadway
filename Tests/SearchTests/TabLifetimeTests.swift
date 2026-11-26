@@ -11,9 +11,8 @@ final class TabLifetimeTests {
         let browser = Browser(record: WindowRecord())
         browser.closeAll()
         let prefs = browser.prefs
-        let saved = (prefs.usesSpaces, prefs.usesTabGroups, prefs.splitView, prefs.sharesPins)
+        let saved = (prefs.usesSpaces, prefs.splitView, prefs.sharesPins)
         prefs.usesSpaces = false
-        prefs.usesTabGroups = false
         prefs.splitView = false
         prefs.sharesPins = false
         let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 900, height: 600),
@@ -23,7 +22,7 @@ final class TabLifetimeTests {
         window.orderBack(nil)
         defer {
             browser.closeAll()
-            (prefs.usesSpaces, prefs.usesTabGroups, prefs.splitView, prefs.sharesPins) = saved
+            (prefs.usesSpaces, prefs.splitView, prefs.sharesPins) = saved
             window.contentView = nil
             window.close()
         }

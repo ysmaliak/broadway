@@ -260,16 +260,7 @@ enum Motion {
         return NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     }
 
-    static var light: Bool {
-        guard Store.settings.object(forKey: lightKey) as? Bool ?? true else { return false }
-        if Store.testing, let test = Store.settings.object(forKey: "motion.testLowPower") as? Bool { return test }
-        let info = ProcessInfo.processInfo
-        return info.isLowPowerModeEnabled || info.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue
-    }
-
-    nonisolated static let lightKey = "motion.light"
-
-    static var calm: Bool { reduced || light }
+    static var calm: Bool { reduced }
 
     static let slide: TimeInterval = 0.16
 
@@ -279,10 +270,10 @@ enum Motion {
 
     static var fieldOutSeconds: Double? { reduced ? nil : 0.2 }
 
-    static var spaceResponse: Double { light ? 0.16 : 0.22 }
+    static var spaceResponse: Double { 0.22 }
 
     static var pageChange: CFTimeInterval? {
-        reduced || light || (Store.testing && !Store.shownOnScreen) ? nil : 0.11
+        reduced || (Store.testing && !Store.shownOnScreen) ? nil : 0.11
     }
 
     static let give: CGFloat = 0.97

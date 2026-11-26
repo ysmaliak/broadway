@@ -118,7 +118,7 @@ extension Browser {
     }
 
     private func fileSearchResultQuietly(_ tab: Tab, from source: Tab?) {
-        guard prefs.usesTabGroups, let source, !source.shy, !source.bench, !tab.shy, !tab.bench, tab.pin == nil else { return }
+        guard let source, !source.shy, !source.bench, !tab.shy, !tab.bench, tab.pin == nil else { return }
         let query = searchQuery(of: source)
         if let id = source.groupID, let folder = tabGroups.first(where: { $0.id == id }) {
             guard let held = folder.query else { return }

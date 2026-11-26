@@ -7,10 +7,8 @@ import Testing
 enum FloatKeyBench {
     static func still() -> () -> Void {
         Store.settings.set(false, forKey: "motion.testReduced")
-        Store.settings.set(false, forKey: "motion.testLowPower")
         return {
             Store.settings.removeObject(forKey: "motion.testReduced")
-            Store.settings.removeObject(forKey: "motion.testLowPower")
         }
     }
 

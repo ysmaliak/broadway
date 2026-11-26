@@ -184,19 +184,16 @@ final class SelectedTabTests {
         NSApp.setActivationPolicy(.prohibited)
         let prefs = Shared.prefs
         if restorePreferences == nil {
-            let previous = (prefs.usesTabGroups, prefs.splitView, prefs.usesSpaces, prefs.addressBar, prefs.sideWidth, prefs.newTabPlace,
+            let previous = (prefs.splitView, prefs.usesSpaces, prefs.sideWidth,
                             prefs.cards)
             restorePreferences = {
-                (prefs.usesTabGroups, prefs.splitView, prefs.usesSpaces, prefs.addressBar, prefs.sideWidth, prefs.newTabPlace,
+                (prefs.splitView, prefs.usesSpaces, prefs.sideWidth,
                  prefs.cards) = previous
             }
         }
-        prefs.usesTabGroups = true
         prefs.splitView = true
         prefs.usesSpaces = false
-        prefs.addressBar = true
         prefs.sideWidth = 258
-        prefs.newTabPlace = .end
         prefs.cards = true
         let browser = Browser(record: WindowRecord())
         browser.closeAll()

@@ -14,7 +14,6 @@ final class TabIconTests {
         setenv("SEARCH_PROBE", "1", 1)
         browser = Browser(record: WindowRecord())
         browser.leaveFiles()
-        browser.prefs.usesTabGroups = true
     }
 
     private func tearDown() async {

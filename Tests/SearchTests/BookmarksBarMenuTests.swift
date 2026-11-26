@@ -22,16 +22,8 @@ struct BookmarksBarMenuTests {
     @Test func openAllInTabGroupNamesTheGroupAfterTheFolder() {
         _ = NSApplication.shared
         let browser = Browser(record: WindowRecord())
-        let prefs = browser.prefs
-        let saved = prefs.usesTabGroups
-        defer { browser.closeAll(); prefs.usesTabGroups = saved }
+        defer { browser.closeAll() }
 
-        prefs.usesTabGroups = false
-        let off = browser.tabs.count
-        browser.openInTabGroup([URL(string: "https://example.com/1")!], named: "Off")
-        #expect(browser.tabs.count == off, "With tab groups off, nothing opens")
-
-        prefs.usesTabGroups = true
         let urls = (1...3).map { URL(string: "https://example.com/\($0)")! }
         browser.openInTabGroup(urls, named: "Reading")
         let group = browser.tabGroups.first { $0.name == "Reading" }
