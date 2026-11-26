@@ -13,7 +13,7 @@ enum BroadwayMap {
     static let lastStreet = 50
     static let streetStep = 2
     static let gridWidth: CGFloat = 12
-    static let lineWidth: CGFloat = 108
+    static let lineWidth: CGFloat = 124
     static let plateCorner: CGFloat = 229
     static let reachOfCorner: CGFloat = 1.52866483
 

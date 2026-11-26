@@ -76,7 +76,7 @@ func shadeInside(_ context: CGContext, path: CGPath, rect: CGRect, offset: CGSiz
 func paintMap(_ context: CGContext, pixels: Int) {
     let small = pixels <= 32
     let middling = pixels == 64
-    let line: CGFloat = small ? 128 : middling ? 116 : BroadwayMap.lineWidth
+    let line: CGFloat = small ? 147 : middling ? 133 : BroadwayMap.lineWidth
     context.saveGState()
     context.setLineCap(.round)
     if !small {
