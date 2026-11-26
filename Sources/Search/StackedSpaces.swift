@@ -371,6 +371,11 @@ extension Browser {
             KitChange.eased { move(pair: pair, toSpace: id) }
             return
         }
+        let chosen = menuTabs(for: tab)
+        if chosen.count > 1 {
+            KitChange.eased { move(chosen, toSpace: id) }
+            return
+        }
         KitChange.eased { move(tab, toSpace: id) }
     }
 

@@ -1573,6 +1573,7 @@ struct SideCarry {
     var home: NSRect?
     var leftHome = false
     var room: CGFloat?
+    var many: [Tab] = []
 }
 
 extension SidePageView {
@@ -1591,6 +1592,12 @@ extension SidePageView {
                   let tab = Self.tab(of: row), let laid = laid[tab.id] else { return }
             carry = SideCarry(tab: tab, view: row, block: laid.block, from: laid.index, count: laid.count, down: pending.at,
                               startY: laidY(tab.id))
+            switch laid.block {
+            case .loose, .folder:
+                let chosen = row is TabRowView ? browser.menuTabs(for: tab) : []
+                if chosen.count > 1 { carry?.many = chosen }
+            case .pins, .task: break
+            }
             browser.beginGesture()
             switch laid.block {
             case .loose, .folder: pickUp(tab, row: row, at: pending.at)
@@ -1601,6 +1608,7 @@ extension SidePageView {
         carry.travel = CGSize(width: point.x - carry.down.x, height: point.y - carry.down.y)
         self.carry = carry
         let tab = carry.tab
+        if carry.many.count > 1 { return dragMany(tab, point) }
         if carry.block != .pins, let window,
            TearOff.shared.drag(self, tab: tab, at: window.convertPoint(toScreen: event.locationInWindow), moved: Self.moved(event),
                                whole: carryingPair) {
@@ -1660,6 +1668,10 @@ extension SidePageView {
         let point = convert(event.locationInWindow, from: nil)
         let tab = carry.tab
         defer { finishCarry() }
+        if carry.many.count > 1 {
+            dropMany(carry, at: point)
+            return true
+        }
         if browser.prefs.splitView, carry.block != .pins {
             let finished = TabDrag.shared.finish(browser: browser, tab: tab, event: event)
             let source = finished.source
@@ -1883,6 +1895,23 @@ extension SidePageView {
         return nil
     }
 
+    private func dragMany(_ tab: Tab, _ point: NSPoint) {
+        setAway(false)
+        follow()
+        hold.over(nil) { [weak self] in self?.joining = $0 }
+        if cross(tab, point, fromPin: false) { return clearListDrop() }
+        _ = destination(tab, at: point)
+    }
+
+    private func dropMany(_ carry: SideCarry, at point: NSPoint) {
+        let target = destination(carry.tab, at: point)
+        spring.over(nil) { _ in }
+        if land(carry.tab, point) { return }
+        guard let target else { return }
+        animateNext = true
+        browser.move(carry.many, toGroup: target.group)
+    }
+
     private func dragPin(_ point: NSPoint) {
         guard let carry, let start = pinStart else { return }
         let cells = laid.values.filter { $0.block == .pins }.sorted { $0.index < $1.index }.map(\.frame)
@@ -1943,6 +1972,12 @@ extension SidePageView {
         case .folder(let inside)?: target = browser.liveDrop(inside, carrying: tab)
         case .loose(let out)?: loose = carried || browser.group(of: tab) != nil ? out : nil
         case nil: break
+        }
+        if (carry?.many.count ?? 0) > 1 {
+            loose = nil
+            target = target.flatMap { target in
+                browser.tabGroups.first { $0.id == target.group }?.live == false ? GroupDropTarget(group: target.group) : nil
+            }
         }
         let shut = target.flatMap { target in
             target.member == nil && browser.tabGroups.first { $0.id == target.group }?.collapsed == true ? target.group : nil
@@ -2150,6 +2185,7 @@ extension SidePageView {
             return nil
         case .squares:
             guard tab.pin == nil, browser.pinsByDrag(tab) else { return nil }
+            if (carry?.many.count ?? 0) > 1 { return .squares(browser.pinSlot(tab, proposed: squares.count)) }
             let origin = gridShown ? gridRect?.origin ?? NSPoint(x: Metrics.sideInset, y: 0) : NSPoint(x: Metrics.sideInset, y: 0)
             let slot = PinDrop.gridSlot(CGPoint(x: point.x - origin.x, y: point.y - origin.y), cells: pinCells(squares.count + 1))
             return .squares(browser.pinSlot(tab, proposed: slot))
@@ -2223,6 +2259,7 @@ extension SidePageView {
         view.washed = washed
         view.solid = ground.stops.map { Paint.Ground(stops: $0, lightInk: ground.dark).average.color } ?? Palette.NS.ground
         view.configure(tab: tab, live: tab.id == browser.activeID, landing: false, titleSize: browser.prefs.sideTitle, ground: ground)
+        if let carry, carry.tab.id == tab.id, carry.many.count > 1 { view.count = carry.many.count }
         addSubview(view, positioned: .above, relativeTo: nil)
         morphView = view
     }
@@ -2248,6 +2285,7 @@ extension SidePageView {
             if crossing != nil { crossing = nil }
             return true
         }
+        let many = carry?.tab.id == tab.id ? carry?.many ?? [] : []
         let carried = morphCarried == tab.id
         if carried { frozen = shapes(tab) }
         if let neighbour = hold.take() {
@@ -2269,6 +2307,7 @@ extension SidePageView {
             self?.animateNext = true
             self?.crossing = nil
             switch shown {
+            case .squares where many.count > 1: browser.togglePin(many, like: tab)
             case .squares(let at): browser.pinDropped(tab, at: at)
             case .loose(let at): browser.unpinDropped(tab, at: at)
             case .group(let id): browser.unpinDropped(tab, at: 0, group: id)

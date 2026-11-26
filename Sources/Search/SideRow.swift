@@ -1543,8 +1543,8 @@ final class TabRowView: KitHoverView {
         let mods = event.modifierFlags
         guard !state.editing, mods.intersection([.command, .control, .shift]).isEmpty else { return }
         if mods.contains(.option), browser.opensBesideOnOptionClick(tab) { return }
-        selectedOnPress = !state.live
-        TabPress.brought = !state.live
+        selectedOnPress = !state.live && browser.menuTabs(for: tab).count < 2
+        TabPress.brought = selectedOnPress
         if selectedOnPress {
             pressedAt = CACurrentMediaTime()
             browser.clearTabSelection()

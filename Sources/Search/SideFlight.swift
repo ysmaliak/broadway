@@ -12,6 +12,8 @@ final class PinMorphView: NSView {
     private let title = KitLabel()
     private let mark = RowMarkView()
     private var held: NSView?
+    private var tally: SideCountView?
+    private var ink: KitInk?
     private var form: CGFloat = 0
     private var rowWidth: CGFloat = 0
     private var slab: Bool?
@@ -23,6 +25,20 @@ final class PinMorphView: NSView {
         }
     }
     var rowRadius = Metrics.sideRadius
+    var count = 0 {
+        didSet {
+            guard count != oldValue else { return }
+            let chip = tally ?? SideCountView()
+            if tally == nil {
+                addSubview(chip)
+                tally = chip
+            }
+            chip.count = count
+            if let ink { chip.dress(ink) }
+            chip.fold(count > 1, curve: .none)
+            placeTally(in: bounds)
+        }
+    }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -77,7 +93,19 @@ final class PinMorphView: NSView {
         mark.tiled = false
         mark.glyph = glyph
         mark.ink = ground.ink
+        ink = ground.ink
+        tally?.dress(ground.ink)
     }
+
+    private func placeTally(in box: NSRect) {
+        guard let tally else { return }
+        let width = tally.width
+        tally.frame = NSRect(x: box.width - width - Self.tallyInset, y: Self.tallyInset, width: width, height: SideCountView.height)
+    }
+
+    static let tallyInset: CGFloat = 4
+
+    var tallyFrame: NSRect? { tally.flatMap { $0.showing ? $0.frame : nil } }
 
     func carry(_ view: NSView) {
         held?.removeFromSuperview()
@@ -95,7 +123,7 @@ final class PinMorphView: NSView {
         var radius: CGFloat = 0
     }
 
-    private var parts: [NSView] { [self, clip, base, wash, face, title, mark] }
+    private var parts: [NSView] { [self, clip, base, wash, face, title, mark] + [tally].compactMap { $0 } }
 
     private func seen() -> Seen {
         var seen = Seen()
@@ -138,7 +166,9 @@ final class PinMorphView: NSView {
         if form == 0 { rowWidth = box.width }
         let x = lead + Self.rowMark + SideLook.markGap + PinShape.mix(0, -12, form)
         let wide = max(box.width, rowWidth)
-        title.frame = NSRect(x: x, y: (box.height - 16) / 2, width: max(0, wide - lead - Self.rowMark - SideLook.markGap - 10), height: 16)
+        let room = tally.map { $0.showing ? $0.width + Self.tallyInset : 0 } ?? 0
+        title.frame = NSRect(x: x, y: (box.height - 16) / 2, width: max(0, wide - lead - Self.rowMark - SideLook.markGap - 10 - room), height: 16)
+        placeTally(in: box)
         let words = max(0, 1 - form * 2.2)
         title.alphaValue = words
         let rest = SelectedLook.shadow
