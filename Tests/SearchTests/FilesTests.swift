@@ -102,7 +102,31 @@ struct FilesTests {
         #expect(!browser.loot.kept.isEmpty)
     }
 
-    @Test func clearListOnTheFilesPageEmptiesTheUploadsAndUndoPutsThemBack() {
+    @Test func theFilesFootCountsWhatIsListedAndOffersClearListOnlyThen() {
+        var listed = 0
+        let foot = FilesFoot(listed: { listed }) {}
+        foot.frame = NSRect(x: 0, y: 0, width: 400, height: 30)
+        foot.layoutSubtreeIfNeeded()
+
+        #expect(!foot.clear.isEnabled)
+        #expect(foot.count.isHidden)
+
+        listed = 1
+        foot.needsLayout = true
+        foot.layoutSubtreeIfNeeded()
+
+        #expect(foot.clear.isEnabled)
+        #expect(foot.count.text == "1 file")
+
+        listed = 3
+        foot.needsLayout = true
+        foot.layoutSubtreeIfNeeded()
+
+        #expect(foot.count.text == "3 files")
+        #expect(foot.count.frame.maxX <= foot.clear.frame.minX)
+    }
+
+    @Test func clearListOnTheFilesPageEmptiesEverythingItListsAndUndoPutsItBack() {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("files-test-\(UUID().uuidString)")
@@ -112,13 +136,18 @@ struct FilesTests {
         uploads.add([URL(fileURLWithPath: "/tmp/a.txt")], to: "shop.example", at: old)
         let browser = Browser(record: WindowRecord())
         defer { browser.closeAll() }
+        browser.loot.forgetAll()
+        browser.loot.add(Keep(name: "b.pdf", from: "bank.example", path: "/tmp/b.pdf", date: new))
+        defer { browser.loot.forgetAll() }
         let page = FilesPageView(browser: browser, loot: browser.loot, uploads: uploads)
 
         page.clearList()
 
         #expect(uploads.kept.isEmpty)
-        #expect(browser.announcement == "List cleared")
+        #expect(browser.loot.kept.isEmpty)
+        #expect(browser.announcement == "Cleared the list. The files stay where they are.")
         browser.undoAnnounced()
         #expect(uploads.kept.map(\.site) == ["shop.example"])
+        #expect(browser.loot.kept.map(\.name) == ["b.pdf"])
     }
 }

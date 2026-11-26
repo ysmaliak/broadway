@@ -77,6 +77,7 @@ enum BenchPage {
 
     private static func uploads(_ action: String, _ values: [String], _ browser: Browser, _ answer: @escaping ([String: Any]) -> Void) {
         var query = ""
+        var pressed = false
         switch action {
         case "state": break
         case "add":
@@ -84,10 +85,18 @@ enum BenchPage {
             Uploads.shared.add([URL(fileURLWithPath: values[0])], to: values[1])
         case "find": query = values.first ?? ""
         case "open": browser.filing = true
-        default: return answer(["error": "uploads state|add PATH SITE|find TEXT|open"])
+        case "clear":
+            guard Store.testing, let foot = browser.window?.contentView?.kitSubviews(of: FilesFoot.self).first(where: { !$0.isHiddenOrHasHiddenAncestor })
+            else { return answer(["error": "uploads clear: no Files page is showing"]) }
+            pressed = foot.clear.accessibilityPerformPress()
+        default: return answer(["error": "uploads state|add PATH SITE|find TEXT|open|clear"])
         }
+        let foot = browser.window?.contentView?.kitSubviews(of: FilesFoot.self).first { !$0.isHiddenOrHasHiddenAncestor }
+        foot?.layoutSubtreeIfNeeded()
         let items = FileItem.found(FileItem.merged(downloads: browser.loot.kept, uploads: Uploads.shared.kept), matching: query)
-        answer(["items": items.map { ["name": $0.name, "source": $0.source, "path": $0.path, "uploaded": $0.kind == .uploaded] as [String: Any] }])
+        answer(["items": items.map { ["name": $0.name, "source": $0.source, "path": $0.path, "uploaded": $0.kind == .uploaded] as [String: Any] },
+                "pressed": pressed, "count": foot.map { $0.count.isHidden ? "" : $0.count.text } ?? "", "clears": foot?.clear.isEnabled ?? false,
+                "announced": browser.announcement ?? ""])
     }
 
     private static func dev(_ action: String, _ values: [String], _ browser: Browser, _ answer: @escaping ([String: Any]) -> Void) {
@@ -164,6 +173,20 @@ enum BenchPage {
             return
         case "size": float.sizing.choose(width: CGFloat(Double(values.first ?? "") ?? 0))
         case "edge": float.sizing.shrink()
+        case "wheel":
+            func all(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(all) }
+            guard Store.testing, values.count == 2, let dx = Double(values[0]), let dy = Double(values[1]),
+                  let content = float.window?.contentView,
+                  let cover = all(content).first(where: { String(describing: type(of: $0)) == "Cover" }),
+                  let cg = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 2, wheel1: 0, wheel2: 0, wheel3: 0) else {
+                return answer(["error": "call wheel DX DY: no call is floating"])
+            }
+            cg.setIntegerValueField(.scrollWheelEventIsContinuous, value: 0)
+            let sign: Double = NSEvent(cgEvent: cg)?.isDirectionInvertedFromDevice == true ? 1 : -1
+            cg.setIntegerValueField(.scrollWheelEventDeltaAxis2, value: Int64(sign * dx))
+            cg.setIntegerValueField(.scrollWheelEventDeltaAxis1, value: Int64(-sign * dy))
+            guard let event = NSEvent(cgEvent: cg) else { return answer(["error": "call wheel: no event"]) }
+            cover.scrollWheel(with: event)
         case "show", "hide":
             let area = NSScreen.main?.visibleFrame ?? .zero
             let size = float.window?.frame.size ?? .zero
@@ -175,7 +198,7 @@ enum BenchPage {
         case "key":
             if values.first == "d" { float.toggleMic() } else { float.toggleCamera() }
         default:
-            answer(["error": "call state|mute|camera|leave|return|away|hover on|off|global|key d|e|size WIDTH|edge"])
+            answer(["error": "call state|mute|camera|leave|return|away|hover on|off|global|key d|e|size WIDTH|edge|wheel DX DY"])
             return
         }
         answer(state())

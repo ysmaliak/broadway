@@ -94,6 +94,8 @@ final class FieldMenuListView: NSView {
     private let slab = FieldSlabTrack()
     private let line = KitBox(fill: KitColor.ink.withAlphaComponent(0.1))
     private var rows: [FieldMenuRowView] = []
+    private var rules: [KitBox] = []
+    static let part: CGFloat = 9
     private var shownPicked: Int?
     private var lineOn = false
     private var area: NSTrackingArea?
@@ -137,8 +139,7 @@ final class FieldMenuListView: NSView {
 
     private func row(at event: NSEvent) -> Int? {
         let point = page.convert(event.locationInWindow, from: nil)
-        let index = Int(floor((point.y - headerHeight) / rowHeight))
-        return point.y >= headerHeight && rows.indices.contains(index) ? index : nil
+        return rows.firstIndex { $0.frame.minY <= point.y && point.y < $0.frame.maxY }
     }
 
     override func mouseMoved(with event: NSEvent) {
@@ -169,17 +170,33 @@ final class FieldMenuListView: NSView {
                 page.addSubview(made)
                 rows.append(made)
             }
-            rows[index].ruled = item.parted && index > 0
         }
         empty.isHidden = !list.isEmpty
         let width = bounds.width
         let inner = width - 14
         header.frame = page.kitSnap(NSRect(x: 7 + 8, y: 0, width: max(0, inner - 8), height: headerHeight))
         empty.frame = NSRect(x: 7 + 10, y: headerHeight, width: max(0, inner - 20), height: rowHeight)
+        var parts: [CGFloat] = []
+        var y = headerHeight
         for (index, row) in rows.enumerated() {
-            row.frame = NSRect(x: 7, y: headerHeight + CGFloat(index) * rowHeight, width: inner, height: rowHeight)
+            if list[index].parted, index > 0 {
+                parts.append(y + Self.part / 2)
+                y += Self.part
+            }
+            row.frame = NSRect(x: 7, y: y, width: inner, height: rowHeight)
+            y += rowHeight
         }
-        let content = headerHeight + CGFloat(max(list.count, 1)) * rowHeight
+        while rules.count > parts.count { rules.removeLast().removeFromSuperview() }
+        while rules.count < parts.count {
+            let rule = KitBox(fill: KitColor.ink.withAlphaComponent(0.1))
+            page.addSubview(rule)
+            rules.append(rule)
+        }
+        let thin = 1 / max(kitScale, 1)
+        for (rule, middle) in zip(rules, parts) {
+            rule.frame = page.kitSnap(NSRect(x: 7 + 10, y: middle - thin / 2, width: max(0, inner - 20), height: thin))
+        }
+        let content = list.isEmpty ? headerHeight + rowHeight : y
         scroll.frame = bounds
         scroll.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: room ?? 0, right: 0)
         page.frame = NSRect(x: 0, y: 0, width: width, height: content)
@@ -230,20 +247,14 @@ final class FieldMenuRowView: NSView {
         }
     }
 
-    var ruled = false {
-        didSet { if ruled != oldValue { rule.isHidden = !ruled } }
-    }
-
     private let icon = FieldLine.symbol("circle", size: 13)
     private let title = FieldLine.label("", size: 14)
     private let keys = FieldLine.label("", size: 12, weight: .medium, color: KitColor.muted)
-    private let rule = KitBox(fill: KitColor.ink.withAlphaComponent(0.1))
 
     init(item: FieldMenuItem) {
         self.item = item
         super.init(frame: .zero)
-        for view in [icon, title, keys, rule] as [NSView] { addSubview(view) }
-        rule.isHidden = true
+        for view in [icon, title, keys] as [NSView] { addSubview(view) }
         refresh()
     }
 
@@ -266,7 +277,6 @@ final class FieldMenuRowView: NSView {
         var items: [FieldLine.Item] = [.box(icon, 18, 18), .text(title), .spacer(0)]
         if !keys.isHidden { items.append(.text(keys)) }
         FieldLine.place(items, in: self, padding: 10, spacing: 12)
-        rule.frame = NSRect(x: 10, y: 0, width: max(0, bounds.width - 20), height: 1 / max(kitScale, 1))
     }
 }
 

@@ -8,6 +8,7 @@ final class LabelRoll {
     fileprivate(set) var curve: KitCurve = .none
     fileprivate var anchor: NSPoint?
     fileprivate var give: CGFloat = 0
+    fileprivate var ride: CGFloat = 0
     fileprivate var pending: ((CGSize) -> Void)?
     var busy: Bool { !pieces.isEmpty }
 }
@@ -51,6 +52,7 @@ extension KitLabel {
         state.mark += 1
         state.pending = nil
         state.anchor = nil
+        state.ride = 0
         for piece in state.pieces { piece.removeFromSuperview() }
         state.pieces = []
         needsDisplay = true
@@ -85,11 +87,14 @@ extension KitLabel {
             move.fillMode = .backwards
             layer.add(move, forKey: "roll.position")
         }
+        if isDescendant(of: view) { state.ride = was.minX - now.minX }
     }
 
     private func startRoll(_ move: AddressMove, from before: [Run]) {
         guard let state = rolled else { return }
         let after = runs
+        let scale = window?.backingScaleFactor ?? 1
+        func whole(_ x: CGFloat) -> CGFloat { (x * scale).rounded() / scale }
         let was = Self.offsets(before), now = Self.offsets(after)
         let wide = ceil(max(bounds.width, was.last ?? 0, now.last ?? 0)) + 2
         let height = bounds.height
@@ -97,8 +102,8 @@ extension KitLabel {
         let shift: CGSize = if case let .roll(down) = move { CGSize(width: 0, height: down ? lift : -lift) } else { .zero }
         let curve = move.curve
         func piece(_ runs: [Run], _ range: Range<Int>, _ at: [CGFloat]) -> NSView {
-            let from = range.lowerBound == 0 ? -lift : at[range.lowerBound]
-            let to = range.upperBound == at.count - 1 ? wide + lift : at[range.upperBound]
+            let from = range.lowerBound == 0 ? -lift : whole(at[range.lowerBound])
+            let to = range.upperBound == at.count - 1 ? wide + lift : whole(at[range.upperBound])
             let clip = NSView(frame: NSRect(x: from, y: 0, width: max(0, to - from), height: height))
             clip.wantsLayer = true
             clip.clipsToBounds = true
@@ -138,23 +143,37 @@ extension KitLabel {
         state.pending = { [weak self, weak state] delta in
             guard let self, let state, state.mark == mark else { return }
             var longest: CFTimeInterval = 0
+            let ride = state.ride
+            func stay(_ layer: CALayer) {
+                guard abs(ride) > 0.01,
+                      let hold = curve.animation("position", from: NSValue(point: CGPoint(x: -ride, y: 0)), to: NSValue(point: .zero)) as? CAPropertyAnimation
+                else { return }
+                hold.isAdditive = true
+                hold.fillMode = .backwards
+                layer.add(hold, forKey: "roll.stay")
+            }
             for (made, dx) in kept {
                 let x = dx + delta.width
-                guard abs(x) > 0.01, let layer = made.layer else { continue }
+                guard let layer = made.layer else { continue }
                 let base = layer.position
-                if let slide = curve.animation("position", from: NSValue(point: CGPoint(x: base.x + x, y: base.y)), to: NSValue(point: base)) {
+                if abs(x) > 0.01, let slide = curve.animation("position", from: NSValue(point: CGPoint(x: base.x + x, y: base.y)), to: NSValue(point: base)) {
                     slide.fillMode = .both
                     layer.add(slide, forKey: "glide.position")
                 }
+                stay(layer)
             }
             for made in leaving {
                 made.setFrameOrigin(NSPoint(x: made.frame.minX + delta.width, y: made.frame.minY))
                 if let layer = made.layer {
                     longest = max(longest, AddressMove.glide(layer, shift: CGSize(width: -shift.width, height: -shift.height), leaving: true, curve: curve))
+                    stay(layer)
                 }
             }
             for made in coming {
-                if let layer = made.layer { longest = max(longest, AddressMove.glide(layer, shift: shift, leaving: false, curve: curve)) }
+                if let layer = made.layer {
+                    longest = max(longest, AddressMove.glide(layer, shift: shift, leaving: false, curve: curve))
+                    stay(layer)
+                }
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + max(longest, 0.4)) { [weak self, weak state] in
                 guard let self, let state, state.mark == mark else { return }

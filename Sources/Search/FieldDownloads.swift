@@ -188,13 +188,15 @@ extension Browser {
         return FieldMenuItem(id: "clear", title: "Clear List", symbol: "trash") { [weak self] in self?.clearDownloadsList() }
     }
 
+    static let clearedList = "Cleared the list. The files stay where they are."
+
     func clearDownloadsList() {
         let was = loot.kept
         guard !was.isEmpty else { return }
         loot.forgetAll()
         keptThere = [:]
         if fieldPlace == .downloads { relistDownloads() }
-        announce("Cleared the list. The files stay where they are.", undo: { [weak self] in
+        announce(Self.clearedList, undo: { [weak self] in
             guard let self else { return }
             for keep in was.reversed() { self.loot.restore(keep) }
             if self.fieldPlace == .downloads { self.relistDownloads() }

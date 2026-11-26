@@ -4510,6 +4510,7 @@ final class Bench {
             if let yes = request["confirm"] as? Bool, Store.testing { Ask.testing = yes }
             // "ask": the real question again, as a person gets it.
             if request["confirm"] as? String == "ask" { Ask.testing = nil }
+            if Store.testing, let on = request["pageDialogs"] as? Bool { Dialogs.shownInTest = on }
             if Store.testing, let title = request["sheetPress"] as? String {
                 guard let button = browser.window?.attachedSheet?.contentView?.kitSubviews(of: NSButton.self).first(where: { $0.title == title })
                 else { answer(["error": "no button called \(title) on a sheet"]); return }

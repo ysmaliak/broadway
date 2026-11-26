@@ -303,9 +303,11 @@ final class CapsuleNote: KitFlippedView {
 
     private var shownTrailing: Bool { !(trailing?.text.isEmpty ?? true) }
 
+    static let widest: CGFloat = 420
+
     override var intrinsicContentSize: NSSize {
         let text = label.measure(width: .greatestFiniteMagnitude)
-        var width = ceil(text.width)
+        var width = min(ceil(text.width), Self.widest)
         if shownTrailing, let trailing { width += 8 + ceil(trailing.measure(width: .greatestFiniteMagnitude).width) }
         return NSSize(width: width + 30, height: ceil(text.height) + 18)
     }
@@ -315,7 +317,7 @@ final class CapsuleNote: KitFlippedView {
         glass.frame = bounds
         inside.frame = glass.bounds
         let text = label.measure(width: .greatestFiniteMagnitude)
-        label.frame = kitSnap(CGRect(x: 15, y: 9, width: ceil(text.width), height: ceil(text.height)))
+        label.frame = kitSnap(CGRect(x: 15, y: 9, width: min(ceil(text.width), Self.widest), height: ceil(text.height)))
         if let trailing {
             trailing.isHidden = !shownTrailing
             let size = trailing.measure(width: .greatestFiniteMagnitude)

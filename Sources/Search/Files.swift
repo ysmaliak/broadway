@@ -117,7 +117,7 @@ final class FilesPageView: KitFlippedView {
         self.asTab = asTab
         body = FilesBody(loot: loot, uploads: uploads, asTab: asTab)
         super.init(frame: .zero)
-        let foot = FilesFoot(uploads: uploads) { [weak self] in self?.clearList() }
+        let foot = FilesFoot(listed: { FileItem.merged(downloads: loot.kept, uploads: uploads.kept).count }) { [weak self] in self?.clearList() }
         plate = KitPlatePage("Files", content: body, foot: foot)
         kitPin(plate)
         let press = NSClickGestureRecognizer(target: self, action: #selector(pressed))
@@ -136,21 +136,29 @@ final class FilesPageView: KitFlippedView {
     func type(_ text: String) { body.typed(text) }
 
     func clearList() {
-        let was = uploads.kept
-        guard !was.isEmpty else { return }
+        let given = uploads.kept
+        let fetched = loot.kept
+        guard !given.isEmpty || !fetched.isEmpty else { return }
         uploads.forgetAll()
-        browser.announce("List cleared", undo: { [weak uploads] in uploads?.restore(was) })
+        loot.forgetAll()
+        browser.keptThere = [:]
+        browser.announce(Browser.clearedList, undo: { [weak uploads, weak loot] in
+            uploads?.restore(given)
+            for keep in fetched.reversed() { loot?.restore(keep) }
+        })
     }
 }
 
 final class FilesFoot: KitFlippedView {
-    private let uploads: Uploads
-    private let clear: KitBroadwayButton
+    private let listed: () -> Int
+    let count = KitLabel("", font: KitPageRow.footFont, color: .secondaryLabelColor)
+    let clear: KitBroadwayButton
 
-    init(uploads: Uploads, clear: @escaping () -> Void) {
-        self.uploads = uploads
+    init(listed: @escaping () -> Int, clear: @escaping () -> Void) {
+        self.listed = listed
         self.clear = KitBroadwayButton("Clear List", action: clear)
         super.init(frame: .zero)
+        addSubview(count)
         addSubview(self.clear)
     }
 
@@ -161,9 +169,14 @@ final class FilesFoot: KitFlippedView {
 
     override func layout() {
         super.layout()
-        clear.isEnabled = !uploads.kept.isEmpty
+        let files = listed()
+        clear.isEnabled = files > 0
+        count.text = files == 1 ? "1 file" : "\(files) files"
+        count.isHidden = files == 0
         let size = clear.intrinsicContentSize
         clear.frame = NSRect(x: bounds.width - size.width, y: ((bounds.height - size.height) / 2).rounded(), width: size.width, height: size.height)
+        let said = count.intrinsicContentSize
+        count.frame = kitSnap(NSRect(x: 0, y: (bounds.height - said.height) / 2, width: min(said.width, max(0, clear.frame.minX - 8)), height: said.height))
     }
 }
 

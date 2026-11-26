@@ -116,6 +116,20 @@ final class LabelRollTests {
         #expect(word.intrinsicContentSize.width > 0)
     }
 
+    @Test func thePiecesOfARollSitOnWholePixelsSoKeptCharactersStaySharp() {
+        let word = label()
+        word.roll("10m ago", for: "pin")
+
+        word.roll("11m ago", for: "pin")
+        let scale = word.window?.backingScaleFactor ?? 1
+        func whole(_ x: CGFloat) -> Bool { abs(x * scale - (x * scale).rounded()) < 0.001 }
+
+        #expect(KitLabel.offsets(word.runs).contains { !whole($0) })
+        #expect(pieces(word).count == 4)
+        #expect(pieces(word).allSatisfy { whole($0.frame.minX) && whole($0.frame.width) })
+        #expect(pieces(word).allSatisfy { piece in piece.subviews.allSatisfy { whole($0.frame.minX) } })
+    }
+
     @Test func aShownLabelRollsItsNewDigitsDownFromAboveWhenTheNumberShrinks() {
         let word = label()
         word.roll("10m left", for: "call")
@@ -222,6 +236,41 @@ final class LabelRollTests {
     private func start(of index: Int, in piece: NSView, runs: [KitLabel.Run]) -> CGFloat {
         guard let copy = piece.subviews.first else { return .infinity }
         return copy.convert(NSPoint(x: KitLabel.offsets(runs)[index], y: 0), to: nil).x
+    }
+
+    @Test func theDigitsOfAChipAnchoredOnItsRightStayPutWhileTheChipGrowsAroundThem() throws {
+        let chip = SideCountView()
+        let host = ChipHost(chip)
+        host.frame = NSRect(x: 20, y: 10, width: 120, height: 30)
+        let shown = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 60), styleMask: .borderless, backing: .buffered, defer: false)
+        shown.isReleasedWhenClosed = false
+        shown.contentView?.wantsLayer = true
+        shown.contentView?.addSubview(host)
+        windows.append(shown)
+        chip.count = 9
+        chip.fold(true, curve: .none)
+        host.needsLayout = true
+        shown.contentView?.layoutSubtreeIfNeeded()
+
+        chip.count = 10
+        host.needsLayout = true
+        shown.contentView?.layoutSubtreeIfNeeded()
+        let box = try #require(chip.subviews.compactMap { $0 as? KitBox }.first)
+        let tally = try #require(box.subviews.compactMap { $0 as? KitLabel }.first)
+        let layer = try #require(box.layer)
+        let grow = try #require(layer.animation(forKey: "roll.bounds") as? CABasicAnimation)
+        let move = try #require(layer.animation(forKey: "roll.position") as? CABasicAnimation)
+        let grewFrom = try #require((grow.fromValue as? NSValue)?.rectValue)
+        let movedFrom = try #require((move.fromValue as? NSValue)?.pointValue)
+        let rides = (movedFrom.x - layer.anchorPoint.x * grewFrom.width) - (layer.position.x - layer.anchorPoint.x * layer.bounds.width)
+        let holds = pieces(tally).compactMap { $0.layer?.animation(forKey: "roll.stay") as? CABasicAnimation }
+
+        #expect(rides > 1)
+        #expect(pieces(tally).count == 2)
+        #expect(holds.count == 2)
+        #expect(holds.allSatisfy { $0.isAdditive && $0.duration == move.duration })
+        #expect(holds.allSatisfy { abs((($0.fromValue as? NSValue)?.pointValue.x ?? 0) + rides) < 0.01 })
+        #expect(pieces(tally).allSatisfy { ($0.layer?.animationKeys() ?? []).last == "roll.stay" })
     }
 
     @Test func aChipAnchoredOnItsRightRollsItsLeavingDigitOutFromWhereItWasAndGrowsWithTheRoll() throws {

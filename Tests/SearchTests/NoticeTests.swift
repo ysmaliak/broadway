@@ -304,6 +304,20 @@ struct NoticeTests {
         #expect(zip(frames, frames.dropFirst()).allSatisfy { !$0.intersects($1) })
     }
 
+    @Test func aLongNoticeIsCutAtItsTailAndKeepsItsButtonInside() throws {
+        let long = CapsuleNote("Forgot " + String(repeating: "a very long page title ", count: 12), size: 12, trailing: "Undo")
+        long.frame = NSRect(origin: .zero, size: long.intrinsicContentSize)
+        long.layoutSubtreeIfNeeded()
+        let short = CapsuleNote("Closed 3 tabs", size: 12, trailing: "Undo")
+        short.frame = NSRect(origin: .zero, size: short.intrinsicContentSize)
+        short.layoutSubtreeIfNeeded()
+        let undo = try #require(long.trailing)
+
+        #expect(long.label.frame.width == CapsuleNote.widest)
+        #expect(undo.frame.maxX <= long.bounds.width - 14)
+        #expect(short.label.frame.width < 120)
+    }
+
     @Test func everyNoticeInTheCodeUsesTheSharedMotion() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let sources = root.appendingPathComponent("Sources/Search")

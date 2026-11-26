@@ -404,6 +404,35 @@ final class QuickActionsTests {
         #expect(menu.query == "")
     }
 
+    @Test func aPartedRowSitsUnderARuleWithRoomAboveAndBelowIt() throws {
+        let menu = FieldMenu()
+        menu.open(heading: "Row", items: [FieldMenuItem(id: "a", title: "Forget Today", symbol: "calendar") {},
+                                          FieldMenuItem(id: "b", title: "Clear History…", symbol: "trash", parted: true) {}])
+        let list = FieldMenuListView(menu: menu, rowHeight: 38, headerHeight: 28)
+        list.frame = NSRect(x: 0, y: 0, width: 400, height: 300)
+        list.layoutSubtreeIfNeeded()
+
+        let rows = list.kitSubviews(of: FieldMenuRowView.self).sorted { $0.frame.minY < $1.frame.minY }
+        let rule = try #require(list.kitSubviews(of: KitBox.self).first { $0.superview === rows[0].superview && $0.frame.height <= 1 })
+
+        #expect(rows[1].frame.minY - rows[0].frame.maxY == FieldMenuListView.part)
+        #expect(rule.frame.minY - rows[0].frame.maxY >= 3)
+        #expect(rows[1].frame.minY - rule.frame.maxY >= 3)
+    }
+
+    @Test func aPartedRowThatLeadsTheListGetsNoRule() {
+        let menu = FieldMenu()
+        menu.open(heading: "Row", items: [FieldMenuItem(id: "b", title: "Clear History…", symbol: "trash", parted: true) {}])
+        let list = FieldMenuListView(menu: menu, rowHeight: 38, headerHeight: 28)
+        list.frame = NSRect(x: 0, y: 0, width: 400, height: 300)
+        list.layoutSubtreeIfNeeded()
+
+        let rows = list.kitSubviews(of: FieldMenuRowView.self)
+
+        #expect(rows.first?.frame.minY == 28)
+        #expect(!list.kitSubviews(of: KitBox.self).contains { $0.superview === rows.first?.superview && $0.frame.height <= 1 })
+    }
+
     @Test func walkingWrapsAndAnEmptySearchRunsNothing() {
         let menu = FieldMenu()
         var ran = 0

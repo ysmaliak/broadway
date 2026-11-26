@@ -496,6 +496,8 @@ enum Dialogs {
 
     static var continuesInTest = false
 
+    static var shownInTest = false
+
     static func show(
         _ alert: NSAlert,
         over webView: WKWebView,
@@ -505,7 +507,7 @@ enum Dialogs {
         // page without one, would be on the screen of whoever is working
         // beside it. What it would have asked is written down (bench probe),
         // and it is answered as if cancelled.
-        if Store.testing {
+        if Store.testing, !shownInTest {
             askedInTest.append(alert.messageText)
             finish(.cancel)
             return
