@@ -605,6 +605,7 @@ extension Browser {
         for other in Browsers.all where other !== self { other.forget(space: id) }
         Pins.forget(id)
         LiveOffers.shared.forget(space: id)
+        LiveFolders.shared.remove(space: id)
         history.forget(space: id)
         // A space signed in with the others has nothing of its own to erase:
         // its cookies are theirs.

@@ -41,6 +41,14 @@ struct LivePreset: Equatable, Identifiable {
                    detail: "Files you opened lately", source: LiveDrive.source),
     ]
 
+    static func name(for source: LiveSource) -> String {
+        if let preset = all.first(where: { same($0.source, source) }) { return preset.name }
+        let url = URL(string: source.address)
+        let path = url?.path().split(separator: "/").map(String.init) ?? []
+        if source.kind == .repository || source.kind == .issues, path.count >= 2, path[0] != "issues" { return "\(path[0])/\(path[1])" }
+        return url?.host().map(Address.withoutWWW) ?? source.address
+    }
+
     static func same(_ one: LiveSource, _ other: LiveSource) -> Bool {
         guard one.kind == other.kind, one.service == other.service else { return false }
         switch one.kind {

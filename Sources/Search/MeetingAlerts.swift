@@ -375,6 +375,16 @@ final class MeetingAlerts {
         replan()
     }
 
+    func joined(_ link: URL, event: CalendarEvent? = nil) {
+        let call = { (meeting: Meeting) in meeting.link.map { $0 == link || MeetingLink.same($0, link) } == true }
+        var keys = Set(due.filter(call).map { MeetingAlertRules.key($0.event) })
+        if let event, call(Meeting(event: event)) { keys.insert(MeetingAlertRules.key(event)) }
+        guard !keys.isSubset(of: dismissed) else { return }
+        dismissed.formUnion(keys)
+        store.set(dismissed.sorted(), forKey: Self.dismissedKey)
+        replan()
+    }
+
     func snooze(_ meeting: Meeting) {
         snoozed[MeetingAlertRules.key(meeting.event)] = MeetingAlertRules.snooze(meeting.event, at: clock())
         replan()
@@ -504,6 +514,24 @@ final class MeetingAlertPanel {
         guard let panel, let stack, NSEvent.pressedMouseButtons == 0 else { return }
         let over = stack.cards.contains { panel.convertToScreen($0.convert($0.bounds, to: nil)).contains(pointer) }
         if panel.ignoresMouseEvents == over { panel.ignoresMouseEvents = !over }
+        beat(near: panel.frame.contains(pointer))
+    }
+
+    private func beat(near: Bool) {
+        guard !watching.isEmpty else {
+            pulse?.invalidate()
+            pulse = nil
+            return
+        }
+        let every: TimeInterval = near ? 0.05 : 0.25
+        guard pulse?.timeInterval != every else { return }
+        pulse?.invalidate()
+        let beat = Timer(timeInterval: every, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reach() }
+        }
+        beat.tolerance = every * 0.4
+        RunLoop.main.add(beat, forMode: .common)
+        pulse = beat
     }
 
     private func watch() {
@@ -517,12 +545,6 @@ final class MeetingAlertPanel {
             return event
         }
         watching = [far, near].compactMap { $0 }
-        let beat = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.reach() }
-        }
-        beat.tolerance = 0.02
-        RunLoop.main.add(beat, forMode: .common)
-        pulse = beat
     }
 
     private func unwatch() {

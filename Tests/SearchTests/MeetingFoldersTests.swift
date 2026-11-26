@@ -252,4 +252,18 @@ final class MeetingFoldersTests {
         #expect(SettingsIndex.apply(Preferences.meetingFoldersKey, false, to: prefs))
         #expect(!prefs.meetingFolders)
     }
+
+    @Test func aClosedTabLeavesNothingBehindInTheMeetingFolders() {
+        let first = browser.open(URL(string: "about:blank")!, foreground: true)
+        let tab = browser.open(URL(string: "about:blank")!, foreground: true)
+        MeetingFolders.shared.joined(tab, link: call, event: nil)
+        let held = MeetingFolders.shared.joined[tab.id] != nil
+
+        browser.close(tab)
+
+        #expect(held)
+        #expect(MeetingFolders.shared.joined[tab.id] == nil)
+        #expect(MeetingFolders.shared.firstSeen([tab]).map(\.id) == [tab.id])
+        #expect(first.id != tab.id)
+    }
 }

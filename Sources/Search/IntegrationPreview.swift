@@ -136,8 +136,8 @@ final class IntegrationPreviews {
 
     private static func fetch(_ link: IntegrationLink, space: UUID, integrations: Integrations) async -> IntegrationPreview? {
         if link.service == .linear {
-            guard case .answered(let data, let status)? = await IntegrationReader.sessionCall(
-                link.body, space: space, workspace: link.owner, cookies: await IntegrationReader.cookies(space), transport: integrations.transport
+            guard case .answered(let data, let status, _)? = await IntegrationReader.sessionCall(
+                link.body, space: space, workspace: link.owner, cookies: await IntegrationReader.cookies(space), transport: integrations.exchange
             ), (200..<300).contains(status) else { return nil }
             return IntegrationPreview.parse(data, for: link)
         }

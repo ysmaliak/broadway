@@ -397,6 +397,7 @@ enum Browsers {
         Extensions.shared.detach(browser)
         browser.closeAll()
         ContentView.forget(browser)
+        LiveOffers.shared.gone(browser)
         frames[ObjectIdentifier(browser)] = nil
         spaceWatch[ObjectIdentifier(browser)] = nil
         if Front.shared.browser === browser {

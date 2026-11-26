@@ -375,4 +375,59 @@ struct NextMeetingTests {
         #expect(!off)
         #expect(on)
     }
+
+    @Test func joinOpensZoomInItsAppWhenItIsInstalledAsTheAlertDoes() async throws {
+        let browser = fresh()
+        defer { browser.closeAll() }
+        let start = Date().addingTimeInterval(300)
+        let call = CalendarEvent(id: "z", title: "Call", start: start, end: start.addingTimeInterval(1800),
+                                 location: "https://acme.zoom.us/j/81234567890")
+        let meetings = Meetings(source: FakeCalendar(events: [call]))
+        await meetings.refresh()
+        let suite = "next-meeting-join-\(UUID().uuidString)"
+        let store = try #require(UserDefaults(suiteName: suite))
+        defer { store.removePersistentDomain(forName: suite) }
+        let alerts = MeetingAlerts(meetings: meetings, prefs: MeetingAlertPrefs(store: store), store: store)
+        alerts.installed = { $0 == "zoommtg" }
+        let count = browser.tabs.count
+
+        browser.joinNextMeeting(using: meetings, alerts: alerts)
+
+        #expect(alerts.opened.map(\.scheme) == ["zoommtg"])
+        #expect(browser.tabs.count == count)
+    }
+
+    @Test func aCalendarSwitchedOffFeedsNeitherThePinNorJoinNorNow() async {
+        let team = CalendarEvent(id: "team", title: "team", start: now.addingTimeInterval(5 * 60), end: now.addingTimeInterval(35 * 60),
+                                 notes: "https://meet.google.com/abc-defg-hij", calendar: "team")
+        let mine = CalendarEvent(id: "mine", title: "mine", start: now.addingTimeInterval(20 * 60), end: now.addingTimeInterval(50 * 60),
+                                 notes: "https://meet.google.com/xyz-wxyz-xyz", calendar: "work")
+        let meetings = Meetings(source: FakeCalendar(events: [team, mine]))
+        meetings.skipped = { ["team"] }
+
+        await meetings.refresh(at: now)
+
+        #expect(meetings.next?.event.id == "mine")
+    }
+
+    @Test func thePinReadsTheCalendarAgainOnWakeAZoneChangeOrAClockChange() async throws {
+        let fake = FakeCalendar(events: [])
+        let meetings = Meetings(source: fake)
+        meetings.start()
+        defer { meetings.stop() }
+        let center = NotificationCenter.default
+        let changes = [(NSWorkspace.shared.notificationCenter, NSWorkspace.didWakeNotification), (center, Notification.Name.NSSystemTimeZoneDidChange),
+                       (center, Notification.Name.NSSystemClockDidChange)]
+
+        var seen: [String?] = []
+        for (index, (hub, name)) in changes.enumerated() {
+            let id = "m\(index)"
+            fake.stored = [CalendarEvent(id: id, title: id, start: Date().addingTimeInterval(600), end: Date().addingTimeInterval(1800))]
+            hub.post(name: name, object: nil)
+            for _ in 0..<300 where meetings.next?.event.id != id { try await Task.sleep(for: .milliseconds(10)) }
+            seen.append(meetings.next?.event.id)
+        }
+
+        #expect(seen == ["m0", "m1", "m2"])
+    }
 }

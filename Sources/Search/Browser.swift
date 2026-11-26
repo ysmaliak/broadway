@@ -3913,9 +3913,9 @@ extension Browser {
             writeSession(now: true)
         }
         if unfoldGroup, prefs.usesTabGroups { unfoldStack(holding: tab) }
-        if let key = tab.liveKey {
+        if !tab.shy, !isPrivate, let key = tab.liveKey {
             LiveFolders.shared.opened(key, space: spaceID)
-        } else if prefs.liveFolders, let url = tab.address {
+        } else if !tab.shy, !isPrivate, prefs.liveFolders, let url = tab.address {
             LiveFolders.shared.landed(url, space: spaceID)
         }
         // A peek is over the tab it was opened from; another tab puts it away.
@@ -4029,6 +4029,7 @@ extension Browser {
         guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
         if putsDownPinnedSplit(tab) { return }
         LiveFolders.shared.signOnTabClosed(tab.id)
+        MeetingFolders.shared.closed(tab.id)
         var live: LiveDismissal?
         if let key = tab.liveKey, !LiveFolders.shared.syncing {
             if let folder = tab.groupID, let made = LiveFolders.shared.hide(key, in: folder, item: tab.liveItem) {
@@ -6136,21 +6137,51 @@ extension Browser {
             if let otherwise { picture(otherwise, quietly: quietly, toggle: toggle) }
             return
         }
-        if quietly, !Players.knows(tab.address) || tab.pageAddress?.host().map(Grounded.holds) == true || tab.sound.role == .mini {
+        let strict = quietly && !Players.knows(tab.address)
+        if quietly, strict && !tab.noisy && !tab.muted || tab.pageAddress?.host().map(Grounded.holds) == true || tab.sound.role == .mini {
             if let otherwise { picture(otherwise, quietly: quietly, toggle: toggle) }
             return
         }
-        tab.web.evaluateInSearch(NativePiP.script(toggle: toggle)) { [weak self, weak tab] answer in
-            MainActor.assumeIsolated {
-                guard let self, let tab else { return }
-                switch answer as? String {
-                case "in": self.pictured = tab.id
-                case "out": if self.pictured == tab.id { self.pictured = nil }
-                case "refused": if !quietly { self.announce("This page keeps its video to itself") }
-                default:
-                    if let otherwise { return self.picture(otherwise, quietly: quietly, toggle: toggle) }
-                    if !quietly { self.announce("Nothing is playing here") }
+        let web = tab.web
+        let frames: [WKFrameInfo?] = [nil] + tab.mediaFrames.reversed().map { Optional($0) }
+        func answered(_ answer: String?) {
+            switch answer {
+            case "in": pictured = tab.id
+            case "out": if pictured == tab.id { pictured = nil }
+            case "refused": if !quietly { announce("This page keeps its video to itself") }
+            default:
+                if let otherwise { return picture(otherwise, quietly: quietly, toggle: toggle) }
+                if !quietly { announce("Nothing is playing here") }
+            }
+        }
+        func each(_ left: [WKFrameInfo?], _ script: String, none: @escaping () -> Void) {
+            guard let frame = left.first else { return none() }
+            web.evaluateJavaScript(script, in: frame, in: Web.world) { result in
+                MainActor.assumeIsolated {
+                    guard let answer = (try? result.get()) as? String, answer != "none" else { return each(Array(left.dropFirst()), script, none: none) }
+                    answered(answer)
                 }
+            }
+        }
+        func look(_ left: [WKFrameInfo?], none: @escaping () -> Void) {
+            guard let frame = left.first else { return none() }
+            let rest = Array(left.dropFirst())
+            web.evaluateJavaScript(FloatFind.look(strict: strict), in: frame, in: Web.world) { seen in
+                MainActor.assumeIsolated {
+                    guard FloatFind.sizeable(try? seen.get(), in: web, strict: strict) != nil else { return look(rest, none: none) }
+                    web.evaluateJavaScript(NativePiP.pick, in: frame, in: Web.world) { result in
+                        MainActor.assumeIsolated {
+                            guard let answer = (try? result.get()) as? String, answer != "none" else { return look(rest, none: none) }
+                            answered(answer)
+                        }
+                    }
+                }
+            }
+        }
+        each(frames, NativePiP.held(toggle: toggle)) {
+            look(frames) {
+                guard toggle else { return answered(nil) }
+                each(frames, NativePiP.paused) { answered(nil) }
             }
         }
     }
@@ -6159,7 +6190,8 @@ extension Browser {
     func unpicture() {
         guard let id = pictured else { return }
         pictured = nil
-        (tabs + parkedTabs).first { $0.id == id }?.web.evaluateInSearch(NativePiP.off)
+        guard let tab = (tabs + parkedTabs).first(where: { $0.id == id }) else { return }
+        for frame in [nil] + tab.mediaFrames.map({ Optional($0) }) { tab.web.evaluateJavaScript(NativePiP.off, in: frame, in: Web.world) { _ in } }
     }
 
     /// The button at the top right of macOS's picture in picture, back to the

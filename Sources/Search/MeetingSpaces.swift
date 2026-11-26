@@ -308,6 +308,7 @@ extension Browser {
         let event = event ?? meetingEvent(for: link)
         let memory = MeetingSpaceMemory.shared
         memory.remember(link, event: event)
+        MeetingAlerts.shared.joined(link, event: event)
         let landed = landMeeting(link, event: event)
         landed.browser.meetingJoined(link, event: event)
         switch memory.lastChoice {

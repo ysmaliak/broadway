@@ -101,6 +101,7 @@ extension Browser {
         guard let pair = pinnedSplit(of: tab) else { return false }
         let members = prefs.splitView ? pair.tabs.compactMap { id in tabs.first { $0.id == id } } : [tab]
         LiveFolders.shared.signOnTabClosed(tab.id)
+        for page in members { MeetingFolders.shared.closed(page.id) }
         SaveAsk.shared.tabClosed(Set(members.map(\.id)))
         for page in members {
             heldDialogs.removeValue(forKey: page.id)?.forEach { $0.dismiss() }

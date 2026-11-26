@@ -199,6 +199,10 @@ final class MiniPlayer {
         _ = artTurn
         if let staged { return Shown(item: staged, items: [staged]) }
         guard prefs.miniPlayer else { return Shown() }
+        let open = Set((browser.tabs + browser.parkedTabs).map(\.id))
+        dismissed = dismissed.filter { open.contains($0.key) }
+        asked = asked.filter { open.contains($0.key) }
+        holds = holds.filter { open.contains($0.key) }
         let tabs = (browser.tabs + browser.parkedTabs).filter { tab in
             tab.isWeb && !tab.asleep && !tab.floating && tab.sound.role == .mini && dismissed[tab.id] != tab.sound.started
                 && !browser.onCall(tab)
@@ -290,6 +294,7 @@ final class MiniPlayer {
         if artwork.count > 16 {
             artwork.removeAll()
             fetching.removeAll()
+            failed.removeAll()
         }
         artwork[address] = image
     }

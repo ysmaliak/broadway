@@ -16,8 +16,8 @@ enum IntegrationReader {
             let keys = linear.filter { $0.space == space }.map(\.key)
             let workspace = keys.compactMap { URL(string: $0) }.compactMap { LinearAPI.workspace(in: $0.absoluteString) }.first
             let answer = await sessionCall(LinearAPI.pointBody(keys), space: space, workspace: workspace,
-                                           cookies: await cookies(space), transport: integrations.transport)
-            guard case .answered(let data, let status) = answer, (200..<300).contains(status),
+                                           cookies: await cookies(space), transport: integrations.exchange)
+            guard case .answered(let data, let status, _) = answer, (200..<300).contains(status),
                   let items = LinearAPI.pointItems(from: data, keys: keys) else { continue }
             found += items
         }
@@ -32,7 +32,7 @@ enum IntegrationReader {
 
     enum Session: Equatable {
         case signIn
-        case answered(Data, Int)
+        case answered(Data, Int, [String: String])
     }
 
     private struct Asking: Hashable {
@@ -68,7 +68,7 @@ enum IntegrationReader {
     }
 
     static func sessionCall(_ body: Data, space: UUID, workspace: String?, cookies all: [HTTPCookie],
-                            endpoint: URL? = nil, transport: Integrations.Transport) async -> Session? {
+                            endpoint: URL? = nil, transport: Integrations.Exchange) async -> Session? {
         let mine = LiveReader.cookies(all, for: linearSite)
         guard !mine.isEmpty else { return .signIn }
         let asking = Asking(space: space, workspace: workspace?.lowercased() ?? "")
@@ -77,25 +77,25 @@ enum IntegrationReader {
     }
 
     private static func sessionCall(_ body: Data, asking: Asking, workspace: String?, cookies: [HTTPCookie], endpoint: URL,
-                                    transport: Integrations.Transport, again: Bool) async -> Session? {
+                                    transport: Integrations.Exchange, again: Bool) async -> Session? {
         let user: LinearAPI.SessionUser
         if let known = askers[asking] {
             user = known
         } else {
-            guard let (data, status) = await transport(sessionRequest(LinearAPI.usersBody, cookies: cookies, user: nil, endpoint: endpoint)) else {
+            guard let (data, status, headers) = await transport(sessionRequest(LinearAPI.usersBody, cookies: cookies, user: nil, endpoint: endpoint)) else {
                 return nil
             }
             if refused(data, status) { return .signIn }
-            guard (200..<300).contains(status), let users = LinearAPI.users(from: data) else { return .answered(data, status) }
+            guard (200..<300).contains(status), let users = LinearAPI.users(from: data) else { return .answered(data, status, headers) }
             guard let picked = LinearAPI.pick(users, workspace: workspace) else { return .signIn }
             user = picked
         }
-        guard let (data, status) = await transport(sessionRequest(body, cookies: cookies, user: user, endpoint: endpoint)) else { return nil }
+        guard let (data, status, headers) = await transport(sessionRequest(body, cookies: cookies, user: user, endpoint: endpoint)) else { return nil }
         let own = Asking(space: asking.space, workspace: user.workspace)
         guard refused(data, status) else {
             askers[asking] = user
             if !user.workspace.isEmpty { askers[own] = user }
-            return .answered(data, status)
+            return .answered(data, status, headers)
         }
         askers[asking] = nil
         if askers[own] == user { askers[own] = nil }
@@ -115,10 +115,10 @@ enum IntegrationReader {
         let unread = list == .inbox || list == .mentions
         for step in 0..<(unread ? LinearAPI.pages : 1) {
             let answer = await sessionCall(LinearAPI.body(for: list, leaving: folder.source.leftOut, after: cursor), space: folder.space,
-                                           workspace: workspace, cookies: jar, transport: integrations.transport)
+                                           workspace: workspace, cookies: jar, transport: integrations.exchange)
             guard let answer else { return .failed }
-            guard case .answered(let data, let status) = answer else { return .signIn }
-            if status == 429 || LinearAPI.limited(data) { return .missed(LiveMiss(cause: .limited)) }
+            guard case .answered(let data, let status, let headers) = answer else { return .signIn }
+            if status == 429 || LinearAPI.limited(data) { return .missed(LiveMiss(cause: .limited, wait: LiveLimit.retryAfter(headers))) }
             guard (200..<300).contains(status) else { return .failed }
             guard let page = LinearAPI.page(from: data, list: list) else { return .missed(LiveMiss(cause: .unread)) }
             for item in page.items where seen.insert(LiveIdentity.of(item.key)).inserted { items.append(item) }

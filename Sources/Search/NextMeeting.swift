@@ -246,10 +246,11 @@ final class Meetings {
     private(set) var clock = Date()
     private(set) var calendarList: [MeetingCalendar] = []
     @ObservationIgnored private(set) var known: [Meeting] = []
+    @ObservationIgnored var skipped: () -> Set<String> = { MeetingAlertPrefs.shared.skipped }
 
     @ObservationIgnored private var source: CalendarSource?
     @ObservationIgnored private var timer: Timer?
-    @ObservationIgnored private var watcher: NSObjectProtocol?
+    @ObservationIgnored private var watchers: [(NotificationCenter, NSObjectProtocol)] = []
     @ObservationIgnored private var ticks = 0
 
     init(source: CalendarSource?) {
@@ -296,7 +297,8 @@ final class Meetings {
         }.value
         clock = now
         known = found.filter { !$0.declined }.map(Meeting.init(event:)).filter { $0.link != nil }
-        let picked = Self.pick(found, at: now)
+        let quiet = skipped()
+        let picked = Self.pick(found.filter { !quiet.contains($0.calendar) }, at: now)
         if picked != next { next = picked }
     }
 
@@ -307,11 +309,16 @@ final class Meetings {
 
     func start() {
         guard timer == nil else { return }
-        watcher = NotificationCenter.default.addObserver(forName: .EKEventStoreChanged, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                Task { await self.refresh() }
+        let center = NotificationCenter.default
+        for (hub, name) in [(center, Notification.Name.EKEventStoreChanged), (center, .NSSystemTimeZoneDidChange),
+                            (center, .NSSystemClockDidChange), (NSWorkspace.shared.notificationCenter, NSWorkspace.didWakeNotification)] {
+            let watcher = hub.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    Task { await self.refresh() }
+                }
             }
+            watchers.append((hub, watcher))
         }
         let tick = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
@@ -325,8 +332,8 @@ final class Meetings {
     func stop() {
         timer?.invalidate()
         timer = nil
-        if let watcher { NotificationCenter.default.removeObserver(watcher) }
-        watcher = nil
+        for (hub, watcher) in watchers { hub.removeObserver(watcher) }
+        watchers = []
         next = nil
     }
 
@@ -385,12 +392,12 @@ final class Meetings {
 }
 
 extension Browser {
-    func joinNextMeeting(using meetings: Meetings = .shared, at now: Date = Date()) {
-        guard let meeting = meetings.next, meeting.joinable(at: now), let link = meeting.link else {
+    func joinNextMeeting(using meetings: Meetings = .shared, alerts: MeetingAlerts = .shared, at now: Date = Date()) {
+        guard let meeting = meetings.next, meeting.joinable(at: now), meeting.link != nil else {
             announce("No meeting to join in the next 15 minutes")
             return
         }
-        joinMeeting(link, event: meeting.event)
+        alerts.join(meeting, in: self)
     }
 
     func tab(on link: URL) -> Tab? {

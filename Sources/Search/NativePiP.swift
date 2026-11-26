@@ -45,10 +45,7 @@ enum NativePiP {
         for web in Web.pages.allObjects { allow(web.configuration.preferences) }
     }
 
-    /// The largest video playing, into picture in picture. `toggle`: one
-    /// already there comes back instead. Answers "in", "out", "none" (no
-    /// video playing) or "refused".
-    static func script(toggle: Bool) -> String {
+    static func held(toggle: Bool) -> String {
         """
         (function () {
           var toggle = \(toggle ? "true" : "false");
@@ -60,29 +57,35 @@ enum NativePiP {
               try { v.webkitSetPresentationMode('inline'); return 'out'; } catch (e) { return 'refused'; }
             }
           }
-          var best = null, area = 0;
-          for (var j = 0; j < videos.length; j++) {
-            var w = videos[j];
-            if (w.paused || w.ended || w.readyState < 2) continue;
-            var box = w.getBoundingClientRect();
-            if (box.width * box.height >= area) { area = box.width * box.height; best = w; }
-          }
-          // By hand, a paused video can go too, as in Safari: the largest
-          // one with a picture.
-          if (!best && toggle) {
-            for (var k = 0; k < videos.length; k++) {
-              var u = videos[k];
-              if (u.readyState < 2) continue;
-              var b = u.getBoundingClientRect();
-              if (b.width * b.height >= area) { area = b.width * b.height; best = u; }
-            }
-          }
-          if (!best) return 'none';
-          if (!best.webkitSupportsPresentationMode || !best.webkitSupportsPresentationMode('picture-in-picture')) return 'refused';
-          try { best.webkitSetPresentationMode('picture-in-picture'); return 'in'; } catch (e) { return 'refused'; }
+          return 'none';
         })();
         """
     }
+
+    static let pick = """
+    (function () {
+      var v = window.__officeFloatPick;
+      window.__officeFloatPick = null;
+      if (!v || v.tagName !== 'VIDEO') return 'none';
+      if (!v.webkitSupportsPresentationMode || !v.webkitSupportsPresentationMode('picture-in-picture')) return 'refused';
+      try { v.webkitSetPresentationMode('picture-in-picture'); return 'in'; } catch (e) { return 'refused'; }
+    })();
+    """
+
+    static let paused = """
+    (function () {
+      var videos = document.querySelectorAll('video'), best = null, area = 0;
+      for (var i = 0; i < videos.length; i++) {
+        var u = videos[i];
+        if (u.readyState < 2) continue;
+        var b = u.getBoundingClientRect();
+        if (b.width * b.height >= area) { area = b.width * b.height; best = u; }
+      }
+      if (!best) return 'none';
+      if (!best.webkitSupportsPresentationMode || !best.webkitSupportsPresentationMode('picture-in-picture')) return 'refused';
+      try { best.webkitSetPresentationMode('picture-in-picture'); return 'in'; } catch (e) { return 'refused'; }
+    })();
+    """
 
     /// Back into the page, whatever is in picture in picture there.
     static let off = """

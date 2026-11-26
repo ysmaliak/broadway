@@ -811,8 +811,9 @@ final class LiveFolders {
         let saved = read.kept, gone = read.retired
         foreign = read.foreign
         foreignIDs = read.foreignIDs
-        folders = LiveFolders.woken(saved)
-        lastSaved = folders
+        lastSaved = LiveFolders.woken(saved)
+        folders = LiveFolders.housed(LiveFolders.woken(saved), in: Set(Spaces.known.keys))
+        save()
         if !gone.isEmpty {
             retired.formUnion(gone)
             Store.settings.set(retired.map(\.uuidString).sorted(), forKey: LiveFolders.retiredKey)
@@ -917,6 +918,15 @@ final class LiveFolders {
         began[id] = nil
         signOns[id] = nil
         retries[id] = nil
+        again.remove(id)
+        early.remove(id)
+        signedAt[id] = nil
+        signOnTabs = signOnTabs.filter { $0.value.folder != id }
+        pageReads[id] = nil
+        pageSoon[id] = nil
+        actedReads[id] = nil
+        pauses[id] = nil
+        reads[id] = nil
         for (identity, turn) in turned where turn.folders.contains(id) {
             let left = turn.folders.subtracting([id])
             turned[identity] = left.isEmpty ? nil : (turn.token, left)
@@ -928,6 +938,14 @@ final class LiveFolders {
                                                               marked: claim.marked, confirmed: claim.confirmed)
         }
         save()
+    }
+
+    func remove(space: UUID) {
+        for folder in folders where folder.space == space { remove(folder.id) }
+    }
+
+    static func housed(_ folders: [LiveFolder], in spaces: Set<UUID>) -> [LiveFolder] {
+        folders.filter { spaces.contains($0.space) }
     }
 
     func rename(_ id: UUID, to name: String) { change(id) { $0.name = name } }
@@ -2157,10 +2175,8 @@ extension Browser {
 
     func followSite(_ tab: Tab) {
         guard prefs.liveFolders, let address = tab.address?.absoluteString,
-              let source = LiveSource.from(address) else { return }
-        let name = tab.address?.host().map(Address.withoutWWW) ?? tab.label
-        LiveFolders.shared.add(name: name, source: source, space: spaceID)
-        announce("Following \(name)")
+              let source = LiveSource.from(address), !alreadyFollowing(source) else { return }
+        addLivePreset(LivePreset.name(for: source), source, space: nil)
     }
 
     func askForLiveFolder() {
@@ -2171,13 +2187,18 @@ extension Browser {
                 announce("That isn't an address")
                 return
             }
-            let name = URL(string: source.address)?.host().map(Address.withoutWWW) ?? text
-            LiveFolders.shared.add(name: source.kind == .repository ? text : name, source: source, space: spaceID)
+            guard !alreadyFollowing(source) else { return }
+            addLivePreset(LivePreset.name(for: source), source, space: nil)
         }
     }
 
-    func addLivePreset(_ name: String, _ source: LiveSource) {
-        LiveFolders.shared.add(name: name, source: source, space: spaceID)
+    func alreadyFollowing(_ source: LiveSource) -> Bool {
+        guard let followed = LiveFolders.shared.folders.first(where: { $0.space == spaceID && LivePreset.same($0.source, source) }) else {
+            return false
+        }
+        unfoldFolder(followed.id)
+        announce("Already following \(followed.name)")
+        return true
     }
 
     func liveSpace(_ asked: UUID?) -> UUID {
@@ -2219,14 +2240,16 @@ enum LiveMenu {
         let menu = NSMenu()
         menu.addItem(PlusMenu.item("Feed or Site…") { browser.askForLiveFolder() })
         menu.addItem(.separator())
-        menu.addItem(PlusMenu.item("GitHub Pull Requests") { browser.addLivePreset(LiveSource.pullRequestsName, .pullRequests) })
-        menu.addItem(PlusMenu.item("GitHub Issues") { browser.addLivePreset("Issues", .issues) })
-        menu.addItem(PlusMenu.item("GitHub Notifications") { browser.addLivePreset("Notifications", .gitHubNotifications) })
-        menu.addItem(.separator())
-        menu.addItem(PlusMenu.item("Linear My Issues") { browser.addLivePreset("My Issues", .linear(.assigned)) })
-        menu.addItem(PlusMenu.item("Linear Mentions") { browser.addLivePreset("Mentions", .linear(.mentions)) })
-        menu.addItem(.separator())
-        menu.addItem(PlusMenu.item("YouTube Subscriptions") { browser.addLivePreset("Subscriptions", .subscriptions) })
+        let adds = LiveAdd.now(for: browser, space: browser.spaceID)
+        if adds.isEmpty {
+            let none = NSMenuItem(title: LiveFolderRows.allAdded(in: nil, offered: false), action: nil, keyEquivalent: "")
+            none.isEnabled = false
+            menu.addItem(none)
+        }
+        for (index, add) in adds.enumerated() {
+            if index > 0, case .preset = add, case .suggested = adds[index - 1] { menu.addItem(.separator()) }
+            menu.addItem(PlusMenu.item(add.title) { browser.addLivePreset(add.name, add.source, space: nil) })
+        }
         return menu
     }
 }

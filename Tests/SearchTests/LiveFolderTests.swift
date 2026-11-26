@@ -885,4 +885,98 @@ final class LiveFolderTests {
         #expect(asked == sso)
         #expect(items.map(\.title) == ["Three", "Four"])
     }
+
+    @Test func deletingASpaceRemovesItsLiveFolders() throws {
+        browser.addSpace(named: "Elsewhere")
+        let other = try #require(browser.spaces.first { $0.name == "Elsewhere" }).id
+        let gone = LiveFolders.shared.add(name: "News", source: LiveSource(kind: .feed, address: "https://example.com/feed"), space: other)
+        let kept = LiveFolders.shared.add(name: "News", source: LiveSource(kind: .feed, address: "https://example.com/feed"), space: Space.firstID)
+
+        browser.deleteSpace(other)
+
+        #expect(LiveFolders.shared.folder(gone.id) == nil)
+        #expect(LiveFolders.shared.folder(kept.id) != nil)
+    }
+
+    @Test func aSavedFolderWhoseSpaceIsGoneIsLeftOut() {
+        let home = LiveFolder(space: Space.firstID, name: "News", source: LiveSource(kind: .feed, address: "https://example.com/feed"))
+        let ghost = LiveFolder(space: UUID(), name: "News", source: LiveSource(kind: .feed, address: "https://example.com/feed"))
+
+        let kept = LiveFolders.housed([home, ghost], in: [Space.firstID])
+
+        #expect(kept.map(\.id) == [home.id])
+    }
+
+    @Test func goingToATabInAPrivateWindowLeavesTheLiveFolderItemUnopened() throws {
+        let quiet = Browser(record: WindowRecord(), privateStore: .nonPersistent())
+        defer { quiet.closeAll() }
+        let made = LiveFolders.shared.add(name: "News", source: LiveSource(kind: .feed, address: "https://example.com/feed"), space: Space.firstID)
+        LiveFolders.shared.apply(.items([LiveItem(key: "https://example.com/1", title: "One")], nil), to: made.id)
+        _ = quiet.open(URL(string: "about:blank")!, foreground: true)
+        let tab = quiet.open(URL(string: "about:blank")!, foreground: false)
+        tab.liveKey = "https://example.com/1"
+
+        quiet.select(tab)
+
+        #expect(LiveFolders.shared.folder(made.id)?.items.first?.opened == nil)
+    }
+
+    @Test func theNewLiveFolderMenuOffersWhatSettingsOffersAndNothingTheSpaceHas() {
+        _ = LiveFolders.shared.add(name: "PRs", source: .pullRequests, space: browser.spaceID)
+
+        let titles = LiveMenu.menu(for: browser).items.map(\.title)
+
+        #expect(!titles.contains("GitHub Pull Requests"))
+        #expect(!titles.contains("GitHub Issues"))
+        #expect(titles.contains("GitHub Assigned Issues"))
+        #expect(titles.contains("Linear Inbox"))
+        #expect(titles.contains("Google Drive"))
+    }
+
+    @Test func followingASiteTheSpaceAlreadyFollowsAddsNoSecondFolder() throws {
+        let tab = browser.makeTab()
+        tab.restore(url: try #require(URL(string: "https://example.com/blog")), title: "Blog")
+        browser.followSite(tab)
+        let first = LiveFolders.shared.folders.filter { $0.space == browser.spaceID }
+
+        browser.followSite(tab)
+
+        #expect(first.count == 1)
+        #expect(LiveFolders.shared.folders.filter { $0.space == browser.spaceID }.map(\.id) == first.map(\.id))
+        #expect(browser.announcement == "Already following \(first.first?.name ?? "")")
+    }
+
+    @Test func everyDoorNamesAFolderTheSameWay() throws {
+        let typed = try #require(LiveSource.from("acme/rocket"))
+        let page = try #require(LiveSource.from("https://github.com/acme/rocket"))
+        let feed = try #require(LiveSource.from("https://www.example.com/feed.xml"))
+
+        #expect(LivePreset.name(for: .pullRequests) == LiveSource.pullRequestsName)
+        #expect(LivePreset.name(for: .subscriptions) == "Subscriptions")
+        #expect(LivePreset.name(for: typed) == "acme/rocket")
+        #expect(LivePreset.name(for: page) == "acme/rocket")
+        #expect(LivePreset.name(for: feed) == "example.com")
+    }
+
+    @Test func followingASiteSaysWhatSettingsSays() throws {
+        let tab = browser.makeTab()
+        tab.restore(url: try #require(URL(string: "https://github.com/acme/rocket")), title: "Rocket")
+
+        browser.followSite(tab)
+
+        #expect(LiveFolders.shared.folders.filter { $0.space == browser.spaceID }.map(\.name) == ["acme/rocket"])
+        #expect(browser.announcement == "Added acme/rocket")
+    }
+
+    @Test func removingAFolderForgetsItsSignOnTab() {
+        let made = LiveFolders.shared.add(name: "PRs", source: .pullRequests, space: browser.spaceID)
+        let tab = UUID()
+        LiveFolders.shared.signOnTab(tab, for: made.id, at: URL(string: "https://github.com/login")!)
+        let watched = LiveFolders.shared.opened(tab)
+
+        LiveFolders.shared.remove(made.id)
+
+        #expect(watched)
+        #expect(!LiveFolders.shared.opened(tab))
+    }
 }

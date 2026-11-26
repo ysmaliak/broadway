@@ -506,4 +506,18 @@ final class IntegrationTests {
         #expect(Address.url(from: "acme/rocket#412") == nil)
         #expect(Address.url(from: "ENG-231") == nil)
     }
+
+    @Test func aLimitedLinearFolderWaitsAsLongAsLinearSays() async {
+        let made = Integrations()
+        made.exchange = { [weak self] request in
+            guard let self, let (data, status) = session.answer(request, { _ in (Data(), 429) }) else { return nil }
+            return (data, status, status == 429 ? ["Retry-After": "120"] : [:])
+        }
+        session.users = [LinearSessionFake.north]
+        IntegrationReader.cookies = { _ in [HTTPCookie(properties: [.domain: "linear.app", .path: "/", .name: "s", .value: "fixture"])!] }
+
+        let answer = await IntegrationReader.read(folder(.linear(.assigned)), with: made)
+
+        #expect(answer == .missed(LiveMiss(cause: .limited, wait: 120)))
+    }
 }

@@ -19,11 +19,17 @@ struct NativePiPTests {
     }
 
     @Test func scriptsAskOnlyForPictureInPicture() {
-        let on = NativePiP.script(toggle: false)
-        #expect(on.contains("var toggle = false"))
-        #expect(NativePiP.script(toggle: true).contains("var toggle = true"))
-        #expect(on.contains("webkitSetPresentationMode('picture-in-picture')"))
-        #expect(!on.contains("fullscreen"))
+        let held = NativePiP.held(toggle: false)
+        #expect(held.contains("var toggle = false"))
+        #expect(NativePiP.held(toggle: true).contains("var toggle = true"))
+        #expect(NativePiP.pick.contains("webkitSetPresentationMode('picture-in-picture')"))
+        #expect(NativePiP.paused.contains("webkitSetPresentationMode('picture-in-picture')"))
+        #expect(!(held + NativePiP.pick + NativePiP.paused).contains("fullscreen"))
         #expect(NativePiP.off.contains("webkitSetPresentationMode('inline')"))
+    }
+
+    @Test func pictureInPictureTakesTheVideoTheFloatingWindowsFinderPicked() {
+        #expect(FloatFind.look(strict: true).contains("window.__officeFloatPick = best"))
+        #expect(NativePiP.pick.contains("var v = window.__officeFloatPick"))
     }
 }

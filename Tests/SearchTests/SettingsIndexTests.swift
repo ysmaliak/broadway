@@ -435,4 +435,9 @@ struct SettingsIndexTests {
             #expect(SettingsIndex.item(id)?.findOnly == true, "\(id)")
         }
     }
+
+    @Test func theMiniPlayerRowsDescribeThePlayerAsItIs() {
+        #expect(SettingsIndex.item(Preferences.miniKey)?.detail == "Music, podcasts and audiobooks playing in this window, at the foot of the sidebar")
+        #expect(SettingsIndex.item(Preferences.miniSpeedKey)?.detail == "A speed button for audiobooks and podcasts")
+    }
 }

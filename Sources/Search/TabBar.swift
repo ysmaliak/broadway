@@ -508,7 +508,7 @@ enum TabMenuItems {
             items.append(action("Change Letter") { browser.editLetter(tab) })
         }
         if browser.prefs.liveFolders, tab.isWeb, !tab.shy, !tab.bench, tab.liveKey == nil {
-            items.append(action(tab.pin == nil ? "Follow Site in a Folder" : "Live Folder from Site") { browser.followSite(tab) })
+            items.append(action("Follow Site in a Folder") { browser.followSite(tab) })
         }
         if browser.prefs.sitesInPanel, tab.isWeb, !tab.shy {
             items.append(action("Open in Side Panel") { browser.openInSidePanel(tab) })

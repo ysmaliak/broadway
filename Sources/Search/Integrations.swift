@@ -24,10 +24,19 @@ final class IntegrationRedirects: NSObject, URLSessionTaskDelegate {
 @MainActor
 final class Integrations {
     typealias Transport = @MainActor (URLRequest) async -> (Data, Int)?
+    typealias Exchange = @MainActor (URLRequest) async -> (Data, Int, [String: String])?
 
     static let shared = Integrations()
 
-    var transport: Transport = { await Integrations.send($0) }
+    var exchange: Exchange = { await LiveConditional.exchange($0, delegate: IntegrationRedirects()) }
+
+    var transport: Transport {
+        get {
+            let exchange = exchange
+            return { await exchange($0).map { ($0.0, $0.1) } }
+        }
+        set { exchange = { await newValue($0).map { ($0.0, $0.1, [:]) } } }
+    }
 
     nonisolated static let rootKey = "integrations.api"
 

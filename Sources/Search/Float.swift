@@ -77,6 +77,11 @@ final class Float {
     /// `area`. A swipe clearly both ways — between about 22° and 68° — takes
     /// it to the corner it points at; a straighter one along its stronger
     /// direction, against whichever of the other two edges it is nearer.
+    nonisolated static func flicked(_ swipe: CGVector, lifted: Bool) -> Bool {
+        let length = hypot(swipe.dx, swipe.dy)
+        return length > 120 || (lifted && length > 20)
+    }
+
     nonisolated static func corner(for frame: NSRect, in area: NSRect, toward way: CGVector, margin: CGFloat = 12) -> NSPoint {
         let left = area.minX + margin, right = area.maxX - margin - frame.width
         let bottom = area.minY + margin, top = area.maxY - margin - frame.height
@@ -145,7 +150,7 @@ final class Float {
         panel.acceptsMouseMovedEvents = true
         panel.isReleasedWhenClosed = false
         // The bench's, off every screen, is left out when a probe is hidden.
-        panel.canHide = Float.benchAway == nil
+        panel.canHide = false
         panel.aspectRatio = wanted
         self.shape = wanted
         // Kept once a move or a resize is over, not on each step of one: at
@@ -984,8 +989,7 @@ final class Float {
             // Read from the whole swipe, as the fingers lift: a swipe often
             // sets off along one side before it turns diagonal, and read
             // early it went the wrong way. A long one doesn't wait.
-            let length = hypot(swipe.dx, swipe.dy)
-            if !flicked, length > 120 || (lifted && length > 20) {
+            if !flicked, Float.flicked(swipe, lifted: lifted) {
                 flicked = true
                 flick(swipe)
             }

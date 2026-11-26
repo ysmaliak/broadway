@@ -256,8 +256,8 @@ extension Browser {
     }
 
     func openBefore(_ meeting: Meeting, said: String) {
-        if let link = meeting.link {
-            joinMeeting(link, event: meeting.event)
+        if meeting.link != nil {
+            MeetingAlerts.shared.join(meeting, in: self)
         } else if let pin = tabs.first(where: { Meetings.isCalendar($0.address) }) {
             select(pin)
         } else {

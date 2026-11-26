@@ -254,4 +254,11 @@ struct CallCornersTests {
 
         #expect(!away.keeps(tab))
     }
+
+    @Test func theCallAndTheVideoFlickOnTheSameSwipes() {
+        #expect(Float.flicked(CGVector(dx: 130, dy: 0), lifted: false))
+        #expect(!Float.flicked(CGVector(dx: 60, dy: 40), lifted: false))
+        #expect(Float.flicked(CGVector(dx: 30, dy: 0), lifted: true))
+        #expect(!Float.flicked(CGVector(dx: 10, dy: 5), lifted: true))
+    }
 }

@@ -21,6 +21,11 @@ final class MeetingFolders {
         tabs.filter { seen.insert($0.id).inserted }
     }
 
+    func closed(_ tab: UUID) {
+        joined[tab] = nil
+        seen.remove(tab)
+    }
+
     func forget() {
         joined = [:]
         declined = []

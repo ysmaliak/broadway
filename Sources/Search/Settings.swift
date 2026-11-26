@@ -1087,6 +1087,7 @@ final class SettingsCalendars: NSView {
             box.kitOnChange { control in
                 let shown = (control as? NSButton)?.state == .on
                 if shown { MeetingAlertPrefs.shared.skipped.remove(calendar.id) } else { MeetingAlertPrefs.shared.skipped.insert(calendar.id) }
+                Task { await Meetings.shared.refresh() }
             }
             grid.addArrangedSubview(box)
         }

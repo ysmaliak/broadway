@@ -229,6 +229,16 @@ final class LiveOffers {
         if past != before { save() }
     }
 
+    func gone(_ browser: Browser) {
+        let id = ObjectIdentifier(browser)
+        windows[id] = nil
+        eyes[id] = nil
+        accepted[id] = nil
+        waiting[id] = nil
+        showing[id] = nil
+        if showing.isEmpty { stop() }
+    }
+
     func reconsider() {
         for window in windows.values { if let browser = window.browser { consider(browser) } }
     }
@@ -276,6 +286,7 @@ final class LiveOffers {
 
     func consider(_ browser: Browser) {
         let id = ObjectIdentifier(browser)
+        if let old = windows[id], old.browser !== browser { gone(browser) }
         windows[id] = windows[id] ?? Window(browser)
         guard !browser.liveOfferMoving else { return }
         let visit = self.visit(browser)

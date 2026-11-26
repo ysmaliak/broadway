@@ -743,11 +743,59 @@ final class CallFloat {
 
     private final class Cover: NSView {
         var moved: (() -> Void)?
+        private var swipe: CGVector = .zero
+        private var flicked = false
+        private var lastWheelFlick = Date.distantPast
         override var acceptsFirstResponder: Bool { true }
         override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
         override func mouseDown(with event: NSEvent) {
             window?.performDrag(with: event)
             moved?()
+        }
+
+        override func scrollWheel(with event: NSEvent) {
+            guard Float.flicks else { return super.scrollWheel(with: event) }
+            guard event.momentumPhase == [] else { return }
+            let sign: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
+            let step = CGVector(dx: sign * event.scrollingDeltaX, dy: -sign * event.scrollingDeltaY)
+            if event.phase == [] {
+                guard Date().timeIntervalSince(lastWheelFlick) > 0.4, step != .zero else { return }
+                lastWheelFlick = Date()
+                return flick(step)
+            }
+            if event.phase.contains(.began) {
+                swipe = .zero
+                flicked = false
+            }
+            swipe.dx += step.dx
+            swipe.dy += step.dy
+            let lifted = event.phase.contains(.ended) || event.phase.contains(.cancelled)
+            if !flicked, Float.flicked(swipe, lifted: lifted) {
+                flicked = true
+                flick(swipe)
+            }
+            if lifted {
+                swipe = .zero
+                flicked = false
+            }
+        }
+
+        private func flick(_ way: CGVector) {
+            guard let window, let area = (window.screen ?? NSScreen.main)?.visibleFrame else { return }
+            let target = Float.corner(for: window.frame, in: area, toward: way)
+            guard target != window.frame.origin else { return }
+            guard let time = CallShape.glide(reduced: Motion.reduced, seen: window.isVisible && window.screen != nil) else {
+                window.setFrameOrigin(target)
+                moved?()
+                return
+            }
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = time
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                window.animator().setFrame(NSRect(origin: target, size: window.frame.size), display: true)
+            }, completionHandler: { [weak self] in
+                MainActor.assumeIsolated { self?.moved?() }
+            })
         }
     }
 }

@@ -411,4 +411,36 @@ final class MeetingAlertsTests {
         #expect(source.reads == 0)
         #expect(alerts.fireAt == nil)
     }
+
+    @Test func joiningTheCallByAnotherDoorTakesItsCardDown() async {
+        let meet = event("meet", in: 0.5, link: "https://meet.google.com/abc-defg-hij")
+        let other = event("other", in: 0.5, link: "https://meet.google.com/xyz-wxyz-xyz")
+        let later = event("later", in: 5, link: "https://meet.google.com/klm-nopq-rst")
+        let clock = Clock(now)
+        let alerts = alerts(AlertCalendar([meet, other, later]), clock: clock)
+        alerts.start()
+        await alerts.reading?.value
+        #expect(Set(alerts.due.map(\.event.id)) == ["meet", "other"])
+
+        alerts.joined(url("https://meet.google.com/abc-defg-hij?authuser=0"))
+        alerts.joined(url("https://meet.google.com/klm-nopq-rst"), event: later)
+        clock.now = later.start.addingTimeInterval(-60)
+        alerts.fire()
+
+        #expect(alerts.due.map(\.event.id) == ["other"])
+        alerts.stop()
+    }
+
+    @Test func respondingToAnInvitationKeepsTheCardUp() async {
+        let meet = event("meet", in: 0.5, link: "https://meet.google.com/abc-defg-hij")
+        let clock = Clock(now)
+        let alerts = alerts(AlertCalendar([meet]), clock: clock)
+        alerts.start()
+        await alerts.reading?.value
+
+        alerts.joined(url("https://calendar.example.com/event"), event: meet)
+
+        #expect(alerts.due.map(\.event.id) == ["meet"])
+        alerts.stop()
+    }
 }
