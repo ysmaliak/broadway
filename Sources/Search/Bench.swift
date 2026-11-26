@@ -5209,7 +5209,8 @@ final class Bench {
             guard let page = tab() else { answer(["error": "split pose needs id"]); return }
             browser.paneQuestions.append(PaneQuestion(
                 tab: page.id, host: request["host"] as? String ?? "example.com",
-                message: request["message"] as? String ?? "", kind: .confirm, reply: { _, _ in }
+                message: request["message"] as? String ?? "", kind: .confirm, page: page.built,
+                offersSilence: request["offersSilence"] as? Bool ?? false, reply: { _, _ in }
             ))
             reply()
         case "answer":
@@ -5217,7 +5218,8 @@ final class Bench {
             guard let page = tab(), let question = browser.paneQuestions.first(where: { $0.tab == page.id }) else {
                 answer(["error": "split answer needs the id of a page with a question"]); return
             }
-            browser.answer(question, ok: request["ok"] as? Bool ?? true, text: request["text"] as? String)
+            browser.answer(question, ok: request["ok"] as? Bool ?? true, text: request["text"] as? String,
+                           silence: request["silence"] as? Bool ?? false)
             reply()
         case "swap": browser.swapSplit(); reply()
         case "even": browser.evenSplit(); reply()
@@ -5337,7 +5339,7 @@ final class Bench {
                 .map { (Bench.short($0), $0.store.identifier?.uuidString ?? "default") }),
             // What pages of the pair asked, oldest first (see PaneQuestion).
             "questions": browser.paneQuestions.map { question in
-                ["tab": short(question.tab), "host": question.host, "message": question.message,
+                ["tab": short(question.tab), "host": question.host, "message": question.message, "offersSilence": question.offersSilence,
                  "kind": { switch question.kind { case .alert: "alert"; case .confirm: "confirm"; case .prompt: "prompt" } }()]
             },
             "held": browser.heldDialogs.mapValues(\.count).reduce(into: [String: Int]()) { out, entry in

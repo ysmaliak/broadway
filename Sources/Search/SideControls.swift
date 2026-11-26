@@ -205,6 +205,7 @@ final class TalkMarkView: NSView {
 
     private let glyph = KitSymbol("bubble.left", style: KitSymbol.Style(size: Metrics.liveLine - 0.5), tint: Palette.NS.muted)
     private let number = KitLabel("", font: .monospacedDigitSystemFont(ofSize: Metrics.liveLine, weight: .medium), color: Palette.NS.muted)
+    private var carried: (NSRect, NSRect)?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -236,7 +237,9 @@ final class TalkMarkView: NSView {
     }
 
     private func changed() {
+        let was = glyph.window == nil ? nil : (glyph.convert(glyph.bounds, to: nil), glyph.frame)
         number.roll(count > 1 ? "\(count)" : "", for: thing)
+        carried = number.rolled?.busy == true ? was : nil
         number.isHidden = count < 2
         let said = count == 1 ? "1 unanswered comment" : "\(count) unanswered comments"
         setAccessibilityLabel(said)
@@ -251,6 +254,10 @@ final class TalkMarkView: NSView {
         glyph.frame = NSRect(x: 0, y: (bounds.height - size.height) / 2, width: size.width, height: size.height)
         let text = number.intrinsicContentSize
         number.frame = NSRect(x: size.width + Self.gap, y: (bounds.height - text.height) / 2, width: ceil(text.width), height: ceil(text.height))
+        if let was = carried, abs(bounds.width - ceil(intrinsicContentSize.width)) < 0.5 {
+            carried = nil
+            number.rollCarry(glyph, from: was.0, or: was.1)
+        }
     }
 }
 

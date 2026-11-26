@@ -664,6 +664,7 @@ private final class PaneQuestionCardView: NSView {
     private let scroll = NSScrollView()
     private let words = NSTextView()
     private let field: PaneQuestionField?
+    private let silence: DialogSilenceBox?
     private let cancel: KitButton?
     private let ok: KitButton
     private var ready = false
@@ -678,6 +679,7 @@ private final class PaneQuestionCardView: NSView {
                            font: .systemFont(ofSize: 13, weight: .semibold), color: KitColor.ink)
         heading.overflow = .middle
         if case .prompt(let given) = question.kind { field = PaneQuestionField(text: given) } else { field = nil }
+        silence = question.offersSilence ? DialogSilenceBox(isOn: false, font: .systemFont(ofSize: 13), color: KitColor.ink) : nil
         cancel = question.kind == .alert ? nil : Self.choice("Cancel", strong: false)
         ok = Self.choice("OK", strong: true)
         super.init(frame: .zero)
@@ -715,6 +717,7 @@ private final class PaneQuestionCardView: NSView {
             }
             card.addSubview(field)
         }
+        if let silence { card.addSubview(silence) }
         if let cancel {
             cancel.action = { [weak self] in self?.answer(false) }
             card.addSubview(cancel)
@@ -762,7 +765,7 @@ private final class PaneQuestionCardView: NSView {
 
     private func answer(_ yes: Bool) {
         browser.focusPane(tab)
-        browser.answer(question, ok: yes, text: prompting ? field?.text : nil)
+        browser.answer(question, ok: yes, text: prompting ? field?.text : nil, silence: silence?.isOn == true)
     }
 
     private static func buttonWidth(_ button: KitButton) -> CGFloat {
@@ -788,6 +791,11 @@ private final class PaneQuestionCardView: NSView {
         if let field {
             field.frame = NSRect(x: 14, y: y, width: inner, height: PaneQuestionField.height)
             y += PaneQuestionField.height + 10
+        }
+        if let silence {
+            let size = silence.intrinsicContentSize
+            silence.frame = NSRect(x: 14, y: y, width: min(size.width, inner), height: size.height)
+            y += size.height + 10
         }
         y += 2
         let okWidth = Self.buttonWidth(ok)

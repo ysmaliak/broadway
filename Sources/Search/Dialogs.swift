@@ -52,17 +52,27 @@ final class PaneQuestion: Identifiable {
     let message: String
     let kind: Kind
     let asked = Date()
+    let offersSilence: Bool
+    private(set) weak var page: WKWebView?
     private var reply: ((Bool, String?) -> Void)?
 
-    init(tab: Tab.ID, host: String, message: String, kind: Kind, reply: @escaping (Bool, String?) -> Void) {
+    init(tab: Tab.ID, host: String, message: String, kind: Kind, page: WKWebView? = nil, offersSilence: Bool = false,
+         reply: @escaping (Bool, String?) -> Void) {
         self.tab = tab
         self.host = host
         self.message = message
         self.kind = kind
+        self.page = page
+        self.offersSilence = offersSilence
         self.reply = reply
     }
 
     var open: Bool { reply != nil }
+
+    func answered(ok: Bool, text: String? = nil, silence: Bool = false) {
+        if open, let page { DialogRuns.answered(page, silence: offersSilence && silence) }
+        answer(ok: ok, text: text)
+    }
 
     func answer(ok: Bool, text: String? = nil) {
         let reply = reply
@@ -84,15 +94,16 @@ extension Browser {
         return tab
     }
 
-    private func askInPane(_ tab: Tab, frame: WKFrameInfo, message: String, kind: PaneQuestion.Kind,
+    private func askInPane(_ tab: Tab, _ webView: WKWebView, frame: WKFrameInfo, message: String, kind: PaneQuestion.Kind,
                            reply: @escaping (Bool, String?) -> Void) {
         let host = frame.securityOrigin.host
-        paneQuestions.append(PaneQuestion(tab: tab.id, host: host, message: message, kind: kind, reply: reply))
+        paneQuestions.append(PaneQuestion(tab: tab.id, host: host, message: message, kind: kind, page: webView,
+                                          offersSilence: DialogRuns.offersSilence(webView), reply: reply))
     }
 
     /// The card's buttons, and the bench.
-    func answer(_ question: PaneQuestion, ok: Bool, text: String? = nil) {
-        question.answer(ok: ok, text: text)
+    func answer(_ question: PaneQuestion, ok: Bool, text: String? = nil, silence: Bool = false) {
+        question.answered(ok: ok, text: text, silence: silence)
         paneQuestions.removeAll { $0.id == question.id }
     }
 
@@ -137,7 +148,8 @@ extension Browser {
                           reply: @escaping (Bool, String?) -> Void) -> Bool {
         guard let tab = anyTab(for: webView), tab.agent, tab.agentTask != nil, !tab.shy, !tab.driving, tab.agentFinished == nil else { return false }
         tab.agentDialog?.answer(ok: false)
-        tab.agentDialog = PaneQuestion(tab: tab.id, host: frame.securityOrigin.host, message: message, kind: kind, reply: reply)
+        tab.agentDialog = PaneQuestion(tab: tab.id, host: frame.securityOrigin.host, message: message, kind: kind, page: webView,
+                                       offersSilence: DialogRuns.offersSilence(webView), reply: reply)
         return true
     }
 
@@ -150,7 +162,7 @@ extension Browser {
         if DialogRuns.silenced(webView) { return completionHandler() }
         if askAgent(webView, frame: frame, message: message, kind: .alert, reply: { _, _ in completionHandler() }) { return }
         if let tab = paneAsking(webView) {
-            return askInPane(tab, frame: frame, message: message, kind: .alert) { _, _ in completionHandler() }
+            return askInPane(tab, webView, frame: frame, message: message, kind: .alert) { _, _ in completionHandler() }
         }
         ask(from: webView, show: {
             let alert = Dialogs.alert(from: frame, saying: message)
@@ -168,7 +180,7 @@ extension Browser {
         if DialogRuns.silenced(webView) { return completionHandler(false) }
         if askAgent(webView, frame: frame, message: message, kind: .confirm, reply: { ok, _ in completionHandler(ok) }) { return }
         if let tab = paneAsking(webView) {
-            return askInPane(tab, frame: frame, message: message, kind: .confirm) { ok, _ in completionHandler(ok) }
+            return askInPane(tab, webView, frame: frame, message: message, kind: .confirm) { ok, _ in completionHandler(ok) }
         }
         ask(from: webView, show: {
             let alert = Dialogs.alert(from: frame, saying: message)
@@ -190,7 +202,7 @@ extension Browser {
         if DialogRuns.silenced(webView) { return completionHandler(nil) }
         if askAgent(webView, frame: frame, message: prompt, kind: .prompt(""), reply: { ok, text in completionHandler(ok ? (text ?? "") : nil) }) { return }
         if let tab = paneAsking(webView) {
-            return askInPane(tab, frame: frame, message: prompt, kind: .prompt(defaultText ?? "")) { ok, text in
+            return askInPane(tab, webView, frame: frame, message: prompt, kind: .prompt(defaultText ?? "")) { ok, text in
                 completionHandler(ok ? (text ?? "") : nil)
             }
         }
@@ -457,7 +469,116 @@ enum DialogRuns {
     }
 }
 
+@MainActor
+final class DialogSilence: Equatable {
+    private(set) weak var page: WKWebView?
+    var ticked = false
+
+    init(_ page: WKWebView?) {
+        self.page = page
+    }
+
+    nonisolated static func == (one: DialogSilence, other: DialogSilence) -> Bool { one === other }
+
+    func taken() {
+        guard ticked, let page else { return }
+        DialogRuns.answered(page, silence: true)
+    }
+}
+
+final class DialogSilenceBox: KitHoverView {
+    static let side: CGFloat = 14
+    static let gap: CGFloat = 7
+
+    var isOn = false {
+        didSet {
+            guard isOn != oldValue else { return }
+            paint()
+            setAccessibilityValue(isOn ? "on" : "off")
+        }
+    }
+    var changed: ((Bool) -> Void)?
+
+    private let square = KitBox(fill: nil, corners: .radius(4))
+    private let mark = KitSymbol("checkmark", style: KitSymbol.Style(size: 9, weight: .bold), tint: .white)
+    private let words: KitLabel
+
+    init(isOn: Bool, font: NSFont, color: NSColor) {
+        self.isOn = isOn
+        words = KitLabel(Dialogs.silenceWords, font: font, color: color)
+        super.init(frame: .zero)
+        wantsLayer = true
+        words.setAccessibilityElement(false)
+        mark.setAccessibilityElement(false)
+        addSubview(square)
+        square.addSubview(mark)
+        addSubview(words)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.checkBox)
+        setAccessibilityLabel(Dialogs.silenceWords)
+        setAccessibilityValue(isOn ? "on" : "off")
+        paint()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var isFlipped: Bool { true }
+
+    override var intrinsicContentSize: NSSize {
+        let text = words.measure(width: .greatestFiniteMagnitude)
+        return NSSize(width: Self.side + Self.gap + ceil(text.width), height: max(Self.side, ceil(text.height)))
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func mouseDown(with event: NSEvent) {}
+
+    override func mouseUp(with event: NSEvent) {
+        guard bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
+        flip()
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        flip()
+        return true
+    }
+
+    func flip() {
+        isOn.toggle()
+        changed?(isOn)
+    }
+
+    override func hoverChanged() { paint() }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        paint()
+    }
+
+    private func paint() {
+        let dark = kitDark
+        let (fill, knob) = KitSwitch.colors(on: true, dark: dark, lit: hovering)
+        square.fill = isOn ? fill : KitWash.track.color(dark: dark, plus: hovering ? 0.03 : 0)
+        square.stroke = isOn ? nil : KitColor.hairline
+        mark.tint = knob
+        mark.isHidden = !isOn
+    }
+
+    override func layout() {
+        super.layout()
+        let box = NSRect(x: 0, y: (bounds.height - Self.side) / 2, width: Self.side, height: Self.side)
+        square.frame = kitSnap(box)
+        mark.centre(in: square.bounds)
+        let text = words.measure(width: .greatestFiniteMagnitude)
+        let x = Self.side + Self.gap
+        words.frame = kitSnap(NSRect(x: x, y: (bounds.height - ceil(text.height)) / 2, width: max(0, bounds.width - x), height: ceil(text.height)))
+    }
+}
+
 enum Dialogs {
+    static let silenceWords = "Don't let this page show more dialogs"
+
     static func alert(from frame: WKFrameInfo, saying message: String) -> NSAlert {
         let alert = NSAlert()
         // The site's name as the title, so a page can't dress its message up
@@ -481,7 +602,7 @@ enum Dialogs {
         if DialogRuns.silenced(webView) { return finish(.cancel) }
         if DialogRuns.offersSilence(webView) {
             alert.showsSuppressionButton = true
-            alert.suppressionButton?.title = "Don't let this page show more dialogs"
+            alert.suppressionButton?.title = Dialogs.silenceWords
         }
         show(alert, over: webView) { [weak webView] answer in
             if let webView {

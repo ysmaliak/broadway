@@ -36,7 +36,7 @@ extension Suggestion {
 enum FieldLine {
     enum Item {
         case box(NSView, CGFloat, CGFloat)
-        case text(KitLabel, priority: Int = 0, fixed: Bool = false)
+        case text(KitLabel, priority: Int = 0, fixed: Bool = false, least: CGFloat = 0)
         case spacer(CGFloat)
     }
 
@@ -49,20 +49,20 @@ enum FieldLine {
         let height = view.bounds.height
         var left = view.bounds.width - padding - (trailing ?? padding) - spacing * CGFloat(max(0, items.count - 1))
         var widths = [CGFloat](repeating: 0, count: items.count)
-        var flexible: [(index: Int, priority: Int, ideal: CGFloat)] = []
+        var flexible: [(index: Int, priority: Int, ideal: CGFloat, least: CGFloat)] = []
         var spacer: Int?
         for (index, item) in items.enumerated() {
             switch item {
             case .box(_, let width, _):
                 widths[index] = width
                 left -= width
-            case .text(let label, let priority, let fixed):
+            case .text(let label, let priority, let fixed, let least):
                 let ideal = width(label, scale: scale)
                 if fixed {
                     widths[index] = ideal
                     left -= ideal
                 } else {
-                    flexible.append((index, priority, ideal))
+                    flexible.append((index, priority, ideal, least))
                 }
             case .spacer(let least):
                 widths[index] = least
@@ -72,9 +72,10 @@ enum FieldLine {
         }
         for priority in Set(flexible.map(\.priority)).sorted(by: >) {
             let group = flexible.filter { $0.priority == priority }.sorted { $0.ideal < $1.ideal }
+            let kept = flexible.filter { $0.priority < priority }.reduce(0) { $0 + min($1.ideal, $1.least) }
             var count = CGFloat(group.count)
             for entry in group {
-                let take = min(entry.ideal, max(0, left / count))
+                let take = min(entry.ideal, max(0, (left - kept) / count))
                 widths[entry.index] = take
                 left -= take
                 count -= 1
@@ -88,7 +89,7 @@ enum FieldLine {
             case .box(let box, _, let tall):
                 let rect = NSRect(x: x, y: (height - tall) / 2, width: width, height: tall)
                 if let symbol = box as? KitSymbol { symbol.centre(in: rect) } else { box.frame = view.kitSnap(rect) }
-            case .text(let label, _, let fixed):
+            case .text(let label, _, let fixed, _):
                 if !fixed, label.runs.count == 1, label.overflow == .tail { KitLabelFit.tail(label, width: width) }
                 label.frame = view.kitSnap(NSRect(x: x, y: 0, width: width, height: height))
             case .spacer:

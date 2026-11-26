@@ -768,7 +768,7 @@ final class BrowserToolbox: AgentToolbox {
     private var prefs: Preferences? { (Browsers.forAgents(keeping: browser) ?? Browsers.front)?.prefs }
 
     func gate(_ act: AgentAct, tab: Tab?, site: String?, task: UUID?, quote: String = "", reason: String = "",
-                      said: String = "The page says", title: String? = nil) async -> ToolOutcome? {
+                      said: String = "The page says", title: String? = nil, silence: DialogSilence? = nil) async -> ToolOutcome? {
         let rule = AgentSites.shared.rule(for: site)
         switch AgentPolicy.verdict(act, mode: prefs?.agentMode ?? .auto, rule: rule) {
         case .go:
@@ -791,6 +791,7 @@ final class BrowserToolbox: AgentToolbox {
         question.quote = AgentQuestion.clean(quote)
         question.reason = AgentQuestion.clean(reason, limit: 240)
         question.quoteLabel = said
+        question.silence = silence
         let settle = { (answer: AgentAnswer) -> ToolOutcome? in
             switch answer {
             case .yes:
@@ -894,7 +895,8 @@ final class BrowserToolbox: AgentToolbox {
         await gate(.tab, tab: tab, site: AgentSites.site(of: tab.pageAddress), task: task)
     }
 
-    func decide(_ facts: ActionFacts, final: String?, tab: Tab, task: UUID?, enter: Bool = false) async -> (refused: ToolOutcome?, asked: Bool) {
+    func decide(_ facts: ActionFacts, final: String?, tab: Tab, task: UUID?, enter: Bool = false,
+                silence: DialogSilence? = nil) async -> (refused: ToolOutcome?, asked: Bool) {
         let site = AgentSites.site(of: tab.pageAddress)
         switch ActionKind.of(facts, declared: final.flatMap(AgentAct.init(rawValue:)), enter: enter) {
         case .plain:
@@ -903,7 +905,7 @@ final class BrowserToolbox: AgentToolbox {
             return (await person(stop, tab: tab, site: site, task: task), true)
         case .act(let act):
             let title = act == .send && ActionKind.signsIn(facts) ? AgentAct.signIn.question(on: site) : nil
-            return (await gate(act, tab: tab, site: site, task: task, quote: [facts.name, facts.optionLabel, facts.optionValue].filter { !$0.isEmpty }.joined(separator: " · "), title: title), true)
+            return (await gate(act, tab: tab, site: site, task: task, quote: [facts.name, facts.optionLabel, facts.optionValue].filter { !$0.isEmpty }.joined(separator: " · "), title: title, silence: silence), true)
         }
     }
 
@@ -986,7 +988,7 @@ final class BrowserToolbox: AgentToolbox {
         var closed: AgentChange.Dialog?
         if let reached, reached.agent, name != "dialog", let question = reached.agentDialog, question.open, case .alert = question.kind {
             closed = AgentChange.Dialog(question)
-            question.answer(ok: true, text: nil)
+            question.answered(ok: true)
             reached.agentDialog = nil
         }
         reached?.agentWarned = false
@@ -1549,13 +1551,14 @@ final class BrowserToolbox: AgentToolbox {
             if case .prompt = question.kind, question.message.range(of: "password|passcode|passphrase|api.?key|card.?(?:number|num|no)|\\b(?:token|secret|card|code|pin|otp|cvv|cvc)\\b", options: .regularExpression.union(.caseInsensitive)) != nil {
                 return .failure("Agents never answer password, card or code prompts. Ask the person to.", code: .secretField)
             }
-            let decided = await decide(ActionFacts(["name": question.message]), final: arguments["final"] as? String, tab: tab, task: task)
+            let silence = question.offersSilence ? DialogSilence(question.page) : nil
+            let decided = await decide(ActionFacts(["name": question.message]), final: arguments["final"] as? String, tab: tab, task: task, silence: silence)
             if let refused = decided.refused { return refused }
             guard tab.agentDialog === question, question.open else { return .failure("That dialog has gone. Read again.", code: .staleRef) }
         }
         await mark(tab, task: task, keep: true)
         AgentWatchBox.current?.kept["answered"] = action
-        question.answer(ok: action == "accept", text: text)
+        question.answered(ok: action == "accept", text: text)
         tab.agentDialog = nil
         return .json(["pending": false, "answered": action, "website": true])
     }

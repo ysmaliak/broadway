@@ -637,7 +637,7 @@ final class FieldPlaceRowView: NSView {
             let room = bounds.width - 20 - 18 - 12 * 3 - 8 - trailingWidth
             let fits = item.place != .downloads || FieldLine.width(title, scale: kitScale) + 60 < room
             detail.alphaValue = fits ? 1 : 0
-            if fits { items.append(.text(detail)) }
+            if fits { items.append(.text(detail, least: item.place == .downloads ? 0 : (bounds.width / 4).rounded())) }
         }
         items.append(.spacer(8))
         items.append(.box(trailing, trailingWidth, bounds.height))

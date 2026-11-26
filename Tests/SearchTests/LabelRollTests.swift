@@ -337,6 +337,112 @@ final class LabelRollTests {
         #expect(capsule(badge) == nil)
     }
 
+    private func startX(_ view: NSView) -> CGFloat {
+        var x = view.convert(view.bounds, to: nil).minX
+        var at: NSView? = view
+        while let here = at {
+            for key in here.layer?.animationKeys() ?? [] {
+                guard let move = here.layer?.animation(forKey: key) as? CABasicAnimation else { continue }
+                if move.keyPath == "position", let from = (move.fromValue as? NSValue)?.pointValue {
+                    let to = (move.toValue as? NSValue)?.pointValue ?? .zero
+                    x += move.isAdditive ? from.x : from.x - to.x
+                } else if move.keyPath == "transform.translation.x", let from = move.fromValue as? NSNumber {
+                    x += CGFloat(from.doubleValue)
+                }
+            }
+            at = here.superview
+        }
+        return x
+    }
+
+    private func shown(_ host: NSView) -> NSWindow {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 240, height: 60), styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView?.wantsLayer = true
+        window.contentView?.addSubview(host)
+        windows.append(window)
+        return window
+    }
+
+    @Test(arguments: [(9, 10), (10, 9)])
+    func theCommentBubbleGlidesFromWhereItWasWhileItsCountRolls(_ old: Int, _ new: Int) throws {
+        let talk = TalkMarkView()
+        talk.thing = "tab"
+        let host = TalkHost(talk)
+        host.frame = NSRect(x: 20, y: 10, width: 160, height: 30)
+        let window = shown(host)
+        talk.count = old
+        host.needsLayout = true
+        window.contentView?.layoutSubtreeIfNeeded()
+        let glyph = try #require(talk.subviews.compactMap { $0 as? KitSymbol }.first)
+        let number = try #require(talk.subviews.compactMap { $0 as? KitLabel }.first)
+        let was = glyph.convert(glyph.bounds, to: nil).minX
+        let digit = place(of: 0, in: number)
+        let oldRuns = number.runs
+
+        talk.count = new
+        host.needsLayout = true
+        window.contentView?.layoutSubtreeIfNeeded()
+        let now = glyph.convert(glyph.bounds, to: nil).minX
+        let move = try #require(glyph.layer?.animation(forKey: "roll.position") as? CABasicAnimation)
+        let gone = try #require(leaving(number).first?.subviews.first)
+        let goneStart = startX(gone) + KitLabel.offsets(oldRuns)[0]
+
+        #expect(abs(now - was) > 3)
+        #expect(abs(startX(glyph) - was) < 0.5)
+        #expect(abs(goneStart - digit) < 0.5)
+        #expect(move.duration > 0.1)
+        #expect(coming(number).count == 1)
+    }
+
+    @Test(arguments: [(9, 10), (10, 9)])
+    func theLiveFoldersDotHoldsItsPlaceWhileItsCountRolls(_ old: Int, _ new: Int) async throws {
+        let browser = Browser(record: WindowRecord())
+        browser.leaveFiles()
+        browser.prefs.liveFolders = true
+        for folder in LiveFolders.shared.folders { LiveFolders.shared.remove(folder.id) }
+        defer {
+            for folder in LiveFolders.shared.folders { LiveFolders.shared.remove(folder.id) }
+            browser.prefs.liveFolders = false
+            browser.closeAll()
+        }
+        let folder = LiveFolders.shared.add(name: "Pull Requests", source: .reviewRequests, space: browser.spaceID)
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let keys = (0..<10).map { "https://github.com/acme/rocket/pull/\($0)" }
+        func read(_ listed: Int, fresh: Int, minutes: Double) {
+            let items = keys.prefix(listed).enumerated().map { index, key in
+                LiveItem(key: key, title: key, activity: index < fresh ? start.addingTimeInterval(minutes * 60) : start)
+            }
+            LiveFolders.shared.apply(.items(Array(items), nil), to: folder.id, now: start.addingTimeInterval(minutes * 60 + 1))
+        }
+        read(10, fresh: 0, minutes: 0)
+        read(10, fresh: old, minutes: 1)
+        let status = LiveStatusView(browser: browser, id: folder.id, collapsed: true)
+        let host = StatusHost(status)
+        host.frame = NSRect(x: 20, y: 10, width: 200, height: 30)
+        let window = shown(host)
+        func count() -> KitLabel? { status.subviews.compactMap { $0 as? KitLabel }.first { Int($0.text) != nil && !$0.isHidden } }
+        for _ in 0..<100 where count()?.text != "\(old)" { try await Task.sleep(for: .milliseconds(10)) }
+        host.needsLayout = true
+        window.contentView?.layoutSubtreeIfNeeded()
+        let dot = try #require(status.subviews.first { $0 is UnseenDotView })
+        let label = try #require(count())
+        let was = dot.convert(dot.bounds, to: nil).minX
+        let digit = place(of: 0, in: label)
+        let oldRuns = label.runs
+
+        if new > old { read(10, fresh: new, minutes: 2) } else { read(new, fresh: new, minutes: 2) }
+        for _ in 0..<100 where count()?.text != "\(new)" { try await Task.sleep(for: .milliseconds(10)) }
+        host.needsLayout = true
+        window.contentView?.layoutSubtreeIfNeeded()
+        let gone = try #require(leaving(label).first?.subviews.first)
+
+        #expect(label.text == "\(new)")
+        #expect(abs(startX(dot) - was) < 0.5)
+        #expect(abs(dot.convert(dot.bounds, to: nil).minX - was) < 0.5)
+        #expect(abs(startX(gone) + KitLabel.offsets(oldRuns)[0] - digit) < 0.5)
+    }
+
     @Test func theSameTextAgainChangesNothing() {
         let word = label()
         word.roll("3", for: "folder")
@@ -369,6 +475,52 @@ private final class BadgeHost: NSView {
         super.layout()
         let size = badge.intrinsicContentSize
         badge.frame = NSRect(x: ((bounds.width - size.width) / 2 * 2).rounded() / 2, y: 4, width: size.width, height: size.height)
+    }
+}
+
+private final class TalkHost: NSView {
+    let talk: TalkMarkView
+
+    init(_ talk: TalkMarkView) {
+        self.talk = talk
+        super.init(frame: .zero)
+        wantsLayer = true
+        talk.wantsLayer = true
+        addSubview(talk)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var isFlipped: Bool { true }
+
+    override func layout() {
+        super.layout()
+        let size = talk.intrinsicContentSize
+        let wide = ceil(size.width)
+        talk.frame = NSRect(x: bounds.width - 10 - wide, y: 6, width: wide, height: size.height)
+    }
+}
+
+private final class StatusHost: NSView {
+    let status: NSView
+
+    init(_ status: NSView) {
+        self.status = status
+        super.init(frame: .zero)
+        wantsLayer = true
+        addSubview(status)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var isFlipped: Bool { true }
+
+    override func layout() {
+        super.layout()
+        let size = status.fittingSize
+        status.kitSetFrame(NSRect(x: bounds.width - 10 - size.width, y: (bounds.height - size.height) / 2, width: size.width, height: size.height))
     }
 }
 

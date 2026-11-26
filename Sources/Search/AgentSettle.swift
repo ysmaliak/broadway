@@ -264,7 +264,7 @@ extension BrowserToolbox {
             let elapsed = now.timeIntervalSince(start)
             if let question = tab.agentDialog, question.open, case .alert = question.kind, alerted == nil {
                 alerted = AgentChange.Dialog(question)
-                question.answer(ok: true, text: nil)
+                question.answered(ok: true)
                 tab.agentDialog = nil
                 lastBusy = now
             }

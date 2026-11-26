@@ -484,6 +484,61 @@ final class FieldPlaceTests {
         window.contentView = nil
     }
 
+    private func placeRow(title: String, address: String) -> (window: NSWindow, row: FieldPlaceRowView) {
+        let item = FieldPlaceItem(place: .history, id: "row", title: title, detail: address, aside: "5 min ago",
+                                  url: URL(string: "https://" + address)!)
+        let size = NSSize(width: 760, height: 600)
+        let field = OmniboxView.frame(in: size)
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let host = KitFlippedView(frame: NSRect(origin: .zero, size: size))
+        window.contentView = host
+        defer { window.contentView = nil }
+        let row = FieldPlaceRowView(item: item, lit: false)
+        host.addSubview(row)
+        row.frame = NSRect(x: field.minX + 7, y: field.minY + 100, width: field.width - 14, height: OmniboxView.rowHeight)
+        host.layoutSubtreeIfNeeded()
+        return (window, row)
+    }
+
+    private func place(_ view: NSView) -> NSRect { view.convert(view.bounds, to: nil) }
+
+    @Test func aLongTitleAndItsAddressShareTheRoomBeforeTheTime() throws {
+        let title = String(String(repeating: "Notes from the long meeting about the spring plan ", count: 5).prefix(200))
+        let address = "news.example/articles/2026/11/26/notes-from-the-long-meeting"
+        let (window, row) = placeRow(title: title, address: address)
+        defer { window.contentView = nil }
+        let labels = row.kitSubviews(of: KitLabel.self)
+        let shownTitle = try #require(labels.first { $0.text.hasPrefix("Notes from") })
+        let shownAddress = try #require(labels.first { $0.text == address })
+        let time = try #require(labels.first { $0.text == "5 min ago" })
+
+        #expect(title.count == 200)
+        #expect(place(shownTitle).width > 100)
+        #expect(place(shownAddress).width > 100)
+        #expect(place(shownTitle).maxX <= place(shownAddress).minX)
+        #expect(place(time).minX - place(shownAddress).maxX >= 12)
+        #expect(shownAddress.measure(width: .greatestFiniteMagnitude).width > place(shownAddress).width)
+        #expect(shownAddress.overflow == .middle)
+        #expect(shownTitle.overflow == .tail)
+    }
+
+    @Test func anOrdinaryTitleStaysWholeWhileALongAddressGivesWay() throws {
+        let title = "Release notes for the spring update of the app"
+        let address = "news.example/articles/2026/11/26/release-notes-for-the-spring-update-of-the-app-in-full"
+        let (window, row) = placeRow(title: title, address: address)
+        defer { window.contentView = nil }
+        let labels = row.kitSubviews(of: KitLabel.self)
+        let shownTitle = try #require(labels.first { $0.text == title })
+        let shownAddress = try #require(labels.first { $0.text == address })
+        let time = try #require(labels.first { $0.text == "5 min ago" })
+
+        #expect(place(shownTitle).width >= shownTitle.measure(width: .greatestFiniteMagnitude).width - 0.5)
+        #expect(place(shownAddress).width > 100)
+        #expect(shownAddress.measure(width: .greatestFiniteMagnitude).width > place(shownAddress).width)
+        #expect(place(time).minX - place(shownAddress).maxX >= 12)
+    }
+
     @Test func newestScansWithoutSortingEverything() {
         for index in 0..<5000 {
             browser.history.take(URL(string: "https://bulk.example/\(index)")!, title: "Bulk \(index)", count: 1,

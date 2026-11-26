@@ -73,7 +73,7 @@ extension KitLabel {
         guard let state = rolled, state.busy, state.curve.animates, view.window != nil, let superview = view.superview, let layer = view.layer else { return }
         let now = view.frame
         var was = superview.convert(place, from: nil)
-        if abs(was.minX - now.minX) > abs(was.width - now.width) + 1 || abs(was.minY - now.minY) > 1 { was = local }
+        if abs(was.minX - now.minX) > max(abs(was.width - now.width), state.give) + 1 || abs(was.minY - now.minY) > 1 { was = local }
         was.origin.y = now.minY
         guard abs(was.width - now.width) > 0.01 || abs(was.minX - now.minX) > 0.01 || abs(was.minY - now.minY) > 0.01 else { return }
         let anchor = layer.anchorPoint

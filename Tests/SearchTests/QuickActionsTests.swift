@@ -433,6 +433,76 @@ final class QuickActionsTests {
         #expect(!list.kitSubviews(of: KitBox.self).contains { $0.superview === rows.first?.superview && $0.frame.height <= 1 })
     }
 
+    private func fieldMenu(_ count: Int) throws -> (window: NSWindow, box: OmniboxView, browser: Browser) {
+        let browser = fresh()
+        let items = (0..<count).map { index in
+            FieldMenuItem(id: "row\(index)", title: index == count - 1 ? "Clear History…" : "Action \(index)", symbol: "link",
+                          parted: index == count - 1 && count > 1) {}
+        }
+        browser.edit()
+        browser.fieldMenu.open(heading: "example.com", items: items)
+        let size = NSSize(width: 760, height: 600)
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let box = OmniboxView(browser: browser)
+        window.contentView = box
+        box.frame = NSRect(origin: .zero, size: size)
+        box.needsLayout = true
+        box.layoutSubtreeIfNeeded()
+        return (window, box, browser)
+    }
+
+    private func clearOfTheFoot(_ box: OmniboxView) throws -> (rows: [Bool], last: Bool) {
+        let bar = try #require(box.kitSubviews(of: FieldBarView.self).first)
+        let list = try #require(box.kitSubviews(of: FieldMenuListView.self).first)
+        let foot = bar.convert(bar.bounds, to: nil)
+        let seen = list.convert(list.bounds, to: nil)
+        let rows = list.kitSubviews(of: FieldMenuRowView.self).sorted { $0.frame.minY < $1.frame.minY }
+        let shown = rows.map { $0.convert($0.bounds, to: nil) }.filter { $0.intersects(seen) }
+        let last = try #require(rows.last).convert(try #require(rows.last).bounds, to: nil)
+        return (shown.map { $0.minY >= foot.maxY }, last.minY >= foot.maxY && last.maxY <= seen.maxY)
+    }
+
+    @Test func aShortRowMenuOpensWithEveryRowClearOfTheFoot() throws {
+        let (window, box, browser) = try fieldMenu(3)
+        defer {
+            window.contentView = nil
+            browser.closeAll()
+        }
+
+        let clear = try clearOfTheFoot(box)
+
+        #expect(clear.rows.count == 3)
+        #expect(clear.rows.allSatisfy { $0 })
+        #expect(clear.last)
+    }
+
+    @Test(arguments: [9, 12])
+    func aLongRowMenuScrollsItsLastRowClearOfTheFoot(_ count: Int) throws {
+        let (window, box, browser) = try fieldMenu(count)
+        defer {
+            window.contentView = nil
+            browser.closeAll()
+        }
+        let list = try #require(box.kitSubviews(of: FieldMenuListView.self).first)
+        let scroll = try #require(list.kitSubviews(of: NSScrollView.self).first)
+        let atOpen = try clearOfTheFoot(box)
+
+        let clip = scroll.contentView
+        clip.setBoundsOrigin(clip.constrainBoundsRect(NSRect(x: 0, y: 100_000, width: clip.bounds.width, height: clip.bounds.height)).origin)
+        scroll.reflectScrolledClipView(clip)
+        let scrolled = try clearOfTheFoot(box)
+        clip.setBoundsOrigin(.zero)
+        browser.fieldMenu.picked = count - 1
+        list.needsLayout = true
+        box.layoutSubtreeIfNeeded()
+        let walked = try clearOfTheFoot(box)
+
+        #expect(!atOpen.last)
+        #expect(scrolled.last)
+        #expect(walked.last)
+    }
+
     @Test func walkingWrapsAndAnEmptySearchRunsNothing() {
         let menu = FieldMenu()
         var ran = 0

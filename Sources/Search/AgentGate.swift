@@ -253,6 +253,7 @@ struct AgentQuestion: Identifiable, Equatable {
     var offersAlways = true
     var signs = false
     var shown = Date()
+    var silence: DialogSilence?
 
     var keyDelay: TimeInterval {
         switch kind {
@@ -310,6 +311,7 @@ final class AgentDesk {
 
     func take(_ id: UUID, _ answer: AgentAnswer) {
         guard let done = waiting.removeValue(forKey: id) else { return }
+        if answer != .dropped { pending.first { $0.id == id }?.silence?.taken() }
         pending.removeAll { $0.id == id }
         AgentNotice.taken(id)
         done.resume(returning: answer)
@@ -404,6 +406,7 @@ final class AgentCardView: NSView {
     private let reason = AgentCardView.wrapping(lines: 3)
     private var buttons: [NSView] = []
     private var choices: [AgentChoiceRow] = []
+    private var silenceBox: DialogSilenceBox?
     var frozen = false
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -497,6 +500,13 @@ final class AgentCardView: NSView {
         for row in choices { row.removeFromSuperview() }
         buttons = []
         choices = []
+        silenceBox?.removeFromSuperview()
+        silenceBox = question.silence.map { silence in
+            let box = DialogSilenceBox(isOn: silence.ticked, font: .systemFont(ofSize: 12), color: KitColor.glassMuted)
+            box.changed = { on in silence.ticked = on }
+            stage.addSubview(box)
+            return box
+        }
         let id = question.id
         func key(_ keys: String, _ word: String, _ answer: AgentAnswer) -> KitGlassKey {
             let made = KitGlassKey(title: word) { AgentDesk.shared.take(id, answer) }
@@ -570,6 +580,7 @@ final class AgentCardView: NSView {
         if !quote.isHidden { height += 8 + self.height(of: quote, width: inner + 4) }
         if !reason.isHidden { height += 8 + self.height(of: reason, width: inner + 4) }
         if !choices.isEmpty { height += 8 + CGFloat(choices.count) * (AgentChoiceRow.height + 4) }
+        if let silenceBox { height += 8 + silenceBox.intrinsicContentSize.height }
         height += 8 + 22 + Self.pad
         return height
     }
@@ -628,6 +639,12 @@ final class AgentCardView: NSView {
                 y += AgentChoiceRow.height + 4
             }
             y -= 4
+        }
+        if let silenceBox {
+            y += 8
+            let size = silenceBox.intrinsicContentSize
+            silenceBox.frame = stage.kitSnap(NSRect(x: Self.pad, y: y, width: min(size.width, inner), height: size.height))
+            y += size.height
         }
         y += 8
         var x = Self.pad
