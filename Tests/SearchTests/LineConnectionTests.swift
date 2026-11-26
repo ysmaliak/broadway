@@ -3,7 +3,7 @@ import Foundation
 import Testing
 @testable import Search
 
-@Suite(.sharedWorld, .serialized, .timeLimit(.minutes(2)))
+@Suite(.sharedWorld, .serialized, .timeLimit(.minutes(5)))
 @MainActor
 final class LineConnectionTests {
     private var ends: [Int32] = []

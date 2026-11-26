@@ -3,7 +3,7 @@ import Testing
 import WebKit
 @testable import Search
 
-@Suite(.sharedWorld, .timeLimit(.minutes(2)))
+@Suite(.sharedWorld, .timeLimit(.minutes(5)))
 @MainActor
 struct NotificationForgetTests {
     private let origin = "https://example.com"

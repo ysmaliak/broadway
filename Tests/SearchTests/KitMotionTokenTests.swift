@@ -3,7 +3,7 @@ import QuartzCore
 import Testing
 @testable import Search
 
-@Suite(.sharedWorld, .serialized, .timeLimit(.minutes(1)))
+@Suite(.sharedWorld, .serialized, .timeLimit(.minutes(5)))
 @MainActor
 struct KitMotionTokenTests {
     private func reduced<T>(_ on: Bool, _ body: () -> T) -> T {

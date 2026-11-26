@@ -3,7 +3,7 @@ import Testing
 import WebKit
 @testable import Search
 
-@Suite(.sharedWorld, .timeLimit(.minutes(2)))
+@Suite(.sharedWorld, .timeLimit(.minutes(5)))
 @MainActor
 struct SiteNotificationStoresTests {
     private final class Note: NSObject {

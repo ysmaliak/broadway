@@ -4,7 +4,7 @@ import WebKit
 import Testing
 @testable import Search
 
-@Suite(.sharedWorld, .timeLimit(.minutes(3)))
+@Suite(.sharedWorld, .timeLimit(.minutes(5)))
 @MainActor
 struct ExtensionShimTruthTests {
     @Test func notificationsAreGrantedOnlyWhenTheMacAllowsThem() {

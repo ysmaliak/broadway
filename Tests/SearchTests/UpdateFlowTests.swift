@@ -40,6 +40,11 @@ struct UpdateFlowTests {
         try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
     }
 
+    private func until(_ seconds: Double = 10, _ done: () -> Bool) async {
+        let end = Date().addingTimeInterval(seconds)
+        while !done(), Date() < end { await turn(0.01) }
+    }
+
     private func staged(_ flow: UpdateFlow, _ update: UpdateFound) {
         flow.found(update, stage: .notDownloaded, informational: false) { _ in }
         flow.downloadStarted()
@@ -118,7 +123,7 @@ struct UpdateFlowTests {
         let beganAfterRead = engine.begins
         flow.found(b, stage: .installing, informational: false) { replies.append($0) }
         flow.cycleEnded()
-        await turn()
+        await until { engine.begins == 2 }
         let beganAgain = engine.begins
         flow.found(c, stage: .notDownloaded, informational: false) { replies.append($0) }
         flow.downloadStarted()
