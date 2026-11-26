@@ -21,7 +21,7 @@ enum ExtensionNative {
     }
 
     /// Where Chromium browsers look, per user and for the whole Mac.
-    private static var folders: [URL] {
+    static var folders: [URL] {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let support = home.appendingPathComponent("Library/Application Support")
         return [
@@ -40,28 +40,30 @@ enum ExtensionNative {
     }
 
     /// The program for `name`, if one is registered and lets this extension in.
-    private static func host(_ name: String, for extensionID: String) throws -> URL {
+    static func host(_ name: String, for extensionID: String, in folders: [URL] = folders) throws -> URL {
         guard name.range(of: #"^[a-z0-9_]+(\.[a-z0-9_]+)*$"#, options: .regularExpression) != nil else {
             throw Refused(why: "Invalid native messaging host name")
         }
         let origin = "chrome-extension://\(extensionID)/"
+        var forbidden = false
         for folder in folders {
             let file = folder.appendingPathComponent(name + ".json")
             guard let data = try? Data(contentsOf: file),
                   let manifest = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  manifest["name"] as? String == name, manifest["type"] as? String == "stdio",
                   let path = manifest["path"] as? String
             else { continue }
             let allowed = manifest["allowed_origins"] as? [String] ?? []
             guard allowed.contains(origin) else {
-                throw Refused(why: "Access to the specified native messaging host is forbidden.")
+                forbidden = true
+                continue
             }
             let program = path.hasPrefix("/") ? URL(fileURLWithPath: path) : folder.appendingPathComponent(path)
-            guard FileManager.default.isExecutableFile(atPath: program.path) else {
-                throw Refused(why: "Specified native messaging host not found.")
-            }
+            if !path.hasPrefix("/"), !program.standardizedFileURL.path.hasPrefix(folder.standardizedFileURL.path + "/") { continue }
+            guard FileManager.default.isExecutableFile(atPath: program.path) else { continue }
             return program
         }
-        throw Refused(why: "Specified native messaging host not found.")
+        throw Refused(why: forbidden ? "Access to the specified native messaging host is forbidden." : "Specified native messaging host not found.")
     }
 
     /// `runtime.sendNativeMessage`: run, send one, read one, stop.

@@ -11,6 +11,7 @@ struct Keep: Codable, Identifiable, Equatable {
     var from: String
     var path: String
     var date: Date
+    var number: Int? = nil
 
     var id: String { path }
 
@@ -46,7 +47,25 @@ final class Loot {
         Store.settings.set(date, forKey: "downloads.cleared")
     }
 
+    private var promised: [String: Int] = [:]
+
+    func nextNumber() -> Int {
+        let number = Store.settings.integer(forKey: "downloads.lastNumber") + 1
+        Store.settings.set(number, forKey: "downloads.lastNumber")
+        return number
+    }
+
+    func promise(_ number: Int, for path: String) {
+        promised[path] = number
+    }
+
+    func kept(number: Int) -> Keep? {
+        kept.first { $0.number == number }
+    }
+
     func add(_ keep: Keep) {
+        var keep = keep
+        keep.number = promised.removeValue(forKey: keep.path) ?? keep.number ?? nextNumber()
         kept.removeAll { $0.path == keep.path }
         kept.insert(keep, at: 0)
         if kept.count > 500 { kept.removeLast(kept.count - 500) }
@@ -54,6 +73,8 @@ final class Loot {
     }
 
     func restore(_ keep: Keep) {
+        var keep = keep
+        if keep.number == nil { keep.number = nextNumber() }
         kept.removeAll { $0.path == keep.path }
         let at = kept.firstIndex { $0.date <= keep.date } ?? kept.endIndex
         kept.insert(keep, at: at)
@@ -97,6 +118,11 @@ final class Loot {
             return
         }
         kept = list
+        guard kept.contains(where: { $0.number == nil }) else { return }
+        for index in kept.indices.reversed() where kept[index].number == nil {
+            kept[index].number = nextNumber()
+        }
+        save()
     }
 
     private func save() {

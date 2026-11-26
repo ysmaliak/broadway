@@ -25,6 +25,7 @@ final class ExtensionPopup: NSObject, WKUIDelegate, WKNavigationDelegate {
     /// so "the current window" from a popup is the browser's, and so is the
     /// last focused one.
     private var page: PopupPage?
+    private weak var pageContext: WKWebExtensionContext?
     private var measuring: Timer?
     private(set) var extensionID: String?
     /// The popup's web view, while one is up — for the bench.
@@ -74,9 +75,10 @@ final class ExtensionPopup: NSObject, WKUIDelegate, WKNavigationDelegate {
 
         self.web = web
         extensionID = context.uniqueIdentifier
-        let page = PopupPage(web: web)
+        let page = PopupPage(web: web, owner: context.uniqueIdentifier)
         self.page = page
-        Extensions.shared.controller.didOpenTab(page)
+        pageContext = context
+        context.didOpenTab(page)
 
         shown = false
         let closed: () -> Void = { [weak self, weak stage] in
@@ -108,6 +110,8 @@ final class ExtensionPopup: NSObject, WKUIDelegate, WKNavigationDelegate {
 
     /// Each extension's popup size, so the next opening starts there.
     private static var lastSize: [String: NSSize] = [:]
+
+    static func forget(_ id: String) { lastSize[id] = nil }
 
     private var shown = false
 
@@ -144,8 +148,9 @@ final class ExtensionPopup: NSObject, WKUIDelegate, WKNavigationDelegate {
 
     /// Tells WebKit the popup's window and tab are gone.
     private func forget() {
-        if let page { Extensions.shared.controller.didCloseTab(page, windowIsClosing: false) }
+        if let page { pageContext?.didCloseTab(page, windowIsClosing: false) }
         page = nil
+        pageContext = nil
         popup = nil
         web = nil
         extensionID = nil
@@ -311,14 +316,20 @@ final class ExtensionPopup: NSObject, WKUIDelegate, WKNavigationDelegate {
 @MainActor
 final class PopupPage: NSObject, WKWebExtensionTab {
     weak var web: WKWebView?
+    let owner: String
 
-    init(web: WKWebView) { self.web = web }
+    init(web: WKWebView, owner: String) {
+        self.web = web
+        self.owner = owner
+    }
+
+    private func sealed(_ context: WKWebExtensionContext) -> Bool { context.uniqueIdentifier != owner }
 
     func window(for context: WKWebExtensionContext) -> (any WKWebExtensionWindow)? { Extensions.shared.window }
     func indexInWindow(for context: WKWebExtensionContext) -> Int { NSNotFound }
-    func webView(for context: WKWebExtensionContext) -> WKWebView? { web }
-    func title(for context: WKWebExtensionContext) -> String? { web?.title }
-    func url(for context: WKWebExtensionContext) -> URL? { web?.url }
+    func webView(for context: WKWebExtensionContext) -> WKWebView? { sealed(context) ? nil : web }
+    func title(for context: WKWebExtensionContext) -> String? { sealed(context) ? nil : web?.title }
+    func url(for context: WKWebExtensionContext) -> URL? { sealed(context) ? nil : web?.url }
     func isLoadingComplete(for context: WKWebExtensionContext) -> Bool { !(web?.isLoading ?? false) }
     func isSelected(for context: WKWebExtensionContext) -> Bool { false }
     func close(for context: WKWebExtensionContext) async throws { ExtensionPopup.shared.close() }

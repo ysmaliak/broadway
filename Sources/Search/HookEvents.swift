@@ -171,7 +171,7 @@ enum HookDownloads {
                 await MainActor.run {
                     if let moved, moved != file, let kept = loot.kept.first(where: { $0.path == file.path }) {
                         loot.forget(kept)
-                        loot.restore(Keep(name: moved.lastPathComponent, from: kept.from, path: moved.path, date: kept.date))
+                        loot.restore(Keep(name: moved.lastPathComponent, from: kept.from, path: moved.path, date: kept.date, number: kept.number))
                     }
                     done?(moved)
                 }

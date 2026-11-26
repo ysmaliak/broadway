@@ -8659,6 +8659,7 @@ extension Browser: WKDownloadDelegate {
         if let asked = source,
            let id = ExtensionShims.askedDownloads.removeValue(forKey: asked) {
             ExtensionShims.ownDownloads[id, default: []].insert(file.path)
+            if let number = ExtensionShims.askedNumbers.removeValue(forKey: asked) { loot.promise(number, for: file.path) }
         }
         saved(file, from: source)
         HookDownloads.finished(download, file: file, source: source, in: self)
@@ -8768,6 +8769,7 @@ extension Browser: WKDownloadDelegate {
         DownloadTrace.error("failed", error, ["url": download.originalRequest?.url?.absoluteString ?? ""], private: tracesPrivately(download))
         if speculating.removeValue(forKey: ObjectIdentifier(download)) != nil { return }
         AgentDownloadWatch.failed(download, error.localizedDescription)
+        if let asked = download.originalRequest?.url { ExtensionShims.askedNumbers[asked] = nil }
         guard let ended = fetches.fail(download, error: error, resumeData: resumeData) else { return }
         ended.owner.relinquish(download)
         if ended.announceFailure { announce("That download didn't finish", kind: .error) }

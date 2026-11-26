@@ -18,7 +18,7 @@ import Security
 
 enum Crx {
     enum Refused: LocalizedError {
-        case notAnID, download(Int), empty, notCrx, unsignedOrWrong, unpack
+        case notAnID, download(Int), empty, notCrx, unsignedOrWrong, unpack, unsafe
 
         var errorDescription: String? {
             switch self {
@@ -28,6 +28,7 @@ enum Crx {
             case .notCrx: return "What came back isn't a Chrome extension"
             case .unsignedOrWrong: return "The extension's signature doesn't hold up"
             case .unpack: return "The extension couldn't be unpacked"
+            case .unsafe: return "This extension's package isn't safe to open"
             }
         }
     }
@@ -150,7 +151,9 @@ enum Crx {
     }
 
     /// Unpacks a zip into `folder`, which is replaced whole.
-    static func unpack(_ zip: Data, into folder: URL) throws {
+    static let unpackedLimit: Int64 = 500 * 1024 * 1024
+
+    static func unpack(_ zip: Data, into folder: URL, limit: Int64 = unpackedLimit) throws {
         let files = FileManager.default
         let scratch = files.temporaryDirectory.appendingPathComponent("search-crx-\(UUID().uuidString)")
         try files.createDirectory(at: scratch, withIntermediateDirectories: true)
@@ -162,7 +165,17 @@ enum Crx {
         ditto.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
         ditto.arguments = ["-x", "-k", archive.path, out.path]
         try ditto.run()
+        var over = false
+        while ditto.isRunning {
+            RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.05))
+            if size(of: out) > limit {
+                over = true
+                ditto.terminate()
+                break
+            }
+        }
         ditto.waitUntilExit()
+        if over || size(of: out) > limit { throw Refused.unsafe }
         guard ditto.terminationStatus == 0,
               files.fileExists(atPath: out.appendingPathComponent("manifest.json").path)
         else { throw Refused.unpack }
@@ -181,6 +194,15 @@ enum Crx {
     }
 
     // MARK: - pieces
+
+    private static func size(of folder: URL) -> Int64 {
+        var total: Int64 = 0
+        let items = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.fileSizeKey])
+        while let item = items?.nextObject() as? URL {
+            total += Int64((try? item.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        }
+        return total
+    }
 
     private static func le32(_ b: [UInt8], _ at: Int) -> UInt32 {
         UInt32(b[at]) | UInt32(b[at + 1]) << 8 | UInt32(b[at + 2]) << 16 | UInt32(b[at + 3]) << 24

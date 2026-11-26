@@ -2330,7 +2330,7 @@ enum ExtensionShims {
         const setPopup = a.setPopup.bind(a);
         put(a, "setPopup", (details = {}, callback) => {
           const tell = (index) => native("action.popup", [details.popup || "", index]).catch(() => {});
-          if (typeof details.tabId === "number" && chrome.tabs) chrome.tabs.get(details.tabId).then((t) => tell(t.index), () => {});
+          if (typeof details.tabId === "number" && chrome.tabs) chrome.tabs.get(details.tabId).then(async (t) => tell(placeOf(t, await frames())), () => {});
           else tell(-1);
           return setPopup(details, callback);
         });
@@ -2946,8 +2946,10 @@ enum ExtensionShims {
           // Asked from a click on the extension's button: when filling in
           // the tab it was given (mend) cost WebKit the click, Search
           // knows it was one and asks the same question.
-          return Promise.resolve(request({ permissions: theirs, origins })).catch((e) =>
+          const given = await Promise.resolve(request({ permissions: theirs, origins })).catch((e) =>
             /user gesture/i.test(String(e && e.message)) ? native("permissions.afterClick", [theirs, origins]) : Promise.reject(e));
+          if (given) await native("permissions.keep", [theirs, origins]).catch(() => {});
+          return given;
         }));
         put(p, "getAll", (callback) => {
           const pr = (async () => {
@@ -2962,6 +2964,7 @@ enum ExtensionShims {
           const { theirs, mine } = split(permissions);
           if (mine.length) await native("permissions.remove", [mine]);
           const done = theirs.length || origins.length ? await remove({ permissions: theirs, origins }) : true;
+          if (done && (theirs.length || origins.length)) await native("permissions.letGo", [theirs, origins]);
           // <all_urls> given back gives back what it is held as, *://*/*,
           // too (see Extensions.fence): contains() then says no to both.
           // Not when the manifest itself asks for every website: what it
@@ -3030,6 +3033,18 @@ enum ExtensionShims {
             await scripting.registerContentScripts(scripts);
           });
         };
+        const refresh = async () => {
+          const want = await list();
+          const ids = (await registered()).map((s) => s.id);
+          if (ids.length) await scripting.unregisterContentScripts({ ids }).catch(() => {});
+          if (!want.length) return;
+          const scripts = await Promise.all(want.map(content));
+          await scripting.registerContentScripts(scripts).catch(async (e) => {
+            if (!/duplicate/i.test(String(e && e.message))) throw e;
+            await scripting.unregisterContentScripts({ ids: scripts.map((s) => s.id) }).catch(() => {});
+            await scripting.registerContentScripts(scripts);
+          });
+        };
         const pick = (filter, l) => filter && Array.isArray(filter.ids) ? l.filter((s) => filter.ids.includes(s.id)) : l;
         const api = {
           register: async (scripts) => {
@@ -3057,9 +3072,9 @@ enum ExtensionShims {
             await save(l.filter((o) => !gone.includes(o)));
           },
           getScripts: async (filter) => pick(filter, await list()),
-          configureWorld: (properties) => native("userScripts.world", [properties || {}]),
+          configureWorld: async (properties) => { if (await native("userScripts.world", [properties || {}])) await refresh(); },
           getWorldConfigurations: () => native("userScripts.worlds", []),
-          resetWorldConfiguration: (worldId) => native("userScripts.world", [{ worldId, reset: true }]),
+          resetWorldConfiguration: async (worldId) => { if (await native("userScripts.world", [{ worldId, reset: true }])) await refresh(); },
           execute: async (injection) => {
             const file = await native("userScripts.file", [{ id: "execute-" + Date.now(), js: injection.js || [], world: injection.world }]);
             return scripting.executeScript({ target: injection.target, files: [file], world: injection.world === "MAIN" ? "MAIN" : "ISOLATED",
@@ -4105,18 +4120,26 @@ enum ExtensionShims {
                 browser.namedDownloads[url] = (name as NSString).lastPathComponent
             }
             ExtensionShims.askedDownloads[url] = id
+            let number = browser.loot.nextNumber()
+            ExtensionShims.askedNumbers[url] = number
             let download = await web.startDownload(using: URLRequest(url: url))
             browser.keep(download)
-            return browser.loot.kept.count + 1
+            return number
         case "downloads.search":
-            return browser.loot.kept.enumerated().map { index, keep in
-                ["id": index + 1, "url": keep.url.absoluteString, "finalUrl": keep.url.absoluteString,
+            let wanted = (first as? [String: Any])?["id"] as? Int
+            let going = ExtensionShims.askedNumbers.filter { wanted == nil || $0.value == wanted }.sorted { $0.value > $1.value }.map { url, number in
+                let address = url.scheme?.lowercased() == "data" ? "" : url.absoluteString
+                return ["id": number, "url": address, "finalUrl": address, "filename": "",
+                 "state": "in_progress", "exists": false, "mime": ""] as [String: Any]
+            }
+            let landed = browser.loot.kept.filter { wanted == nil || $0.number == wanted }.map { keep in
+                ["id": keep.number ?? 0, "url": keep.url.absoluteString, "finalUrl": keep.url.absoluteString,
                  "filename": keep.path, "state": "complete", "exists": keep.stillThere,
                  "startTime": ISO8601DateFormatter().string(from: keep.date), "mime": ""] as [String: Any]
             }
+            return going + landed
         case "downloads.open", "downloads.show":
-            guard let index = first as? Int, browser.loot.kept.indices.contains(index - 1) else { return nil }
-            let keep = browser.loot.kept[index - 1]
+            guard let number = first as? Int, let keep = browser.loot.kept(number: number) else { return nil }
             if api == "downloads.open" {
                 // As in Chrome, opening asks for its own permission; and only
                 // a file this extension downloaded itself, not any of yours.
@@ -4245,7 +4268,11 @@ enum ExtensionShims {
             return ["id": id, "name": found.displayName ?? "", "shortName": found.displayShortName ?? "",
                     "version": found.version ?? "", "description": found.displayDescription ?? "",
                     "enabled": true, "type": "extension", "installType": owner.installed.first { $0.id == id }?.fromStore == false ? "development" : "normal",
-                    "mayDisable": true, "offlineEnabled": true, "isApp": false, "hostPermissions": [], "permissions": []]
+                    "mayDisable": true, "offlineEnabled": true, "isApp": false,
+                    "hostPermissions": Array(Set(context.currentPermissionMatchPatterns.map(\.string))
+                        .intersection(found.allRequestedMatchPatterns.union(found.optionalPermissionMatchPatterns).map(\.string))).sorted(),
+                    "permissions": Array(Set(context.currentPermissions.filter(found.requestedPermissions.union(found.optionalPermissions).contains).map(\.rawValue))
+                        .union(allowed(id, context: context))).sorted()]
         case "management.getAll":
             return []
         case "management.setEnabled", "management.uninstallSelf":
@@ -4300,24 +4327,40 @@ enum ExtensionShims {
             let options = (named == nil ? first : (args.count > 1 ? args[1] : nil)) as? [String: Any] ?? [:]
             let key = named ?? UUID().uuidString
             let center = UNUserNotificationCenter.current()
-            _ = try? await center.requestAuthorization(options: [.alert, .sound])
+            guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true else {
+                throw Unsupported(what: "Notifications are turned off for Broadway in System Settings")
+            }
             let content = UNMutableNotificationContent()
             content.title = options["title"] as? String ?? (context.webExtension.displayName ?? "")
             content.body = options["message"] as? String ?? ""
             content.subtitle = context.webExtension.displayName ?? ""
-            try? await center.add(UNNotificationRequest(identifier: "\(id).\(key)", content: content, trigger: nil))
+            try await center.add(UNNotificationRequest(identifier: "\(id).\(key)", content: content, trigger: nil))
             return key
         case "notifications.clear":
-            if let key = first as? String {
-                UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ["\(id).\(key)"])
-            }
-            return true
+            guard let key = first as? String else { return false }
+            let center = UNUserNotificationCenter.current()
+            let shown = await center.deliveredNotifications().contains { $0.request.identifier == "\(id).\(key)" }
+            center.removeDeliveredNotifications(withIdentifiers: ["\(id).\(key)"])
+            return shown
         case "notifications.getAll":
-            return [String: Any]()
+            let prefix = "\(id)."
+            var all: [String: Any] = [:]
+            for shown in await UNUserNotificationCenter.current().deliveredNotifications() where shown.request.identifier.hasPrefix(prefix) {
+                all[String(shown.request.identifier.dropFirst(prefix.count))] = true
+            }
+            return all
         case "notifications.getPermissionLevel":
-            return "granted"
+            return notificationLevel(await UNUserNotificationCenter.current().notificationSettings().authorizationStatus)
         case "notifications.update":
-            return false
+            guard let key = first as? String, let options = (args.count > 1 ? args[1] : nil) as? [String: Any] else { return false }
+            let center = UNUserNotificationCenter.current()
+            guard let shown = await center.deliveredNotifications().first(where: { $0.request.identifier == "\(id).\(key)" }),
+                  let content = shown.request.content.mutableCopy() as? UNMutableNotificationContent
+            else { return false }
+            if let title = options["title"] as? String { content.title = title }
+            if let message = options["message"] as? String { content.body = message }
+            try await center.add(UNNotificationRequest(identifier: "\(id).\(key)", content: content, trigger: nil))
+            return true
 
         // MARK: speech
         case "tts.speak":
@@ -4378,7 +4421,7 @@ enum ExtensionShims {
                 guard error != nil else { return nil }
                 if attempt < 2 { try? await Task.sleep(for: .milliseconds(400)) }
             }
-            owner.revive(id, because: "its worker wouldn't start")
+            owner.revive(id, because: "its worker wouldn't start", clearingWorkers: true)
             return nil
         // Whether this extension was loaded before in this run of the
         // browser — an "install" then is really a restart (see the shim).
@@ -4413,13 +4456,13 @@ enum ExtensionShims {
         // MARK: the button's popup
         case "action.popup":
             let path = first as? String ?? ""
-            let index = args.dropFirst().first as? Int ?? -1
-            let visible = owner.visibleTabs(for: context)
-            if index >= 0, visible.indices.contains(index) {
-                popups[id, default: [:]][visible[index].id.uuidString] = path
-            } else {
+            let place = args.dropFirst().first
+            let live = Set(Browsers.all.flatMap { $0.tabs + $0.parked.values.flatMap(\.tabs) }.map(\.id.uuidString))
+            popups[id] = popups[id]?.filter { $0.key == "*" || live.contains($0.key) }
+            if (place as? NSNumber)?.intValue ?? -1 < 0, !(place is [String: Any]) {
                 popups[id, default: [:]]["*"] = path
-                popups[id] = popups[id]?.filter { $0.key == "*" }
+            } else if let tab = located(place, context: context, owner: owner) {
+                popups[id, default: [:]][tab.id.uuidString] = path
             }
             return nil
 
@@ -4427,17 +4470,20 @@ enum ExtensionShims {
         case "scripting.file":
             return try scriptingFile(first as? String ?? "", arguments: args.dropFirst().first as? [Any] ?? [], in: Extensions.folder(for: id))
         case "userScripts.file":
-            return try userScriptFile(first as? [String: Any] ?? [:], in: Extensions.folder(for: id))
+            let script = first as? [String: Any] ?? [:]
+            return try userScriptFile(script, in: Extensions.folder(for: id), messaging: userScriptMessaging(script, for: id))
         case "userScripts.list":
-            return (try? JSONSerialization.jsonObject(with: Data(contentsOf: Extensions.folder(for: id).appendingPathComponent("_search/userscripts.json")))) ?? []
+            return (try? JSONSerialization.jsonObject(with: Data(contentsOf: userScriptsKept("userscripts.json", for: id)))) ?? []
         case "userScripts.save":
             let folder = Extensions.folder(for: id).appendingPathComponent("_search", isDirectory: true)
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             let scripts = first as? [[String: Any]] ?? []
-            try JSONSerialization.data(withJSONObject: scripts).write(to: folder.appendingPathComponent("userscripts.json"), options: .atomic)
+            let list = userScriptsKept("userscripts.json", for: id)
+            try FileManager.default.createDirectory(at: list.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try JSONSerialization.data(withJSONObject: scripts).write(to: list, options: .atomic)
             // Files no saved script is written in any more, once a moment
             // has passed — one being injected right now is left alone.
-            let keep = Set(scripts.compactMap { try? userScriptFile($0, in: Extensions.folder(for: id)) }.map { URL(fileURLWithPath: $0).lastPathComponent })
+            let keep = Set(scripts.compactMap { try? userScriptFile($0, in: Extensions.folder(for: id), messaging: userScriptMessaging($0, for: id)) }.map { URL(fileURLWithPath: $0).lastPathComponent })
             for file in (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
             where file.lastPathComponent.hasPrefix("us-") && !keep.contains(file.lastPathComponent) {
                 let age = (try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate).map { -$0.timeIntervalSinceNow } ?? 999
@@ -4445,16 +4491,18 @@ enum ExtensionShims {
             }
             return nil
         case "userScripts.world", "userScripts.worlds":
-            let url = Extensions.folder(for: id).appendingPathComponent("_search/worlds.json")
+            let url = userScriptsKept("worlds.json", for: id)
             var worlds = (try? JSONSerialization.jsonObject(with: Data(contentsOf: url))) as? [[String: Any]] ?? []
             if api == "userScripts.worlds" { return worlds }
             let props = first as? [String: Any] ?? [:]
             let world = props["worldId"] as? String ?? ""
+            let before = worlds.first { ($0["worldId"] as? String ?? "") == world }?["messaging"] as? Bool ?? false
             worlds.removeAll { ($0["worldId"] as? String ?? "") == world }
             if props["reset"] as? Bool != true { worlds.append(props) }
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try JSONSerialization.data(withJSONObject: worlds).write(to: url, options: .atomic)
-            return nil
+            let after = props["reset"] as? Bool == true ? false : props["messaging"] as? Bool ?? false
+            return before != after
 
         // MARK: permissions Search grants itself
         case "permissions.granted":
@@ -4540,6 +4588,17 @@ enum ExtensionShims {
             let gone = Set((first as? [String]) ?? [])
             let had = Store.settings.stringArray(forKey: "extensions.granted.\(id)") ?? []
             Store.settings.set(had.filter { !gone.contains($0) }, forKey: "extensions.granted.\(id)")
+            return true
+        case "permissions.keep":
+            let given = { (status: WKWebExtensionContext.PermissionStatus) in status == .grantedExplicitly || status == .grantedImplicitly }
+            let permissions = ((first as? [String]) ?? []).map { WKWebExtension.Permission(rawValue: $0) }
+                .filter { given(context.permissionStatus(for: $0)) }
+            let sites = ((args.dropFirst().first as? [String]) ?? []).compactMap { try? WKWebExtension.MatchPattern(string: ExtensionGrants.site($0)) }
+                .filter { !Extensions.withheld($0) && given(context.permissionStatus(for: $0)) }
+            ExtensionGrants.keep(permissions, sites: sites, for: id)
+            return true
+        case "permissions.letGo":
+            ExtensionGrants.letGo((first as? [String]) ?? [], sites: (args.dropFirst().first as? [String]) ?? [], for: id)
             return true
 
         // MARK: tabs, by where they are in the row
@@ -4686,7 +4745,7 @@ enum ExtensionShims {
             return ["numOfProcessors": ProcessInfo.processInfo.processorCount, "archName": arch,
                     "modelName": model, "features": [], "processors": [], "temperatures": []]
         case "system.memory.getInfo":
-            return ["capacity": Double(ProcessInfo.processInfo.physicalMemory), "availableCapacity": Double(ProcessInfo.processInfo.physicalMemory) / 2]
+            return ["capacity": Double(ProcessInfo.processInfo.physicalMemory), "availableCapacity": availableMemory()]
         case "system.storage.getInfo":
             return []
         case "system.display.getInfo":
@@ -4787,6 +4846,39 @@ enum ExtensionShims {
     /// A function sent by an extension page inside a website's frame cannot
     /// survive the JSON message to its worker. Write it as a file for WebKit's
     /// scripting API, with its JSON arguments and final result intact.
+    static func notificationLevel(_ status: UNAuthorizationStatus) -> String {
+        switch status {
+        case .authorized, .provisional, .ephemeral: return "granted"
+        default: return "denied"
+        }
+    }
+
+    static func availableMemory() -> Double {
+        var stats = vm_statistics64()
+        var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64_data_t>.size / MemoryLayout<integer_t>.size)
+        let result = withUnsafeMutablePointer(to: &stats) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &count) }
+        }
+        guard result == KERN_SUCCESS else { return 0 }
+        let pages = UInt64(stats.free_count) + UInt64(stats.inactive_count) + UInt64(stats.speculative_count)
+        return Double(pages) * Double(vm_kernel_page_size)
+    }
+
+    static func userScriptsFolder(for id: String) -> URL {
+        Extensions.folder.appendingPathComponent("UserScripts", isDirectory: true).appendingPathComponent(id, isDirectory: true)
+    }
+
+    static func userScriptsKept(_ name: String, for id: String) -> URL {
+        let kept = userScriptsFolder(for: id).appendingPathComponent(name)
+        let old = Extensions.folder(for: id).appendingPathComponent("_search", isDirectory: true).appendingPathComponent(name)
+        let files = FileManager.default
+        if !files.fileExists(atPath: kept.path), files.fileExists(atPath: old.path) {
+            try? files.createDirectory(at: kept.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? files.copyItem(at: old, to: kept)
+        }
+        return kept
+    }
+
     static func scriptingFile(_ function: String, arguments: [Any], in folder: URL) throws -> String {
         // A megabyte of source at most: a page gone wrong can't fill the
         // extension's folder with big files (Security).
@@ -4814,7 +4906,15 @@ enum ExtensionShims {
     /// gives the code a `chrome` whose messages are marked as a user
     /// script's. Named by what is in it, so a changed script is a new file
     /// and never a stale one WebKit has already read.
-    static func userScriptFile(_ script: [String: Any], in folder: URL) throws -> String {
+    static func userScriptMessaging(_ script: [String: Any], for id: String) -> Bool {
+        let worlds = (try? JSONSerialization.jsonObject(with: Data(contentsOf: userScriptsKept("worlds.json", for: id)))) as? [[String: Any]] ?? []
+        let named = { (world: [String: Any]) in world["worldId"] as? String ?? "" }
+        let wanted = script["worldId"] as? String ?? ""
+        let world = worlds.first { named($0) == wanted } ?? worlds.first { named($0).isEmpty }
+        return world?["messaging"] as? Bool ?? false
+    }
+
+    static func userScriptFile(_ script: [String: Any], in folder: URL, messaging: Bool) throws -> String {
         let json = { (value: Any) in
             (try? JSONSerialization.data(withJSONObject: value)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
         }
@@ -4831,13 +4931,16 @@ enum ExtensionShims {
             }
         }
         let userWorld = (script["world"] as? String) != "MAIN"
+        let sending = #"""
+              sendMessage: (message, ...rest) => runtime.sendMessage({ __searchUserScript: true, message }, ...rest.filter((r) => typeof r === "function" || (r && typeof r === "object"))),
+              connect: (info) => runtime.connect({ ...(info || {}), name: "search-us:" + ((info && info.name) || "") }),
+        """#
         let prelude = #"""
           const chrome = (() => {
             const runtime = globalThis.chrome.runtime;
             return { runtime: {
               id: runtime.id, getURL: (path) => runtime.getURL(path), get lastError() { return runtime.lastError; },
-              sendMessage: (message, ...rest) => runtime.sendMessage({ __searchUserScript: true, message }, ...rest.filter((r) => typeof r === "function" || (r && typeof r === "object"))),
-              connect: (info) => runtime.connect({ ...(info || {}), name: "search-us:" + ((info && info.name) || "") }),
+        \#(messaging ? sending : "")
             } };
           })();
           const browser = chrome;
@@ -4874,6 +4977,7 @@ enum ExtensionShims {
     /// Downloads an extension asked for, by address, until they land; then
     /// the files they became, which are the only ones it may open.
     static var askedDownloads: [URL: String] = [:]
+    static var askedNumbers: [URL: Int] = [:]
     static var ownDownloads: [String: Set<String>] = [:]
 
     /// Keep-awake assertions, one per extension that asked.

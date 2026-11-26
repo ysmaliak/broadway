@@ -586,6 +586,7 @@ final class Extensions: NSObject {
                 context.setPermissionStatus(.grantedExplicitly, for: .declarativeNetRequestWithHostAccess)
             }
             Extensions.grantSites(context)
+            ExtensionGrants.apply(to: context)
             // Its own sign-in address, https://<id>.chromiumapp.org, which
             // is never loaded (see ExtensionAuth.handOver). WebKit shows an
             // extension a tab's address only where it has access, where
@@ -826,19 +827,34 @@ final class Extensions: NSObject {
     private var failures: [String: [Date]] = [:]
     private var nativePorts: [String: NSHashTable<WKWebExtension.MessagePort>] = [:]
 
+    private func forgetMemory(of id: String) {
+        revived[id] = nil
+        failures = failures.filter { !$0.key.hasPrefix(id + "→") }
+        if let watcher = errorWatchers.removeValue(forKey: id) { NotificationCenter.default.removeObserver(watcher) }
+        Extensions.clicked[id] = nil
+        Extensions.pressed[id] = nil
+        Extensions.touched[id] = nil
+        ExtensionPopup.forget(id)
+        ExtensionShims.popups[id] = nil
+        ExtensionShims.ownDownloads[id] = nil
+        ExtensionShims.askedDownloads = ExtensionShims.askedDownloads.filter { $0.value != id }
+        ExtensionShims.panelPath[id] = nil
+        ExtensionShims.panelOnClick.remove(id)
+    }
+
     /// Loaded at least once since the browser started, and loaded again.
     private var loadsThisRun: Set<String> = []
     private(set) var loadedBefore: Set<String> = []
 
     @discardableResult
-    func revive(_ id: String, because reason: String) -> Bool {
+    func revive(_ id: String, because reason: String, clearingWorkers: Bool = false) -> Bool {
         guard let item = installed.first(where: { $0.id == id }), item.enabled,
               let context = contexts[id],
               Date().timeIntervalSince(revived[id] ?? .distantPast) > 60 else { return false }
         let popup = ExtensionPopup.shared.extensionID == id ? ExtensionPopup.shared.view?.url : nil
         guard unload(id, replacingContext: false) else { return false }
         revived[id] = Date()
-        workersChanged()
+        if clearingWorkers { workersChanged() }
         noteError("restarted the extension: \(reason)", for: id)
         // WebKit API objects held by existing pages address this context's
         // internal identifier. A different context with the same extension id
@@ -916,7 +932,7 @@ final class Extensions: NSObject {
                 guard failed else { return }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
                     guard let self, self.contexts[id] === context else { return }
-                    self.revive(id, because: "its worker failed to start")
+                    self.revive(id, because: "its worker failed to start", clearingWorkers: true)
                 }
             }
         }
@@ -963,6 +979,8 @@ final class Extensions: NSObject {
         errors[id] = nil
         Extensions.setSettings([:], for: id)
         Store.settings.removeObject(forKey: "extensions.granted.\(id)")
+        ExtensionGrants.forget(id)
+        forgetMemory(of: id)
         loadsThisRun.remove(id)
         loadedBefore.remove(id)
         Store.settings.removeObject(forKey: "extensions.newtab.\(id)")
@@ -970,6 +988,7 @@ final class Extensions: NSObject {
         installed.removeAll { $0.id == id }
         save()
         try? FileManager.default.removeItem(at: Extensions.folder(for: id))
+        try? FileManager.default.removeItem(at: ExtensionShims.userScriptsFolder(for: id))
         var left = Store.settings.stringArray(forKey: Extensions.forgettingKey) ?? []
         if !left.contains(id) { left.append(id) }
         Store.settings.set(left, forKey: Extensions.forgettingKey)
@@ -1659,6 +1678,10 @@ final class Extensions: NSObject {
     /// What an extension's popup hangs from: its own button in the row,
     /// else the puzzle button — whichever is in the window now.
     func anchor(for id: String) -> NSView? {
+        if let front = browser?.window {
+            if let own = anchors[id]?.view, own.window === front, !own.isHiddenOrHasHiddenAncestor { return own }
+            if let found = ExtensionSlotView.anchor(for: id, in: front) { return found }
+        }
         let own = anchors[id]?.view
         return own?.window != nil ? own : anchors[Extensions.menuAnchor]?.view
     }
@@ -2225,7 +2248,10 @@ final class ExtensionActionButton: KitButton {
         icon = ExtensionIconView(button: button, size: 15)
         super.init(.plain(press: 1), label: button.name)
         let id = button.id
-        action = { press(id) }
+        action = { [weak self] in
+            if let self { Extensions.shared.anchors[id] = WeakView(self) }
+            press(id)
+        }
         addSubview(ground, positioned: .below, relativeTo: nil)
         content = icon
         kitAccess(help: button.label)
@@ -2252,7 +2278,7 @@ final class ExtensionActionButton: KitButton {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window != nil { Extensions.shared.anchors[button.id] = WeakView(self) }
+        if window != nil, (superview as? ExtensionSlotView)?.still != true { Extensions.shared.anchors[button.id] = WeakView(self) }
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
@@ -2292,6 +2318,21 @@ final class ExtensionSlotView: NSView {
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? { still ? nil : super.hitTest(point) }
+
+    func anchor(for id: String) -> NSView? {
+        guard !still, window != nil, !isHiddenOrHasHiddenAncestor else { return nil }
+        return buttons.first { $0.button.id == id } ?? door
+    }
+
+    static func anchor(for id: String, in window: NSWindow) -> NSView? {
+        var found: [NSView] = []
+        func walk(_ view: NSView) {
+            if let slot = view as? ExtensionSlotView, let anchor = slot.anchor(for: id) { found.append(anchor) }
+            view.subviews.forEach(walk)
+        }
+        if let root = window.contentView?.superview ?? window.contentView { walk(root) }
+        return found.first { $0 is ExtensionActionButton } ?? found.first
+    }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
