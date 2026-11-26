@@ -31,12 +31,8 @@ struct KeychainShelf: SignInShelf {
     }
 
     func read(_ account: String) -> Data? {
-        var query = item(account)
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-        var out: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &out)
-        guard status == errSecSuccess, let data = out as? Data else {
+        let (data, status) = Keychain.read(item(account))
+        guard let data else {
             if status != errSecItemNotFound { NSLog("Sign-ins: keychain read refused (%d)", status) }
             return nil
         }
@@ -44,31 +40,28 @@ struct KeychainShelf: SignInShelf {
     }
 
     func write(_ data: Data, as account: String) -> Bool {
-        let fields: [String: Any] = [kSecValueData as String: data]
-        let status = SecItemUpdate(item(account) as CFDictionary, fields as CFDictionary)
-        if status == errSecSuccess { return true }
-        if status != errSecItemNotFound { SecItemDelete(item(account) as CFDictionary) }
         var fresh = item(account)
         fresh[kSecValueData as String] = data
         fresh[kSecAttrLabel as String] = service
         fresh[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-        let added = SecItemAdd(fresh as CFDictionary, nil)
+        let put = Keychain.write(item(account), [kSecValueData as String: data], orAdd: fresh)
+        if put.status == errSecSuccess { return true }
+        var added = put.status
+        if !put.added {
+            _ = Keychain.delete(item(account))
+            added = Keychain.add(fresh)
+        }
         if added != errSecSuccess { NSLog("Sign-ins: keychain write failed (%d)", added) }
         return added == errSecSuccess
     }
 
     func remove(_ account: String) {
-        let status = SecItemDelete(item(account) as CFDictionary)
+        let status = Keychain.delete(item(account))
         if status != errSecSuccess, status != errSecItemNotFound { NSLog("Sign-ins: keychain remove failed (%d)", status) }
     }
 
     func accounts() -> [String] {
-        var query = identity
-        query[kSecReturnAttributes as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitAll
-        var out: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &out) == errSecSuccess,
-              let rows = out as? [[String: Any]] else { return [] }
+        guard let rows = Keychain.list(identity).rows else { return [] }
         return rows.compactMap { $0[kSecAttrAccount as String] as? String }
     }
 }

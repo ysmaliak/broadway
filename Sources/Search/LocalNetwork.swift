@@ -28,7 +28,7 @@ enum LocalNetwork {
         if host.isEmpty { return .internet }
         if let parts = ipv4(host) { return reach(v4: parts) }
         if host.contains(":") { return reach(v6: host) }
-        if host == "localhost" || host.hasSuffix(".localhost") { return .loopback }
+        if Hosts.isLoopback(host) { return .loopback }
         if [".local", ".test", ".internal", ".home.arpa"].contains(where: { host.hasSuffix($0) }) { return .lan }
         if !host.contains(".") { return .lan }
         return .internet

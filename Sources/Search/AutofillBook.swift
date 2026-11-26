@@ -82,12 +82,8 @@ final class KeychainKeeper: AutofillKeeper, @unchecked Sendable {
     }
 
     func list(_ shelf: AutofillShelf) -> [KeptItem] {
-        var asked = query(shelf)
-        asked[kSecReturnAttributes as String] = true
-        asked[kSecMatchLimit as String] = kSecMatchLimitAll
-        var out: CFTypeRef?
-        let status = SecItemCopyMatching(asked as CFDictionary, &out)
-        guard status == errSecSuccess, let rows = out as? [[String: Any]] else {
+        let (rows, status) = Keychain.list(query(shelf))
+        guard let rows else {
             if status != errSecItemNotFound { NSLog("Autofill: keychain list failed (%d)", status) }
             return []
         }
@@ -99,12 +95,8 @@ final class KeychainKeeper: AutofillKeeper, @unchecked Sendable {
     }
 
     func read(_ shelf: AutofillShelf, id: String) -> Data? {
-        var asked = query(shelf, id: id)
-        asked[kSecReturnData as String] = true
-        asked[kSecMatchLimit as String] = kSecMatchLimitOne
-        var out: CFTypeRef?
-        let status = SecItemCopyMatching(asked as CFDictionary, &out)
-        guard status == errSecSuccess, let data = out as? Data else {
+        let (data, status) = Keychain.read(query(shelf, id: id))
+        guard let data else {
             if status != errSecItemNotFound { NSLog("Autofill: keychain read failed (%d)", status) }
             return nil
         }
@@ -116,24 +108,19 @@ final class KeychainKeeper: AutofillKeeper, @unchecked Sendable {
             kSecValueData as String: data,
             kSecAttrComment as String: note,
         ]
-        let status = SecItemUpdate(query(shelf, id: id) as CFDictionary, fields as CFDictionary)
-        if status == errSecSuccess { return true }
-        guard status == errSecItemNotFound else {
-            NSLog("Autofill: keychain write failed (%d)", status)
-            return false
-        }
         var fresh = query(shelf, id: id).merging(fields) { _, new in new }
         fresh[kSecMatchSearchList as String] = nil
         fresh[kSecAttrLabel as String] = "Broadway autofill"
         fresh[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlocked
         if let keychain { fresh[kSecUseKeychain as String] = keychain }
-        let added = SecItemAdd(fresh as CFDictionary, nil)
-        if added != errSecSuccess { NSLog("Autofill: keychain add failed (%d)", added) }
-        return added == errSecSuccess
+        let put = Keychain.write(query(shelf, id: id), fields, orAdd: fresh)
+        if put.status == errSecSuccess { return true }
+        NSLog(put.added ? "Autofill: keychain add failed (%d)" : "Autofill: keychain write failed (%d)", put.status)
+        return false
     }
 
     func remove(_ shelf: AutofillShelf, id: String) -> Bool {
-        SecItemDelete(query(shelf, id: id) as CFDictionary) == errSecSuccess
+        Keychain.delete(query(shelf, id: id)) == errSecSuccess
     }
 }
 

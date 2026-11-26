@@ -75,14 +75,9 @@ enum AgentSignInNames {
 
 enum AgentSignInMatch {
     static func bare(_ host: String) -> String {
-        let low = host.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
-        return low.hasPrefix("www.") ? String(low.dropFirst(4)) : low
+        Address.withoutWWW(host.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "[]")))
     }
 
-    static func loopback(_ host: String) -> Bool {
-        let low = bare(host)
-        return low == "localhost" || low == "127.0.0.1" || low == "::1" || low.hasSuffix(".localhost")
-    }
 
     static func defaultPort(_ scheme: String?) -> Int {
         scheme?.lowercased() == "http" ? 80 : 443
@@ -97,7 +92,7 @@ enum AgentSignInMatch {
 
     static func portFits(_ kept: Kept, page: URL) -> Bool {
         let scheme = page.scheme?.lowercased()
-        if kept.port == nil, loopback(page.host() ?? "") { return true }
+        if kept.port == nil, Hosts.isLoopback(page.host() ?? "") { return true }
         let wanted = page.port ?? defaultPort(scheme)
         let held = kept.port ?? defaultPort(scheme)
         return wanted == held

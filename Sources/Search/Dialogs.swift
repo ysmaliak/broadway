@@ -516,15 +516,4 @@ enum Dialogs {
             finish(alert.runModal())
         }
     }
-
-    /// This Mac itself: a certificate here can only have been made here.
-    /// Only the names that can't mean anything else: localhost, and the
-    /// loopback addresses written as addresses — four numbers and nothing
-    /// more, so 127.0.0.1.example.com is a website like any other.
-    static func isLoopback(_ host: String) -> Bool {
-        if host == "localhost" || host == "::1" || host == "[::1]" { return true }
-        let parts = host.split(separator: ".", omittingEmptySubsequences: false)
-        guard parts.count == 4, parts.allSatisfy({ UInt8($0) != nil }) else { return false }
-        return parts[0] == "127"
-    }
 }

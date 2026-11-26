@@ -203,6 +203,17 @@ final class OpenRouterTests {
         #expect(OpenRouterModels.namingEffort == "none")
     }
 
+    @Test func theNamerSaysWhoIsAskingWithItsKey() async throws {
+        let stub = OpenRouterStub.naming("Trip")
+        try await stub.client.check(key: "sk-or-good-9")
+        let sent = try #require(stub.requests.first?.0)
+        #expect(sent.url?.absoluteString == "https://\(stub.host)/api/v1/key")
+        #expect(sent.value(forHTTPHeaderField: "Authorization") == "Bearer sk-or-good-9")
+        #expect(sent.value(forHTTPHeaderField: "HTTP-Referer") == "https://broadwaybrowser.com")
+        #expect(sent.value(forHTTPHeaderField: "X-Title") == "Broadway")
+        #expect(sent.timeoutInterval == 5)
+    }
+
     @Test func aTestRunNeverReachesOpenRouterItself() async {
         let client = OpenRouterClient(base: OpenRouterClient.real)
 

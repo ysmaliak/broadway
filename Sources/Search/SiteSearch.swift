@@ -231,8 +231,7 @@ enum SiteSearch {
     }
 
     private static func bare(_ host: String) -> String {
-        let first = host.split(separator: "/").first.map(String.init) ?? host
-        return first.hasPrefix("www.") ? String(first.dropFirst(4)) : first
+        Address.withoutWWW(host.split(separator: "/").first.map(String.init) ?? host)
     }
 
     /// An address's host, without its www — a template's with its %s filled.
@@ -240,7 +239,7 @@ enum SiteSearch {
         guard let url = URL(string: address.replacingOccurrences(of: "%s", with: "x")),
               let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
               let host = url.host()?.lowercased(), !host.isEmpty else { return nil }
-        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+        return Address.withoutWWW(host)
     }
 
     /// `address` is on the same site as `host` — the same registrable

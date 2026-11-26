@@ -65,7 +65,7 @@ final class SiteCard: NSObject, NSMenuDelegate {
 
     nonisolated static func site(_ url: URL) -> String {
         if let host = url.host(), !host.isEmpty {
-            return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+            return Address.withoutWWW(host)
         }
         if url.isFileURL { return "File" }
         return url.scheme ?? url.absoluteString

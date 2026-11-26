@@ -66,7 +66,7 @@ enum CertificateTrust {
             return
         }
         let host = CertificateExceptions.normal(host)
-        if Dialogs.isLoopback(host) {
+        if Hosts.isLoopback(host, subdomains: false) {
             done(.pass)
             return
         }

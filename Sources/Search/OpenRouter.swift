@@ -50,7 +50,8 @@ enum OpenRouterTrouble: Error, LocalizedError, Equatable {
 }
 
 struct OpenRouterClient: Sendable {
-    static let real = URL(string: "https://openrouter.ai/api/v1")!
+    static let api = URL(string: "https://openrouter.ai/api")!
+    static let real = api.appending(path: "v1")
 
     var base: URL
     var session: URLSession
@@ -68,15 +69,22 @@ struct OpenRouterClient: Sendable {
         return URL(string: said)
     }
 
-    var allowed: Bool {
+    var allowed: Bool { Self.allowed(base) }
+
+    static func allowed(_ base: URL) -> Bool {
         guard CLIGuard.underTest, !CLIGuard.realAllowed else { return true }
-        return base.host() != Self.real.host()
+        return base.host() != real.host()
+    }
+
+    static func request(_ url: URL, key: String, seconds: Double) -> URLRequest {
+        var made = URLRequest(url: url, timeoutInterval: seconds)
+        made.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        return made
     }
 
     private func request(_ path: String, key: String) throws -> URLRequest {
         guard allowed else { throw OpenRouterTrouble.testRun }
-        var made = URLRequest(url: base.appending(path: path), timeoutInterval: seconds)
-        made.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        var made = Self.request(base.appending(path: path), key: key, seconds: seconds)
         made.setValue("https://broadwaybrowser.com", forHTTPHeaderField: "HTTP-Referer")
         made.setValue("Broadway", forHTTPHeaderField: "X-Title")
         return made
@@ -160,12 +168,8 @@ final class OpenRouterKeychain: OpenRouterKeyStore {
     }
 
     func read() -> String? {
-        var asked = slot
-        asked[kSecReturnData as String] = true
-        asked[kSecMatchLimit as String] = kSecMatchLimitOne
-        var out: CFTypeRef?
-        let status = quietly { SecItemCopyMatching(asked as CFDictionary, &out) }
-        guard status == errSecSuccess, let data = out as? Data, let key = String(data: data, encoding: .utf8), !key.isEmpty else {
+        let (data, status) = quietly { Keychain.read(slot) }
+        guard let data, let key = String(data: data, encoding: .utf8), !key.isEmpty else {
             if status != errSecSuccess, status != errSecItemNotFound { NSLog("OpenRouterKeychain: read failed (%d)", status) }
             return nil
         }
@@ -174,20 +178,17 @@ final class OpenRouterKeychain: OpenRouterKeyStore {
 
     func write(_ key: String) -> Bool {
         let data = Data(key.utf8)
-        var status = quietly { SecItemUpdate(slot as CFDictionary, [kSecValueData as String: data] as CFDictionary) }
-        if status == errSecItemNotFound {
-            var item = slot
-            item[kSecValueData as String] = data
-            item[kSecAttrLabel as String] = Self.service
-            item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlocked
-            status = SecItemAdd(item as CFDictionary, nil)
-        }
+        var item = slot
+        item[kSecValueData as String] = data
+        item[kSecAttrLabel as String] = Self.service
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlocked
+        let status = Keychain.write(slot, [kSecValueData as String: data], orAdd: item, quietly: { quietly($0) }).status
         if status != errSecSuccess { NSLog("OpenRouterKeychain: write failed (%d)", status) }
         return status == errSecSuccess
     }
 
     func erase() {
-        _ = quietly { SecItemDelete(slot as CFDictionary) }
+        _ = quietly { Keychain.delete(slot) }
     }
 
     private func quietly<T>(_ body: () -> T) -> T {

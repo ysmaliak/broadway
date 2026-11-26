@@ -80,8 +80,8 @@ final class OpenRouterDecider: AIGroupDecider {
         var refused: Set<String> = []
     }
 
-    static let jev = "~typesafe/jev-latest"
-    static let home = URL(string: "https://openrouter.ai/api")!
+    static let jev = OpenRouterModels.grouping
+    static let home = OpenRouterClient.api
     static let longest = 30_000
     static let shown = [(6, 6), (3, 3), (1, 1), (1, 0)]
 
@@ -107,7 +107,7 @@ final class OpenRouterDecider: AIGroupDecider {
     let batch = 8
     let seconds: Double = 12
 
-    convenience init(key: String, model: String, base: URL = URL(string: "https://openrouter.ai/api")!, session: URLSession = .shared) {
+    convenience init(key: String, model: String, base: URL = OpenRouterClient.api, session: URLSession = .shared) {
         self.init(key: key, model: model, base: base, session: session, thresholds: Thresholds.standard(for: model))
     }
 
@@ -447,15 +447,14 @@ final class OpenRouterDecider: AIGroupDecider {
         guard !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw ProviderError.refused("There's no OpenRouter key")
         }
-        if CLIGuard.underTest, !CLIGuard.realAllowed, base.host() == Self.home.host() {
+        if !OpenRouterClient.allowed(base) {
             throw ProviderError.refused("A test run never calls a real model")
         }
     }
 
     func send(_ body: Body) async throws -> Heard {
-        var request = URLRequest(url: endpoint, timeoutInterval: seconds)
+        var request = OpenRouterClient.request(endpoint, key: key, seconds: seconds)
         request.httpMethod = "POST"
-        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try Self.encoded(body)
         let data: Data

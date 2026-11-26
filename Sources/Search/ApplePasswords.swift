@@ -447,8 +447,7 @@ final class ApplePasswords {
     }
 
     nonisolated private static func bare(_ host: String) -> String {
-        let host = host.lowercased()
-        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+        Address.withoutWWW(host.lowercased())
     }
 }
 

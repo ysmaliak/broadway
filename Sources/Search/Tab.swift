@@ -1426,7 +1426,7 @@ final class Tab: Identifiable {
         // later it may be somewhere else entirely, and that is not where
         // the password belongs.
         guard let host = pageAddress?.host()?.lowercased() else { return }
-        let bare = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+        let bare = Address.withoutWWW(host)
         // A password page with no name on it: the name is the one the step
         // before was sent with.
         let user = user.isEmpty ? givenName() ?? "" : user

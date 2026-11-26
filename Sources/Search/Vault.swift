@@ -169,13 +169,10 @@ enum Vault {
         var query: [String: Any] = [
             kSecClass as String: kSecClassInternetPassword,
             kSecAttrLabel as String: label,
-            kSecReturnAttributes as String: true,
-            kSecMatchLimit as String: kSecMatchLimitAll,
         ]
         extra.forEach { query[$0] = $1 }
-        var out: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &out)
-        guard status == errSecSuccess, let rows = out as? [[String: Any]] else {
+        let (rows, status) = Keychain.list(query)
+        guard let rows else {
             // Nothing kept reads as "not found"; anything else is worth a
             // line in the log, because the panel will only say "nothing".
             if status != errSecItemNotFound { NSLog("Vault: keychain list failed (%d)", status) }
@@ -186,12 +183,8 @@ enum Vault {
 
     /// One item's secret, by the two things that name it.
     private static func secret(host: String, user: String, port: Int?) -> String? {
-        var out: CFTypeRef?
-        var query = identity(host: host, user: user, port: port)
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-        let status = SecItemCopyMatching(query as CFDictionary, &out)
-        guard status == errSecSuccess, let data = out as? Data else {
+        let (data, status) = Keychain.read(identity(host: host, user: user, port: port))
+        guard let data else {
             if status != errSecItemNotFound { NSLog("Vault: keychain read failed (%d)", status) }
             return nil
         }
@@ -262,32 +255,29 @@ enum Vault {
         ]
         if let used { fields[kSecAttrComment as String] = String(used.timeIntervalSince1970) }
 
-        let status = SecItemUpdate(identity as CFDictionary, fields as CFDictionary)
-        if status == errSecSuccess { return true }
-        guard status == errSecItemNotFound else { return false }
-
         var fresh = identity.merging(fields) { _, new in new }
         fresh[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlocked
-        let added = SecItemAdd(fresh as CFDictionary, nil)
-        if added == errSecSuccess { return true }
-        guard added == errSecDuplicateItem, dropFormer(host: host, user: user, clear: clear) else {
-            NSLog("Vault: keychain save failed (%d)", added)
+        let put = Keychain.write(identity, fields, orAdd: fresh)
+        if put.status == errSecSuccess { return true }
+        guard put.added else { return false }
+        guard put.status == errSecDuplicateItem, dropFormer(host: host, user: user, clear: clear) else {
+            NSLog("Vault: keychain save failed (%d)", put.status)
             return false
         }
-        return SecItemAdd(fresh as CFDictionary, nil) == errSecSuccess
+        return Keychain.add(fresh) == errSecSuccess
     }
 
     private static let formerLabel = Store.world.map { "Ave (\($0))" } ?? "Ave"
 
     private static func dropFormer(host: String, user: String, clear: Bool) -> Bool {
-        SecItemDelete([
+        Keychain.delete([
             kSecClass as String: kSecClassInternetPassword,
             kSecAttrServer as String: host,
             kSecAttrAccount as String: user,
             kSecAttrLabel as String: formerLabel,
             kSecAttrAuthenticationType as String: kSecAttrAuthenticationTypeHTMLForm,
             kSecAttrProtocol as String: clear ? kSecAttrProtocolHTTP : kSecAttrProtocolHTTPS,
-        ] as CFDictionary) == errSecSuccess
+        ]) == errSecSuccess
     }
 
     static func keepsNewer(_ kept: Kept?, than login: Login) -> Bool {
@@ -302,14 +292,14 @@ enum Vault {
 
     @discardableResult
     static func note(_ use: AgentUse, on kept: Kept) -> Bool {
-        SecItemUpdate(identity(host: kept.host, user: kept.user, port: kept.port) as CFDictionary,
-                      [kSecAttrDescription as String: use.stored] as CFDictionary) == errSecSuccess
+        Keychain.update(identity(host: kept.host, user: kept.user, port: kept.port),
+                        [kSecAttrDescription as String: use.stored]) == errSecSuccess
     }
 
     /// Whether the keychain let it go: Remove All… counts only those.
     @discardableResult
     static func forget(host: String, user: String, port: Int? = nil) -> Bool {
-        SecItemDelete(identity(host: host, user: user, port: port) as CFDictionary) == errSecSuccess
+        Keychain.delete(identity(host: host, user: user, port: port)) == errSecSuccess
     }
 
     // MARK: - sites that asked not to be asked
@@ -337,7 +327,7 @@ enum Vault {
     /// example.com for www.example.com and accounts.example.com; bbc.co.uk
     /// stays bbc.co.uk.
     static func registrable(_ host: String) -> String {
-        Registrable.domain(of: host, isSuffix: Passkeys.publicSuffix.map { test in { test($0 as CFString) } })
+        Registrable.domain(of: host, isSuffix: AtRest.systemSuffix)
     }
 
     static func host(of text: String) -> String {
@@ -350,7 +340,7 @@ enum Vault {
         guard let url = URL(string: value), ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
               let host = url.host()?.lowercased()
         else { return "" }
-        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+        return Address.withoutWWW(host)
     }
 
     static func address(of text: String) -> (host: String, clear: Bool, port: Int?) {

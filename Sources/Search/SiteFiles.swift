@@ -55,7 +55,7 @@ enum FileVerdict: Equatable {
 enum SiteFiles {
     static func local(_ host: String) -> Bool {
         let host = host.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
-        return Address.isLocal(host: host) || Address.isLocal(host: "[\(host)]") || Hosts.isLoopback(host)
+        return Address.isLocal(host: host) || Hosts.isLoopback(host)
     }
 
     static func insecure(_ facts: FileFacts, local: (String) -> Bool = SiteFiles.local) -> Bool {

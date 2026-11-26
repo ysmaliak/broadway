@@ -137,10 +137,11 @@ enum Hosts {
     }
 
     /// This Mac, where plain http is the rule rather than a risk.
-    static func isLoopback(_ host: String) -> Bool {
-        // 127.x written as an address only: 127.0.0.1.example.com is a
-        // website like any other (see Dialogs.isLoopback).
-        host == "localhost" || host.hasSuffix(".localhost") || host == "::1" || (isAddress(host) && host.hasPrefix("127."))
+    static func isLoopback(_ host: String, subdomains: Bool = true) -> Bool {
+        var host = host.lowercased()
+        if host.hasPrefix("["), host.hasSuffix("]") { host = String(host.dropFirst().dropLast()) }
+        while host.hasSuffix(".") { host.removeLast() }
+        return host == "localhost" || (subdomains && host.hasSuffix(".localhost")) || host == "::1" || (isAddress(host) && host.hasPrefix("127."))
     }
 
     /// The host in ASCII: each label written in another alphabet turned to

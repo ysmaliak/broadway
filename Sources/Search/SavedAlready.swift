@@ -51,8 +51,7 @@ enum SavedAlready {
     }
 
     private static func bare(_ host: String) -> String {
-        let host = host.lowercased()
-        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+        Address.withoutWWW(host.lowercased())
     }
 
     static func marked(_ sent: SentSignIn, by marks: [FillMark?],

@@ -60,7 +60,7 @@ enum Address {
     }
 
     /// The private ranges, where Docker and many offices put their machines.
-    /// Four numbers and nothing more, as Dialogs.isLoopback has it: 10.io is
+    /// Four numbers and nothing more, as Hosts.isLoopback has it: 10.io is
     /// a website, not 10.0.0.0/8.
     private static func privateRange(_ host: String) -> Bool {
         let parts = host.split(separator: ".", omittingEmptySubsequences: false)

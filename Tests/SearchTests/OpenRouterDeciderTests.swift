@@ -137,6 +137,9 @@ final class DecisionsStub: URLProtocol {
         #expect(request.request.httpMethod == "POST")
         #expect(request.request.value(forHTTPHeaderField: "Authorization") == "Bearer \(Self.key)")
         #expect(request.request.value(forHTTPHeaderField: "Content-Type") == "application/json")
+        #expect(request.request.value(forHTTPHeaderField: "HTTP-Referer") == nil)
+        #expect(request.request.value(forHTTPHeaderField: "X-Title") == nil)
+        #expect(request.request.timeoutInterval == 12)
         let yes = "They all serve that one task"
         let no = "They only share a website, a kind of page such as two videos or two articles, a broad field, or a word, or they serve different tasks"
         let tasks = "such as planning one trip, choosing one purchase, finding one flat, applying for one job, fixing one bug, following one story or learning one subject"
@@ -562,6 +565,9 @@ final class DecisionsStub: URLProtocol {
         let decider = OpenRouterDecider(key: Self.key, model: OpenRouterDecider.jev)
         #expect(decider.thresholds == .jev)
         #expect(decider.base == OpenRouterDecider.home)
+        #expect(OpenRouterDecider.home.absoluteString == "https://openrouter.ai/api")
+        #expect(OpenRouterClient.real.absoluteString == "https://openrouter.ai/api/v1")
+        #expect(OpenRouterDecider.jev == "~typesafe/jev-latest")
         #expect(decider.local == false)
         #expect(decider.batch == 8)
     }

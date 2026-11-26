@@ -33,7 +33,7 @@ final class Curtain {
 
     func host(of url: URL?) -> String? {
         guard let host = url?.host()?.lowercased() else { return nil }
-        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+        return Address.withoutWWW(host)
     }
 
     func veils(on host: String?) -> [Veil] {

@@ -258,7 +258,7 @@ final class Passkeys: NSObject {
         }
         let scheme = caller.origin.protocol.lowercased()
         let host = caller.origin.host.lowercased()
-        let local = host == "localhost" || host.hasSuffix(".localhost") || host == "127.0.0.1" || host == "::1"
+        let local = Hosts.isLoopback(host)
         guard !host.isEmpty, scheme == "https" || (scheme == "http" && local) else {
             return refuse(answer, "NotAllowedError", "Passkeys need a secure page.")
         }
@@ -282,8 +282,7 @@ final class Passkeys: NSObject {
         // said the browser needed updating (#679).
         let page = caller.page
         let pageHost = page?.host()?.lowercased()
-        let suffix = Passkeys.publicSuffix.map { test in { (name: String) in test(name as CFString) } }
-        let sameSite = pageHost.map { Registrable.sameSite($0, host, isSuffix: suffix) } ?? false
+        let sameSite = pageHost.map { Registrable.sameSite($0, host, isSuffix: AtRest.systemSuffix) } ?? false
         guard caller.mainFrame || (sameSite && page?.scheme?.lowercased() == scheme) else {
             return refuse(answer, "NotAllowedError", "Passkeys can't be asked for from another site's frame.")
         }
@@ -585,8 +584,8 @@ final class Passkeys: NSObject {
     static func fits(_ rp: String, _ host: String) -> Bool {
         if rp == host { return true }
         let address = host.contains(":") || host.allSatisfy { $0.isNumber || $0 == "." }
-        guard !address, host.hasSuffix("." + rp), rp.contains("."), let suffix = publicSuffix else { return false }
-        return !suffix(rp as CFString)
+        guard !address, host.hasSuffix("." + rp), rp.contains("."), let suffix = AtRest.systemSuffix else { return false }
+        return !suffix(rp)
     }
 
     /// The address of the page a view shows, once it is that page's: a

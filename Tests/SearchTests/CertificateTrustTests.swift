@@ -84,6 +84,19 @@ final class CertificateTrustTests {
         #expect(asked == 0)
     }
 
+    @Test func thisMacByAddressGoesThroughAndALocalhostSubdomainIsAsked() {
+        let store = WKWebsiteDataStore.nonPersistent()
+
+        #expect(answer(store, host: "127.0.0.2") == .pass)
+        #expect(answer(store, host: "[::1]") == .pass)
+        #expect(answer(store, host: "LOCALHOST.") == .pass)
+        #expect(asked == 0)
+        _ = answer(store, host: "app.localhost")
+        #expect(asked == 1)
+        _ = answer(store, host: "127.0.0.1.example.com")
+        #expect(asked == 2)
+    }
+
     @Test func continueAnywayLetsTheSameChainThroughWithoutAskingAgain() {
         let store = WKWebsiteDataStore.nonPersistent()
 

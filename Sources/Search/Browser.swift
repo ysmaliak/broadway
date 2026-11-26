@@ -8269,10 +8269,10 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         let site: String
         if Browser.extensionScheme(asker.protocol) {
             host = Browser.extensionName(asker.host)
-            site = "\(asker.protocol.lowercased())://\(asker.host.lowercased())"
+            site = Browser.origin(asker.protocol, asker.host, 0)
         } else {
             host = origin.host.isEmpty ? (tab(for: webView)?.address?.host() ?? "This page") : origin.host
-            site = origin.host.isEmpty ? host : "\(origin.protocol)://\(origin.host)" + (origin.port == 0 ? "" : ":\(origin.port)")
+            site = origin.host.isEmpty ? host : Browser.origin(origin.protocol, origin.host, origin.port)
         }
         let shy = tab(for: webView).map { $0.shy || !webView.configuration.websiteDataStore.isPersistent } ?? false
         let known = Browser.captureAnswer(type, site: site) { shy ? nil : Store.settings.object(forKey: "capture." + $0) as? Bool }
