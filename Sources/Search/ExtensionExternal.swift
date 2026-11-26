@@ -25,14 +25,26 @@ import Foundation
 // done: given nothing, it never asked the real one and spun for good.
 
 enum ExtensionExternal {
+    struct Loaded {
+        var id: String
+        var manifest: [String: Any]
+        var privateAllowed: Bool
+    }
+
     /// The `externally_connectable` patterns of every extension loaded now,
     /// those Chrome would take and no others, by the extension's id.
-    @MainActor static var listings: [String: [String]] {
+    @MainActor static func listings(shy: Bool) -> [String: [String]] {
+        listings(Extensions.shared.contexts.map { id, context in
+            Loaded(id: id, manifest: context.webExtension.manifest, privateAllowed: context.hasAccessToPrivateData)
+        }, shy: shy)
+    }
+
+    nonisolated static func listings(_ loaded: [Loaded], shy: Bool) -> [String: [String]] {
         var found: [String: [String]] = [:]
-        for (id, context) in Extensions.shared.contexts {
-            let listed = context.webExtension.manifest["externally_connectable"] as? [String: Any]
+        for one in loaded where !shy || one.privateAllowed {
+            let listed = one.manifest["externally_connectable"] as? [String: Any]
             let patterns = ((listed?["matches"] as? [String]) ?? []).filter(allowed)
-            if !patterns.isEmpty { found[id] = Array(Set(patterns)).sorted() }
+            if !patterns.isEmpty { found[one.id] = Array(Set(patterns)).sorted() }
         }
         return found
     }
@@ -65,8 +77,8 @@ enum ExtensionExternal {
 
     /// For the page about to load, in its own world before any of its
     /// scripts; nil with nothing listed anywhere.
-    @MainActor static var script: String? {
-        let found = listings
+    @MainActor static func script(shy: Bool) -> String? {
+        let found = listings(shy: shy)
         guard !found.isEmpty,
               let data = try? JSONSerialization.data(withJSONObject: found, options: .sortedKeys),
               let list = String(data: data, encoding: .utf8)

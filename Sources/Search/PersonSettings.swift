@@ -471,7 +471,7 @@ enum PersonSettings {
             let found = try command(call)
             let typed = try call.need("keys")
             guard let combo = keys(typed), combo.isUsable else { throw PersonRefusal.usage("Keys look like cmd+shift+k, with ⌘, ⌥, ⌃ or a function key.") }
-            if KeyCombo.isReserved(combo) { throw PersonRefusal("refused", "\(combo.display) is taken by macOS") }
+            if let reason = KeyCombo.reserved(combo) { throw PersonRefusal("refused", "\(combo.display): \(reason)") }
             let store = ShortcutStore.shared
             let other = store.owner(of: combo, except: found.id)
             store.assign(combo, to: found.id)

@@ -122,6 +122,11 @@ extension Browser {
         if let arrived { LinkArrivals.moved(arrived, to: destination.id, in: self) }
     }
 
+    func moveToNewWindow(_ tab: Tab, into target: Browser? = nil) {
+        guard tab.pin == nil, !tab.bench, tabs.count > wholePairs([tab]).count else { return }
+        moveToWindow(pairOf: tab, target)
+    }
+
     func moveToWindow(_ chosen: [Tab], _ target: Browser?) {
         let movers = wholePairs(chosen).filter { $0.pin == nil && !$0.bench }
         guard let first = movers.first else { return }

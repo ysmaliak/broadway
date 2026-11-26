@@ -292,8 +292,8 @@ struct Command: Identifiable {
             browser.iconPicker.pick(.tab(tab.id))
         },
         Command("tabs.toNewWindow", "Move Tab to New Window", .tabs, KeyCombo("n", shift: true, option: true)) { browser in
-            guard let tab = browser.active, tab.pin == nil, !tab.bench, browser.tabs.count > 1 else { return }
-            browser.moveToWindow(tab, nil)
+            guard let tab = browser.active else { return }
+            browser.moveToNewWindow(tab)
         },
         Command("tabs.newFolder", "New Folder", .tabs, nil) { browser in
             if browser.prefs.usesTabGroups { browser.newFolder() }

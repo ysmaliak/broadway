@@ -1302,7 +1302,7 @@ final class Tab: Identifiable {
         )
         // Every frame, in the page's own world: a page an extension lists
         // reaches it as chrome.runtime (see ExtensionExternal.swift).
-        if let external = ExtensionExternal.script {
+        if let external = ExtensionExternal.script(shy: shy) {
             controller.addUserScript(
                 WKUserScript(source: external, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .page)
             )
