@@ -678,15 +678,14 @@ final class StackedHeaderView: NSView {
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let name = space.name
-        let menu = KitMenu.make([
-            .action(folded ? "Unfold \(name)" : "Fold \(name)", modifiers: [], run: { [weak self] in self?.fold() }),
-            .action("New Tab in \(name)", symbol: MenuSymbol.newTab, modifiers: [], run: { [weak self] in self?.newTab() }),
-        ])
-        let own = SpaceMenu.menu(for: browser, space: space.id)
-        let rows = own.items
-        own.removeAllItems()
-        menu.addItem(.separator())
-        for row in rows { menu.addItem(row) }
+        let menu = SpaceMenu.menu(for: browser, space: space.id)
+        let rows = [
+            SpaceMenu.item(folded ? "Unfold \(name)" : "Fold \(name)") { [weak self] in self?.fold() }
+                .leadingSymbol(folded ? MenuSymbol.openFolders : MenuSymbol.shutFolders),
+            SpaceMenu.item("New Tab in \(name)") { [weak self] in self?.newTab() }.leadingSymbol(MenuSymbol.newTab),
+            NSMenuItem.separator(),
+        ]
+        for (at, row) in rows.enumerated() { menu.insertItem(row, at: at) }
         return menu
     }
 

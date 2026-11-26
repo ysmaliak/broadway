@@ -148,6 +148,33 @@ final class PickedDragTests {
         #expect(t[4].pin == nil)
     }
 
+    @Test func pickedRowsLetGoOnAnotherSpaceLeaveNoCarriedRowInTheAir() async throws {
+        let browser = makeBrowser(count: 5)
+        let t = browser.tabs
+        browser.select(t[0])
+        pick(browser, [t[2], t[3]])
+        let window = makeWindow(browser)
+        try await settle(in: window)
+        let page = try #require(livePage(in: window))
+        var dropped: [Search.Tab.ID] = []
+        page.outside = { tab, _, ended in
+            if ended { dropped.append(tab.id) }
+            return ended
+        }
+        let row = try #require(Bench.rowFrames[t[2].id])
+
+        let last = try await carry(from: try middle(t[2], in: window), through: [
+            point(x: 70, y: row.midY + 30, in: window),
+        ], in: window)
+        let carried = page.morphView
+        try await send(.leftMouseUp, at: last, in: window)
+        try await waitUntil("the carried row stayed in the air") { page.morphCarried == nil }
+
+        #expect(carried?.count == 3)
+        #expect(dropped == [t[2].id])
+        #expect(page.morphView == nil)
+    }
+
     @Test func aPickedRowLetGoOnAnotherSpaceTakesEveryPickedTab() async throws {
         let browser = makeBrowser(count: 5)
         let t = browser.tabs

@@ -625,7 +625,7 @@ extension Browser {
 /// The dot's menu: the spaces, then what can be done to the one on screen.
 @MainActor
 enum SpaceMenu {
-    private static func item(_ title: String, checked: Bool = false, _ run: @escaping () -> Void) -> NSMenuItem {
+    static func item(_ title: String, checked: Bool = false, _ run: @escaping () -> Void) -> NSMenuItem {
         KitMenu.item(.action(title, modifiers: [], on: checked, run: run))
     }
 
@@ -656,7 +656,7 @@ enum SpaceMenu {
         menu.addItem(item("Rename “\(here.name)”…") {
             Ask.name("Rename Space", placeholder: here.name, initial: here.name, confirm: "Rename") { browser.renameSpace(here.id, to: $0) }
         }.leadingSymbol(MenuSymbol.rename))
-        if icon { menu.addItem(item("Change Icon…") { browser.iconPicker.pick(.space(here.id)) }) }
+        if icon { menu.addItem(item("Change Icon…") { browser.iconPicker.pick(.space(here.id)) }.leadingSymbol(MenuSymbol.icon)) }
         if shown { menu.addItem(item("Edit Look…") { browser.editingLook = true }.leadingSymbol(MenuSymbol.look)) }
         // The order is the swipe's, and ⌃1–⌃9's.
         if let at = browser.spaces.firstIndex(where: { $0.id == here.id }) {

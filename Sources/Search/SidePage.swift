@@ -2283,6 +2283,7 @@ extension SidePageView {
     func land(_ tab: Tab, _ point: CGPoint?) -> Bool {
         if let outside, tab.pin == nil, outside(tab, point.map { convert($0, to: nil) }, true) {
             if crossing != nil { crossing = nil }
+            if morphCarried == tab.id { settle(nil, tile: false) {} }
             return true
         }
         let many = carry?.tab.id == tab.id ? carry?.many ?? [] : []

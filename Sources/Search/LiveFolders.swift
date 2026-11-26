@@ -2247,9 +2247,15 @@ enum LiveMenu {
             menu.addItem(none)
         }
         for (index, add) in adds.enumerated() {
-            if index > 0, case .preset = add, case .suggested = adds[index - 1] { menu.addItem(.separator()) }
+            if index > 0, service(add) != service(adds[index - 1]) { menu.addItem(.separator()) }
             menu.addItem(PlusMenu.item(add.title) { browser.addLivePreset(add.name, add.source, space: nil) })
         }
         return menu
+    }
+
+    static func service(_ add: LiveAdd) -> String {
+        guard case .preset(let preset) = add else { return "suggested" }
+        let parts = preset.id.split(separator: ".")
+        return parts.count > 1 ? String(parts[0]) : "other"
     }
 }

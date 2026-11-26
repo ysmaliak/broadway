@@ -196,6 +196,17 @@ final class TabIconTests {
         #expect(browser.spaceID == first)
     }
 
+    @Test func everyCommandInASpacesMenuCarriesALeadingSymbolSoTheWordsLineUp() throws {
+        let work = Space(id: UUID(), name: "Work", colour: 0)
+        browser.spaces.append(work)
+
+        let menu = SpaceMenu.menu(for: browser, space: work.id, icon: true)
+
+        let commands = menu.items.filter { !$0.isSeparatorItem }.dropFirst(browser.spaces.count)
+        #expect(commands.contains { $0.title == "Change Icon…" })
+        #expect(commands.filter { $0.offStateImage == nil }.map(\.title) == [])
+    }
+
     @Test func theSpaceMenuShowsTheKeysInForceForEachSpace() throws {
         let store = ShortcutStore.shared
         defer { store.reset("spaces.1"); store.reset("spaces.2") }

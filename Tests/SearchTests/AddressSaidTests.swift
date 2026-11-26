@@ -59,6 +59,17 @@ final class AddressSaidTests {
         #expect(pill(tab) == AddressLaneView.text(other.url("/slow"), full: browser.prefs.fullAddress))
     }
 
+    @Test func anAddressHeldForTheTabWithoutLoadingItIsNamedByThePillAndTheRow() async throws {
+        let tab = try await started()
+        let asked = try #require(URL(string: "https://shop.example/sign-in"))
+
+        tab.hold(asked)
+
+        #expect(tab.committed == server.url("/start"))
+        #expect(tab.saidAddress == asked)
+        #expect(pill(tab) == AddressLaneView.text(asked, full: browser.prefs.fullAddress))
+    }
+
     @Test func aLoadThePageStartedLeavesThePillAndTheRowOnThePageOnScreenUntilTheNewOneArrives() async throws {
         let tab = try await started()
 

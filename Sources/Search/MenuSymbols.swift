@@ -37,6 +37,7 @@ enum MenuSymbol {
     static let downloadsFolder = "arrow.down.circle"
     static let settingsFolder = "arrow.uturn.backward"
     static let languages = "globe"
+    static let icon = "face.smiling"
 
     static func mute(_ muted: Bool) -> String { muted ? "speaker.wave.2" : "speaker.slash" }
 }

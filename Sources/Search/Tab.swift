@@ -320,7 +320,7 @@ final class Tab: Identifiable {
     /// A tab with no view (asleep, restored) has only its address to say.
     var restAddress: URL? { built == nil ? address : committed }
     private(set) var ownLoad = false
-    var saidAddress: URL? { ownLoad ? address : restAddress }
+    var saidAddress: URL? { ownLoad || held != nil ? address : restAddress }
 
     func didCommit() {
         retryCommitted()

@@ -19,6 +19,25 @@ enum BenchMenus {
         case "read":
             guard let menu = shown else { answer(["error": "no menu open"]); return }
             answer(["items": describe(menu)])
+        case "pick":
+            guard var menu = shown else { answer(["error": "no menu open"]); return }
+            let path = request["path"] as? [String] ?? []
+            for (depth, title) in path.enumerated() {
+                guard let at = menu.items.firstIndex(where: { $0.title == title }) else { answer(["error": "no item \(title)"]); return }
+                if depth == path.count - 1 {
+                    shown?.cancelTracking()
+                    shown = nil
+                    let last = menu
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        last.performActionForItem(at: at)
+                        answer(["picked": title])
+                    }
+                    return
+                }
+                guard let next = menu.items[at].submenu else { answer(["error": "\(title) opens no menu"]); return }
+                menu = next
+            }
+            answer(["error": "pick needs a path"])
         case "keys":
             guard let menu = shown, let window = browser.window else { answer(["error": "no menu open"]); return }
             for key in request["keys"] as? [String] ?? [] { press(key, window: window) }

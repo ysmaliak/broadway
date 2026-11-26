@@ -143,6 +143,24 @@ final class SpaceKitTests {
         #expect(header.accessibilityCustomActions()?.first?.name == "Unfold")
     }
 
+    @Test func aHeadersMenuStartsWithFoldAndNewTabDrawnAsTheSpaceMenusCommands() throws {
+        let other = Space(id: UUID(), name: "Errands", colour: 0, icon: TabIcon(symbol: "cart"))
+        browser.spaces.append(other)
+        let folds = StackedFolds()
+        let header = StackedHeaderView(browser: browser, folds: folds, space: other, count: 2)
+        defer { folds.forget(other.id) }
+        let press = try #require(NSEvent.mouseEvent(with: .rightMouseDown, location: .zero, modifierFlags: [], timestamp: 0,
+                                                    windowNumber: 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+
+        let rows = try #require(header.menu(for: press)).items
+
+        #expect(rows.prefix(2).map(\.title) == ["Fold Errands", "New Tab in Errands"])
+        #expect(rows[2].isSeparatorItem)
+        #expect(rows.prefix(2).allSatisfy { $0.image == nil && $0.offStateImage != nil })
+        #expect(rows.filter { !$0.isSeparatorItem }.dropFirst(2 + browser.spaces.count).filter { $0.offStateImage == nil }.map(\.title) == [])
+        #expect(rows.contains { $0.title == "Rename “Errands”…" })
+    }
+
     @Test func theCurrentSpacesHeaderSaysSo() {
         let header = StackedHeaderView(browser: browser, folds: StackedFolds(), space: browser.space, count: 1)
 

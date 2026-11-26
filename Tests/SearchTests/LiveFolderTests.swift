@@ -933,6 +933,19 @@ final class LiveFolderTests {
         #expect(titles.contains("Google Drive"))
     }
 
+    @Test func theNewLiveFolderMenuDrawsALineWhereTheServiceChanges() {
+        _ = LiveFolders.shared.add(name: "PRs", source: .pullRequests, space: browser.spaceID)
+
+        let rows = LiveMenu.menu(for: browser).items.drop { $0.title != "GitHub Assigned Issues" }
+        let groups = rows.split { $0.isSeparatorItem }.map { $0.map(\.title) }
+
+        #expect(groups == [
+            ["GitHub Assigned Issues", "GitHub Notifications"],
+            ["Linear My Issues", "Linear Mentions", "Linear Inbox", "Linear Created by Me"],
+            ["YouTube Subscriptions", "Google Drive"],
+        ])
+    }
+
     @Test func followingASiteTheSpaceAlreadyFollowsAddsNoSecondFolder() throws {
         let tab = browser.makeTab()
         tab.restore(url: try #require(URL(string: "https://example.com/blog")), title: "Blog")
