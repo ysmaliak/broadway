@@ -1905,11 +1905,15 @@ extension SidePageView {
 
     private func dropMany(_ carry: SideCarry, at point: NSPoint) {
         let target = destination(carry.tab, at: point)
+        let loose = looseOn
         spring.over(nil) { _ in }
         if land(carry.tab, point) { return }
-        guard let target else { return }
         animateNext = true
-        browser.move(carry.many, toGroup: target.group)
+        if let target {
+            browser.moveBlock(carry.many, to: .folder(target))
+        } else if let loose {
+            browser.moveBlock(carry.many, to: .loose(loose))
+        }
     }
 
     private func dragPin(_ point: NSPoint) {
@@ -1973,10 +1977,11 @@ extension SidePageView {
         case .loose(let out)?: loose = carried || browser.group(of: tab) != nil ? out : nil
         case nil: break
         }
-        if (carry?.many.count ?? 0) > 1 {
-            loose = nil
-            target = target.flatMap { target in
-                browser.tabGroups.first { $0.id == target.group }?.live == false ? GroupDropTarget(group: target.group) : nil
+        if let many = carry?.many, many.count > 1 {
+            let refused = browser.blockMovers(many) == nil
+            if refused { loose = nil }
+            target = refused ? nil : target.flatMap { target in
+                browser.tabGroups.first { $0.id == target.group }?.live == false ? target : nil
             }
         }
         let shut = target.flatMap { target in

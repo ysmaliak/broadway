@@ -4751,7 +4751,7 @@ extension Browser {
         writeSession(now: true)
     }
 
-    private func markFilled(_ id: UUID?) {
+    func markFilled(_ id: UUID?) {
         guard undoQuiet == 0, let id, let index = tabGroups.firstIndex(where: { $0.id == id && $0.ai }),
               !tabGroups[index].userFilled else { return }
         tabGroups[index].userFilled = true

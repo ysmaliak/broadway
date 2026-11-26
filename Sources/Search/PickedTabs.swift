@@ -194,6 +194,68 @@ extension Browser {
         for tab in chosen { move(tab, toGroup: id) }
     }
 
+    func blockMovers(_ chosen: [Tab]) -> [Tab]? {
+        let movers = wholePairs(chosen).filter { $0.pin == nil && !$0.shy && !$0.bench }
+        let live = Set(tabGroups.filter(\.live).map(\.id))
+        guard !movers.isEmpty,
+              !movers.contains(where: { $0.liveKey != nil || $0.groupID.map(live.contains) == true }) else { return nil }
+        return movers
+    }
+
+    func moveBlock(_ chosen: [Tab], to place: ListDrop) {
+        guard let movers = blockMovers(chosen) else { return }
+        let mark = beginStep(movers.count == 1 ? "Move Tab" : "Move \(movers.count) Tabs")
+        defer { endStep(mark) }
+        let grouped = prefs.usesTabGroups
+        let ids = Set(movers.map(\.id))
+        var folder: UUID?
+        var anchor: (index: Int, after: Bool)?
+        switch place {
+        case .folder(let target):
+            guard grouped, tabGroups.contains(where: { $0.id == target.group && !$0.live }) else { return }
+            guard let member = target.member else {
+                for tab in movers { move(tab, toGroup: target.group) }
+                return
+            }
+            guard let found = tabs.first(where: { $0.id == member }), found.groupID == target.group,
+                  let index = tabs.firstIndex(where: { $0.id == split(for: found).map { target.after ? $0.right : $0.left } ?? member })
+            else { return }
+            folder = target.group
+            anchor = (index, target.after)
+        case .loose(let out):
+            let index: Int? = switch out.before {
+            case .tab(let id)?: tabs.firstIndex { $0.id == id }
+            case .folder(let id)?: tabs.firstIndex { tab in
+                tab.pin == nil && tab.groupID.map { FolderTree.root(of: $0, in: tabGroups) == id } == true
+            } ?? listTop(tabs, groups: tabGroups)
+            case nil: nil
+            }
+            anchor = index.map { ($0, false) }
+        }
+        var row = tabs.filter { !ids.contains($0.id) }
+        let insertion = anchor.map { at in
+            tabs[..<at.index].filter { !ids.contains($0.id) }.count + (at.after && !ids.contains(tabs[at.index].id) ? 1 : 0)
+        } ?? row.count
+        row.insert(contentsOf: movers, at: insertion)
+        let regrouped = grouped && movers.contains { $0.groupID != folder }
+        guard regrouped || row.map(\.id) != tabs.map(\.id) else { return }
+        let previous = Dictionary(movers.map { ($0.id, $0.groupID) }, uniquingKeysWith: { first, _ in first })
+        if grouped {
+            if let folder, regrouped { markFilled(folder) }
+            for tab in movers {
+                tab.groupID = folder
+                letGoLive(tab, from: previous[tab.id] ?? nil)
+            }
+        }
+        if let folder, let index = tabGroups.firstIndex(where: { $0.id == folder }) {
+            tabGroups[index].held = false
+            unfoldFolder(folder)
+        }
+        setRow(row)
+        if grouped { for id in Set(previous.values.compactMap { $0 }) where id != folder { removeEmptyGroup(id) } }
+        writeSession(now: true)
+    }
+
     func moveTab(by step: Int) {
         guard let tab = active, tabs.contains(where: { $0.id == tab.id }), !tab.bench else { return }
         let lead = split(for: tab).flatMap { pair in tabs.first { $0.id == pair.left } } ?? tab

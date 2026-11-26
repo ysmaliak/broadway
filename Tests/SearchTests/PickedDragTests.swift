@@ -237,6 +237,87 @@ final class PickedDragTests {
         #expect(browser.tabs.contains { $0 === t[2] })
     }
 
+    @Test func threePickedRowsCarriedAmongTheLooseRowsShowTheDropLineAndTravelThereTogether() async throws {
+        try await carryThreeAmongTheLooseRows(reduced: false)
+    }
+
+    @Test func underReduceMotionThePickedRowsLandWithoutTravel() async throws {
+        try await carryThreeAmongTheLooseRows(reduced: true)
+    }
+
+    @Test func aPickedRowInAFolderTravelsOutWithTheBlock() async throws {
+        let store = Store.settings
+        let saved = ["motion.testReduced", "motion.testLowPower"].map { ($0, store.object(forKey: $0)) }
+        for (key, _) in saved { store.set(false, forKey: key) }
+        defer { for (key, value) in saved { store.set(value, forKey: key) } }
+        let browser = makeBrowser(count: 6)
+        let t = browser.tabs
+        browser.prefs.usesTabGroups = true
+        let folder = browser.addTabGroup(containing: t[0], pinned: false)
+        browser.move(t[1], toGroup: folder)
+        browser.editingGroupID = nil
+        browser.select(t[3])
+        pick(browser, [t[1], t[4]])
+        let window = makeWindow(browser)
+        try await settle(in: window)
+        let target = try #require(Bench.rowFrames[t[4].id])
+
+        let last = try await carry(from: try middle(t[3], in: window), through: [
+            point(x: 70, y: target.midY + 10, in: window),
+            point(x: 70, y: target.minY + 4, in: window),
+        ], in: window)
+        let page = try #require(livePage(in: window))
+        #expect(page.looseOn == LoosePlace(before: .tab(t[5].id)))
+        try await send(.leftMouseUp, at: last, in: window)
+        let root = try #require(window.contentView)
+        let moving = subviews(of: TabRowView.self, in: root).filter { $0.tab?.id == t[1].id && !($0.superview is SideFoldClip) }
+        let travels = moving.contains { $0.layer?.animation(forKey: "position") != nil }
+        try await waitUntil("the picked rows did not leave the folder") { browser.group(of: t[1]) == nil }
+        try await settle(in: window)
+
+        let loose = browser.displayedTabs.filter { browser.group(of: $0) == nil }.compactMap { tab in t.firstIndex { $0 === tab } }
+        #expect(loose == [2, 1, 3, 4, 5])
+        #expect(browser.group(of: t[0]) == folder)
+        #expect(travels, "the row leaving its folder travels to its new place")
+    }
+
+    private func carryThreeAmongTheLooseRows(reduced: Bool) async throws {
+        let store = Store.settings
+        let saved = ["motion.testReduced", "motion.testLowPower"].map { ($0, store.object(forKey: $0)) }
+        store.set(reduced, forKey: "motion.testReduced")
+        store.set(false, forKey: "motion.testLowPower")
+        defer { for (key, value) in saved { store.set(value, forKey: key) } }
+        let browser = makeBrowser(count: 6)
+        let t = browser.tabs
+        browser.select(t[3])
+        pick(browser, [t[4], t[5]])
+        let window = makeWindow(browser)
+        try await settle(in: window)
+        let page = try #require(livePage(in: window))
+        let target = try #require(Bench.rowFrames[t[1].id])
+
+        let last = try await carry(from: try middle(t[3], in: window), through: [
+            point(x: 70, y: target.midY + 10, in: window),
+            point(x: 70, y: target.minY + 4, in: window),
+        ], in: window)
+        #expect(page.morphView?.count == 3)
+        #expect(page.looseOn == LoosePlace(before: .tab(t[1].id)), "the drop line shows as for one row")
+        let line = try #require(SidePageView.benchDrop["line"] as? [Double])
+        #expect(abs(line[1] - Double(target.minY)) < 8, "the line sits at the top of the row it goes before")
+        #expect(browser.tabs.map(\.id) == t.map(\.id), "the other picked rows stay where they are")
+
+        try await send(.leftMouseUp, at: last, in: window)
+        let others = subviews(of: TabRowView.self, in: try #require(window.contentView)).first { $0.tab?.id == t[5].id }
+        let travels = others?.layer?.animation(forKey: "position") != nil
+        try await waitUntil("the picked rows did not land at the drop line") {
+            browser.tabs.map(\.id) == [t[0], t[3], t[4], t[5], t[1], t[2]].map(\.id)
+        }
+        try await settle(in: window)
+
+        #expect(travels == !reduced, reduced ? "no travel under Reduce Motion" : "the picked rows travel to their new places")
+        #expect(browser.selectedTabIDs == Set([t[3], t[4], t[5]].map(\.id)), "and stay picked")
+    }
+
     private func livePage(in window: NSWindow) -> SidePageView? {
         guard let root = window.contentView else { return nil }
         return subviews(of: SidePageView.self, in: root).first { $0.preview == nil && !$0.embedded && !$0.isHiddenOrHasHiddenAncestor }
