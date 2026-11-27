@@ -155,6 +155,12 @@ extension Browser {
 }
 
 extension Bench {
+    static func logins(_ rows: [[String: Any]]) -> (kept: [Kept], secret: @Sendable (Kept) -> Login?) {
+        let kept = rows.map { Kept(host: $0["host"] as? String ?? "", user: $0["user"] as? String ?? "", used: nil, clear: $0["clear"] as? Bool ?? true, port: $0["port"] as? Int) }
+        let secrets = Dictionary(zip(kept, rows).map { ($0.id, $1["password"] as? String ?? "") }, uniquingKeysWith: { a, _ in a })
+        return (kept, { one in secrets[one.id].map { Login(host: one.host, user: one.user, password: $0, used: nil, clear: one.clear, port: one.port) } })
+    }
+
     static func row(_ window: NSWindow) -> [String: Any] {
         ["number": window.windowNumber, "kind": "\(type(of: window))", "visible": window.isVisible, "level": window.level.rawValue,
          "frame": [window.frame.minX, window.frame.minY, window.frame.width, window.frame.height], "room": window is AgentPageRoom]
@@ -237,11 +243,9 @@ extension Bench {
             AgentDesk.shared.take(first.id, said)
             answer(["answered": first.title])
         case "logins":
-            let rows = request["kept"] as? [[String: Any]] ?? []
-            let kept = rows.map { Kept(host: $0["host"] as? String ?? "", user: $0["user"] as? String ?? "", used: nil, clear: $0["clear"] as? Bool ?? true, port: $0["port"] as? Int) }
-            let secrets = Dictionary(rows.map { (($0["host"] as? String ?? "") + "\u{1}" + ($0["user"] as? String ?? ""), $0["password"] as? String ?? "") }, uniquingKeysWith: { a, _ in a })
+            let (kept, secret) = Bench.logins(request["kept"] as? [[String: Any]] ?? [])
             AgentSocket.shared.box.logins = { _ in kept }
-            AgentSocket.shared.box.loginSecret = { one in secrets[one.id].map { Login(host: one.host, user: one.user, password: $0, used: nil, clear: one.clear, port: one.port) } }
+            AgentSocket.shared.box.loginSecret = secret
             if request["reset"] as? Bool == true { AgentSignIns.shared.reset() }
             answer(["kept": kept.count, "allowed": AgentSignIns.shared.sites])
         case "codes":
