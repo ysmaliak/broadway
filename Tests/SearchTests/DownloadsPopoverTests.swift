@@ -248,4 +248,18 @@ final class DownloadsPopoverTests {
         #expect(found[1]["clickable"] as? Bool == true)
         #expect(found[2]["clickable"] as? Bool == false)
     }
+
+    @Test func wordsThatCannotBePressedTakeTheInkOfARowsSecondLine() {
+        let empty = DownloadsWordCell()
+        let off = DownloadsWordCell()
+        let on = DownloadsWordCell()
+
+        empty.show("No Recent Downloads", enabled: false)
+        off.show("Clear", enabled: false)
+        on.show("Show All Downloads", enabled: true)
+
+        #expect(empty.textField?.textColor == Palette.NS.glassMuted)
+        #expect(off.textField?.textColor == Palette.NS.glassMuted)
+        #expect(on.textField?.textColor == .labelColor)
+    }
 }

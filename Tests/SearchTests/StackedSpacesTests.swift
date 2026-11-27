@@ -105,6 +105,7 @@ struct StackedSpacesTests {
     }
 
     @Test func theFoldedCountReads() {
+        #expect(StackedSpaces.count(0) == "No tabs")
         #expect(StackedSpaces.count(1) == "1 tab")
         #expect(StackedSpaces.count(3) == "3 tabs")
     }

@@ -25,7 +25,7 @@ SURFACES = [
     ("announcement", "hint", {"text": "⌘W closes a tab"}),
     ("agent-ask-outside", "shown", {}),
     ("offer-bar", "link-notice", {"text": "Open links from Mail in this space?"}),
-    ("offer-bar", "developer", {"text": "Turn on Developer Mode for ⌥⌘I?"}),
+    ("offer-bar", "developer", {"text": "Developer Mode for ⌥⌘I?"}),
     ("link-preview", "shown", {}),
     ("update-card", "shown", {}),
     ("stuck-card", "stuck", {}),

@@ -2317,8 +2317,15 @@ extension SidePageView {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.layoutSubtreeIfNeeded()
+            self.dressLanding(tab)
             self.settle(self.home(of: tab), tile: tab.pin != nil) {}
         }
+    }
+
+    private func dressLanding(_ tab: Tab) {
+        guard morphCarried == tab.id, tab.pin == nil, let morphView, Self.morphLanding.animates,
+              let state = rows[tab.id]?.state, state.interactive, state.picked else { return }
+        morphView.land(picked: state.ground.greys.picked, join: state.join, radius: state.radius, live: state.live, curve: Self.morphLanding)
     }
 
     private func home(of tab: Tab) -> CGRect? {
@@ -2347,6 +2354,7 @@ extension SidePageView {
             done()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2 * PinMorph.slow) { self?.finishMorph(mine) }
         }
+        morphView.letGo(curve: curve)
         morphView.apply(frame: rect, form: tile ? 1 : 0, lift: 0, curve: curve)
         CATransaction.commit()
     }
@@ -2354,7 +2362,7 @@ extension SidePageView {
     private func finishMorph(_ mine: Int) {
         guard mine == flights else { return }
         PinFlightTrace.event("finish \(mine)")
-        if morphCarried != nil, let morph = morphView, let layer = morph.layer {
+        if morphCarried != nil, let morph = morphView, let layer = morph.layer, morph.joined == nil {
             let fade = CABasicAnimation(keyPath: "opacity")
             fade.fromValue = layer.presentation()?.opacity ?? layer.opacity
             fade.toValue = 0

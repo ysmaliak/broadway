@@ -36,7 +36,7 @@ MEMBERS = [
 ]
 
 
-BARS = ["Opened in Work by a rule", "Turn on Developer Mode", "Filled 3", "Allow Ads Here"]
+BARS = ["Opened in Work by a rule", "Developer Mode", "Filled 3", "Allow Ads Here"]
 
 
 def bars(on):

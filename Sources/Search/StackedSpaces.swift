@@ -49,7 +49,7 @@ enum StackedSpaces {
     }
 
     static func count(_ tabs: Int) -> String {
-        tabs == 1 ? "1 tab" : "\(tabs) tabs"
+        tabs == 0 ? "No tabs" : tabs == 1 ? "1 tab" : "\(tabs) tabs"
     }
 
     static func section(at point: CGPoint, heads: [UUID: CGRect], bodies: [UUID: CGRect], except: UUID?) -> UUID? {
@@ -531,7 +531,8 @@ final class StackedHeaderView: NSView {
     private var folded: Bool { folds.isFolded(space.id) }
     private var active: Bool { space.id == browser.spaceID }
     private var shownGathered: Bool?
-    private var chipShare: CGFloat { gathered ? 1 : 1 - openness }
+    private var shownCounted: Bool?
+    private var chipShare: CGFloat { count == 0 ? 0 : gathered ? 1 : 1 - openness }
     private lazy var reads = KitReads { [weak self] in self?.refresh() }
 
     init(browser: Browser, folds: StackedFolds = .shared, space: Space, count: Int) {
@@ -588,7 +589,7 @@ final class StackedHeaderView: NSView {
         plate.frame = row
         well.frame = row
         ground?.frame = well.bounds
-        let showsChip = openness < 1 || gathered
+        let showsChip = count > 0 && (openness < 1 || gathered)
         let showsDoors = hovering && !gathered
         let middle = row.minX + SpaceTitleLineView.iconMiddle
         mark.frame = kitSnap(NSRect(x: middle - 10, y: row.minY + (row.height - 18) / 2 - 0.5, width: 20, height: 18))
@@ -722,11 +723,13 @@ final class StackedHeaderView: NSView {
     private func refreshNow() {
         let name = space.name
         if mark.icon != space.shownIcon { mark.icon = space.shownIcon }
-        let was = chip.window == nil ? nil : (chip.convert(chip.bounds, to: nil), chip.frame)
-        tally.roll("\(count)", for: space.id)
-        if tally.rolled?.busy == true {
-            carried = was
-            needsLayout = true
+        if count > 0 {
+            let was = chip.window == nil ? nil : (chip.convert(chip.bounds, to: nil), chip.frame)
+            tally.roll("\(count)", for: space.id)
+            if tally.rolled?.busy == true {
+                carried = was
+                needsLayout = true
+            }
         }
         add.setAccessibilityLabel("New Tab in \(name)")
         add.toolTip = "New Tab in \(name)"
@@ -736,12 +739,17 @@ final class StackedHeaderView: NSView {
         turn.setAccessibilityLabel(turnLabel)
         turn.toolTip = turnLabel
         let showsDoors = hovering && !gathered
-        if gathered != shownGathered {
+        let counted = count > 0
+        let turned = shownCounted.map { $0 != counted } ?? false
+        shownCounted = counted
+        if gathered != shownGathered || (turned && gathered) {
             let first = shownGathered == nil
             shownGathered = gathered
             chip.isHidden = false
             chip.layer?.kitAnimate("opacity", to: Swift.Float(chipShare), curve: first || window == nil ? .none : Motion.kitSettle, key: "fade")
             chip.alphaValue = chipShare
+        } else if turned, window != nil, openness == 0 {
+            chip.layer?.kitAnimate("opacity", to: Swift.Float(chipShare), curve: Motion.kitSettle, key: "count")
         }
         fade(doors, shown: showsDoors, curve: Motion.kitQuick)
         showOpenness()

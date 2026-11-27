@@ -143,6 +143,35 @@ final class SpaceKitTests {
         #expect(header.accessibilityCustomActions()?.first?.name == "Unfold")
     }
 
+    @Test func aFoldedHeadingWithNoTabsShowsNoCount() throws {
+        let folds = StackedFolds()
+        let other = Space(id: UUID(), name: "Errands", colour: 0, icon: TabIcon(symbol: "cart"))
+        folds.set(other.id, folded: true)
+        defer { folds.forget(other.id) }
+        let header = StackedHeaderView(browser: browser, folds: folds, space: other, count: 0)
+        header.frame = NSRect(x: 0, y: 0, width: 246, height: StackedHeaderView.height)
+        header.layoutSubtreeIfNeeded()
+        let chip = try #require(header.subviews.compactMap { $0 as? KitBox }.first { box in box.subviews.contains { $0 is KitLabel } })
+        let name = try #require(header.subviews.compactMap { $0 as? KitLabel }.first)
+
+        let empty = (chip.alphaValue, header.accessibilityValue() as? String)
+        header.count = 2
+        header.layoutSubtreeIfNeeded()
+        let holding = (chip.alphaValue, chip.subviews.compactMap { $0 as? KitLabel }.first?.text, header.accessibilityValue() as? String)
+        header.count = 0
+        header.layoutSubtreeIfNeeded()
+        let emptied = (chip.alphaValue, header.accessibilityValue() as? String)
+
+        #expect(empty.0 == 0)
+        #expect(empty.1 == "No tabs")
+        #expect(holding.0 == 1)
+        #expect(holding.1 == "2")
+        #expect(holding.2 == "2 tabs")
+        #expect(emptied.0 == 0)
+        #expect(emptied.1 == "No tabs")
+        #expect(name.text == "Errands")
+    }
+
     @Test func aHeadersMenuStartsWithFoldAndNewTabDrawnAsTheSpaceMenusCommands() throws {
         let other = Space(id: UUID(), name: "Errands", colour: 0, icon: TabIcon(symbol: "cart"))
         browser.spaces.append(other)

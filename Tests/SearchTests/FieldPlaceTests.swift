@@ -503,6 +503,49 @@ final class FieldPlaceTests {
 
     private func place(_ view: NSView) -> NSRect { view.convert(view.bounds, to: nil) }
 
+    private func lit(title: String, width: CGFloat, splits: Bool = false, lit: Bool = true) -> (hints: [String], title: Double, aside: String, address: Bool) {
+        let address = "news.example/articles/2026/11/26/notes"
+        let (window, row) = placeRow(title: title, address: address)
+        defer { window.contentView = nil }
+        row.setFrameSize(NSSize(width: width, height: row.frame.height))
+        row.splits = splits
+        row.lit = lit
+        row.layoutSubtreeIfNeeded()
+        let shown = row.kitSubviews(of: KitLabel.self).first { $0.text == address }
+        return (row.bench["hints"] as? [String] ?? [], row.bench["titleWidth"] as? Double ?? 0, row.bench["aside"] as? String ?? "",
+                shown.map { !$0.isHidden && $0.frame.width > 0 } ?? false)
+    }
+
+    @Test func theLitRowKeepsItsTitleAndLetsItsLastHintsGoInANarrowWindow() {
+        let ordinary = "Ordinary Notes On The Garden Forecast In May"
+
+        let narrow = lit(title: ordinary, width: 446)
+        let short = lit(title: "Alpha", width: 446)
+        let wide = lit(title: ordinary, width: 624)
+        let split = lit(title: "Alpha", width: 446, splits: true)
+
+        #expect(narrow.hints == ["⌘↩ Background", "⇧⌘C Copy Link"])
+        #expect(narrow.title >= (446 - 82) * 0.4 - 1)
+        #expect(short.hints == ["⌘↩ Background", "⇧⌘C Copy Link", "⇧⌫ Forget"])
+        #expect(wide.hints == ["⌘↩ Background", "⇧⌘C Copy Link", "⇧⌫ Forget"])
+        #expect(split.hints == ["⌘↩ Background", "⌥↩ Split View", "⇧⌘C Copy Link"])
+        #expect(split.title > 30)
+        #expect([narrow, short, wide, split].allSatisfy { $0.aside.isEmpty && !$0.address })
+    }
+
+    @Test func aLitRowWithNoRoomForAHintShowsWhatItShowsAtRest() {
+        let ordinary = "Ordinary Notes On The Garden Forecast In May"
+
+        let none = lit(title: ordinary, width: 230)
+        let resting = lit(title: ordinary, width: 230, lit: false)
+
+        #expect(none.hints == [])
+        #expect(none.aside == "5 min ago")
+        #expect(none.address)
+        #expect(none.title == resting.title)
+        #expect(resting.aside == "5 min ago")
+    }
+
     @Test func aLongTitleAndItsAddressShareTheRoomBeforeTheTime() throws {
         let title = String(String(repeating: "Notes from the long meeting about the spring plan ", count: 5).prefix(200))
         let address = "news.example/articles/2026/11/26/notes-from-the-long-meeting"

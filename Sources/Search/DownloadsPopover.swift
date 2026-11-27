@@ -767,7 +767,7 @@ final class DownloadsWordCell: NSTableCellView {
 
     func show(_ text: String, enabled: Bool) {
         word.stringValue = text
-        word.textColor = enabled ? .labelColor : Palette.NS.glassFaint
+        word.textColor = enabled ? .labelColor : Palette.NS.glassMuted
         if press != nil {
             setAccessibilityElement(true)
             setAccessibilityRole(.button)

@@ -457,6 +457,7 @@ final class FieldPlaceRowView: NSView {
     private let aside = FieldLine.label("", size: 12, color: KitColor.muted)
     private var hints: [(cap: FieldKeyCap, word: KitLabel)] = []
     private var shownHints: [String] = []
+    private var fitted = 0
     private var bar: NSProgressIndicator?
     private var progress: KitLabel?
     private var progressWidth: CGFloat = 0
@@ -611,17 +612,46 @@ final class FieldPlaceRowView: NSView {
 
     private var trailingWidth: CGFloat {
         let scale = kitScale
-        if lit {
-            let parts = hints.map { $0.cap.intrinsicContentSize.width + 5 + FieldLine.width($0.word, scale: scale) }
+        if lit, fitted > 0 {
+            let parts = hints.prefix(fitted).map { $0.cap.intrinsicContentSize.width + 5 + FieldLine.width($0.word, scale: scale) }
             return parts.reduce(0, +) + CGFloat(max(0, parts.count - 1)) * 10
         }
         return aside.isHidden ? 0 : FieldLine.width(aside, scale: scale)
+    }
+
+    private func fit() {
+        guard lit else {
+            fitted = 0
+            return
+        }
+        let scale = kitScale
+        var room = bounds.width - 20 - 18 - 12 * 3 - 8
+        if bar != nil { room -= Self.barWidth + 12 }
+        if let progress { room -= (progressState == .failed ? 0 : max(progressWidth, FieldLine.width(progress, scale: scale))) + 12 }
+        let left = room - min(FieldLine.width(title, scale: scale), room * 0.4)
+        var used: CGFloat = 0
+        var count = 0
+        for hint in hints {
+            let next = used + (count > 0 ? 10 : 0) + hint.cap.intrinsicContentSize.width + 5 + FieldLine.width(hint.word, scale: scale)
+            guard next <= left else { break }
+            used = next
+            count += 1
+        }
+        fitted = count
+        for (index, hint) in hints.enumerated() {
+            hint.cap.isHidden = index >= count
+            hint.word.isHidden = index >= count
+        }
+        let bare = !hints.isEmpty && count == 0
+        detail.isHidden = entry != nil || item.detail.isEmpty || !bare
+        aside.isHidden = !bare || aside.text.isEmpty
     }
 
     static let barWidth: CGFloat = 64
 
     override func layout() {
         super.layout()
+        fit()
         var items: [FieldLine.Item] = []
         if let icon { items.append(.box(icon, 18, 18)) }
         items.append(.text(title, priority: 1))
@@ -645,7 +675,7 @@ final class FieldPlaceRowView: NSView {
         aside.frame = trailing.bounds
         var x: CGFloat = 0
         let scale = kitScale
-        for hint in hints {
+        for hint in hints.prefix(fitted) {
             let cap = hint.cap.intrinsicContentSize
             hint.cap.frame = trailing.kitSnap(NSRect(x: x, y: (trailing.bounds.height - cap.height) / 2, width: cap.width, height: cap.height))
             x += cap.width + 5
@@ -657,7 +687,7 @@ final class FieldPlaceRowView: NSView {
 
     var bench: [String: Any] {
         ["title": title.text, "progress": progress?.text ?? "", "bar": bar != nil, "indeterminate": bar?.isIndeterminate ?? false,
-         "fraction": bar?.doubleValue ?? 0, "hints": shownHints, "aside": aside.isHidden ? "" : aside.text,
+         "fraction": bar?.doubleValue ?? 0, "hints": Array(shownHints.prefix(fitted)), "aside": aside.isHidden ? "" : aside.text,
          "dimmed": (icon?.alphaValue ?? 1) < 1, "progressWidth": Double(progress?.frame.width ?? 0),
          "titleWidth": Double(title.frame.width), "width": Double(bounds.width)]
     }

@@ -136,11 +136,34 @@ struct BarWidthTests {
     }
 
     @Test func aShortBarKeepsItsOwnWidthAndNoTooltip() {
-        let made = OfferBarView("Turn on Developer Mode?", choices: [.init("Turn On", .primary) {}])
+        let made = OfferBarView("Developer Mode?", choices: [.init("Turn On", .primary) {}])
         let stack = stack(page: CGRect(x: 240, y: 0, width: 400, height: 480))
         stack.show([BarStack.Bar(view: made, kind: .offer)])
         stack.layoutSubtreeIfNeeded()
         #expect(abs(made.frame.width - made.intrinsicContentSize.width) <= 1)
         #expect(made.toolTip == nil)
+    }
+
+    @Test func theDeveloperModeOfferNamesItsSubjectFirstSoACutKeepsIt() throws {
+        let font = NSFont.systemFont(ofSize: 13)
+        func width(_ words: String) -> CGFloat { ceil(NSAttributedString(string: words, attributes: [.font: font]).size().width) }
+        func shown(pane: CGFloat) throws -> (room: CGFloat, tip: String?) {
+            let made = DeveloperOfferView.make(key: "127.0.0.1", turnOn: {}, notNow: {})
+            let stack = stack(page: CGRect(x: 0, y: 0, width: 640, height: 480))
+            stack.show([BarStack.Bar(view: made, kind: .offer, pane: CGRect(x: 640 - pane, y: 0, width: pane, height: 480))])
+            stack.layoutSubtreeIfNeeded()
+            let label = try #require(made.subviews.compactMap { $0 as? KitLabel }.first)
+            return (label.frame.width, made.toolTip)
+        }
+        let words = DeveloperOfferView.make(key: "127.0.0.1", turnOn: {}, notNow: {}).text
+
+        let split = try shown(pane: 310)
+        let narrowest = try shown(pane: PaneStage.narrowest)
+
+        #expect(words == "Developer Mode for 127.0.0.1?")
+        #expect(split.room >= width("Developer Mode…"))
+        #expect(narrowest.room >= width("Develop…"))
+        #expect(split.tip == words)
+        #expect(narrowest.tip == words)
     }
 }

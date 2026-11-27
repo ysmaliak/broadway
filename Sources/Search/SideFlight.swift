@@ -7,6 +7,8 @@ final class PinMorphView: NSView {
 
     private let clip = NSView()
     private let base = KitPlate()
+    private let pick = KitPlate()
+    private let reach = KitPlate()
     private let wash = KitPlate()
     private let face = PinFaceView()
     private let title = KitLabel()
@@ -17,6 +19,7 @@ final class PinMorphView: NSView {
     private var form: CGFloat = 0
     private var rowWidth: CGFloat = 0
     private var slab: Bool?
+    private(set) var joined: RowJoin?
     var washed = true
     var solid: NSColor? {
         didSet {
@@ -47,9 +50,12 @@ final class PinMorphView: NSView {
         clip.wantsLayer = true
         clip.layer?.masksToBounds = true
         clip.layer?.cornerCurve = .continuous
+        addSubview(reach)
         addSubview(clip)
-        for view in [base, wash, face, title, mark] as [NSView] { clip.addSubview(view) }
+        for view in [base, pick, wash, face, title, mark] as [NSView] { clip.addSubview(view) }
         base.isHidden = true
+        pick.isHidden = true
+        reach.isHidden = true
         wash.strokeWidth = 1
         title.lines = 1
         title.overflow = .tail
@@ -107,6 +113,41 @@ final class PinMorphView: NSView {
 
     var tallyFrame: NSRect? { tally.flatMap { $0.showing ? $0.frame : nil } }
 
+    var reachFrame: NSRect? { reach.isHidden ? nil : reach.frame }
+
+    var groundShare: CGFloat { base.isHidden ? 0 : base.alphaValue }
+
+    func letGo(curve: KitCurve) {
+        tally?.fold(false, curve: curve)
+    }
+
+    func land(picked fill: KitTone, join: RowJoin, radius: CGFloat, live: Bool, curve: KitCurve) {
+        joined = join
+        rowRadius = radius
+        let tone: KitTone = live ? .strong : .title
+        title.color = tone.base
+        title.opacity = tone.opacity
+        let corners = RowJoin.corners(join)
+        base.corners = corners
+        var clipped: CACornerMask = []
+        if !join.above { clipped.insert([.layerMinXMaxYCorner, .layerMaxXMaxYCorner]) }
+        if !join.below { clipped.insert([.layerMinXMinYCorner, .layerMaxXMinYCorner]) }
+        clip.layer?.maskedCorners = clipped
+        pick.corners = corners
+        for plate in [pick, reach] {
+            plate.ink = ink ?? .flat
+            plate.fill = fill
+        }
+        pick.isHidden = false
+        reach.isHidden = !join.above
+        if slab != nil { wash.stroke = nil }
+        for plate in [pick, reach] where !plate.isHidden {
+            guard let fade = curve.animation("opacity", from: Swift.Float(0), to: Swift.Float(1)) else { continue }
+            fade.fillMode = .backwards
+            plate.layer?.add(fade, forKey: "land.opacity")
+        }
+    }
+
     func carry(_ view: NSView) {
         held?.removeFromSuperview()
         held = view
@@ -123,7 +164,7 @@ final class PinMorphView: NSView {
         var radius: CGFloat = 0
     }
 
-    private var parts: [NSView] { [self, clip, base, wash, face, title, mark] + [tally].compactMap { $0 } }
+    private var parts: [NSView] { [self, clip, base, pick, reach, wash, face, title, mark] + [tally].compactMap { $0 } }
 
     private func seen() -> Seen {
         var seen = Seen()
@@ -150,8 +191,11 @@ final class PinMorphView: NSView {
         clip.layer?.cornerRadius = radius
         base.frame = box
         base.radius = radius
+        pick.frame = box
+        pick.radius = radius
+        reach.frame = NSRect(x: 0, y: -Metrics.sideGap, width: box.width, height: Metrics.sideGap)
         held?.frame = box
-        base.alphaValue = 1 - form
+        base.alphaValue = joined == nil ? 1 - form : 0
         wash.frame = box
         wash.radius = radius
         face.frame = box

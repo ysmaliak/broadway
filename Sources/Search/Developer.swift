@@ -661,7 +661,7 @@ final class OfferBarView: KitFlippedView, BarShrinks, KitOnGlass {
 @MainActor
 enum DeveloperOfferView {
     static func make(key: String, turnOn: @escaping () -> Void, notNow: @escaping () -> Void) -> OfferBarView {
-        OfferBarView("Turn on Developer Mode for \(key)?", choices: [.init("Not Now", run: notNow), .init("Turn On", .primary, run: turnOn)])
+        OfferBarView("Developer Mode for \(key)?", choices: [.init("Not Now", run: notNow), .init("Turn On", .primary, run: turnOn)])
     }
 }
 

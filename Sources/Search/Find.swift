@@ -61,9 +61,9 @@ final class FindBarView: NSView, NSTextFieldDelegate {
 
     init(browser: Browser?) {
         self.browser = browser
-        previous = KitGlassKey(symbol: "chevron.up", circle: Self.key, symbolSize: 9, weight: .semibold, quiet: true, label: "Previous Match")
-        next = KitGlassKey(symbol: "chevron.down", circle: Self.key, symbolSize: 9, weight: .semibold, quiet: true, label: "Next Match")
-        close = KitGlassKey(symbol: "xmark", circle: Self.key, symbolSize: 9, weight: .semibold, quiet: true, label: "Close Find on Page")
+        previous = KitGlassKey(symbol: "chevron.up", circle: Self.key, symbolSize: 9, weight: .semibold, label: "Previous Match")
+        next = KitGlassKey(symbol: "chevron.down", circle: Self.key, symbolSize: 9, weight: .semibold, label: "Next Match")
+        close = KitGlassKey(symbol: "xmark", circle: Self.key, symbolSize: 9, weight: .semibold, label: "Close Find on Page")
         super.init(frame: .zero)
         previous.kitAccess(help: "Find the previous match")
         next.kitAccess(help: "Find the next match")

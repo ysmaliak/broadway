@@ -279,6 +279,47 @@ final class PickedDragTests {
         #expect(travels, "the row leaving its folder travels to its new place")
     }
 
+    @Test func aCarriedBlockLandsAsOneBlockWithItsCountGone() async throws {
+        let store = Store.settings
+        let saved = ["motion.testReduced", "motion.testLowPower"].map { ($0, store.object(forKey: $0)) }
+        for (key, _) in saved { store.set(false, forKey: key) }
+        defer { for (key, value) in saved { store.set(value, forKey: key) } }
+        let browser = makeBrowser(count: 6)
+        let t = browser.tabs
+        browser.select(t[0])
+        pick(browser, [t[3], t[4], t[5]])
+        let window = makeWindow(browser)
+        try await settle(in: window)
+        let page = try #require(livePage(in: window))
+        let target = try #require(Bench.rowFrames[t[1].id])
+
+        let last = try await carry(from: try middle(t[4], in: window), through: [
+            point(x: 70, y: target.midY + 10, in: window),
+            point(x: 70, y: target.minY + 4, in: window),
+        ], in: window)
+        let carried = try #require(page.morphView)
+        let counted = carried.tallyFrame != nil
+        try await send(.leftMouseUp, at: last, in: window)
+        let landing = page.morphView
+        let count = landing?.tallyFrame
+        let joined = landing?.joined
+        let reach = landing?.reachFrame
+        let ground = landing?.groundShare
+        try await waitUntil("the picked rows did not land at the drop line") {
+            browser.tabs.map(\.id) == [t[0], t[3], t[4], t[5], t[1], t[2]].map(\.id)
+        }
+        try await waitUntil("the lifted copy never handed over") { page.morphView == nil }
+        let left = carried.superview == nil
+
+        #expect(counted, "the count rides with the hand")
+        #expect(landing === carried, "the same copy lands")
+        #expect(count == nil, "the count goes at the drop")
+        #expect(joined == RowJoin(above: true, below: true), "the copy wears the picked look of its place in the block")
+        #expect(reach?.minY == -Metrics.sideGap && reach?.height == Metrics.sideGap, "and reaches over the gap to the row above")
+        #expect(ground == 0, "over the column itself, as the picked rows beside it")
+        #expect(left, "the copy already looks like the row, so it leaves at once")
+    }
+
     private func carryThreeAmongTheLooseRows(reduced: Bool) async throws {
         let store = Store.settings
         let saved = ["motion.testReduced", "motion.testLowPower"].map { ($0, store.object(forKey: $0)) }

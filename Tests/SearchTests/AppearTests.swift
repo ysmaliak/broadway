@@ -67,6 +67,17 @@ struct LinkShowTests {
 @Suite(.sharedWorld, .timeLimit(.minutes(5)))
 @MainActor
 struct FindBarWidthTests {
+    @Test func theFindBarsRoundKeysCarryTheSameInkAsItsOptionsKey() {
+        let bar = FindBarView(browser: nil)
+
+        let keys = bar.kitSubviews(of: KitGlassKey.self)
+        let marks = keys.compactMap { $0.content as? KitSymbol }
+
+        #expect(keys.map(\.symbol).sorted() == ["chevron.down", "chevron.up", "xmark"])
+        #expect(marks.count == 3)
+        #expect(marks.allSatisfy { $0.opacity == 1 })
+    }
+
     @Test func theCountsSlotIsOneWidthWhateverItSays() {
         let statuses: [String?] = [nil, "1 of 3", "12 of 400", "999+ of 999+", "No matches", "Whole words unavailable"]
         let count = FindCountView()
