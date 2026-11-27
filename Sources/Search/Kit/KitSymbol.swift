@@ -29,6 +29,7 @@ final class KitSymbol: NSImageView {
     var opacity: Double = 1 { didSet { if opacity != oldValue { refresh() } } }
     var ink: KitInk = .flat { didSet { if ink != oldValue { refresh() } } }
     var whole = false { didSet { if whole != oldValue { invalidateIntrinsicContentSize() } } }
+    var fine = false { didSet { if fine != oldValue { refresh() } } }
 
     override var intrinsicContentSize: NSSize {
         whole ? (Self.image(name, style) ?? image)?.size ?? super.intrinsicContentSize : super.intrinsicContentSize
@@ -154,7 +155,7 @@ final class KitSymbol: NSImageView {
 
     private func refresh() {
         if !swapping {
-            let next = Self.image(name, style)
+            let next = fine ? KitGlyph.fine(name, style) : Self.image(name, style)
             if next !== image { image = next }
         }
         let tinted = style.palette.isEmpty ? ink.onGlass(kitOnGlass).color(tint, KitColor.kind(of: tint), opacity: opacity, dark: kitDark) : nil

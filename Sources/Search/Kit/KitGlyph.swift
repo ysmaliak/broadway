@@ -6,6 +6,56 @@ enum KitGlyph {
         named(KitSymbolCache.image(name, style) { made(name, style) }, label)
     }
 
+    static func fine(_ name: String, _ style: KitSymbol.Style) -> NSImage? {
+        KitSymbolCache.image("fine " + name, style) {
+            guard let drawn = made(name, style) else { return nil }
+            let size = NSSize(width: ceil(drawn.size.width), height: ceil(drawn.size.height))
+            let image = NSImage(size: size)
+            for scale in [1, 2] {
+                if let rep = averaged(drawn, in: size, scale: scale) { image.addRepresentation(rep) }
+            }
+            image.isTemplate = true
+            return image
+        }
+    }
+
+    private static func averaged(_ drawn: NSImage, in size: NSSize, scale: Int) -> NSBitmapImageRep? {
+        let step = 8
+        let wide = Int(size.width) * scale, high = Int(size.height) * scale
+        guard let fine = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: wide * step, pixelsHigh: high * step, bitsPerSample: 8,
+                                          samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                                          bytesPerRow: wide * step * 4, bitsPerPixel: 32),
+              let out = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: wide, pixelsHigh: high, bitsPerSample: 8, samplesPerPixel: 4,
+                                         hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: wide * 4, bitsPerPixel: 32),
+              let context = Self.context(fine, size: size)
+        else { return nil }
+        out.size = size
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        drawn.draw(in: NSRect(origin: .zero, size: drawn.size))
+        NSGraphicsContext.restoreGraphicsState()
+        guard let from = fine.bitmapData, let to = out.bitmapData else { return nil }
+        for row in 0..<high {
+            for column in 0..<wide {
+                var sum = 0
+                for y in row * step..<(row + 1) * step {
+                    for x in column * step..<(column + 1) * step { sum += Int(from[(y * wide * step + x) * 4 + 3]) }
+                }
+                let at = (row * wide + column) * 4
+                to[at] = 0
+                to[at + 1] = 0
+                to[at + 2] = 0
+                to[at + 3] = UInt8((sum + step * step / 2) / (step * step))
+            }
+        }
+        return out
+    }
+
+    private static func context(_ rep: NSBitmapImageRep, size: NSSize) -> NSGraphicsContext? {
+        rep.size = size
+        return NSGraphicsContext(bitmapImageRep: rep)
+    }
+
     static func plain(_ name: String, label: String? = nil) -> NSImage? {
         NSImage(systemSymbolName: name, accessibilityDescription: label)
     }

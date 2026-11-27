@@ -16,8 +16,12 @@ final class GestureDisc: NSView {
         var hub: CGPoint {
             switch self {
             case .left, .right: return CGPoint(x: -0.5, y: 0.5)
-            case .top: return CGPoint(x: -0.35, y: 1.85)
+            case .top: return .zero
             }
+        }
+
+        var ring: CGPoint? {
+            self == .top ? CGPoint(x: 0.4923, y: 0.5844) : nil
         }
     }
 
@@ -57,6 +61,8 @@ final class GestureDisc: NSView {
     init(_ edge: Edge) {
         self.edge = edge
         arrow = KitSymbol(edge.symbol, style: .init(size: GestureDisc.glyph, weight: .semibold), tint: KitColor.ink)
+        arrow.whole = edge.ring != nil
+        arrow.fine = edge.ring != nil
         turner = KitTurnView(arrow)
         let size = GestureDisc.size
         super.init(frame: NSRect(x: 0, y: 0, width: size, height: size))
@@ -104,7 +110,7 @@ final class GestureDisc: NSView {
     private func placeGlyph() {
         let size = GestureDisc.size
         let glyph = arrow.intrinsicContentSize
-        let spot = kitSnap(NSRect(x: (size - glyph.width) / 2 - edge.hub.x, y: (size - glyph.height) / 2 - edge.hub.y,
+        let spot = kitSnap(NSRect(x: (size - glyph.width) / 2 - hub.x, y: (size - glyph.height) / 2 - hub.y,
                                   width: glyph.width, height: glyph.height))
         if turner.frame != spot { turner.frame = spot }
     }
@@ -270,12 +276,18 @@ final class GestureDisc: NSView {
         setFace(scale: 1, curve: Motion.kitSettle)
     }
 
+    var hub: CGPoint {
+        guard let ring = edge.ring else { return edge.hub }
+        let box = arrow.intrinsicContentSize
+        return CGPoint(x: (ring.x - 0.5) * box.width, y: (ring.y - 0.5) * box.height)
+    }
+
     var pivot: CGPoint {
-        CGPoint(x: turner.frame.midX + edge.hub.x, y: turner.frame.midY + edge.hub.y)
+        CGPoint(x: turner.frame.midX + hub.x, y: turner.frame.midY + hub.y)
     }
 
     func turned(_ angle: CGFloat) -> CATransform3D {
-        let middle = CGPoint(x: turner.bounds.midX + edge.hub.x, y: turner.bounds.midY + edge.hub.y)
+        let middle = CGPoint(x: turner.bounds.midX + hub.x, y: turner.bounds.midY + hub.y)
         var matrix = CATransform3DMakeTranslation(middle.x, middle.y, 0)
         matrix = CATransform3DRotate(matrix, angle, 0, 0, 1)
         return CATransform3DTranslate(matrix, -middle.x, -middle.y, 0)

@@ -115,7 +115,7 @@ enum BenchDisc {
             let t = shown(l).sublayerTransform
             return atan2(t.m12, t.m11)
         } ?? 0
-        let hub = (disc as? GestureDisc)?.edge.hub ?? .zero
+        let hub = (disc as? GestureDisc)?.hub ?? .zero
         let glyphMiddle = symbol.superview.map { holder -> CGPoint in
             let t = holder.layer.map { shown($0).sublayerTransform } ?? CATransform3DIdentity
             let mid = CGPoint(x: holder.bounds.midX + hub.x, y: holder.bounds.midY + hub.y)
