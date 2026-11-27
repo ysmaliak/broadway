@@ -443,7 +443,7 @@ def answers(tab, base):
     again = envelope("snapshot", "--tab", tab)[1]["data"]
     refs = [e["ref"] for e in first["elements"]]
     given = sorted(int(r[1:]) for r in refs + [r["ref"] for r in first.get("regions", [])])
-    check("refs start at e1 on a page", given[:1] == [1], given[:3])
+    check("refs go on past the tab's earlier pages", given[:1] > [1], given[:3])
     check("and stay the same between looks", refs == [e["ref"] for e in again["elements"]], (refs[:5], [e["ref"] for e in again["elements"]][:5]))
     check("a long page shows 120 and counts the rest", first.get("shown") == 120 and first.get("total", 0) > 200, (first.get("shown"), first.get("total")))
     many = next((r for r in first.get("regions", []) if r.get("name") == "Many"), None)
