@@ -29,13 +29,13 @@ final class SpaceFootView: NSView, SpaceFollowing {
     private var back: DispatchWorkItem?
     private var named: Set<String> = []
 
-    static let side: CGFloat = 28
+    static let side: CGFloat = SideGrid.bar
     static let below: CGFloat = 8
     static let height: CGFloat = side + below
     static let iconMiddle: CGFloat = Metrics.sideInset + TabRowView.iconLead + SideLook.rowMark / 2
     static let lead: CGFloat = iconMiddle - side / 2
     static let glyph: CGFloat = 16
-    static let gap: CGFloat = 2
+    static let gap: CGFloat = SideGrid.keyGap
     static let patience: TimeInterval = 0.7
     @MainActor static var trace: [[String: Double]]?
     @MainActor static var fades = 0

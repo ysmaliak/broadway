@@ -289,7 +289,7 @@ final class LiveLoadingTests {
         #expect(frames[0].minX >= chevron.maxX)
         #expect(place == frames[0])
         #expect(abs(chevron.minX - name.maxX - SideLook.chevronGap) < 0.6)
-        #expect(frames[1].maxX == 230)
+        #expect(frames[1].maxX == open.bounds.width - SideGrid.lead)
         #expect(frames.allSatisfy { abs($0.midY - GroupHeadingView.height / 2) < 0.51 })
         #expect(gone == [false, false])
         #expect(folded.showsCount)
@@ -411,9 +411,9 @@ final class LiveLoadingTests {
         await until { !self.rings(folded) && !self.rings(open) }
 
         #expect(folded.benchNameWidth > part(folded, "nameHost").width)
-        #expect(rest[0].maxX == chip.minX - 9)
+        #expect(rest[0].maxX == chip.minX - SideGrid.gap)
         #expect(rest == during)
-        #expect(rest[1].maxX <= 222 - 10 - LiveLoading.side - 9)
+        #expect(rest[1].maxX <= 222 - SideGrid.lead - LiveLoading.side - SideGrid.gap)
     }
 
     @Test func theUnseenCountOfAFoldedRowStaysBesideTheRing() async {

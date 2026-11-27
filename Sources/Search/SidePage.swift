@@ -517,7 +517,7 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
     private var rowHeight: CGFloat { prefs.sideRow }
     private static let gap = Metrics.sideGap
     private static let inset = Metrics.sideInset
-    private static let indent: CGFloat = 16
+    private static let indent: CGFloat = SideGrid.step
     static let cardLead = SideLook.cardRowInset - Metrics.folderPad
 
     private var scene: SideScene {
@@ -649,7 +649,7 @@ final class SidePageView: NSView, HoverColumnSpace, TabRowHost {
     }
 
     private func pinCells(_ count: Int) -> [CGRect] {
-        PinPlaces.cells(count, room: bounds.width - 2 * Self.inset)
+        PinPlaces.cells(count, room: bounds.width - 2 * Self.inset, scale: window?.backingScaleFactor)
     }
 
     override func layout() {

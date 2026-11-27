@@ -23,7 +23,7 @@ final class HelmView: NSView {
         wantsLayer = true
         for door in [side, back, forward] {
             door.size = 15
-            door.box = 30
+            door.box = SideGrid.key
             door.wantsLayer = true
             addSubview(door)
         }
@@ -170,8 +170,8 @@ final class HelmView: NSView {
 
     override func layout() {
         super.layout()
-        let box: CGFloat = 30
-        let gap: CGFloat = 4
+        let box = SideGrid.key
+        let gap = SideGrid.keyGap
         var x = bounds.width
         let y = ((bounds.height - box) / 2).rounded()
         for door in [reload, forward, back] as [NSView] {

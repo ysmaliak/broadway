@@ -211,7 +211,7 @@ final class PinMorphView: NSView {
         let x = lead + Self.rowMark + SideLook.markGap + PinShape.mix(0, -12, form)
         let wide = max(box.width, rowWidth)
         let room = tally.map { $0.showing ? $0.width + Self.tallyInset : 0 } ?? 0
-        title.frame = NSRect(x: x, y: (box.height - 16) / 2, width: max(0, wide - lead - Self.rowMark - SideLook.markGap - 10 - room), height: 16)
+        title.frame = NSRect(x: x, y: (box.height - 16) / 2, width: max(0, wide - lead - Self.rowMark - SideLook.markGap - SideGrid.lead - room), height: 16)
         placeTally(in: box)
         let words = max(0, 1 - form * 2.2)
         title.alphaValue = words

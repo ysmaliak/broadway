@@ -264,7 +264,7 @@ struct SidebarStyleTests {
         #expect(abs(SideLook.rowRadius - button) <= 0.5, "a row's corner is concentric with the button inside it")
         #expect(Metrics.sideRowHeight + Metrics.sideGap == 37)
         #expect(SidePageView.cardLead + Metrics.folderPad == SideLook.cardRowInset)
-        #expect(SideLook.cardRowInset + SideLook.rowLead == 25)
+        #expect(SideLook.cardRowInset + SideLook.rowLead == SideGrid.words)
         #expect(GroupHeadingView.height + 2 * Metrics.folderPad + 2 * (Metrics.sideRowHeight + Metrics.sideGap) == 108)
     }
 

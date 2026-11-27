@@ -16,7 +16,7 @@ struct PinPlacesTests {
         #expect(narrowest == 4)
         #expect(PinPlaces.across(204) == 5)
         #expect(PinPlaces.across(203) == 4)
-        #expect(PinPlaces.gap == 6)
+        #expect(PinPlaces.gap == SideGrid.edge)
     }
 
     @Test func tilesStayWideEnoughToHitAtEveryColumnWidth() {
@@ -63,5 +63,24 @@ struct PinPlacesTests {
 
     @Test func noneIsEmpty() {
         #expect(PinPlaces.cells(0, room: 242).isEmpty)
+    }
+
+    @Test(arguments: [200, 258, 272, 331, 440])
+    func pinsFillTheirRowOnWholePixelsWithEvenGaps(_ width: Int) {
+        let room = CGFloat(width) - 2 * SideGrid.edge
+        for count in 1...10 {
+            let cells = PinPlaces.cells(count, room: room, scale: 1)
+            var lines: [CGFloat: [CGRect]] = [:]
+            for cell in cells { lines[cell.minY, default: []].append(cell) }
+            for line in lines.values {
+                let sorted = line.sorted { $0.minX < $1.minX }
+                #expect(sorted.first?.minX == 0)
+                #expect(sorted.last?.maxX == room)
+                #expect(sorted.allSatisfy { $0.minX == $0.minX.rounded() && $0.maxX == $0.maxX.rounded() })
+                #expect(zip(sorted, sorted.dropFirst()).allSatisfy { $1.minX - $0.maxX == PinPlaces.gap })
+                let widths = sorted.map(\.width)
+                #expect((widths.max() ?? 0) - (widths.min() ?? 0) <= 1)
+            }
+        }
     }
 }

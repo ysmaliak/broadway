@@ -237,7 +237,7 @@ final class AddressDoorsView: NSView {
     let site = DoorView(icon: SideLook.siteIcon, help: "Site Controls   ⌘E", act: {})
     private(set) var sign: PopupDoorView?
     private var ground = RowGround()
-    static let side: CGFloat = 26
+    static let side: CGFloat = SideGrid.key
 
     init(live: Bool) {
         self.live = live
@@ -263,7 +263,7 @@ final class AddressDoorsView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { live ? super.hitTest(point) : nil }
 
     private var slotWidth: CGFloat { Extensions.shared.installed.isEmpty ? 0 : max(0, slot.intrinsicContentSize.width) }
-    var width: CGFloat { slotWidth + 2 + (sign == nil ? 0 : Self.side + 2) + Self.side + 2 + Self.side }
+    var width: CGFloat { slotWidth + SideGrid.keyGap + (sign == nil ? 0 : Self.side + SideGrid.keyGap) + Self.side + SideGrid.keyGap + Self.side }
 
     func follow(_ tab: Tab?, browser: Browser) {
         guard let tab else {
@@ -303,13 +303,13 @@ final class AddressDoorsView: NSView {
         let slotWidth = slotWidth
         let y = (bounds.height - side) / 2
         slot.frame = NSRect(x: 0, y: 0, width: slotWidth, height: bounds.height)
-        var x = slotWidth + 2
+        var x = slotWidth + SideGrid.keyGap
         if let sign {
             sign.frame = NSRect(x: x, y: y, width: side, height: side)
-            x += side + 2
+            x += side + SideGrid.keyGap
         }
         copy.frame = NSRect(x: x, y: y, width: side, height: side)
-        site.frame = NSRect(x: copy.frame.maxX + 2, y: y, width: side, height: side)
+        site.frame = NSRect(x: copy.frame.maxX + SideGrid.keyGap, y: y, width: side, height: side)
     }
 }
 
@@ -351,7 +351,7 @@ final class AddressPillView: NSView {
         set { words.host = newValue }
     }
 
-    var doorsLead: CGFloat { bounds.width - 4 - doors.width }
+    var doorsLead: CGFloat { bounds.width - SideGrid.tail - doors.width }
 
     func layDoors() {
         let frame = NSRect(x: doorsLead, y: 0, width: doors.width, height: bounds.height)
@@ -476,7 +476,7 @@ final class AddressWordsView: NSView {
     override func layout() {
         super.layout()
         let x = PillLook.textX
-        var room = max(0, bounds.width - 10 - x)
+        var room = max(0, bounds.width - SideGrid.lead - x)
         if let split, let words = host ?? nil {
             if let fadeAt { room = min(room, max(0, fadeAt - SideLook.pillFade - x)) }
             label.runs = [KitLabel.Run(text: Self.lead(split, room: room), font: SideLook.pillFont, color: KitColor.muted),

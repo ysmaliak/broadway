@@ -1349,19 +1349,20 @@ final class TabRowView: KitHoverView {
         content.kitSetFrame(bounds)
 
         let x: CGFloat = 0
-        let endInset = inset + square / 2 - 15 / 2
+        let endSlot = SideGrid.mark
+        let endInset = inset + square / 2 - endSlot / 2
         var trailing = width - (status || peeking ? endInset : 0)
         var ends: [(NSView, CGFloat)] = []
-        if status { ends.append((ring, 15)) }
+        if status { ends.append((ring, endSlot)) }
         if let shortcut { ends.append((shortcut, ShortcutNumberView.side + (status ? 0 : 28))) }
-        if let peekBadge { ends.append((peekBadge, 16)) }
+        if let peekBadge { ends.append((peekBadge, SideGrid.mark)) }
         for (index, end) in ends.enumerated() {
             let (view, room) = end
-            let slot: CGFloat = view === ring ? 15 : view === peekBadge ? 16 : ShortcutNumberView.side
+            let slot: CGFloat = view === ring ? endSlot : view === peekBadge ? SideGrid.mark : ShortcutNumberView.side
             let size: CGFloat = view === ring ? 11 : slot
             let left = trailing - room
             view.kitSetFrame(NSRect(x: left + (slot - size) / 2, y: (height - size) / 2, width: size, height: size))
-            trailing = left - (index < ends.count - 1 || true ? 8 : 0)
+            trailing = left - (index < ends.count - 1 || true ? SideGrid.gap : 0)
         }
         let innerEnd = ends.isEmpty ? trailing + 8 - 8 : trailing
         let lead: CGFloat = Self.iconLead
@@ -1656,7 +1657,7 @@ enum TalkPlace {
 
 enum RowTitleFade {
     static let width: CGFloat = SideLook.titleLine
-    static let whole: CGFloat = 10
+    static let whole: CGFloat = SideGrid.lead
     static let lead: CFTimeInterval = 0.12
 
     static func edge(height: CGFloat) -> CGFloat { Metrics.closeInset(height) }
@@ -1665,7 +1666,7 @@ enum RowTitleFade {
 
     static func reserve(closeFromEnd: CGFloat?, toEnd: CGFloat) -> CGFloat {
         guard let closeFromEnd, toEnd.isFinite else { return 0 }
-        return max(0, closeFromEnd + 2 - toEnd)
+        return max(0, closeFromEnd + SideGrid.keyGap - toEnd)
     }
 
     static func fades(natural: CGFloat, room: CGFloat, reserve: CGFloat, spill: CGFloat = 0) -> Bool {
