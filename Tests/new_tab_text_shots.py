@@ -150,6 +150,8 @@ def main():
             clear()
             sv.cmd({"do": "sitesearch", "action": "esc"})
             other = rl.opened("blue", "Other")
+            sv.sp("newTab")
+            time.sleep(0.4)
             sv.sp("pair", id=blank(), **{"with": other}, side="left")
             time.sleep(0.8)
             sv.sp("select", id=other)

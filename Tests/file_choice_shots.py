@@ -35,7 +35,7 @@ def main():
             sv.cmd({"do": "select", "id": tab})
             fc.until(lambda: sv.ev(tab, "!!document.querySelector('#image')") is True)
             if not private:
-                sv.ev(tab, "document.querySelector('#download').click();1")
+                sv.cmd({"do": "tap", "id": tab, "selector": "#download"})
                 fc.until(lambda: any(x["name"] == "recent.png" for x in sv.cmd({"do": "uploads"})["items"]))
             sv.ev(tab, f"document.querySelector('{selector}').focus();document.querySelector('{selector}').click();1")
             fc.until(lambda: fc.box(window=n).get("ready"))

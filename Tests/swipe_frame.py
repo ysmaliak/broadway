@@ -140,7 +140,7 @@ class Film:
 
 
 def film(name, act, seconds=1.8):
-    if not CAPTURE.exists():
+    if not CAPTURE.exists() or CAPTURE.stat().st_mtime < (ROOT / "Tests/WindowCapture.swift").stat().st_mtime:
         CAPTURE.parent.mkdir(parents=True, exist_ok=True)
         made = subprocess.run(["swiftc", "-parse-as-library", str(ROOT / "Tests/WindowCapture.swift"), "-o", str(CAPTURE)],
                               capture_output=True, text=True)

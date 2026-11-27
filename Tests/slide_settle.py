@@ -13,6 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Tests"))
 import split_view as sv
+import world_out as wo
 
 label = sys.argv[1] if len(sys.argv) > 1 else "now"
 sv.use("slide-settle-" + uuid.uuid4().hex[:6])
@@ -91,7 +92,7 @@ BASE = f"http://127.0.0.1:{server.server_port}"
 
 def tools():
     TOOLS.mkdir(parents=True, exist_ok=True)
-    if not CAPTURE.exists():
+    if not CAPTURE.exists() or CAPTURE.stat().st_mtime < (ROOT / "Tests/WindowCapture.swift").stat().st_mtime:
         subprocess.run(["swiftc", "-parse-as-library", str(ROOT / "Tests/WindowCapture.swift"), "-o", str(CAPTURE)], check=True)
     source = BARS.with_suffix(".swift")
     if not BARS.exists() or source.read_text() != BAR_READER:
@@ -131,7 +132,7 @@ def index(id):
 def geometry(name, to, t):
     folder = OUT / "rides"
     folder.mkdir(parents=True, exist_ok=True)
-    shots = sv.cmd({"do": "film", "action": "space", "index": index(to), "path": str(folder / name),
+    shots = sv.cmd({"do": "film", "action": "space", "index": index(to), "path": str(wo.spot(sv, name)),
                     "frames": 50, "every": 0.016, "region": "0,0,8,8"})["frames"]
     (folder / f"{name}.json").write_text(json.dumps(shots, indent=1))
     late = []

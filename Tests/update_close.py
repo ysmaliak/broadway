@@ -154,6 +154,10 @@ def peeks(out, label):
 
 if __name__ == "__main__":
     args = sys.argv[1:]
+    if len(args) < 2:
+        print("update_close.py needs OUT LABEL [check]: the folder for its pictures, a label for their names, "
+              "and check to judge where the close keys sit")
+        sys.exit(2)
     out = Path(args[0])
     label = args[1]
     measures = pictures(out, label)

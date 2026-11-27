@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Tests"))
 import split_view as sv  # noqa: E402
+import world_out as wo  # noqa: E402
 
 parser = argparse.ArgumentParser(description="The page a tab shows when a load fails, drawn by the bench itself at 2x into "
                                  ".context/failed-page/LABEL/: each kind in light and dark at 720 by 520 and at 320 wide, then "
@@ -25,9 +26,13 @@ t = sv.T()
 def draw(name, **request):
     path = OUT / f"{name}.png"
     path.unlink(missing_ok=True)
-    made = sv.cmd({"do": "surface", "name": "trouble", "pad": 0, "path": str(path), **request})
+    spot = wo.spot(sv, path.name)
+    made = sv.cmd({"do": "surface", "name": "trouble", "pad": 0, "path": str(spot), **request})
     sv.cmd({"do": "surface", "action": "close"})
-    t.ok(f"{name}: drawn", path.exists() and made.get("saved") == str(path), made)
+    saved = spot.exists() and made.get("saved") == str(spot)
+    if saved:
+        wo.bring(spot, path)
+    t.ok(f"{name}: drawn", saved and path.exists(), made)
     return path
 
 

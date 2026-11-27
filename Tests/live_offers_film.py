@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import shutil
+import struct
 import subprocess
 import sys
 import time
@@ -16,6 +17,7 @@ sys.path.insert(0, str(ROOT / "Tests"))
 import live_offers as lo  # noqa: E402
 
 sv = lo.sv
+t = sv.T()
 OUT = ROOT / ".context" / "shots" / label
 TOOLS = ROOT / ".context" / "shots" / "tools"
 CAPTURE = TOOLS / "capture"
@@ -27,7 +29,7 @@ TALL = 430
 def tools():
     TOOLS.mkdir(parents=True, exist_ok=True)
     for tool, source in [(CAPTURE, "WindowCapture.swift"), (SHOT, "WindowShot.swift")]:
-        if not tool.exists():
+        if not tool.exists() or tool.stat().st_mtime < (ROOT / "Tests" / source).stat().st_mtime:
             subprocess.run(["swiftc", "-parse-as-library", str(ROOT / "Tests" / source), "-o", str(tool)], check=True)
 
 
@@ -35,8 +37,10 @@ def picture(pid, number, name, crop=True):
     whole = OUT / f"{name}-window.png"
     said = subprocess.run([str(SHOT), str(pid), str(number), str(whole)], capture_output=True, text=True).stdout.strip()
     print(" ", said, flush=True)
+    t.ok(f"{name}: pictured", whole.exists(), said)
     if crop and whole.exists():
-        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(whole), "-vf", f"crop={(SIDEBAR + 24) * 2}:{TALL * 2}:0:0",
+        k = struct.unpack(">I", whole.read_bytes()[16:20])[0] / 1000
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(whole), "-vf", f"crop={int((SIDEBAR + 24) * k)}:{int(TALL * k)}:0:0",
                         str(OUT / f"{name}.png")], check=True)
 
 
@@ -51,6 +55,7 @@ def film(pid, number, name, seconds, act):
     time.sleep(0.3)
     act()
     print(" ", name, p.communicate()[0].strip(), flush=True)
+    t.ok(f"{name}: filmed", (folder / "0000.png").exists())
     if not (folder / "0000.png").exists():
         return
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", "60", "-i", str(folder / "%04d.png"),
@@ -146,7 +151,9 @@ def main():
         print("  state at the end:", {k: lo.offer().get(k) for k in ("reason", "ghosts", "shown")}, flush=True)
     finally:
         sv.finish()
+    t.done()
+    return int(t.failed != 0)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

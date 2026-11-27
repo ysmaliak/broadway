@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
 sys.path.insert(0, str(ROOT / "Tests"))
 import split_view as sv
+import world_out as wo
 
 label = sys.argv[1] if len(sys.argv) > 1 else "now"
 look = sys.argv[2] if len(sys.argv) > 2 else "dark"
@@ -53,7 +54,7 @@ def film(name, pid, number, mark, held, off=False, seconds=1.4):
     x, y = mark[0] + mark[2] / 2, mark[1] + mark[3] / 2
     points = [[x, y], [x + 60, y - 60] if off else [x, y]]
     sv.cmd({"do": "film", "action": "drag", "to": "view", "points": points, "step": held, "frames": 1,
-            "path": str(folder / "bench"), "region": "0,0,4,4"})
+            "path": str(wo.spot(sv, "bench")), "region": "0,0,4,4"})
     print(name, capture.communicate()[0].strip(), flush=True)
     for stray in folder.glob("bench-*.png"):
         stray.unlink()

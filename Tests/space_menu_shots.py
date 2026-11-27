@@ -75,14 +75,16 @@ def picture(pid, number, name, keys=()):
         words = said.split()
         took = said.startswith("shot") and int(words[words.index("menus") + 1]) >= 1 and still_open()
         if took:
+            k = float(words[words.index("scale") + 1])
             break
         close()
         time.sleep(0.8)
     close()
     time.sleep(0.5)
     if took:
-        x, y = (AT[0] - 14) * 2, (AT[1] - 14) * 2
-        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(whole), "-vf", f"crop=1040:960:{x}:{y}", str(cut)], check=True)
+        x, y = int((AT[0] - 14) * k), int((AT[1] - 14) * k)
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(whole), "-vf", f"crop={int(520 * k)}:{int(480 * k)}:{x}:{y}", str(cut)],
+                       check=True)
         whole.unlink()
     if reply:
         (OUT / f"{name}-{theme}.json").write_text(json.dumps(reply["items"], indent=1, ensure_ascii=False))

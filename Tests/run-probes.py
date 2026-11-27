@@ -28,7 +28,8 @@ def main():
     files = [p for p in files if p.name not in ("motion_audit.py", "stacked_spaces_film.py", "fullscreen_tab.py", "speaker_swap_film.py", "pin_mesh_shots.py", "field_appear.py", "quiet_fills_shots.py", "tempo_hud_shots.py", "polish_shots.py", "peek_slide.py", "ring_film.py", "raised_look_shots.py", Path(__file__).name)]
     if args.only is not None:
         files = [p for p in files if p.stem in args.only]
-    skipped = {"visual_diff": "needs a before shoot to compare against: run `visual_diff.py shoot` on two builds, then `compare`"}
+    skipped = {"visual_diff": "needs a before shoot to compare against: run `visual_diff.py shoot` on two builds, then `compare`",
+               "glass_ink": "reads the numbers a glass probe measured and starts no app"}
     for probe in [p for p in files if p.stem in skipped]:
         print(f"{probe.name}: SKIP ({skipped[probe.stem]})", flush=True)
     files = [p for p in files if p.stem not in skipped]
@@ -53,6 +54,10 @@ def main():
             command += ["--out", str(args.output / probe.stem), "--runs", "1", "--any-screen", "--no-reference"]
         elif probe.stem == "swipe_120":
             command += ["--out", str(args.output / probe.stem), "--runs", "1", "--any-screen"]
+        elif probe.stem in ("heading_jump", "trouble_shots"):
+            command += ["probes"]
+        elif probe.stem == "update_close":
+            command += [str(args.output / probe.stem), "probes", "check"]
         began = time.monotonic()
         prior_index = next((i for i, row in enumerate(results) if row["probe"] == probe.name), None)
         prior = results[prior_index] if prior_index is not None else None

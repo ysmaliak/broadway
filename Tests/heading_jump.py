@@ -44,43 +44,14 @@ OUT = Path(options.out or ROOT / ".context" / "heading-jump") / options.label
 FILM = ROOT / ".context" / "pin-motion" / "pin-film"
 WIDTH, HEIGHT, COLUMN = 1000, 720, 260
 HEADS = {"Pull Requests": (46, 186), "Shelf": (46, 330), "Outer": (46, 551), "Inner": (62, 585)}
+t = sv.T()
 
 
 def read_png(path, last=None):
-    data = Path(path).read_bytes()
-    pos, idat = 8, b""
-    while pos < len(data):
-        length, kind = struct.unpack(">I4s", data[pos:pos + 8])
-        body = data[pos + 8:pos + 8 + length]
-        if kind == b"IHDR":
-            width, height, _, colour = struct.unpack(">IIBB", body[:10])
-        elif kind == b"IDAT":
-            idat += body
-        pos += 12 + length
-    ch = {6: 4, 2: 3}[colour]
-    raw = zlib.decompress(idat)
-    stride = width * ch
-    rows, prev, i = [], bytearray(stride), 0
-    for _ in range(min(height, last or height)):
-        f, line = raw[i], bytearray(raw[i + 1:i + 1 + stride])
-        i += 1 + stride
-        for x in range(stride):
-            a = line[x - ch] if x >= ch else 0
-            b = prev[x]
-            c = prev[x - ch] if x >= ch else 0
-            if f == 1:
-                line[x] = (line[x] + a) & 255
-            elif f == 2:
-                line[x] = (line[x] + b) & 255
-            elif f == 3:
-                line[x] = (line[x] + ((a + b) >> 1)) & 255
-            elif f == 4:
-                p = a + b - c
-                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
-                line[x] = (line[x] + (a if pa <= pb and pa <= pc else b if pb <= pc else c)) & 255
-        rows.append([0.3 * line[k * ch] + 0.59 * line[k * ch + 1] + 0.11 * line[k * ch + 2] for k in range(0, COLUMN)])
-        prev = line
-    return rows
+    wide = COLUMN + 10
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-vf", f"scale={wide}:{HEIGHT}:flags=area,format=gray",
+                          "-f", "rawvideo", "-"], capture_output=True, check=True).stdout
+    return [list(raw[r * wide:r * wide + COLUMN]) for r in range(min(HEIGHT, last or HEIGHT))]
 
 
 def patch(luma, x, y, w=44, h=16):
@@ -164,7 +135,7 @@ def cmd(**r): return sv.cmd(r)
 TEMPLATES = {}
 
 
-def film(name, act, seconds, track):
+def film(name, act, seconds, track, still):
     folder = OUT / name
     folder.mkdir(parents=True, exist_ok=True)
     for old in folder.glob("0*.png"):
@@ -195,6 +166,11 @@ def film(name, act, seconds, track):
     result = {"frames": len(frames), "start": first, "end": ys[-1] if ys else 0, "steps": steps, "ys": ys}
     (folder / "track.json").write_text(json.dumps(result))
     summary[name] = {k: result[k] for k in ("frames", "start", "end", "steps")}
+    t.ok(f"{name}: filmed", len(frames) > 1, str(len(frames)))
+    if still:
+        t.ok(f"{name}: the title holds still", not steps, str(steps[:14]))
+    else:
+        t.ok(f"{name}: the title moves one way only", all(s > 0 for s in steps) or all(s < 0 for s in steps), str(steps[:14]))
     print(f"  {name}: {len(frames)} frames, title {first:.2f} -> {result['end']:.2f}, steps {steps[:14]}", flush=True)
 
 
@@ -232,6 +208,10 @@ def main():
     threading.Thread(target=server.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{server.server_port}"
     OUT.mkdir(parents=True, exist_ok=True)
+    FILM.parent.mkdir(parents=True, exist_ok=True)
+    source = ROOT / "Tests/pin_film.swift"
+    if not FILM.exists() or FILM.stat().st_mtime < source.stat().st_mtime:
+        subprocess.run(["swiftc", "-O", "-parse-as-library", str(source), "-o", str(FILM)], check=True)
     sv.use("heading-jump-" + uuid.uuid4().hex[:6])
     sv.setup(spaces=True, sidebar=True, **{"tabs.groups": True, "tabs.aiGroups": False, "ai": False, "ai.groups": False,
                                            "tabs.cards": True, "layout.cards": True, "start.fresh": False, "split": False,
@@ -301,7 +281,7 @@ def main():
                     for kind in ("shut", "open"):
                         film(f"{look}-{state}-{short}-{kind}",
                              lambda k=key: threading.Timer(0.1, lambda: cmd(do="group", name=k, fold=True)).start(),
-                             1.0, (key, y - 8 - moved))
+                             1.0, (key, y - 8 - moved), state != "end")
                         time.sleep(0.4)
         (OUT / "summary.json").write_text(json.dumps(summary, indent=1))
     finally:
@@ -317,3 +297,5 @@ def main():
 
 
 main()
+t.done()
+sys.exit(1 if t.failed else 0)

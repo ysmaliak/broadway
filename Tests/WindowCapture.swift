@@ -39,6 +39,7 @@ final class Capture: NSObject, SCStreamOutput, @unchecked Sendable {
         let scale = args.count > 5 ? Double(args[5]) ?? 1 : 1
         config.width = Int(window.frame.width * scale)
         config.height = Int(window.frame.height * scale)
+        config.scalesToFit = scale > (NSScreen.main?.backingScaleFactor ?? 2)
         config.minimumFrameInterval = CMTime(value: 1, timescale: args.count > 6 ? Int32(args[6]) ?? 60 : 60)
         config.showsCursor = false
         config.ignoreShadowsSingleWindow = true

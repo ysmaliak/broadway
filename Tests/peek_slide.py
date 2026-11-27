@@ -251,8 +251,13 @@ def main():
         summary[side] = run_side(side, out, a.runs, a.look, a.policy, a.tag, glass=not a.plain, place=a.fast_screen)
     (out / f"{a.tag}-summary.json").write_text(json.dumps(summary, indent=1))
     print(json.dumps(summary, indent=1))
-    ok = all(s["in"]["runs"] == a.runs and s["turnedBack"]["peeking"] and s["trace"]["in"].get("runs") for s in summary.values())
-    sys.exit(0 if ok else 1)
+    t = sv.T()
+    for side, s in summary.items():
+        t.ok(f"{side}: every peek filmed", s["in"]["runs"] == a.runs, str(s["in"]["runs"]))
+        t.ok(f"{side}: a peek turned back mid-slide comes out again", bool(s["turnedBack"]["peeking"]), str(s["turnedBack"]))
+        t.ok(f"{side}: the bench traced the column moving", bool(s["trace"]["in"].get("runs")), str(s["trace"]))
+    t.done()
+    sys.exit(1 if t.failed else 0)
 
 
 if __name__ == "__main__":

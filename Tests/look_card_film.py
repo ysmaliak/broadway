@@ -15,6 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Tests"))
 import split_view as sv  # noqa: E402
+import world_out as wo  # noqa: E402
 
 label = sys.argv[1] if len(sys.argv) > 1 else "now"
 parts = set(sys.argv[2:]) or {"switch", "fold", "mode"}
@@ -67,6 +68,7 @@ server = ThreadingHTTPServer(("127.0.0.1", 0), Pages)
 threading.Thread(target=server.serve_forever, daemon=True).start()
 BASE = f"http://127.0.0.1:{server.server_port}"
 count = [0]
+t = sv.T()
 
 
 def opened(icon, title):
@@ -97,7 +99,7 @@ def film(name, action, frames=40, every=0.03, target=None):
     folder = OUT / name
     shutil.rmtree(folder, ignore_errors=True)
     folder.mkdir(parents=True)
-    ask = {"do": "film", "action": action, "path": str(folder / "f"), "frames": frames, "every": every, "region": "full"}
+    ask = {"do": "film", "action": action, "path": str(wo.spot(sv, "f")), "frames": frames, "every": every, "region": "full"}
     if target:
         ask["target"] = target
     said = sv.cmd(ask)
@@ -105,10 +107,11 @@ def film(name, action, frames=40, every=0.03, target=None):
     for index, shot in enumerate(shots):
         drawn = Path(shot.get("file", ""))
         if drawn.is_file():
-            drawn.rename(folder / f"{index:04d}.png")
+            wo.bring(drawn, folder / f"{index:04d}.png")
             shot["file"] = str(folder / f"{index:04d}.png")
     (folder / "frames.json").write_text(json.dumps([{k: v for k, v in f.items() if k in ("t", "size", "file")} for f in shots], indent=1))
     sizes = [f.get("size", [0, 0])[1] for f in shots]
+    t.ok(f"{name}: filmed", len(shots) == frames and all(Path(f.get("file", "")).is_file() for f in shots), f"{len(shots)} of {frames}")
     print(f"  {name}: {len(shots)} frames over {shots[-1]['t'] if shots else 0} ms, heights {sizes[:3]} .. {sizes[-3:]}")
     return shots
 
@@ -230,9 +233,14 @@ def main():
             app = values["app"]
             steps = [round(b - a, 1) for a, b in zip(app, app[1:])]
             print(f"  {name}: {len(app)} app frames, {app[:1]} .. {app[-1:]}, steps {steps}")
+            filmed = values["filmed"]
+            grows = name.startswith("more-open")
+            t.ok(f"{name}: the card {'grows' if grows else 'shrinks'} to its other height",
+                 bool(filmed) and (filmed[-1] > filmed[0] if grows else filmed[-1] < filmed[0]), f"{filmed[:1]} .. {filmed[-1:]}")
     finally:
         sv.finish()
-    return 0
+    t.done()
+    return int(t.failed != 0)
 
 
 if __name__ == "__main__":

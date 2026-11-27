@@ -31,6 +31,7 @@ parser.add_argument("--width", type=float, default=289)
 parser.add_argument("--grounds", default="near,vivid")
 parser.add_argument("--themes", default="dark,light")
 parser.add_argument("--near", default="000000")
+parser.add_argument("--dia", default="")
 args = parser.parse_args()
 sys.argv = sys.argv[:1]
 import split_view as sv  # noqa: E402
@@ -81,8 +82,12 @@ def main():
     subprocess.run(["swiftc", "-parse-as-library", str(source), "-o", str(rl.SHOT)], check=True, cwd=TMP)
     (TMP / "pixel.swift").write_text(rl.PIXEL_SOURCE)
     subprocess.run(["swiftc", "-O", str(TMP / "pixel.swift"), "-o", str(rl.PIXEL)], check=True, cwd=TMP)
-    dia = TMP / "dia.png"
-    srgb(ROOT / ".context" / "dia.png", dia)
+    given = Path(args.dia or ROOT / ".context" / "dia.png")
+    dia = TMP / "dia.png" if given.exists() else None
+    if dia:
+        srgb(given, dia)
+    else:
+        print(f"  no Dia crop at {given}: Broadway's column is pictured alone")
     sv.setup(spaces=True, **{"start.fresh": False, "live.on": True, "welcome.show": False, "tabs.newAtBottom": True})
     subprocess.run(["defaults", "write", sv.SUITE, "sidebar.width", "-float", str(args.width)], check=True)
     before = sv.running()
@@ -128,7 +133,7 @@ def main():
         bottom = max((f[1] + f[3] for f in frames.values()), default=900)
         width = args.width + 6
         height = min(990, bottom + 60)
-        diaw, diah = size_of(dia)
+        diaw, diah = size_of(dia) if dia else (0, 0)
         for theme in args.themes.split(","):
             for ground in args.grounds.split(","):
                 if theme == "light" and ground == "near":
@@ -150,12 +155,13 @@ def main():
                 column = OUT / f"{name}-broadway.png"
                 subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(still), "-vf",
                                 f"crop={int(width * k)}:{int(height * k)}:0:0", str(column)], check=True)
-                pair = OUT / f"{name}-beside-dia.png"
-                cw, ch = size_of(column)
-                tall = max(ch, diah)
-                subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(column), "-i", str(dia), "-filter_complex",
-                                f"[0]pad={cw + 24}:{tall}:0:0:color=0x808080[a];[1]pad={diaw}:{tall}:0:0:color=0x808080[b];[a][b]hstack=inputs=2",
-                                str(pair)], check=True)
+                pair = OUT / f"{name}-beside-dia.png" if dia else column
+                if dia:
+                    cw, ch = size_of(column)
+                    tall = max(ch, diah)
+                    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(column), "-i", str(dia), "-filter_complex",
+                                    f"[0]pad={cw + 24}:{tall}:0:0:color=0x808080[a];[1]pad={diaw}:{tall}:0:0:color=0x808080[b];[a][b]hstack=inputs=2",
+                                    str(pair)], check=True)
                 tile = rows.get(pins[2][:8].lower())
                 picked = rows.get(ids[0][:8].lower())
                 plain = rows.get(loose[0][:8].lower())

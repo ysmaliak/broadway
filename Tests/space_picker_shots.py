@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import split_view as sv  # noqa: E402
 
 sv.use("picker-shots")
+t = sv.T()
 ROOT = Path(__file__).resolve().parents[1]
 SHOT = Path(os.environ.get("TMPDIR", "/tmp")) / f"space-picker-shot-{os.getpid()}"
 VISITS = [
@@ -126,12 +127,13 @@ def main():
             print(subprocess.run([str(SHOT), str(pid), number, str(path)], capture_output=True, text=True).stdout.strip())
             shots += path.exists()
         print(f"{shots} shots in {out}")
+        t.ok("every Settings page pictured", shots == 18, str(shots))
         sv.cmd({"do": "ui", "look": "dark"})
         sv.cmd({"do": "ui", "settingsPage": "livefolders"})
         sv.cmd({"do": "ui", "settingsSize": [860, 760]})
         sv.cmd({"do": "ui", "settingsSpace": 2})
         time.sleep(1.2)
-        sv.cmd({"do": "ui", "settingsPress": "settings.live.add.vercel"})
+        sv.cmd({"do": "ui", "settingsPress": "settings.live.add.drive"})
         time.sleep(1.2)
         path = out / "livefolders-work-added-dark.png"
         print(subprocess.run([str(SHOT), str(pid), number, str(path)], capture_output=True, text=True).stdout.strip())
@@ -142,13 +144,13 @@ def main():
         time.sleep(1)
         there = [row["name"] for row in sv.cmd({"do": "folders"}).get("rows", [])]
         print("sidebar in Personal", here, "in Work", there)
-        if "space" in next(iter(live().get("folders", [{}])), {}):
-            assert homes.get("Deployments") == "Work", homes
-            assert "Deployments" in there and "Deployments" not in here, (here, there)
-            print("OK: Add with Work picked put the folder in Work")
+        t.ok("Add with Work picked keeps the folder in Work", homes.get("Recent Files") == "Work", str(homes))
+        t.ok("the folder shows in Work's sidebar and not in Personal's", "Recent Files" in there and "Recent Files" not in here,
+             str((here, there)))
     finally:
         sv.finish()
-    return 0
+    t.done()
+    return int(t.failed != 0)
 
 
 if __name__ == "__main__":

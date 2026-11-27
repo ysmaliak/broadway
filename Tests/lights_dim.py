@@ -25,7 +25,10 @@ sv.use("lights-dim")
 t = sv.T()
 OUT = Path(sys.argv[1] if len(sys.argv) > 1 else "/tmp/lights-dim").resolve()
 LABEL = sys.argv[2] if len(sys.argv) > 2 else "run"
-BEHIND = "behind" in sys.argv[3:]
+LOCKED = '"CGSSessionScreenIsLocked"=Yes' in subprocess.run(["ioreg", "-n", "Root", "-d1"], capture_output=True, text=True).stdout
+BEHIND = "behind" in sys.argv[3:] or LOCKED
+if LOCKED:
+    print("  the screen is locked, so the test copy cannot come to the front: only the picture with it inactive is taken")
 TOOLS = OUT / "tools"
 WIDTH, HEIGHT = 660, 430
 

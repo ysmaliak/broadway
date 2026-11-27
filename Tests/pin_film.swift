@@ -160,6 +160,7 @@ func sheet(_ pictures: [CGImage], labels: [String], columns: Int, shrink: Double
         let config = SCStreamConfiguration()
         config.width = Int(window.frame.width * scale)
         config.height = Int(window.frame.height * scale)
+        config.scalesToFit = scale > (NSScreen.main?.backingScaleFactor ?? 2)
         config.minimumFrameInterval = CMTime(value: 1, timescale: 120)
         config.showsCursor = false
         config.ignoreShadowsSingleWindow = true

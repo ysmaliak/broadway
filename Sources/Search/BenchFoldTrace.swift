@@ -160,6 +160,17 @@ final class PeekTrace: NSObject {
     private weak var scroll: NSScrollView?
     private var rigid: PeekRigid?
 
+    static func column(in window: NSWindow) -> NSScrollView? {
+        guard let root = window.contentView?.superview ?? window.contentView else { return nil }
+        func cards(in view: NSView) -> [NSView] {
+            view is PeekSliding ? [view] : view.subviews.flatMap(cards)
+        }
+        func scrolls(in view: NSView) -> [NSScrollView] {
+            (view as? NSScrollView).map { [$0] } ?? view.subviews.flatMap(scrolls)
+        }
+        return cards(in: root).flatMap(scrolls).max { $0.frame.height < $1.frame.height }
+    }
+
     static func run(_ ask: [String: Any], browser: Browser, _ answer: @escaping ([String: Any]) -> Void) {
         guard let window = browser.window ?? Links.window else { answer(["error": "peektrace needs a window"]); return }
         let toggle = ask["toggle"] as? Bool ?? false
@@ -172,7 +183,7 @@ final class PeekTrace: NSObject {
         link?.invalidate()
         ticks = []
         rigid = watching ? PeekRigid(window: window, docked: toggle) : nil
-        scroll = FoldTrace.column(browser, in: window)
+        scroll = (toggle ? nil : Self.column(in: window)) ?? FoldTrace.column(browser, in: window)
         let made = window.displayLink(target: self, selector: #selector(tick(_:)))
         made.add(to: .main, forMode: .common)
         link = made

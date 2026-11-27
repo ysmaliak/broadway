@@ -166,6 +166,10 @@ def summary(numbers):
 
 if __name__ == "__main__":
     import sys
+    if len(sys.argv) < 2 or (sys.argv[1] == "sheets" and len(sys.argv) < 4):
+        print("glass_ink.py reads what a glass probe measured and starts no app. Give it NUMBERS.json, "
+              "or sheets ROOT TAG to lay out the pictures of a run")
+        sys.exit(2)
     if sys.argv[1] == "sheets":
         root, tag = Path(sys.argv[2]), sys.argv[3]
         for folder in sorted(p for p in root.iterdir() if p.is_dir()):

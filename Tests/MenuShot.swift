@@ -29,6 +29,6 @@ import ScreenCaptureKit
         let rep = NSBitmapImageRep(cgImage: image)
         try rep.representation(using: .png, properties: [:])!.write(to: out)
         let menus = windows.filter { $0.windowLayer >= Int(CGWindowLevelForKey(.popUpMenuWindow)) }.count
-        print("shot \(out.lastPathComponent) \(image.width)x\(image.height) windows \(windows.count) menus \(menus)")
+        print("shot \(out.lastPathComponent) \(image.width)x\(image.height) windows \(windows.count) menus \(menus) scale \(scale)")
     }
 }

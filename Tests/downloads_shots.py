@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import struct
 import subprocess
 import sys
 import time
@@ -88,7 +89,7 @@ def union(a, b):
 
 
 def crop(whole, cut, frame, box):
-    scale = 2
+    scale = struct.unpack(">I", whole.read_bytes()[16:20])[0] / frame[2]
     x = max(0, box[0] - frame[0] - PAD)
     top = max(0, (frame[1] + frame[3]) - (box[1] + box[3]) - PAD)
     width = min(frame[2] - x, box[2] + PAD * 2)
@@ -164,6 +165,7 @@ def native(pid, number, name, box, **ask):
         words = said.split()
         took = said.startswith("shot") and int(words[words.index("menus") + 1]) >= 1 and still_open()
         if took:
+            k = float(words[words.index("scale") + 1])
             break
         close_menu()
         time.sleep(0.8)
@@ -171,7 +173,7 @@ def native(pid, number, name, box, **ask):
     time.sleep(0.5)
     t.ok(f"{name}: pictured", took)
     if took:
-        x, y, width, height = (v * 2 for v in box)
+        x, y, width, height = (int(v * k) for v in box)
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(whole), "-vf", f"crop={width}:{height}:{x}:{y}",
                         str(OUT / f"{name}.png")], check=True)
         whole.unlink()
