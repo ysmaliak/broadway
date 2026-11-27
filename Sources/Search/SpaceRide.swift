@@ -200,7 +200,7 @@ final class RideView: NSView, SpaceRiding {
         CATransaction.setDisableActions(true)
         layer.removeAnimation(forKey: Self.key)
         layer.removeAnimation(forKey: Self.fadeKey)
-        aim = pixel(travel(offset, base: base, reach: reach(width)) + lanes)
+        aim = pixel(travel(offset, base: base, reach: reach(width))) + lanes
         layer.setValue(aim, forKeyPath: Self.path)
         layer.opacity = alpha(offset, base: base, width: width)
         if let was {

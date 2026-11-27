@@ -151,7 +151,7 @@ def film(name, act, seconds=1.8):
     folder = OUT / f"film-{name}"
     subprocess.run(["rm", "-rf", str(folder)])
     folder.mkdir(parents=True)
-    run = subprocess.Popen([str(CAPTURE), str(pid), str(folder), str(seconds), str(WINDOW[0]), "2"], stdout=subprocess.PIPE, text=True)
+    run = subprocess.Popen([str(CAPTURE), str(pid), str(folder), str(seconds), str(WINDOW[0]), "screen"], stdout=subprocess.PIPE, text=True)
     for _ in range(240):
         if (folder / "ready").exists() or run.poll() is not None:
             break
@@ -168,6 +168,9 @@ def film(name, act, seconds=1.8):
         return None
     probe = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
                             "-of", "csv=p=0", str(frames[0])], capture_output=True, text=True).stdout.strip().split(",")
+    if not SAID[0]:
+        SAID[0] = True
+        print(f"  filmed at the screen's own scale, {int(probe[0]) / WIDTH:g}x: in full colour per pixel, so every pixel read is one the window server drew", flush=True)
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", "60", "-i", str(folder / "%04d.png"),
                     "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-pix_fmt", "yuv420p", str(OUT / f"{name}.mp4")])
     step = max(1, len(frames) // 24)
@@ -328,6 +331,7 @@ def column_width():
 
 
 KEPT = {}
+SAID = [False]
 LINED = [True]
 
 

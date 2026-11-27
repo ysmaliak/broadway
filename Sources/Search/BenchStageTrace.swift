@@ -11,6 +11,7 @@ final class StageTrace: NSObject {
     private var samples: [[String: Any]] = []
     private weak var browser: Browser?
     private var film: (path: String, paint: [String: String], frames: [NSBitmapImageRep])?
+    private var edges = false
 
     static func run(_ ask: [String: Any], browser: Browser, _ answer: @escaping ([String: Any]) -> Void) {
         switch ask["action"] as? String {
@@ -18,6 +19,7 @@ final class StageTrace: NSObject {
             guard let window = browser.window else { answer(["error": "stagetrace needs a window"]); return }
             if ask["forget"] as? Bool == true { browser.spacePictures.clear() }
             shared.film = (ask["film"] as? String).map { ($0, ask["paint"] as? [String: String] ?? [:], []) }
+            shared.edges = ask["edges"] as? Bool == true
             shared.start(window, browser: browser)
             answer(["ok": true, "stage": stage(browser) != nil])
         case "stop":
@@ -95,6 +97,7 @@ final class StageTrace: NSObject {
             shot["webs"] = webs(in: stage.content).filter { !$0.isHiddenOrHasHiddenAncestor && $0.alphaValue > 0.01 && $0.frame.width > 0 }
                 .compactMap { web in all.first { $0.built === web }.map(Bench.short) }
         }
+        if edges { shot["edges"] = Self.edges(browser) }
         samples.append(shot)
         if film != nil, !cycle, let frame = render(browser) { film?.frames.append(frame) }
     }
@@ -139,5 +142,73 @@ final class StageTrace: NSObject {
             NSGraphicsContext.restoreGraphicsState()
         }
         return rep
+    }
+}
+
+extension StageTrace {
+    static func edges(_ browser: Browser) -> [String: Any] {
+        guard let window = browser.window, let frameView = window.contentView?.superview, let stage = stage(browser),
+              let model = stage.layer else { return [:] }
+        let top = model.presentation() ?? model
+        let placed = stage.convert(stage.bounds, to: frameView)
+        let origin = CGPoint(x: placed.minX, y: frameView.isFlipped ? placed.minY : frameView.bounds.height - placed.maxY)
+        let size = top.bounds.size
+        let flipped = !stage.isFlipped != !top.isGeometryFlipped
+        func box(_ rect: CGRect) -> [Double] {
+            let y = flipped ? size.height - rect.maxY : rect.minY
+            return [rect.minX + origin.x, y + origin.y, rect.maxX + origin.x, y + rect.height + origin.y].map { (Double($0) * 1000).rounded() / 1000 }
+        }
+        func shown(_ layer: CALayer) -> CALayer { layer.presentation() ?? layer }
+        func inks(_ layer: CALayer) -> Bool {
+            if layer.contents != nil || layer.borderWidth > 0 { return true }
+            if let colour = layer.backgroundColor, colour.alpha > 0.001 { return true }
+            if let shape = layer as? CAShapeLayer, shape.path != nil, (shape.fillColor?.alpha ?? 0) > 0.001 || (shape.strokeColor?.alpha ?? 0) > 0.001 { return true }
+            return false
+        }
+        func maskArea(_ mask: CALayer) -> CGRect {
+            var area = CGRect.null
+            func walk(_ layer: CALayer) {
+                let drawn = shown(layer)
+                guard !drawn.isHidden, drawn.opacity > 0.01 else { return }
+                if inks(drawn) { area = area.union(drawn.convert(drawn.bounds, to: top)) }
+                drawn.sublayers?.forEach(walk)
+            }
+            walk(mask)
+            return area
+        }
+        var found: [[String: Any]] = []
+        var masks: [[String: Any]] = []
+        func name(_ layer: CALayer) -> String {
+            let view = layer.delegate as? NSView
+            return view.map { String(describing: type(of: $0)) } ?? String(describing: type(of: layer))
+        }
+        func walk(_ model: CALayer, clip: CGRect, chain: [String], opacity: Swift.Float) {
+            let layer = shown(model)
+            guard !layer.isHidden else { return }
+            let seen = opacity * layer.opacity
+            guard seen > 0.01 else { return }
+            let rect = layer.convert(layer.bounds, to: top)
+            var inside = clip
+            var held = chain
+            if layer.masksToBounds { inside = inside.intersection(rect); held.append("\(name(layer)) bounds") }
+            if let mask = layer.mask {
+                let area = maskArea(mask)
+                inside = inside.intersection(area)
+                held.append("\(name(layer)) mask")
+                if !area.isNull, area.maxX >= size.width - 4 || area.minY <= 4 || area.minX <= 4 {
+                    masks.append(["of": name(layer), "box": box(area), "corner": Double(shown(mask).sublayers?.first.map { shown($0).cornerRadius } ?? shown(mask).cornerRadius)])
+                }
+            }
+            if inks(layer) {
+                let drawn = rect.intersection(inside)
+                if !drawn.isNull, drawn.width > 0, drawn.maxX >= size.width - 4 || drawn.minY <= 4 {
+                    found.append(["layer": name(layer), "box": box(rect), "drawn": box(drawn), "corner": Double(layer.cornerRadius),
+                                  "opacity": Double(seen), "clips": held])
+                }
+            }
+            model.sublayers?.forEach { walk($0, clip: inside, chain: held, opacity: seen) }
+        }
+        walk(model, clip: CGRect(x: -100_000, y: -100_000, width: 200_000, height: 200_000), chain: [], opacity: 1)
+        return ["stage": box(top.bounds), "scale": Double(window.backingScaleFactor), "layers": found, "masks": masks]
     }
 }

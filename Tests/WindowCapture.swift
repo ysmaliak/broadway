@@ -36,12 +36,13 @@ final class Capture: NSObject, SCStreamOutput, @unchecked Sendable {
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
         guard let window = content.windows.first(where: { $0.owningApplication?.processID == pid && $0.windowID == UInt32(args[4])! }) else { print("SKIP: no test window"); return }
         let config = SCStreamConfiguration()
-        let scale = args.count > 5 ? Double(args[5]) ?? 1 : 1
+        let scale = args.count > 5 ? (args[5] == "screen" ? Double(NSScreen.main?.backingScaleFactor ?? 2) : Double(args[5]) ?? 1) : 1
         config.width = Int(window.frame.width * scale)
         config.height = Int(window.frame.height * scale)
         config.scalesToFit = scale > (NSScreen.main?.backingScaleFactor ?? 2)
         config.minimumFrameInterval = CMTime(value: 1, timescale: args.count > 6 ? Int32(args[6]) ?? 60 : 60)
         config.showsCursor = false
+        config.pixelFormat = kCVPixelFormatType_32BGRA
         config.ignoreShadowsSingleWindow = true
         config.queueDepth = 8
         let capture = Capture(folder)
