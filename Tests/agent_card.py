@@ -478,8 +478,8 @@ def main():
             t.ok("lead", f"{mode}: a folded folder of two tabs and the agent's heading both show 2",
                  folder.get("countText") == "2" and head.get("countText") == "2" and folder.get("countShown") and head.get("countShown"), (folder, head))
             t.ok("lead", f"{mode}: the two counts are the same size", abs(fbox[2] - cbox[2]) < 0.01 and abs(fbox[3] - cbox[3]) < 0.01 and cbox[3] == 17, (fbox, cbox))
-            t.ok("lead", f"{mode}: each sits ten points from its row's end, in the row's middle",
-                 abs((hbox[0] + hbox[2]) - (fbox[0] + fbox[2]) - 10) < 0.01 and abs((abox[0] + abox[2]) - (cbox[0] + cbox[2]) - 10) < 0.01
+            t.ok("lead", f"{mode}: each sits nine points from its row's end, in the row's middle",
+                 abs((hbox[0] + hbox[2]) - (fbox[0] + fbox[2]) - 9) < 0.01 and abs((abox[0] + abox[2]) - (cbox[0] + cbox[2]) - 9) < 0.01
                  and abs((fbox[1] + fbox[3] / 2) - (hbox[1] + hbox[3] / 2)) < 0.51 and abs((cbox[1] + cbox[3] / 2) - (abox[1] + abox[3] / 2)) < 0.51,
                  (hbox, fbox, abox, cbox))
         stage(False)
@@ -493,7 +493,7 @@ def main():
         listed = (rest or {}).get("listed") or []
         t.ok("lead", "opened, the fold lists the agent's other tabs and the count goes, as a folder's does",
              row.get("open") and row.get("rows") == 2 and opened.get("open") and not opened.get("countShown"), (row, opened))
-        t.ok("lead", "headings sit at the card's edge and the fold's rows are set in", sorted({round(f[0]) for f in listed}) == [0, 12] and len(listed) == 4, listed)
+        t.ok("lead", "headings sit at the card's edge and the fold's rows are set in", sorted({round(f[0]) for f in listed}) == [0, 20] and len(listed) == 4, listed)
         t.ok("lead", "opening an agent eases the card's height over many frames", len(rooms) >= 8 and abs(rooms[-1] - shut_room - 74) < 0.01
              and all(b >= a - 0.01 for a, b in zip(rooms, rooms[1:])), (shut_room, rooms))
         looks_shots("pic-3-two-open")

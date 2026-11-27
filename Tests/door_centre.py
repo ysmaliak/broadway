@@ -49,7 +49,8 @@ def plate_of(rest, hot, said):
     b = pixels(hot, region)[5]
     diff = [abs(p - q) for p, q in zip(a, b)]
     edge = round(reach * k)
-    inner = [diff[row * w + col] for row in range(edge + 4, h - edge - 4) for col in range(edge + 4, w - edge - 4)]
+    margin = edge + round(2 * k)
+    inner = [diff[row * w + col] for row in range(margin, h - margin) for col in range(margin, w - margin)]
     lift = median(inner)
     if lift < 1.5:
         return None

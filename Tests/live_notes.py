@@ -37,7 +37,7 @@ FOLDERS = [
     ("Issues", "linear:assigned"),
     ("Cycle", "linear:cycle/eng"),
     ("Videos", "https://www.youtube.com/feed/subscriptions"),
-    ("News", "https://dispatch-weekly.example/feed.xml"),
+    ("News", "https://dispatch-times.example/feed.xml"),
 ]
 STATES = ["waiting", "fine", "paused", "running", "signIn", "sso", "unread", "offline", "limited"]
 drawn = []
@@ -80,7 +80,7 @@ def survey(width):
     for state in STATES:
         for name, _ in FOLDERS:
             if state == "sso":
-                live("force", name, "sso", "Octo Corporation Europe")
+                live("force", name, "sso", "Octo Corporation Spain")
             else:
                 live("force", name, state)
         time.sleep(0.6)
