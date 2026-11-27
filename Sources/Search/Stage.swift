@@ -345,6 +345,8 @@ final class StageView: NSView {
     /// it goes out the way ⇧⌘P sends it.
     private weak var parting: NSView?
 
+    private weak var waiting: NSView?
+
     private weak var outgoing: NSView?
     private weak var returning: NSView?
     private var outgoingTicket = 0
@@ -382,6 +384,17 @@ final class StageView: NSView {
         parting = page
     }
 
+    func wait(_ page: NSView) {
+        guard page.superview === self else { return }
+        waiting = page
+    }
+
+    func stopWaiting(_ page: NSView) {
+        guard waiting === page else { return }
+        waiting = nil
+        settle()
+    }
+
     func keepCall(_ page: NSView) {
         guard page.superview == nil, Self.onCall(page) else { return }
         page.alphaValue = 0
@@ -393,6 +406,7 @@ final class StageView: NSView {
     func letGo(_ page: NSView) {
         guard parting === page else { return }
         parting = nil
+        if page === waiting { return }
         if page.superview === self, page !== wanted { page.removeFromSuperview() }
         page.alphaValue = 1
     }
@@ -479,6 +493,7 @@ final class StageView: NSView {
             parting = nil
             page.alphaValue = 1
         }
+        if let page, page === waiting { waiting = nil }
         if let leaving = wanted, leaving !== page, let dock = subviews.first(where: Self.isInspector) {
             Self.docks.setObject(dock, forKey: leaving)
             dock.removeFromSuperview()
@@ -604,6 +619,14 @@ final class StageView: NSView {
                 view.alphaValue = 0
                 continue
             }
+            if view === waiting {
+                view.alphaValue = 0
+                if let window, let responder = window.firstResponder as? NSView,
+                   responder === view || responder.isDescendant(of: view) {
+                    window.makeFirstResponder(nil)
+                }
+                continue
+            }
             if Self.onCall(view) {
                 hold(view)
                 continue
@@ -688,6 +711,10 @@ final class StageView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         let hit = super.hitTest(point)
         if let parting, let hit, hit === parting || hit.isDescendant(of: parting) { return nil }
+        if let waiting, let hit, waiting !== wanted, hit === waiting || hit.isDescendant(of: waiting) {
+            guard let wanted, wanted.superview === self else { return nil }
+            return wanted.hitTest(convert(point, from: superview))
+        }
         if let outgoing, let hit, outgoing !== wanted, hit === outgoing || hit.isDescendant(of: outgoing) {
             guard let wanted, wanted.superview === self else { return nil }
             return wanted.hitTest(convert(point, from: superview))

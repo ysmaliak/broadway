@@ -2092,6 +2092,9 @@ final class Browser: NSObject {
     @ObservationIgnored lazy var mini = MiniPlayer(self)
     @ObservationIgnored lazy var hints = HintWatch(self)
     @ObservationIgnored var floatMiss: FloatMiss?
+    @ObservationIgnored private weak var waitStage: StageView?
+    @ObservationIgnored private weak var waitPage: NSView?
+    @ObservationIgnored private var waitEnd: DispatchWorkItem?
 
     /// ⌘⇧C. The address, in the clipboard, and a line that says as much.
     func copyAddress() {
@@ -6102,6 +6105,34 @@ extension Browser {
         lift(tab, quietly: miss.quietly)
     }
 
+    private func waitForPicture(_ tab: Tab, in stage: StageView) {
+        guard let miss = floatMiss, miss.tab == tab.id, waitPage !== tab.web else { return }
+        endWait()
+        let web = tab.web
+        stage.wait(web)
+        waitStage = stage
+        waitPage = web
+        let end = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated { self?.endWait() }
+        }
+        waitEnd = end
+        DispatchQueue.main.asyncAfter(deadline: .now() + miss.left(), execute: end)
+        web.evaluateInSearch(FloatFind.starts) { [weak self] seen in
+            MainActor.assumeIsolated {
+                guard let self, self.waitPage === web, !FloatFind.starting(seen) else { return }
+                self.endWait()
+            }
+        }
+    }
+
+    private func endWait() {
+        waitEnd?.cancel()
+        waitEnd = nil
+        if let page = waitPage { waitStage?.stopWaiting(page) }
+        waitStage = nil
+        waitPage = nil
+    }
+
     /// Everything but the video goes out of the way, and the page it lives in
     /// moves house — into a small window that stays above everything.
     /// `otherwise`: the other page of a pair, tried when this one has
@@ -6133,6 +6164,9 @@ extension Browser {
         let strict = quietly && !Players.knows(tab.address)
         if strict, !tab.noisy, !tab.muted {
             floatMiss = FloatMiss(tab: tab.id, quietly: true, since: floatMiss)
+            if let stage = tab.web.superview as? StageView {
+                waitForPicture(tab, in: stage)
+            }
             if let otherwise { lift(otherwise, quietly: quietly) }
             return
         }
@@ -6246,6 +6280,7 @@ extension Browser {
             return
         }
         if floatMiss?.tab == tab.id { floatMiss = nil }
+        endWait()
         // Out again before it had settled in its tab: the page isn't as it
         // was left yet, and the picture from the first time still is.
         var left = shot

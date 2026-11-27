@@ -38,6 +38,27 @@ enum FloatFind {
         """
     }
 
+    static let starts = """
+    (function () {
+      var all = document.querySelectorAll('video'), out = [];
+      for (var i = 0; i < all.length && out.length < 16; i++) {
+        var v = all[i];
+        out.push({ paused: v.paused, ended: v.ended, muted: v.muted, volume: v.volume, ready: v.readyState });
+      }
+      return out;
+    })();
+    """
+
+    static func starting(_ seen: Any?) -> Bool {
+        guard let videos = seen as? [[String: Any]] else { return false }
+        return videos.contains { video in
+            func flag(_ key: String) -> Bool { (video[key] as? NSNumber)?.boolValue ?? (video[key] as? Bool ?? false) }
+            let volume = (video["volume"] as? NSNumber)?.doubleValue ?? 0
+            let ready = (video["ready"] as? NSNumber)?.intValue ?? 4
+            return !flag("paused") && !flag("ended") && !flag("muted") && volume > 0 && ready < 3
+        }
+    }
+
     static func carry(_ path: [Int]) -> String {
         """
         (function () {

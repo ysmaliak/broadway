@@ -293,6 +293,8 @@ struct FloatMiss: Equatable {
     }
 
     func fresh(now: Date = Date()) -> Bool { now.timeIntervalSince(at) < Self.lasts }
+
+    func left(now: Date = Date()) -> TimeInterval { max(0, Self.lasts - now.timeIntervalSince(at)) }
 }
 
 struct MiniFrameSeen: Equatable {
