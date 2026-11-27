@@ -136,7 +136,9 @@ class SignMenu: NSObject, NSMenuDelegate {
 
     func rebuild() {
         menu.removeAllItems()
-        for part in follows ? reads.track(parts) : parts() {
+        let built = follows ? reads.track(parts) : parts()
+        let ticks = built.contains { if case .items(let entries) = $0 { entries.contains { $0.on != nil } } else { false } }
+        for part in built {
             switch part {
             case .heading(let text):
                 menu.addItem(text.count <= 44 ? .sectionHeader(title: text) : KitMenu.note(text))
@@ -145,6 +147,8 @@ class SignMenu: NSObject, NSMenuDelegate {
                     let item = KitMenuAction(KitMenu.middle(entry.title, limit: 52), key: "", run: entry.act)
                     if let on = entry.on {
                         item.state = on ? .on : .off
+                    } else if ticks {
+                        item.leadingSymbol(entry.symbol)
                     } else {
                         item.image = KitGlyph.plain(entry.symbol)
                     }

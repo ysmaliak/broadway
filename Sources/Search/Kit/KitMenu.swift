@@ -2,7 +2,7 @@ import AppKit
 
 indirect enum KitMenuItem {
     case action(String, symbol: String? = nil, key: String = "", modifiers: NSEvent.ModifierFlags = .command,
-                on: Bool = false, enabled: Bool = true, id: String? = nil, run: () -> Void)
+                on: Bool? = nil, enabled: Bool = true, id: String? = nil, run: () -> Void)
     case picture(String, NSImage?, run: () -> Void)
     case submenu(String, symbol: String? = nil, [KitMenuItem])
     case header(String)
@@ -27,18 +27,21 @@ enum KitMenu {
         let menu = NSMenu(title: title)
         menu.autoenablesItems = false
         menu.allowsContextMenuPlugIns = false
-        for item in items { menu.addItem(self.item(item)) }
+        let ticks = items.contains { if case .action(_, _, _, _, .some, _, _, _) = $0 { true } else { false } }
+        for item in items { menu.addItem(self.item(item, ticks: ticks)) }
         return menu
     }
 
-    static func item(_ item: KitMenuItem) -> NSMenuItem {
+    static func item(_ item: KitMenuItem, ticks: Bool = false) -> NSMenuItem {
         switch item {
         case let .action(title, symbol, key, modifiers, on, enabled, id, run):
             let made = KitMenuAction(title, key: key, run: run)
             made.keyEquivalentModifierMask = modifiers
-            made.state = on ? .on : .off
+            made.state = on == true ? .on : .off
             made.isEnabled = enabled
-            if let symbol { made.image = KitGlyph.plain(symbol) }
+            if let symbol, on == nil {
+                if ticks { made.leadingSymbol(symbol) } else { made.image = KitGlyph.plain(symbol) }
+            }
             if let id { made.setAccessibilityIdentifier(id) }
             return made
         case let .picture(title, image, run):
@@ -47,7 +50,9 @@ enum KitMenu {
             return made
         case let .submenu(title, symbol, items):
             let made = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-            if let symbol { made.image = KitGlyph.plain(symbol) }
+            if let symbol {
+                if ticks { made.leadingSymbol(symbol) } else { made.image = KitGlyph.plain(symbol) }
+            }
             made.submenu = make(items, title: title)
             return made
         case .header(let title):
