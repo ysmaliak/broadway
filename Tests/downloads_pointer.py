@@ -234,7 +234,8 @@ def stage(dark, size=SIZE):
 def launch():
     sv.setup()
     sv.launch()
-    sv.page("page")
+    tab = sv.page("page")
+    sv.ev(tab, "document.documentElement.style.background = 'rgb(128, 128, 128)'")
     time.sleep(0.4)
 
 

@@ -434,7 +434,7 @@ def browsing(base):
     refused, parsed = envelope("go", base, "--tab", front["id"])
     check("the front tab can't be sent elsewhere", refused.returncode == 1 and parsed["error"]["code"] == "refused", parsed)
     refused, parsed = envelope("close", "--tab", front["id"])
-    check("the front tab can't be closed", refused.returncode == 1 and parsed["error"]["code"] == "refused", parsed)
+    check("the front tab can't be closed", refused.returncode == 1 and parsed["error"]["code"] == "not_yours", parsed)
     check("addresses only", (envelope("go", "file:///etc/passwd", "--tab", tab)[1]["error"] or {}).get("code") in ("refused", "usage"))
     check("close", broadway("close", "--tab", tab).returncode == 0)
     check("it's gone", tab not in broadway("tabs").stdout)

@@ -347,6 +347,10 @@ def mcp_cases(base, tabs):
         still = element(out, "Still", "button")
         out, err = server.tool("snapshot", tab=form)
         name = element(out, "Name", "textbox")
+        out, err = server.tool("open", url=base + "static?own")
+        data = (out.get("_meta") or {}).get("com.broadway/data") or {}
+        own = data.get("id") or data.get("tab")
+        check("mcp opens a tab of its own for go", bool(own) and not err, json.dumps(out)[:400])
         steps = {
             "tabs": lambda n: server.tool("tabs"),
             "snapshot": lambda n: server.tool("snapshot", tab=table),
@@ -355,7 +359,7 @@ def mcp_cases(base, tabs):
             "click": lambda n: server.tool("click", tab=static, ref=still),
             "type": lambda n: server.tool("type", tab=form, ref=name, text=f"Ada {n}", replace=True),
             "scroll": lambda n: server.tool("scroll", tab=table, by="down" if n % 2 == 0 else "up"),
-            "go": lambda n: server.tool("go", tab=static, url=base + f"static?m={n}"),
+            "go": lambda n: server.tool("go", tab=own, url=base + f"static?m={n}"),
             "shot": lambda n: server.tool("shot", tab=static),
         }
         for key, step in steps.items():
@@ -369,9 +373,9 @@ def mcp_cases(base, tabs):
             data = (out.get("_meta") or {}).get("com.broadway/data") or {}
             made.append(data.get("id") or data.get("tab"))
         stopwatch("mcp open", opening)
-        for tab in made:
+        for tab in made + [own]:
             if tab:
-                broadway("close", "--tab", tab)
+                server.tool("close", tab=tab)
     finally:
         server.close()
 
