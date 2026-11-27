@@ -114,6 +114,11 @@ def still(name):
     return out
 
 
+def middle(shot, pane):
+    k = rl.scale_of(shot, 1100)
+    return rl.pixels(shot, [(round((pane["x"] + pane["width"] / 2) * k), round((pane["y"] + pane["height"] / 2) * k))])[0]
+
+
 def crop(src, box, path, zoom=1):
     k = max(1, round(rl.scale_of(src)))
     x, y, w, h = box
@@ -307,6 +312,20 @@ def main():
                     if not (pane and edge):
                         continue
                     shot = still(tag)
+                    seen = middle(shot, pane)
+                    for again in range(1, 6):
+                        if off(seen, HEADERS[kind]) <= 6:
+                            break
+                        print(f"  {tag}: the page has not drawn yet, its middle is {seen}, look {again} of 5")
+                        if again > 2:
+                            sv.sp("select", id=opened["lone-white" if kind == "black" else "lone-black"])
+                            time.sleep(0.5)
+                            focus(id)
+                        else:
+                            time.sleep(1.0)
+                        shot = still(tag)
+                        seen = middle(shot, pane)
+                    t.ok(f"{tag}: the page has drawn", off(seen, HEADERS[kind]) <= 6, seen)
                     k = rl.scale_of(shot, 1100)
                     l, r = math.floor(pane["x"] * k + 0.02), math.ceil((pane["x"] + pane["width"]) * k - 0.02) - 1
                     u, d = math.floor(pane["y"] * k + 0.02), math.ceil((pane["y"] + pane["height"]) * k - 0.02) - 1

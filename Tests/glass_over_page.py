@@ -27,13 +27,24 @@ PAGES = {
 }
 MEMBERS = [
     ("find-bar", "FindBarView", lambda: sv.cmd({"do": "find", "text": "words"}), lambda: sv.cmd({"do": "find", "close": True})),
-    ("link-notice", "OfferBarView", lambda: sv.cmd({"do": "ui", "linkNotice": True}), lambda: sv.cmd({"do": "ui", "linkNotice": False})),
+    ("bars", "BarStack", lambda: bars(True), lambda: bars(False)),
     ("downloads", "RecentDownloadsView", lambda: sv.cmd({"do": "ui", "downloadsStage": "empty", "recentdownloads": True}),
      lambda: sv.cmd({"do": "ui", "recentdownloads": False})),
     ("downloads-many", "RecentDownloadsView", lambda: sv.cmd({"do": "ui", "downloadsStage": "many", "recentdownloads": True}),
      lambda: sv.cmd({"do": "ui", "recentdownloads": False, "downloadsStage": "empty"})),
     ("downloads-picked", "RecentDownloadsView", lambda: picked(), lambda: sv.cmd({"do": "ui", "recentdownloads": False, "downloadsStage": "empty"})),
 ]
+
+
+BARS = ["Opened in Work by a rule", "Turn on Developer Mode", "Filled 3", "Allow Ads Here"]
+
+
+def bars(on):
+    sv.cmd({"do": "ui", "linkNotice": on, "glassBars": ["shield", "developer", "done"] if on else []})
+
+
+def places(marks):
+    return sorted([round(v) for v in mark["box"]] for mark in marks)
 
 
 def picked():
@@ -80,7 +91,7 @@ def main():
     server = ThreadingHTTPServer(("127.0.0.1", 0), Page)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{server.server_port}"
-    sv.setup(**{"start.fresh": False, "welcome.show": False})
+    sv.setup(**{"start.fresh": False, "welcome.show": False, "notice.testAway": True})
     if os.path.exists(sv.SOCK):
         os.remove(sv.SOCK)
     before = sv.running()
@@ -119,6 +130,9 @@ def main():
                         t.ok(f"{label}: shown", False, str(error)[:160])
                         hide()
                         continue
+                    if name == "bars":
+                        words = [mark["text"] for mark in said["inks"]]
+                        t.ok(f"{label}: every bar asked for is up", all(any(w in word for word in words) for w in BARS), str(words))
                     windows = [placed["number"]] + [n for n in said["numbers"] if n != placed["number"]]
                     path = out / name / f"real-{look}-{ground}-{tag}.png"
                     blank = out / name / "blank" / path.name
@@ -129,9 +143,15 @@ def main():
                     sv.cmd({"do": "inks", "under": kind, "blank": True})
                     time.sleep(0.5)
                     bare = shoot(tool, pid, windows, blank)
-                    sv.cmd({"do": "inks", "under": kind, "shown": True})
+                    try:
+                        back = places(sv.cmd({"do": "inks", "under": kind, "shown": True})["inks"])
+                    except RuntimeError as error:
+                        back = str(error)[:160]
                     hide()
                     time.sleep(0.6)
+                    if back != places(said["inks"]):
+                        t.ok(f"{label}: the same words stand in the same places in both pictures", False, f"{places(said['inks'])} then {back}")
+                        continue
                     if frame is None or bare is None or frame != bare:
                         t.ok(f"{label}: pictured without its words", False, f"{frame} and {bare}")
                         continue
