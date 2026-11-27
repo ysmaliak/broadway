@@ -141,7 +141,7 @@ def shots(pid):
                 sv.cmd({"do": "space", "action": "go", "index": index + 1})
                 time.sleep(0.8)
             for kind in KINDS:
-                if kind == "unpainted":
+                if kind in ("unpainted", "newtab"):
                     made[name][kind] = opened(on, kind)
                 sv.cmd({"do": "split", "action": "select", "id": made[name][kind], "window": on})
                 time.sleep(1.2)

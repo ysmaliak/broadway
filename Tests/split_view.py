@@ -183,15 +183,48 @@ def quit():
         if not pids(): break
         time.sleep(0.2)
     for p in pids(): subprocess.run(["kill", p])
-def cmd(req):
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as c:
-        c.settimeout(30); c.connect(f"{SUPPORT}/bench.sock"); c.sendall(json.dumps(req).encode() + b"\n")
-        data = b""
-        while True:
-            ch = c.recv(65536)
-            if not ch: break
-            data += ch
+CONTEXT = str(ROOT / ".context")
+def apart():
+    try: return os.stat(ROOT).st_dev != os.stat(HOME).st_dev
+    except OSError: return False
+APART = apart()
+STAGE = []
+def staging():
+    if not STAGE:
+        STAGE.append(tempfile.mkdtemp(prefix="broadway-probe-stage-") + "/context")
+        atexit.register(shutil.rmtree, os.path.dirname(STAGE[0]), True)
+    return STAGE[0]
+def outward(text):
+    if not APART or CONTEXT not in text: return text, None
+    stage = staging()
+    for real in set(re.findall(re.escape(CONTEXT) + r'[^"\\]*', text)):
+        there = stage + real[len(CONTEXT):]
+        if os.path.isdir(real): os.makedirs(there, exist_ok=True)
+        else:
+            os.makedirs(os.path.dirname(there), exist_ok=True)
+            if os.path.isfile(real): shutil.copyfile(real, there)
+    return text.replace(CONTEXT, stage), stage
+def homeward(stage):
+    for folder, _, names in os.walk(stage):
+        for name in names:
+            real = CONTEXT + os.path.join(folder, name)[len(stage):]
+            os.makedirs(os.path.dirname(real), exist_ok=True)
+            shutil.move(os.path.join(folder, name), real)
+def cmd(req, limit=30):
+    text, stage = outward(json.dumps(req))
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as c:
+            c.settimeout(limit); c.connect(f"{SUPPORT}/bench.sock"); c.sendall(text.encode() + b"\n")
+            data = b""
+            while True:
+                try: ch = c.recv(65536)
+                except TimeoutError: raise TimeoutError(f"{req}: no answer from the app within {limit} s") from None
+                if not ch: break
+                data += ch
+    finally:
+        if stage: homeward(stage)
     a = json.loads(data.split(b"\n", 1)[0] or b"{}")
+    if stage: a = json.loads(json.dumps(a).replace(stage, CONTEXT))
     if "error" in a: raise RuntimeError(f"{req}: {a['error']}")
     return a
 def sp(action, **f): return cmd({"do": "split", "action": action, **f})

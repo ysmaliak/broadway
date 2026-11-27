@@ -236,20 +236,11 @@ def main():
         still("07-folded")
         agents("fold")
 
-        broadway("agents", "done", "--summary", "Read the pull requests, typed a search for the sign-in loop and left notes on ENG-42 "
-                                           "for the team to look at in the morning", env=CLAUDE)
-        broadway("agents", "done", "--failed", "--summary", "Status page timed out", env=SCRIPT)
-        time.sleep(0.4)
-        still("09-done")
-
-        claude = card("Claude Code")
-        burst("10-close", lambda: agents("closelink", link=claude["id"][:8]))
+        burst("10-close", lambda: broadway("agents", "done", "--summary", "Read the pull requests, typed a search for the sign-in loop "
+                                                     "and left notes on ENG-42 for the team to look at in the morning", env=CLAUDE))
         still("10-closed")
-        script = card("Nightly check")
-        agents("closelink", link=script["id"][:8])
-        broadway("agents", "done", env=CODEX)
-        codex = card("Codex Nightly Release Checker For The Whole Team")
-        burst("11-leave", lambda: agents("closelink", link=codex["id"][:8]), frames=16)
+        broadway("agents", "done", "--failed", "--summary", "Status page timed out", env=SCRIPT)
+        burst("11-leave", lambda: broadway("agents", "done", env=CODEX), frames=16)
         still("11-empty")
     finally:
         subprocess.run([BROADWAY, "--world", WORLD, "quit", "--force"], capture_output=True)
@@ -265,6 +256,9 @@ def main():
         server.shutdown()
     for name, dark, files in LOG:
         print(name, "" if dark is None else ("dark" if dark else "light"), " ".join(str(f) for f in files))
+    missing = [name for name, _, files in LOG if not files or "no frame" in files]
+    print(f"{len(LOG) - len(missing)} passed, {len(missing)} failed")
+    sys.exit(1 if missing else 0)
 
 
 main()

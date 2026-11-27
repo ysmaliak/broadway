@@ -18,7 +18,7 @@ def main():
     try:
         sv.setup(**{"tabs.groups": True}); sv.launch()
         tab = sv.page("before-file")
-        with tempfile.TemporaryDirectory(dir=sv.ROOT / "build") as directory:
+        with tempfile.TemporaryDirectory(dir=Path.home() / "Library/Caches" if sv.APART else sv.ROOT / "build") as directory:
             folder = Path(directory)
             file = folder / "résumé #1? 100%.html"
             file.write_text('<!doctype html><link rel="stylesheet" href="style.css"><p>Local fixture</p><a href="next.html">Next</a>')

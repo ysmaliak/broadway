@@ -93,9 +93,18 @@ def ids(said):
     return [row.get("id") for row in data(said).get("tabs", [])]
 
 
+def reachable():
+    seen = subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", HOST, f"test -x {TWIN}/{HELPER}"],
+                          capture_output=True, text=True, stdin=subprocess.DEVNULL)
+    if seen.returncode != 0:
+        sys.exit(f"needs a second Mac that this one reaches as {HOST} over ssh with a key, with this checkout built at {TWIN} there. "
+                 f"Set BROADWAY_SSH_HOST and BROADWAY_TWIN. ssh said: {seen.stderr.strip() or 'no build there'}")
+
+
 def main():
     if "--host" in sys.argv:
         return host()
+    reachable()
     SCRATCH.mkdir(parents=True, exist_ok=True)
     remote = subprocess.Popen(["ssh", HOST, f"cd {TWIN} && python3 -u Tests/agent_ssh.py --host"], stdin=subprocess.PIPE,
                               stdout=subprocess.PIPE, text=True)

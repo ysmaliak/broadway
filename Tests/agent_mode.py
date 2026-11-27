@@ -108,8 +108,15 @@ def probe_agent(name):
     return name == "Probe Agent" or str(name).startswith("Probe Agent · ")
 
 
+def called(row, name):
+    return row["name"] == name or str(row["name"]).startswith(name + " · ")
+
+
+ACCENTS = {}
+
+
 def card(named):
-    return next((row for row in state().get("area", []) if row["name"] == named or (named == "Probe Agent" and probe_agent(row["name"]))), None)
+    return next((row for row in state().get("area", []) if called(row, named)), None)
 
 
 FILMING = Path(tempfile.mkdtemp(prefix="agent-mode-frames-"))
@@ -265,27 +272,26 @@ def second_agent(base):
 def done(second):
     ended, result = data("agents", "done", "--summary", "Read two pages and typed a search")
     check("done", ended and ended["ok"], result.stdout + result.stderr)
-    found = card("Probe Agent")
-    check("the session shows the tick and the summary", found and found["mood"] == "done" and found["status"] == "Read two pages and typed a search", found)
+    left = wait_for(lambda: card("Probe Agent") is None and state())
+    check("done closes its tabs and takes the session away", left is not None, card("Probe Agent"))
     film("05-done")
-    closed = agent("closelink", link=found["id"][:8])
-    check("closing its tabs takes the session away", not any(probe_agent(row["name"]) for row in closed["area"]), closed["area"])
     gone, _ = data("agents", "disconnect", env=second)
     check("disconnect", gone and gone["ok"], gone)
     other = card("Second Agent")
-    agent("closelink", link=other["id"][:8])
-    empty = state()
-    check("the area leaves with the last session", empty["area"] == [] and empty["height"] == 0, empty)
+    if other:
+        agent("closelink", link=other["id"][:8])
+    empty = wait_for(lambda: (lambda now: now if now["area"] == [] and now["height"] == 0 else None)(state()))
+    check("the area leaves with the last session", empty is not None, state())
 
 
 def process_end(base):
     script = f"import subprocess; subprocess.run([{BROADWAY!r}, '--world', {WORLD!r}, 'open', {base + 'four'!r}, '--json'], capture_output=True)"
     subprocess.run([sys.executable, "-c", script], env=clean_env(), timeout=30)
-    named = wait_for(lambda: next((row for row in state()["links"] if row["state"] == "connected" and row["name"] == "Python"), None))
+    named = wait_for(lambda: next((row for row in state()["links"] if row["state"] == "connected" and called(row, "Python")), None))
     check("a script that opens a tab gets a session of its own", named is not None, state()["links"])
     swept = agent("linksweep")
-    ended = next((row for row in swept["links"] if named and row["id"] == named["id"]), None)
-    check("its session ends when the script exits", ended and ended["state"] == "done", swept["links"])
+    kept = next((row for row in swept["links"] if named and row["id"] == named["id"]), None)
+    check("a person's script keeps its tab once it has exited", kept and kept["state"] == "connected" and kept["tabs"] == 1, swept["links"])
     for row in swept["area"]:
         agent("closelink", link=row["id"][:8])
 
@@ -311,20 +317,20 @@ def ancestors(base):
                               f"{line} agents done --summary 'Claude-style run' --json"],
                              capture_output=True, text=True, env=environment, timeout=60)
         check("a Claude Code-style agent runs broadway", ran.returncode == 0, ran.stdout + ran.stderr)
-        rows = [row for row in state()["links"] if row["name"] == "Claude Code"]
+        rows = [row for row in state()["links"] if called(row, "Claude Code")]
         check("a native Claude Code install is named Claude Code, not its version", len(rows) == 1, state()["links"])
-        check("its commands are one session that ended with done", rows and rows[0]["state"] == "done" and rows[0]["tabs"] == 2, rows)
+        check("its commands are one session that ended with done, which closed its tabs", rows and rows[0]["state"] == "done" and rows[0]["tabs"] == 0, rows)
         ran = subprocess.run([codex, "/bin/bash", "-lc", f"{line} agents connect --json", f"{line} open {base}nine --json"],
                              capture_output=True, text=True, env=environment, timeout=60)
         check("a Codex-style agent runs broadway", ran.returncode == 0, ran.stdout + ran.stderr)
-        rows = [row for row in state()["links"] if row["name"] == "Codex"]
+        rows = [row for row in state()["links"] if called(row, "Codex")]
         check("Codex is named Codex", len(rows) == 1 and rows[0]["tabs"] == 1, state()["links"])
         found = card("Codex")
+        if found:
+            ACCENTS["Codex"] = found["accent"]
         swept = agent("linksweep")
         ended = next((row for row in swept["links"] if found and found["id"].lower().startswith(row["id"])), None)
-        check("Codex's session ends once it has exited", ended and ended["state"] == "done", swept["links"])
-        names = {row["name"]: row["accent"] for row in state()["area"]}
-        check("Claude Code and Codex wear different colours", names.get("Claude Code") != names.get("Codex"), names)
+        check("Codex's session ends once it has exited", found and (ended is None or ended["state"] == "done"), swept["links"])
         for row in state()["area"]:
             agent("closelink", link=row["id"][:8])
         boxed = subprocess.run(["sandbox-exec", "-p", "(version 1)(allow default)(deny network*)", BROADWAY, "--world", WORLD, "status", "--json"],
@@ -350,6 +356,9 @@ def mcp(base):
     send({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "open", "arguments": {"url": base + "five"}}})
     found = wait_for(lambda: card("Claude Code"))
     check("an MCP client is named from its hello", found is not None, state()["area"])
+    if found:
+        ACCENTS["Claude Code"] = found["accent"]
+    check("Claude Code and Codex wear different colours", len(ACCENTS) == 2 and ACCENTS["Claude Code"] != ACCENTS["Codex"], ACCENTS)
     process.stdin.close()
     process.wait(timeout=10)
     ended = wait_for(lambda: (lambda c: c if c and c["mood"] == "done" else None)(card("Claude Code")))

@@ -65,14 +65,15 @@ let a = CommandLine.arguments
 let rep = NSBitmapImageRep(data: try! Data(contentsOf: URL(fileURLWithPath: a[1])))!
 let scale = Double(a[2])!, left = Double(a[3])!, top = Double(a[4])!, height = Double(a[5])!
 let edge = Int((left * scale).rounded(.up)) - 1
+let reach = max(1, Int((1.5 * scale).rounded())), aside = Int((5 * scale).rounded())
 func rgb(_ x: Int, _ y: Int) -> [Double] {
     guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { return [0, 0, 0] }
     return [c.redComponent, c.greenComponent, c.blueComponent].map { Double($0) * 255 }
 }
 var worst = 0.0, at = [Int]()
 for y in Int(top * scale)..<min(rep.pixelsHigh, Int((top + height) * scale)) {
-    let ground = rgb(max(0, edge - 10), y)
-    for x in max(0, edge - 3)...edge {
+    let ground = rgb(max(0, edge - aside), y)
+    for x in max(0, edge - reach)...edge {
         let v = rgb(x, y)
         let tint = abs((v.max()! - v.min()!) - (ground.max()! - ground.min()!))
         let off = x < edge ? max(tint, zip(v, ground).map { abs($0 - $1) }.max()!) : tint
@@ -198,7 +199,10 @@ def shoot(pid, name):
         raise SystemExit(f"{name}: no page on screen")
     page = shown[0]
     if out.startswith("shot") and path.exists():
-        read = json.loads(subprocess.run([str(READ), str(path), "2", str(page["x"]), str(page["y"] + (30 if page["x"] < 20 else 0)), "80"],
+        wide = int(subprocess.run(["sips", "-g", "pixelWidth", str(path)], capture_output=True, text=True).stdout.split()[-1])
+        window = next(w for w in sv.cmd({"do": "probe"})["windows"] if w["kind"] in ("AppKitWindow", "NSWindow"))
+        scale = round(wide / window["frame"][2], 3)
+        read = json.loads(subprocess.run([str(READ), str(path), str(scale), str(page["x"]), str(page["y"] + (30 if page["x"] < 20 else 0)), "80"],
                                          capture_output=True, text=True).stdout)
     else:
         read = {"chroma": 0, "at": [], "skipped": True}
@@ -306,7 +310,8 @@ def rides(name, index, t):
     t.ok(f"{name}: riding cards are square on the frame's sides, which rounds them", corners == framed, f"{corners} vs {framed}")
     print(f"  rides {name}: {len(riding)} of {len(shots)} frames ride in, their hairlines {edges}, live {live.get('edge')}; "
           f"last ride {land} vs live {rest}", flush=True)
-    t.ok(f"{name}: the space rides in", len(riding) > 3, f"{len(riding)} frames")
+    lasted = riding[-1]["t"] - riding[0]["t"] + 20 if riding else 0
+    t.ok(f"{name}: the space rides in", lasted > 60, f"{len(riding)} frames over {lasted} ms")
     worn = [live.get("edge")] if live.get("apart") else [0]
     t.ok(f"{name}: a riding pair's panes wear their hairline, a page alone leaves it to the frame", edges == worn, f"{edges} vs {worn}")
     span = max((c[2] for c in rest), default=0) - min((c[0] for c in rest), default=0)

@@ -98,7 +98,7 @@ def shoot(name, numbers=None):
 
 
 def popovers():
-    return [w for w in sv.cmd({"do": "probe"})["windows"] if "Popover" in w["kind"] and w["visible"]]
+    return [w for w in sv.cmd({"do": "probe"})["windows"] if w["kind"] in ("KitPopupPanel", "_NSPopoverWindow") and w["visible"]]
 
 
 def popover(name, opener, closer=None):
@@ -121,19 +121,21 @@ def shut():
     time.sleep(0.4)
 
 
-def press_sign(tab, offset):
-    rows = sv.cmd({"do": "rowframes"})["rows"]
-    x, y, w, h = rows[tab]
-    at = [x + offset, y + h / 2]
-    sv.cmd({"do": "ui", "windowPointer": at, "pointerPhase": "down"})
-    sv.cmd({"do": "ui", "windowPointer": at, "pointerPhase": "up"})
-
-
-def open_sign(tab):
-    for offset in (40, 34, 46, 28, 52):
-        press_sign(tab, offset)
-        if until(popovers, 1.2):
-            return lambda: press_sign(tab, offset)
+def sign_menu(name):
+    for _ in range(4):
+        try:
+            menu = sv.cmd({"do": "ctxmenu", "kind": "sign", "hold": 3})
+        except RuntimeError:
+            time.sleep(0.5)
+            continue
+        time.sleep(0.6)
+        shoot(name)
+        try:
+            sv.cmd({"do": "ctxmenu", "action": "close"})
+        except RuntimeError:
+            pass
+        time.sleep(0.6)
+        return menu
     return None
 
 
@@ -212,27 +214,13 @@ def round_of(dark, name, look, today):
     if wanted("signs"):
         tab = sv.sp("open", url=f"{BASE.replace('127.0.0.1', 'localhost')}/popups")["resultID"]
         time.sleep(1.5)
-        closer = open_sign(tab)
-        if closer:
-            time.sleep(0.9)
-            shoot(f"{tag}-06-blocked", [WINDOW[0]] + [w["number"] for w in popovers()])
-            closer()
-            until(lambda: not popovers(), 3)
-        else:
-            t.ok(f"{tag}: blocked pop-ups sign opened", False)
+        t.ok(f"{tag}: blocked pop-ups sign opened", sign_menu(f"{tag}-06-blocked") is not None)
         sv.sp("close", id=tab)
         tab = sv.sp("open", url=f"{BASE}/french")["resultID"]
         time.sleep(1.2)
         sv.cmd({"do": "translate", "id": tab})
         time.sleep(1.5)
-        closer = open_sign(tab)
-        if closer:
-            time.sleep(0.9)
-            shoot(f"{tag}-07-translate", [WINDOW[0]] + [w["number"] for w in popovers()])
-            closer()
-            until(lambda: not popovers(), 3)
-        else:
-            t.ok(f"{tag}: translate sign opened", False)
+        t.ok(f"{tag}: translate sign opened", sign_menu(f"{tag}-07-translate") is not None)
         sv.sp("close", id=tab)
         sv.sp("select", id=today[2])
     if wanted("newtab"):

@@ -6,6 +6,7 @@ import select
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -58,10 +59,13 @@ class Page(BaseHTTPRequestHandler):
         pass
 
 
+failures = []
+
+
 def check(name, condition):
     print(('ok   ' if condition else 'FAIL ') + name, flush=True)
     if not condition:
-        raise AssertionError(name)
+        failures.append(name)
 
 
 def bench(*words):
@@ -89,9 +93,12 @@ class MCP:
         self.number += 1
         self.process.stdin.write(json.dumps({'jsonrpc': '2.0', 'id': self.number, 'method': method, 'params': params or {}}) + '\n')
         self.process.stdin.flush()
-        if not select.select([self.process.stdout], [], [], 25)[0]:
-            raise TimeoutError(method)
-        return json.loads(self.process.stdout.readline())['result']
+        while True:
+            if not select.select([self.process.stdout], [], [], 25)[0]:
+                raise TimeoutError(method)
+            message = json.loads(self.process.stdout.readline())
+            if message.get('id') == self.number:
+                return message['result']
 
     def call(self, name, **arguments):
         result = self.rpc('tools/call', {'name': name, 'arguments': arguments})
@@ -101,13 +108,15 @@ class MCP:
         if name == 'snapshot':
             elements = []
             for line in text.splitlines():
-                match = re.match(r'(e\d+) (\w+) "([^"]*)"', line)
+                match = re.match(r'@?(e\d+) (\w+) "([^"]*)"', line)
                 if match:
                     item = dict(zip(['ref', 'role', 'name'], match.groups()))
                     if ' options=' in line:
                         item['options'] = json.loads(line.split(' options=', 1)[1])
                     elements.append(item)
             return {'ok': True, 'data': {'elements': elements}}
+        if 'com.broadway/data' in (result.get('_meta') or {}):
+            return {'ok': True, 'data': result['_meta']['com.broadway/data']}
         return {'ok': True, 'data': json.loads('\n'.join(text.splitlines()[2:-1])) if text.splitlines()[2:3] and text.splitlines()[2].startswith('{') else {'text': text}}
 
     def close(self):
@@ -238,16 +247,16 @@ def main():
         tab = exercise(command, base, 'CLI')
         out = Path(tempfile.mkdtemp()) / 'export.pdf'
         check('CLI PDF -o', cli('pdf', '--tab', tab, '-o', str(out))['ok'] and out.read_bytes().startswith(b'%PDF'))
-        check('CLI PDF pipe compatibility', cli('pdf', '--tab', tab, raw=True).stdout.startswith(b'%PDF'))
+        check('CLI PDF pipe compatibility', cli('pdf', '--tab', tab, '--out', '-', raw=True).stdout.startswith(b'%PDF'))
         shutil.rmtree(out.parent)
         client = MCP()
+        client.call('more_tools', query='console network pdf hover choose dialog')
         names = {tool['name'] for tool in client.rpc('tools/list')['tools']}
         check('MCP catalog', {'console', 'network', 'pdf', 'hover', 'choose', 'dialog'} <= names)
         exercise(client.call, base, 'MCP')
         private = bench('open', base, 'private')
         for name in ['console', 'network', 'pdf', 'dialog']:
             check(name + ' private tab excluded', not client.call(name, tab=private[:8])['ok'])
-        print('all good', flush=True)
     finally:
         if client:
             client.close()
@@ -261,7 +270,9 @@ def main():
         time.sleep(.5)
         shutil.rmtree(FOLDER, ignore_errors=True)
         subprocess.run(['defaults', 'delete', SUITE], capture_output=True)
+    print('FAILED: ' + ', '.join(failures) if failures else 'all good', flush=True)
+    return 1 if failures else 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

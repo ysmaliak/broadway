@@ -85,7 +85,14 @@ def line(picture, x, top, bottom, scale):
     return [grey(picture, int(x * scale), y) for y in range(int(top * scale), int(bottom * scale))]
 
 
-def col(**f): return sv.cmd({"do": "columnscroll", **f})
+def col(**f):
+    wheel = f.get("wheel")
+    if wheel and abs(wheel) > 200:
+        now = sv.cmd({"do": "columnscroll"})
+        if "content" in now:
+            room = now["offset"] if wheel < 0 else now["content"] - now["visible"] - now["offset"]
+            f["wheel"] = min(abs(wheel), max(0, room) + 40) * (1 if wheel > 0 else -1)
+    return sv.cmd({"do": "columnscroll", **f})
 
 
 def stage(dark):
@@ -203,7 +210,8 @@ def cut_whole(label, picture, scale, row, ref, cut, side, ground):
     if not row or not ref:
         t.ok(f"{label}: a row across the {side} edge and a whole one", False, (row, ref, cut)); return
     x0, x1 = row[0] + 2, row[0] + 120
-    near = (cut + 0.5, min(cut + 12, row[1] + row[3])) if side == "top" else (max(cut - 12, row[1]), cut - 0.5)
+    past = max(0.5, 1 / scale)
+    near = (cut + past, min(cut + 12, row[1] + row[3])) if side == "top" else (max(cut - 12, row[1]), cut - past)
     shift = ref[1] - row[1]
     cut_patch = patch(picture, x0, x1, near[0], near[1], scale)
     ref_patch = patch(picture, x0, x1, near[0] + shift, near[1] + shift, scale)

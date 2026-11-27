@@ -35,11 +35,15 @@ def check(name, ok, detail=""):
 
 def bench(request):
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+        s.settimeout(30)
         s.connect(str(FOLDER / "bench.sock"))
         s.sendall((json.dumps(request) + "\n").encode())
         chunks = []
         while True:
-            chunk = s.recv(1 << 16)
+            try:
+                chunk = s.recv(1 << 16)
+            except TimeoutError:
+                raise TimeoutError(f"{request}: no answer from the app within 30 s") from None
             if not chunk:
                 break
             chunks.append(chunk)
@@ -72,10 +76,17 @@ def held():
     return subprocess.run(["lsof", "-t", "--", str(FOLDER / "broadway.sock")], capture_output=True, text=True).stdout.split()
 
 
+FILMING = Path(tempfile.mkdtemp(prefix="codex-desktop-frames-"))
+
+
 def film(name):
     FRAMES.mkdir(parents=True, exist_ok=True)
-    answer = bench({"do": "film", "action": "none", "path": str(FRAMES / name), "frames": 1, "region": "full"})
-    files = [frame.get("file") for frame in answer.get("frames", []) if frame.get("file")]
+    answer = bench({"do": "film", "action": "none", "path": str(FILMING / name), "frames": 1, "region": "full"})
+    files = []
+    for frame in answer.get("frames", []):
+        if frame.get("file") and Path(frame["file"]).exists():
+            shutil.copy(frame["file"], FRAMES / Path(frame["file"]).name)
+            files.append(str(FRAMES / Path(frame["file"]).name))
     check(f"frame {name}", bool(files), answer)
 
 
@@ -156,6 +167,7 @@ def main():
             os.kill(int(pid), signal.SIGKILL)
         shutil.rmtree(FOLDER, ignore_errors=True)
         shutil.rmtree(home, ignore_errors=True)
+        shutil.rmtree(FILMING, ignore_errors=True)
         subprocess.run(["defaults", "delete", SUITE], capture_output=True)
         (Path.home() / f"Library/Preferences/{SUITE}.plist").unlink(missing_ok=True)
     print("FAILED: " + ", ".join(failures) if failures else "all good")
