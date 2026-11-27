@@ -41,7 +41,7 @@ struct AnswerTests {
 
         #expect(Answer.lines(data) == [
             "Clicked link \"Checkout\" @e2",
-            "Went to: Checkout  shop.example/checkout   (new page: refs start again)",
+            "Went to: Checkout  shop.example/checkout   (new page: old refs no longer work)",
             "Headings: Checkout · Your details · Payment",
             "Next: broadway snapshot",
         ])
@@ -57,7 +57,7 @@ struct AnswerTests {
 
         #expect(Answer.lines(data) == [
             "Clicked link \"Checkout\" @e2",
-            "Went to: Checkout  shop.example/checkout   (new page: refs start again)",
+            "Went to: Checkout  shop.example/checkout   (new page: old refs no longer work)",
             "## main",
             "@e1 heading \"Checkout\"",
             "@e3 textbox \"Email\"",

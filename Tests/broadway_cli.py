@@ -419,7 +419,8 @@ def browsing(base):
     check("the hint says what to do", "broadway snapshot" in ((parsed["error"] or {}).get("hint") or ""), parsed)
     _, parsed = envelope("snapshot")
     fresh = [e["ref"] for e in parsed["data"]["elements"]]
-    check("refs start again on a new page", fresh[0] == "e1" and old[-1] not in fresh, (old, fresh))
+    number = lambda ref: int(ref.lstrip("@e"))
+    check("a new page's refs go on past the old page's", fresh and min(map(number, fresh)) > max(map(number, old)) and old[-1] not in fresh, (old, fresh))
     gone_ref, parsed = envelope("click", "@" + old[-1])
     check("not even after a new snapshot", gone_ref.returncode == 1 and (parsed["error"] or {}).get("code") == "stale_ref", parsed)
     check("and nothing was clicked", "wrong" not in broadway("tabs").stdout)

@@ -199,6 +199,8 @@ extension BrowserToolbox {
                 }
             }
         }
+        var arguments = arguments
+        if frame == nil { arguments["broadwayFrom"] = AgentRefBook.first(tab) }
         return await withCheckedContinuation { (done: CheckedContinuation<Any?, Never>) in
             var answered = false
             web.callAsyncJavaScript(script, arguments: arguments, in: frame, in: Web.world) { result in
@@ -448,8 +450,16 @@ enum AgentRefBook {
     }
 
     private static var pages: [UUID: [Page]] = [:]
+    private static var highest: [UUID: Int] = [:]
+
+    static func first(_ tab: Tab) -> Int { highest[tab.id] ?? 1 }
+
+    private static func raise(_ tab: Tab, to next: Int) {
+        highest[tab.id] = max(highest[tab.id] ?? 1, next)
+    }
 
     static func note(_ tab: Tab, doc: String, title: String, next: Int?) {
+        raise(tab, to: next ?? 0)
         var list = pages[tab.id] ?? []
         if let index = list.firstIndex(where: { $0.doc == doc }) {
             list[index].title = title.isEmpty ? list[index].title : title
@@ -473,6 +483,9 @@ enum AgentRefBook {
         let key = key(task, tab)
         if told[key]?.doc != doc { told[key] = (doc, []) }
         told[key]?.refs.formUnion(refs)
+        for ref in refs where ref.hasPrefix("e") {
+            if let number = Int(ref.dropFirst()) { raise(tab, to: number + 1) }
+        }
     }
 
     static func wasTold(_ task: UUID?, _ tab: Tab, doc: String?, ref: String) -> Bool? {

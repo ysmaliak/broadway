@@ -128,7 +128,7 @@ Words that fit several elements fail with `ambiguous` and the candidates, each w
 
 ### Refs
 
-Refs count from `e1` on each page, and an element keeps its ref while it is on the page, across any number of snapshots and actions. A new page starts again at `e1`, and a ref from the old page fails with `stale_ref`, naming where the tab went. When an element now reads differently from when you saw it, the action fails with `ref_changed` and shows it as it is now. The same command again acts on it as it is.
+Refs count from `e1` on a tab's first page, and an element keeps its ref while it is on the page, across any number of snapshots and actions. A new page in the tab, the same address loaded again too, goes on from the numbers the tab has given, so a ref from an old page never names anything on the new one. It fails with `stale_ref`, naming where the tab went. When an element now reads differently from when you saw it, the action fails with `ref_changed` and shows it as it is now. The same command again acts on it as it is.
 
 ### Answers
 

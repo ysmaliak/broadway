@@ -73,7 +73,7 @@ enum Answer {
             for id in data["same"] as? [String] ?? [] { found.append("You already have this address in tab \(id). Use it: broadway tab \(id)") }
         } else if settled != "skipped", dialog == nil || dialog?["accepted"] as? Bool == true, opened.isEmpty {
             if page["navigated"] as? Bool == true {
-                found.append("Went to: \(cell(page["title"] as? String ?? ""))  \(short(page["url"] as? String ?? ""))   (new page: refs start again)")
+                found.append("Went to: \(cell(page["title"] as? String ?? ""))  \(short(page["url"] as? String ?? ""))   (new page: old refs no longer work)")
                 if shown.isEmpty {
                     let headings = (data["headings"] as? [String] ?? []).prefix(5).map(cell)
                     if !headings.isEmpty { found.append("Headings: " + headings.joined(separator: " · ")) }

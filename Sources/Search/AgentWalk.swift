@@ -7,7 +7,7 @@ extension AgentPage {
     function broadwayState() {
       var st = window.__broadwayRefs;
       if (!st || !st.doc) {
-        st = window.__broadwayRefs = { ids: new WeakMap(), map: {}, said: {}, target: {}, words: {}, tags: {}, seen: {}, place: {}, only: {}, next: 1,
+        st = window.__broadwayRefs = { ids: new WeakMap(), map: {}, said: {}, target: {}, words: {}, tags: {}, seen: {}, place: {}, only: {}, next: typeof broadwayFrom === 'number' && broadwayFrom > 0 ? broadwayFrom : 1,
           doc: Date.now().toString(36) + Math.random().toString(36).slice(2, 10) };
       }
       if (!st.place) { st.place = {}; st.only = {}; }

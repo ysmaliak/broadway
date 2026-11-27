@@ -255,7 +255,7 @@ final class AgentWordsTests {
         #expect((done.data?["ms"] as? Int ?? 0) < 2500)
     }
 
-    @Test func refsStartAtOneOnEachPageAndStayTheSame() async throws {
+    @Test func refsStayTheSameOnAPageAndGoOnAcrossTheTabsPages() async throws {
         let (_, id) = try await page("<a href='/two'>Next</a><button>Keep</button>",
                                      more: ["/two": .init(type: "text/html", body: "<!doctype html><title>Two</title><button>Back</button>")])
 
@@ -263,12 +263,42 @@ final class AgentWordsTests {
         let again = await box.call("snapshot", ["tab": id], task: task)
         let went = await box.call("click", ["tab": id, "ref": "Next"], task: task)
         let other = await box.call("snapshot", ["tab": id], task: task)
+        let numbers = { (said: ToolOutcome) in (said.data?["elements"] as? [[String: Any]] ?? []).compactMap { Int(($0["ref"] as? String ?? "").dropFirst()) } }
 
         #expect(first.text?.contains("@e1 ") == true)
         #expect(written(first).contains("\"Keep\""))
-        #expect((first.data?["elements"] as? [[String: Any]])?.map { $0["ref"] as? String ?? "" } == (again.data?["elements"] as? [[String: Any]])?.map { $0["ref"] as? String ?? "" })
+        #expect(numbers(first) == numbers(again))
         #expect(went.data?["settled"] as? String == "navigated")
-        #expect(other.text?.contains("@e1 button \"Back\"") == true)
+        #expect(other.text?.contains("button \"Back\"") == true)
+        #expect(!numbers(other).isEmpty && numbers(other).min()! > numbers(first).max()!)
+    }
+
+    @Test func anOldRefAfterANavigateToTheSameAddressIsStaleEvenWhenTheLookGaveOutRefs() async throws {
+        let (tab, id) = try await page("<button onclick='window.clicks=(window.clicks||0)+1'>Keep</button><button onclick='window.clicks=(window.clicks||0)+10'>Other</button>")
+        let old = try await ref(id, "Other")
+
+        let went = await box.call("navigate", ["tab": id, "url": "http://127.0.0.1:\(server.port)/page"], task: task)
+        let given = ((went.data?["look"] as? [String: Any])?["elements"] as? [[String: Any]] ?? []).compactMap { $0["ref"] as? String }
+        let stale = await box.call("click", ["tab": id, "ref": old], task: task)
+
+        #expect(!went.failed)
+        #expect(!given.isEmpty)
+        #expect(!given.contains(String(old.dropFirst())))
+        #expect(stale.code == "stale_ref")
+        #expect(stale.text?.contains("an earlier page called Shop") == true)
+        #expect(await clicks(tab) == 0)
+    }
+
+    @Test func aRefStaysGoodWhenTextElsewhereChangesOrThePageScrolls() async throws {
+        let (tab, id) = try await page("<p id=t>Before</p><div style='height:3000px'></div><button onclick='window.clicks=(window.clicks||0)+1'>Keep</button>")
+        let keep = try await ref(id, "Keep")
+
+        _ = try await tab.web.evaluateJavaScript("document.getElementById('t').textContent = 'After'; window.scrollTo(0, 1200); true")
+        try? await Task.sleep(for: .milliseconds(200))
+        let done = await box.call("click", ["tab": id, "ref": keep], task: task)
+
+        #expect(!done.failed)
+        #expect(await clicks(tab) == 1)
     }
 
     @Test func aRefFromAnEarlierPageSaysWhereItWas() async throws {
@@ -686,10 +716,11 @@ final class AgentWordsTests {
         _ = try await tab.web.evaluateJavaScript("location.reload(); true")
         try? await Task.sleep(for: .milliseconds(600))
         let other = UUID()
-        _ = await box.call("snapshot", ["tab": id], task: other)
+        let shot = await box.call("snapshot", ["tab": id], task: other)
+        let told = try #require((shot.data?["elements"] as? [[String: Any]])?.first { $0["name"] as? String == "Keep" }?["ref"] as? String)
 
         let guessed = await box.call("click", ["tab": id, "ref": mine], task: task)
-        let theirs = await box.call("click", ["tab": id, "ref": mine], task: other)
+        let theirs = await box.call("click", ["tab": id, "ref": told], task: other)
 
         #expect(guessed.code == "stale_ref")
         #expect(!theirs.failed)

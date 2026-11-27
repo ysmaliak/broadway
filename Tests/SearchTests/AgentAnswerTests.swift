@@ -106,7 +106,7 @@ struct AgentAnswerTests {
                                  headings: ["Checkout", "Your details", "Payment"])
         #expect(change.lines() == [
             "Clicked link \"Checkout\" @e2 in a8b6db94",
-            "Went to: Checkout  shop.example/checkout   (new page: refs start again)",
+            "Went to: Checkout  shop.example/checkout   (new page: old refs no longer work)",
             "Headings: Checkout · Your details · Payment",
             "Next: broadway snapshot",
         ])

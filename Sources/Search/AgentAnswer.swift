@@ -438,7 +438,7 @@ struct AgentChange {
             if let look { found += look.text().map { ($0, true) } }
         } else if settled != .skipped, dialog == nil, tabs.opened.isEmpty {
             if page.navigated {
-                found.append(("Went to: \(Self.cell(page.title))  \(Self.short(page.url))   (new page: refs start again)", true))
+                found.append(("Went to: \(Self.cell(page.title))  \(Self.short(page.url))   (new page: old refs no longer work)", true))
                 if let look {
                     found += look.text().map { ($0, true) }
                 } else {

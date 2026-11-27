@@ -159,7 +159,7 @@ extension BrowserToolbox {
         case "stale_ref":
             if said["why"] as? String == "unknown", frame == nil {
                 if let earlier = AgentRefBook.earlier(tab, ref: AgentRef(ref).ref, now: said["doc"] as? String) {
-                    text = "@\(AgentRef(ref).ref) was on \(AgentChange.cell(earlier.title.isEmpty ? "another page" : earlier.title)), this tab is now on \(AgentChange.cell(tab.title.isEmpty ? "another page" : tab.title))"
+                    text = wasOn(AgentRef(ref).ref, earlier, tab)
                     data["website"] = true
                 }
             }
@@ -200,6 +200,13 @@ extension BrowserToolbox {
         return .failure(AgentChange.cell(text, most: 300), code: code ?? ToolFailure.code(text), hint: hint, data: data.isEmpty ? nil : data)
     }
 
+    func wasOn(_ ref: String, _ earlier: AgentRefBook.Page, _ tab: Tab) -> String {
+        if !earlier.title.isEmpty, earlier.title == tab.title {
+            return "@\(ref) is from an earlier page called \(AgentChange.cell(earlier.title)), and this tab has loaded a new one since"
+        }
+        return "@\(ref) was on \(AgentChange.cell(earlier.title.isEmpty ? "another page" : earlier.title)), this tab is now on \(AgentChange.cell(tab.title.isEmpty ? "another page" : tab.title))"
+    }
+
     func toldTab(_ arguments: [String: Any], _ data: [String: Any]) -> Tab? {
         if let tab = find(arguments)?.tab { return tab }
         let id = (data["id"] as? String) ?? (data["tab"] as? String)
@@ -213,9 +220,7 @@ extension BrowserToolbox {
                 let doc = await timed(tab, AgentPage.docScript, seconds: 2) as? String
                 if AgentRefBook.wasTold(task, tab, doc: doc, ref: ref) == false {
                     var text = "@\(ref) is from before this page changed, so it may name something else now"
-                    if let earlier = AgentRefBook.earlier(tab, ref: ref, now: doc) {
-                        text = "@\(ref) was on \(AgentChange.cell(earlier.title.isEmpty ? "another page" : earlier.title)), this tab is now on \(AgentChange.cell(tab.title.isEmpty ? "another page" : tab.title))"
-                    }
+                    if let earlier = AgentRefBook.earlier(tab, ref: ref, now: doc) { text = wasOn(ref, earlier, tab) }
                     return .failure(.failure(text, code: .staleRef, hint: "Run broadway snapshot for this page's refs"))
                 }
             }

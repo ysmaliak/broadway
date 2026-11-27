@@ -278,6 +278,7 @@ def cli_cases(base):
         stopwatch("cli open", lambda n: made.append(broadway("open", base + f"static?open={n}").stdout.strip()))
         for tab in made:
             broadway("close", "--tab", tab)
+    still = ref_of(static, "Still")
     if not ONLY or "acts" in ONLY:
         answers = []
         stopwatch("cli click timer", lambda n: answers.append(said(broadway("click", later, "--tab", timer))))
