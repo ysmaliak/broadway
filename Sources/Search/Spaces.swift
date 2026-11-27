@@ -118,6 +118,46 @@ enum Spaces {
         return names.contains { $0.hasPrefix(start) }
     }
 
+    static func neverMade(at file: URL = Spaces.file, accounts: @autoclosure () -> [String]) -> Bool {
+        let manager = FileManager.default
+        guard !manager.fileExists(atPath: file.path), !setAside(beside: file) else { return false }
+        let folder = file.deletingLastPathComponent()
+        let names = (try? manager.contentsOfDirectory(atPath: folder.path)) ?? []
+        guard !names.contains(where: sessionOfAnotherSpace),
+              foldersOnlyInFirst(folder.appendingPathComponent("live-folders.json")),
+              windowsOnlyInFirst(folder.appendingPathComponent("windows.json")) else { return false }
+        return !accounts().contains(where: another)
+    }
+
+    private static func another(_ id: String) -> Bool {
+        UUID(uuidString: id).map { $0 != Space.firstID } ?? false
+    }
+
+    private static func sessionOfAnotherSpace(_ name: String) -> Bool {
+        ["session-states-", "session-"].contains { start in
+            name.hasPrefix(start) && another(String(name.dropFirst(start.count).prefix(36)))
+        }
+    }
+
+    private struct Housed: Decodable {
+        let space: UUID?
+    }
+
+    private static func foldersOnlyInFirst(_ file: URL) -> Bool {
+        guard let data = try? Data(contentsOf: file) else { return !FileManager.default.fileExists(atPath: file.path) }
+        guard let entries = LiveFile.entries(data) else { return false }
+        return entries.allSatisfy { entry in
+            guard let housed = try? JSONDecoder().decode(Housed.self, from: entry) else { return false }
+            return housed.space.map { $0 == Space.firstID } ?? true
+        }
+    }
+
+    private static func windowsOnlyInFirst(_ file: URL) -> Bool {
+        guard let data = try? Data(contentsOf: file) else { return !FileManager.default.fileExists(atPath: file.path) }
+        guard let records = try? JSONDecoder().decode([WindowRecord].self, from: data) else { return false }
+        return records.allSatisfy { $0.space == Space.firstID && !$0.rows.keys.contains(where: another) }
+    }
+
     @MainActor static var listRead = trusted()
 
     static func read() -> [Space] {

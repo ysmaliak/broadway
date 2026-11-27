@@ -414,8 +414,9 @@ final class History {
         save()
     }
 
-    func placeOldVisits(for browser: Browser) {
-        guard hasUnplaced, !browser.isPrivate, !browser.prefs.usesSpaces || Spaces.listRead else { return }
+    func placeOldVisits(for browser: Browser, spaces file: URL = Spaces.file, shelf: SignInShelf = SignInKeeper.ownShelf()) {
+        guard hasUnplaced, !browser.isPrivate,
+              !browser.prefs.usesSpaces || Spaces.listRead || Spaces.neverMade(at: file, accounts: shelf.accounts()) else { return }
         let spaces = browser.prefs.usesSpaces ? browser.spaces.map(\.id) : [Space.firstID]
         guard spaces.count > 1 else { return placeOldVisits(in: spaces, held: [:]) }
         placeOldVisits(in: spaces, held: History.held(

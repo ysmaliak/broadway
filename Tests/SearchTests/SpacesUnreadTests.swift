@@ -115,12 +115,97 @@ struct SpacesUnreadTests {
         let visit = "{\"url\":\"https://example.com/\",\"key\":\"https://example.com/\",\"title\":\"Page\",\"count\":3,\"last\":\(Date().timeIntervalSinceReferenceDate)}"
         try Data("[\(visit)]".utf8).write(to: folder.appendingPathComponent("history.json"))
         let history = History(file: folder.appendingPathComponent("history.json"), pages: folder.appendingPathComponent("pagetext.sqlite"))
+        try Data("not a list".utf8).write(to: folder.appendingPathComponent("spaces.json"))
         browser.prefs.usesSpaces = true
         Spaces.listRead = false
 
-        history.placeOldVisits(for: browser)
+        history.placeOldVisits(for: browser, spaces: folder.appendingPathComponent("spaces.json"))
 
         #expect(history.hasUnplaced)
+    }
+
+    enum Evidence: String, CaseIterable, CustomTestStringConvertible {
+        case sessionFile, sessionStates, signIns, liveFolder, windowRow, windowOnAnotherSpace, setAsideList, damagedList, unreadableWindows
+
+        var testDescription: String { rawValue }
+
+        func write(in folder: URL, away: UUID) throws {
+            let id = away.uuidString
+            switch self {
+            case .sessionFile:
+                try Data("{}".utf8).write(to: folder.appendingPathComponent("session-\(id).json"))
+            case .sessionStates:
+                try Data().write(to: folder.appendingPathComponent("session-states-\(id).plist"))
+            case .signIns:
+                #expect(FolderShelf(folder: folder.appendingPathComponent("Sign-ins")).write(Data("[]".utf8), as: id))
+            case .liveFolder:
+                let folders = [LiveFolder(space: away, name: "Work News", source: LiveSource(kind: .feed, address: "https://example.com/feed.xml"))]
+                try #require(LiveFile.written(folders, foreign: [])).write(to: folder.appendingPathComponent("live-folders.json"))
+            case .windowRow:
+                var record = WindowRecord()
+                record.rows[id] = Session.Shape(tabs: [], active: 0)
+                try JSONEncoder().encode([WindowRecord(), record]).write(to: folder.appendingPathComponent("windows.json"))
+            case .windowOnAnotherSpace:
+                try JSONEncoder().encode([WindowRecord(space: away)]).write(to: folder.appendingPathComponent("windows.json"))
+            case .setAsideList:
+                try Data("not a list".utf8).write(to: folder.appendingPathComponent("spaces.unreadable-1.json"))
+            case .damagedList:
+                try Data("not a list".utf8).write(to: folder.appendingPathComponent("spaces.json"))
+            case .unreadableWindows:
+                try Data("not a list".utf8).write(to: folder.appendingPathComponent("windows.json"))
+            }
+        }
+    }
+
+    private func neverMadeWorld() throws -> (folder: URL, history: History) {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("spaces-unread-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let visit = "{\"url\":\"https://example.com/\",\"key\":\"https://example.com/\",\"title\":\"Page\",\"count\":3,\"last\":\(Date().timeIntervalSinceReferenceDate)}"
+        try Data("[\(visit)]".utf8).write(to: folder.appendingPathComponent("history.json"))
+        return (folder, History(file: folder.appendingPathComponent("history.json"), pages: folder.appendingPathComponent("pagetext.sqlite")))
+    }
+
+    private func placeWithSpacesUnread(_ history: History, in folder: URL) {
+        let browser = Browser(record: WindowRecord())
+        defer { browser.closeAll() }
+        let wasRead = Spaces.listRead, used = browser.prefs.usesSpaces
+        defer {
+            Spaces.listRead = wasRead
+            browser.prefs.usesSpaces = used
+        }
+        browser.prefs.usesSpaces = true
+        Spaces.listRead = false
+
+        history.placeOldVisits(for: browser, spaces: folder.appendingPathComponent("spaces.json"),
+                               shelf: FolderShelf(folder: folder.appendingPathComponent("Sign-ins")))
+    }
+
+    @Test func oldVisitsGoToTheFirstSpaceWhenNoSpaceWasEverMade() throws {
+        let made = try neverMadeWorld()
+        defer { try? FileManager.default.removeItem(at: made.folder) }
+        try Data("{}".utf8).write(to: made.folder.appendingPathComponent("session.json"))
+        try Data().write(to: made.folder.appendingPathComponent("session-states.plist"))
+        try #require(LiveFile.written([LiveFolder(space: Space.firstID, name: "Home News", source: source)], foreign: []))
+            .write(to: made.folder.appendingPathComponent("live-folders.json"))
+        try JSONEncoder().encode([WindowRecord(), WindowRecord()]).write(to: made.folder.appendingPathComponent("windows.json"))
+        #expect(FolderShelf(folder: made.folder.appendingPathComponent("Sign-ins")).write(Data("[]".utf8), as: Space.firstID.uuidString))
+
+        placeWithSpacesUnread(made.history, in: made.folder)
+
+        #expect(!made.history.hasUnplaced)
+        #expect(made.history.everything(in: Space.firstID).map(\.key) == ["https://example.com/"])
+    }
+
+    @Test(arguments: Evidence.allCases)
+    func oldVisitsStayUnplacedWhileAnythingOfAnotherSpaceIsOnDisk(_ evidence: Evidence) throws {
+        let made = try neverMadeWorld()
+        defer { try? FileManager.default.removeItem(at: made.folder) }
+        try evidence.write(in: made.folder, away: away)
+
+        placeWithSpacesUnread(made.history, in: made.folder)
+
+        #expect(made.history.hasUnplaced)
+        #expect(made.history.everything(in: Space.firstID).isEmpty)
     }
 
     @Test func anotherWindowKeepsItsRowsOfSpacesNotRead() {

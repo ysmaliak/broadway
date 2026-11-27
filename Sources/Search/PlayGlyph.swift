@@ -45,6 +45,22 @@ final class PlayGlyph: NSImageView {
         return NSRect(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2, width: size.width, height: size.height)
     }
 
+    func placed(_ size: NSSize) -> CGPoint {
+        let scale = window?.backingScaleFactor ?? 2
+        func snap(_ value: CGFloat) -> CGFloat { (value * scale).rounded() / scale }
+        return CGPoint(x: snap((bounds.width - size.width) / 2), y: snap((bounds.height - size.height) / 2))
+    }
+
+    override var wantsUpdateLayer: Bool { false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let image, contentTintColor != .clear else { return }
+        let rect = NSRect(origin: placed(image.size), size: image.size)
+        image.draw(in: rect)
+        (contentTintColor ?? .labelColor).set()
+        rect.fill(using: .sourceAtop)
+    }
+
     func show(_ name: String, animated: Bool) {
         guard let next = KitGlyph.image(name, style) else { return }
         let was = self.name
@@ -90,7 +106,7 @@ final class PlayGlyph: NSImageView {
         }
         NSGraphicsContext.restoreGraphicsState()
         guard let made = context.makeImage() else { return nil }
-        let origin = CGPoint(x: ((bounds.width - image.size.width) / 2).rounded(), y: ((bounds.height - image.size.height) / 2).rounded())
+        let origin = placed(image.size)
         let piece = CALayer()
         piece.contents = made
         piece.contentsScale = scale

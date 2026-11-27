@@ -106,6 +106,15 @@ final class MergedTurnTests {
         }
     }
 
+    private func pump(_ column: NSView, until done: () -> Bool, within seconds: Double = 5) async throws {
+        let end = CACurrentMediaTime() + seconds
+        while !done(), CACurrentMediaTime() < end {
+            settle(column)
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        settle(column)
+    }
+
     private static var looks: [(String, SpaceLook)] {
         var looks: [(String, SpaceLook)] = SpaceLook.themes.map { ($0.name, $0.look) }
         looks += SpaceLook.palette.map { ($0.name, SpaceLook(colour: $0.id)) }
@@ -352,10 +361,7 @@ final class MergedTurnTests {
 
         merge(1, column: column)
         let worn = row(1, in: column)?.mergedForm
-        try await Task.sleep(for: .milliseconds(400))
-        settle(column)
-        try await Task.sleep(for: .milliseconds(400))
-        settle(column)
+        try await pump(column) { !LiveFolders.shared.turning(self.key(1)) && self.row(1, in: column) == nil }
 
         #expect(worn == .full)
         #expect(tab(made, 1) == nil)
