@@ -240,7 +240,8 @@ def check_leave(name, rows):
     at = later[steps.index(worst)]
     t.ok(f"[{name}] the title never cuts (most in one frame {worst:.1f} pt of {far:.1f}, at frame f{at.get('frame', -1):03d})",
          worst <= max(3, 0.4 * far), (round(worst, 1), round(far, 1)))
-    t.ok(f"[{name}] it goes one way back to its start", all(abs(b) <= abs(a) + 1 for a, b in zip(places, places[1:])) and abs(places[-1]) < 0.5,
+    back = [row["title"] for row in later]
+    t.ok(f"[{name}] it goes one way back to its start", all(abs(b) <= abs(a) + 1 for a, b in zip(back, back[1:])) and abs(back[-1]) < 0.5,
          [round(v, 1) for v in places[:30]])
     between = [v for v in places if 0.5 < abs(v) < far - 0.5]
     t.ok(f"[{name}] over several frames", len(between) >= 5, len(between))
