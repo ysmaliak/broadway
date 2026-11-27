@@ -86,6 +86,59 @@ struct FindStageTests {
         #expect(!browser.escapeShutFind())
     }
 
+    @Test func openingTheBarAgainFindsTheKeptWordsOnThePage() async throws {
+        _ = NSApplication.shared
+        let browser = Browser(record: WindowRecord())
+        let tab = browser.benchOpen(URL(string: "about:blank")!)
+        browser.activeID = tab.id
+        let stage = PaneStage(frame: CGRect(x: 0, y: 0, width: 600, height: 400))
+        stage.show([tab], split: nil, focused: tab.id)
+        let window = makeWindow(stage)
+        defer { browser.closeFind(); window.close() }
+        let web = tab.web
+        web.loadHTMLString("<body>orchid orchid orchid<script>window.findFixtureReady = true;</script></body>",
+                           baseURL: URL(string: "https://find-again.invalid/"))
+        try await waitUntil("the fixture page loads") {
+            (try? await web.evaluateJavaScript("window.findFixtureReady")) as? Bool == true
+        }
+        browser.openFind()
+        browser.needle = "orchid"
+        try await waitUntil("find answers") { !browser.findBusy && browser.findResult != nil }
+        browser.closeFind()
+        try await waitUntil("closing clears the page's paint") {
+            (try await web.evaluateJavaScript("CSS.highlights.get('search-find-match')?.size ?? 0")) as? Int == 0
+        }
+
+        browser.openFind()
+        let asked = browser.findBusy
+        try await waitUntil("the kept words are found again") { browser.findStatus != nil && !browser.findBusy }
+        try await waitUntil("the page is painted again") {
+            (try await web.evaluateJavaScript("CSS.highlights.get('search-find-match')?.size ?? 0")) as? Int == 3
+        }
+        let selected = try await web.evaluateJavaScript("String(getSelection())") as? String
+
+        #expect(asked)
+        #expect(browser.needle == "orchid")
+        #expect(browser.findStatus == "1 of 3")
+        #expect(selected == "orchid")
+
+        browser.closeFind()
+        browser.finding = true
+        try await waitUntil("the bar shown again without ⌘F finds them too") { browser.findStatus != nil && !browser.findBusy }
+        #expect(browser.findStatus == "1 of 3")
+
+        browser.closeFind()
+        browser.look(forward: true)
+        try await waitUntil("find next answers with the bar shut") { !browser.findBusy && browser.findResult != nil }
+        browser.takeForFind("lily", board: NSPasteboard.withUniqueName())
+        browser.openFind()
+        try await waitUntil("words taken while the bar was shut are found when it opens") {
+            !browser.findBusy && browser.findStatus != "1 of 3"
+        }
+        #expect(browser.needle == "lily")
+        #expect(browser.findStatus == "No matches")
+    }
+
     @Test func closeButtonClearsFindWithoutClickingPageAfterStatusChanges() async throws {
         _ = NSApplication.shared
         let browser = Browser(record: WindowRecord())

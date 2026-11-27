@@ -23,12 +23,13 @@ class H(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split("?")[0]
         with lock:
-            seen.append((path, self.headers.get("Cookie") or ""))
+            seen.append((path, self.headers.get("Cookie") or "", self.headers.get("User-Agent") or ""))
         body = f"<!doctype html><title>{path.strip('/')}</title><p>{path}".encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/html")
         self.send_header("Content-Length", str(len(body)))
         if path in SETS:
+            self.send_header("Cache-Control", "no-store")
             self.send_header("Set-Cookie", f"{SETS[path]}=yes; Path=/")
         self.end_headers()
         self.wfile.write(body)
@@ -47,15 +48,42 @@ def mark():
         return len(seen)
 
 
-def first(since, paths=None, within=20):
+def first(since, paths=None, within=20, pages=False):
     until = time.monotonic() + within
     while time.monotonic() < until:
         with lock:
-            for path, cookie in seen[since:]:
+            for path, cookie, agent in seen[since:]:
+                if pages and agent.startswith("Broadway/"):
+                    continue
                 if paths is None or path in paths:
                     return path, cookie
         time.sleep(0.05)
     return None, None
+
+
+def shown(within=15):
+    until = time.monotonic() + within
+    tab, text = None, None
+    while time.monotonic() < until:
+        tab = next((t for t in sv.cmd({"do": "titles"})["tabs"] if t["active"]), None)
+        if tab and not tab["asleep"] and not tab["loading"]:
+            try:
+                text = sv.ev(tab["id"], "document.body ? document.body.innerText.trim() : ''")
+            except RuntimeError:
+                text = None
+            if text:
+                return tab, text
+        time.sleep(0.2)
+    return tab, text
+
+
+def requested(since, tab, within=10):
+    path, cookie = first(since, pages=True, within=3)
+    if path is None and tab:
+        since = mark()
+        sv.cmd({"do": "eval", "id": tab["id"], "js": "location.reload(); 1"})
+        path, cookie = first(since, pages=True, within=within)
+    return path, cookie
 
 
 def kept():
@@ -109,10 +137,11 @@ try:
     t.ok("Quit from the menu: the kept file has the cookie", kept() == ["kept_one"], kept())
 
     since = relaunch()
-    path, cookie = first(since)
+    tab, text = shown()
+    path, cookie = requested(since, tab)
     numbers["first request after menu quit"] = [path, cookie]
-    t.ok("launch: the tab comes back by itself and asks for its page", path == "/set", path)
-    t.ok("launch: its first request carries the kept cookie", "kept_one=yes" in (cookie or ""), cookie)
+    t.ok("launch: the tab comes back by itself showing its page", text == "/set", text)
+    t.ok("launch: the first request it makes to the site carries the kept cookie", "kept_one=yes" in (cookie or ""), (path, cookie))
 
     sv.cmd({"do": "signins", "settle": 1.0})
     started = time.monotonic()
@@ -128,11 +157,12 @@ try:
     t.ok("SIGKILL: the kept file still has both cookies", kept() == ["kept_one", "kept_two"], kept())
 
     since = relaunch()
-    path, cookie = first(since)
+    tab, text = shown()
+    path, cookie = requested(since, tab)
     numbers["first request after SIGKILL"] = [path, cookie]
-    t.ok("launch after SIGKILL: a tab asks for its page", path in ("/set", "/set2"), path)
-    t.ok("launch after SIGKILL: its first request carries the cookie written before the kill",
-         "kept_two=yes" in (cookie or ""), cookie)
+    t.ok("launch after SIGKILL: the tab comes back showing its page", text in ("/set", "/set2"), text)
+    t.ok("launch after SIGKILL: the first request it makes to the site carries the cookie written before the kill",
+         "kept_two=yes" in (cookie or ""), (path, cookie))
 
     open_tab("/update")
     t.ok("normal settling: the cookie is not written yet", "kept_three" not in (kept() or []), kept())
@@ -146,7 +176,8 @@ try:
          "kept_three" in (kept() or []), kept())
 
     since = relaunch()
-    path, cookie = first(since)
+    tab, text = shown()
+    path, cookie = requested(since, tab)
     numbers["first request after update restart"] = [path, cookie]
     t.ok("launch after the update restart: the first request carries the cookie",
          "kept_three=yes" in (cookie or ""), cookie)

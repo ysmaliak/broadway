@@ -483,7 +483,13 @@ final class Browser: NSObject {
     let findState = FindState()
     var finding: Bool {
         get { findState.on }
-        set { if findState.on != newValue { findState.on = newValue } }
+        set {
+            guard findState.on != newValue else { return }
+            findState.on = newValue
+            guard newValue, let tab = active, !needle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            let spec = FindSpec(tab: tab.id, query: needle, matchCase: matchCase, wholeWords: wholeWords)
+            if findSpec != spec { look(forward: true) }
+        }
     }
     var foldedTasks: Set<UUID> = []
     /// The side panel, beside the page (see SidePanel.swift): up or
