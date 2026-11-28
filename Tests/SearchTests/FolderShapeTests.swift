@@ -114,7 +114,7 @@ final class FolderShapeTests {
         let close = try #require(all(CloseSpotView.self, in: heading).first { !$0.isHidden })
         let covered = chevron.frame.maxX > close.frame.minX - 2
         #expect(chevron.alphaValue == (covered ? 0 : 1), "long \(long): the chevron shows unless the close covers it")
-        #expect(!long || chevron.frame.maxX <= heading.bounds.maxX - SideGrid.lead + 0.5, "the name truncates before the chevron leaves the heading")
+        #expect(!long || chevron.frame.maxX <= heading.bounds.maxX - 10 + 0.5, "the name truncates before the chevron leaves the heading")
     }
 
     private func grounds(in view: NSView) -> [KitPlate] {

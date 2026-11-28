@@ -212,7 +212,7 @@ final class SideColumnView: NSView {
         let low = lowFoot
         wholeStrip.isHidden = browser.makingSpace
         wholeStrip.kitSetFrame(bounds)
-        let helmWidth = width - inset - SideGrid.tail - Metrics.helmLights >= Metrics.helm ? Metrics.helm : Metrics.helmNarrow
+        let helmWidth = width - inset - Metrics.helmLights >= Metrics.helm ? Metrics.helm : Metrics.helmNarrow
         topStrip.kitSetFrame(NSRect(x: 0, y: 0, width: max(0, width - helmWidth), height: strip))
         let stripTop = stacked ? height - foot : height - low
         footStrip.kitSetFrame(NSRect(x: 0, y: stripTop, width: width, height: browser.makingSpace ? 0 : height - stripTop))
@@ -220,7 +220,7 @@ final class SideColumnView: NSView {
 
         helm.greys = onFrame ? .frame : .white
         helm.ink = ground.ink
-        helm.frame = NSRect(x: width - inset - SideGrid.tail - helmWidth, y: 0, width: helmWidth, height: strip)
+        helm.frame = NSRect(x: width - inset - helmWidth, y: 0, width: helmWidth, height: strip)
         fetch.ink = ground.ink
         var y = strip
         if !stacked {

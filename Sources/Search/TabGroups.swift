@@ -46,13 +46,13 @@ struct GroupDropFrames {
 
 enum FolderHeadingMetrics {
     static let height: CGFloat = Metrics.sideRowHeight
-    static let indent: CGFloat = SideGrid.step
+    static let indent: CGFloat = 16
     static var closeInset: CGFloat { (height - Metrics.closeSquare(height)) / 2 }
 
     static func inset(depth: Int) -> CGFloat { CGFloat(max(0, depth - 1)) * indent }
 
     static func inside(x: CGFloat, depth: Int) -> Bool {
-        x > inset(depth: depth) + SideGrid.step + SideGrid.tail
+        x > inset(depth: depth) + indent + 12
     }
 }
 

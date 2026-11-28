@@ -681,7 +681,7 @@ def main():
         t.ok("the artwork has the same space above, beside and below it",
              art[0] == art[1] == card[3] - art[1] - art[3] and 28 <= art[2] == art[3] <= 32, (art, card))
         t.ok("previous, play or pause and next sit at the right, in that order",
-             len(keys) == 3 and keys[0][0] < keys[1][0] < keys[2][0] and card[2] - keys[2][0] - keys[2][2] <= 9, keys)
+             len(keys) == 3 and keys[0][0] < keys[1][0] < keys[2][0] and card[2] - keys[2][0] - keys[2][2] <= 8, keys)
         t.ok("its buttons are go to, previous, pause and next: no sound key and no close",
              rest.get("buttons") == ["Bohemian Rhapsody (Remastered 2011), A Band", "Previous", "Pause", "Next"], rest.get("buttons"))
         t.ok("the second line is the artist, with no times at rest", rest.get("detail") == "A Band", rest.get("detail"))

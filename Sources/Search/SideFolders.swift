@@ -558,7 +558,7 @@ final class FolderEditField: NSTextField, NSTextFieldDelegate {
 
 final class GroupHeadingView: KitHoverView {
     static let height: CGFloat = SideLook.headingHeight
-    static let indent: CGFloat = SideGrid.step
+    static let indent: CGFloat = 16
     static var closeInset: CGFloat { (height - Metrics.closeSquare(height)) / 2 }
     static let nameLine: CGFloat = 16
 
@@ -892,14 +892,14 @@ final class GroupHeadingView: KitHoverView {
         mark.kitSetFrame(NSRect(x: Self.markLead(depth: depth) + (SideLook.rowMark - glyph.width) / 2, y: (height - glyph.height) / 2,
                                 width: glyph.width, height: glyph.height))
         var x = Self.nameLead(depth: depth)
-        var right = box.maxX - SideGrid.lead
+        var right = box.maxX - 10
         let showsChevron = !editing
         chevronTurn.isHidden = !showsChevron
         let chevronSize = chevron.intrinsicContentSize
         if showsChevron, !SideLook.chevronInline {
             chevronTurn.kitSetFrame(NSRect(x: right - chevronSize.width, y: (height - chevronSize.height) / 2,
                                            width: chevronSize.width, height: chevronSize.height))
-            right -= chevronSize.width + SideGrid.gap
+            right -= chevronSize.width + 9
         }
         if !editing, group.collapsed, let number {
             let made = shortcut ?? ShortcutNumberView(number: number)
@@ -907,7 +907,7 @@ final class GroupHeadingView: KitHoverView {
             made.number = number
             let side = ShortcutNumberView.side
             made.kitSetFrame(NSRect(x: right - side, y: (height - side) / 2, width: side, height: side))
-            right -= side + SideGrid.gap
+            right -= side + 9
         } else if let made = shortcut {
             made.removeFromSuperview()
             shortcut = nil
@@ -919,7 +919,7 @@ final class GroupHeadingView: KitHoverView {
             chipFold.kitSetFrame(NSRect(x: right - width, y: (height - SideCountView.height) / 2, width: width, height: SideCountView.height))
             let side = LiveLoading.side
             countRing.kitSetFrame(NSRect(x: right - side, y: (height - side) / 2, width: side, height: side))
-            right -= width + SideGrid.gap
+            right -= width + 9
         }
         let asks = asksSignIn
         foldChip(showsCount, curve: (asks != askedBefore || rings != rangBefore) && !curve.animates ? Motion.kitQuick : curve)
@@ -930,23 +930,23 @@ final class GroupHeadingView: KitHoverView {
             let inline = showsChevron && SideLook.chevronInline ? chevronSize.width + SideLook.chevronGap : 0
             if asks, let live = status as? LiveStatusView, let asked = live.asked {
                 let want = min(ceil(name.intrinsicContentSize.width), SideLook.headingNameRoom)
-                live.short = right - LiveSignInPill.size(asked).width - SideGrid.gap - x - inline < want
+                live.short = right - LiveSignInPill.size(asked).width - 9 - x - inline < want
             } else if let live = status as? LiveStatusView, live.warns {
                 let want = min(ceil(name.intrinsicContentSize.width), SideLook.headingNameRoom)
-                live.short = right - LiveStatusView.warnWidth - SideGrid.gap - x - inline < want
+                live.short = right - LiveStatusView.warnWidth - 9 - x - inline < want
             }
             let size = status.fittingSize
-            let nameRoom = right - size.width - SideGrid.gap - x - inline
+            let nameRoom = right - size.width - 9 - x - inline
             let live = status as? LiveStatusView
             let keeps = asks || live?.keeps == true
             status.isHidden = !keeps && size.width > 0 && nameRoom < SideLook.headingNameRoom
             if size.width > 0, !status.isHidden {
                 status.kitSetFrame(NSRect(x: right - size.width, y: (height - size.height) / 2, width: size.width, height: size.height))
-                right -= size.width + SideGrid.gap
+                right -= size.width + 9
             } else if let live, live.overCount {
                 if live.loads { status.kitSetFrame(countRing.frame) }
             } else if live != nil, status.isHidden {
-                right -= LiveLoading.side + SideGrid.gap
+                right -= LiveLoading.side + 9
             }
         } else {
             status?.isHidden = true
@@ -970,7 +970,7 @@ final class GroupHeadingView: KitHoverView {
             veil.kitSetFrame(NSRect(x: x, y: (height - barHeight) / 2, width: GroupNameReveal.width(for: group.id, room: room),
                                     height: barHeight))
         }
-        field?.kitSetFrame(Self.fieldFrame(nameLead: x, right: box.maxX - SideGrid.lead))
+        field?.kitSetFrame(Self.fieldFrame(nameLead: x, right: box.maxX - 10))
         let inset = SideLook.fieldInset
         well.kitSetFrame(NSRect(x: x - SideLook.fieldLead, y: inset, width: max(0, box.maxX - inset - x + SideLook.fieldLead),
                                 height: height - 2 * inset))

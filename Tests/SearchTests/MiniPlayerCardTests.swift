@@ -172,8 +172,8 @@ struct MiniPlayerCardTests {
         #expect(art.minX == art.minY && art.minY == whole.height - art.maxY)
         #expect(keys.count == 3)
         #expect(keys[0][0] < keys[1][0] && keys[1][0] < keys[2][0])
-        #expect(keys.allSatisfy { $0[2] == Double(SideGrid.key) && $0[1] == Double(MiniPlayerView.height - SideGrid.key) / 2 })
-        #expect(Double(whole.width) - keys[2][0] - keys[2][2] == Double(MiniPlayerView.keysEnd))
+        #expect(keys.allSatisfy { $0[2] == 26 && $0[1] == (44 - 26) / 2 })
+        #expect(Double(whole.width) - keys[2][0] - keys[2][2] == 7)
         #expect(box(state, "titleFrame").maxX <= CGFloat(keys[0][0]))
     }
 

@@ -86,7 +86,7 @@ final class SelectedShortcutView: KitFlippedView {
         chevron.kitSetFrame(kitSnap(NSRect(x: slot.midX - size.width / 2, y: slot.midY - size.height / 2,
                                            width: size.width, height: size.height)))
         let line = SideLook.titleLine
-        title.kitSetFrame(NSRect(x: cursor, y: (height - line) / 2, width: max(0, slot.minX - SideGrid.tail - cursor), height: line))
+        title.kitSetFrame(NSRect(x: cursor, y: (height - line) / 2, width: max(0, slot.minX - 4 - cursor), height: line))
     }
 
     func arrive(_ shown: Bool, animated: Bool = true) {

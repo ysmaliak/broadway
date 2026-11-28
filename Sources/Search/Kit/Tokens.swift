@@ -117,10 +117,10 @@ enum Metrics {
     static let floatGap: CGFloat = 4
     static let floatRadius: CGFloat = 12
     static let lights: CGFloat = 100
-    static let helm: CGFloat = 4 * SideGrid.key + 3 * SideGrid.keyGap + SideGrid.gap
-    static let helmNarrow: CGFloat = 3 * SideGrid.key + 2 * SideGrid.keyGap + SideGrid.gap
+    static let helm: CGFloat = 4 * 30 + 3 * 4 + 8
+    static let helmNarrow: CGFloat = 3 * 30 + 2 * 4 + 8
     static let helmLights: CGFloat = 78
-    static let sideInset: CGFloat = SideGrid.edge
+    static let sideInset: CGFloat = 6
     static let sidePill: CGFloat = SideLook.pillHeight
     static let sideRadius: CGFloat = SideLook.rowRadius
     static let sideRowHeight: CGFloat = 34
@@ -132,7 +132,7 @@ enum Metrics {
     static let folderRadius: CGFloat = SideLook.cardRadius
     static let closeSide: CGFloat = 18
 
-    static func closeSquare(_ height: CGFloat) -> CGFloat { max(18, min(34, height - 2 * SideGrid.tail)) }
+    static func closeSquare(_ height: CGFloat) -> CGFloat { max(18, min(34, height - 8)) }
     static func closeInset(_ height: CGFloat) -> CGFloat { max(0, (height - closeSquare(height)) / 2) }
     static func closeCorner(_ side: CGFloat) -> CGFloat { min(8, side * 0.27) }
     static let paneBar: CGFloat = 32
@@ -152,7 +152,7 @@ enum IconLook {
 enum SideLook {
     static let rowRadius: CGFloat = 11
     static let cardRowRadius: CGFloat = cardRadius - cardPad
-    static let cardPad: CGFloat = SideGrid.pad
+    static let cardPad: CGFloat = 3
     static let dropRing = 0.55
     static let dropRingWidth: CGFloat = 1.5
     static let fieldInset: CGFloat = 1
@@ -166,16 +166,16 @@ enum SideLook {
     static let headingFade: CFTimeInterval = 0.12
     static let shrinkLag: CFTimeInterval = 0.04
     static let foldLag: CFTimeInterval = 0.06
-    static let cardRowInset: CGFloat = SideGrid.step
+    static let cardRowInset: CGFloat = 16
     static let headingHeight: CGFloat = 28
     static let ruleInset: CGFloat = 5
     static let cardRadius: CGFloat = 14
     static let pinRadius: CGFloat = rowRadius
-    static let pinMark: CGFloat = SideGrid.mark
-    static let rowMark: CGFloat = SideGrid.mark
+    static let pinMark: CGFloat = 16
+    static let rowMark: CGFloat = 16
     static let pinsFoot: CGFloat = 8
-    static let rowLead: CGFloat = SideGrid.lead
-    static let markGap: CGFloat = SideGrid.gap
+    static let rowLead: CGFloat = 9
+    static let markGap: CGFloat = 8
     static let titleLine: CGFloat = 16
     static let byline: CGFloat = 11
     static let bylineTone = 1.15
@@ -196,7 +196,7 @@ enum SideLook {
     static let slabVivid = 0.6
     static let pillHeight: CGFloat = 34
     static let pillRadius: CGFloat = rowRadius
-    static let pillLead: CGFloat = SideGrid.lead
+    static let pillLead: CGFloat = 12
     static let doorSize: CGFloat = 12
     static let doorWeight = IconLook.control
     static let siteIcon = "switch.2"

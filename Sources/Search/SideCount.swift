@@ -3,8 +3,8 @@ import AppKit
 final class SideCountView: KitFlippedView {
     static let height: CGFloat = 17
     static let pad: CGFloat = 6
-    static let tail: CGFloat = SideGrid.lead
-    static let gap: CGFloat = SideGrid.gap
+    static let tail: CGFloat = 10
+    static let gap: CGFloat = 9
     static let wash = 0.07
     static let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
 

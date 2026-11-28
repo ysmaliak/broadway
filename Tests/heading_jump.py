@@ -43,7 +43,7 @@ if options.app:
 OUT = Path(options.out or ROOT / ".context" / "heading-jump") / options.label
 FILM = ROOT / ".context" / "pin-motion" / "pin-film"
 WIDTH, HEIGHT, COLUMN = 1000, 720, 260
-HEADS = {"Pull Requests": (46, 186), "Shelf": (46, 330), "Outer": (46, 551), "Inner": (70, 585)}
+HEADS = {"Pull Requests": (46, 186), "Shelf": (46, 330), "Outer": (46, 551), "Inner": (62, 585)}
 t = sv.T()
 
 

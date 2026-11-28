@@ -81,7 +81,7 @@ enum PinPlaces {
     static let height: CGFloat = 40
     static let narrowest: CGFloat = 36
     static let most = 5
-    static let gap: CGFloat = SideGrid.edge
+    static let gap: CGFloat = 6
     static let mark: CGFloat = SideLook.pinMark
     static let radius: CGFloat = SideLook.pinRadius
 
@@ -98,15 +98,13 @@ enum PinPlaces {
         return (0..<lines).map { $0 < extra ? base + 1 : base }
     }
 
-    static func cells(_ count: Int, room: CGFloat, scale: CGFloat? = nil) -> [CGRect] {
-        func snap(_ value: CGFloat) -> CGFloat { scale.map { (value * $0).rounded(.toNearestOrAwayFromZero) / $0 } ?? value }
+    static func cells(_ count: Int, room: CGFloat) -> [CGRect] {
         var cells: [CGRect] = []
         for (line, across) in rows(count, most: across(room)).enumerated() {
             let width = (room - CGFloat(across - 1) * gap) / CGFloat(across)
             for place in 0..<across {
-                let left = snap(CGFloat(place) * (width + gap))
-                let right = snap(CGFloat(place) * (width + gap) + width)
-                cells.append(CGRect(x: left, y: CGFloat(line) * (height + gap), width: right - left, height: height))
+                cells.append(CGRect(x: CGFloat(place) * (width + gap), y: CGFloat(line) * (height + gap),
+                                    width: width, height: height))
             }
         }
         return cells

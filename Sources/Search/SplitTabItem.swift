@@ -150,15 +150,13 @@ final class SplitTabItemView: KitHoverView {
         let height = setup.height
         let side = Metrics.closeSquare(height)
         let inset = Metrics.closeInset(height)
-        let lead = SideGrid.pad
-        let between = lead
-        let room = max(0, bounds.width - lead * 2)
-        let closeRoom = closing ? side + inset - lead + between : 0
-        let each = max(0, (room - between - closeRoom) / 2)
+        let room = max(0, bounds.width - inset * 2)
+        let closeRoom = closing ? side + 5 : 0
+        let each = max(0, (room - 5 - closeRoom) / 2)
         let chipHeight = SplitChipView.height
         let y = (bounds.height - chipHeight) / 2
-        chips[0].frame = kitSnap(NSRect(x: lead, y: y, width: each, height: chipHeight))
-        chips[1].frame = kitSnap(NSRect(x: lead + each + between, y: y, width: each, height: chipHeight))
+        chips[0].frame = kitSnap(NSRect(x: inset, y: y, width: each, height: chipHeight))
+        chips[1].frame = kitSnap(NSRect(x: inset + each + 5, y: y, width: each, height: chipHeight))
         close.frame = kitSnap(NSRect(x: bounds.width - inset - side, y: (bounds.height - side) / 2, width: side, height: side))
         let now: [Tab.ID: CGRect] = [left.id: chips[0].frame, right.id: chips[1].frame]
         if now != told {
@@ -194,7 +192,7 @@ struct SplitGreys {
 
 @MainActor
 final class SplitChipView: KitHoverView {
-    static let height: CGFloat = SideGrid.bar
+    static let height: CGFloat = 28
 
     struct State: Equatable {
         var focused = false
@@ -232,7 +230,7 @@ final class SplitChipView: KitHoverView {
     let fill = KitBox(fill: nil, corners: .radius(7))
     private var lit = false
     private let ring = RingView()
-    private let mark = KitMark(icon: nil, letter: "", side: SideGrid.mark)
+    private let mark = KitMark(icon: nil, letter: "", side: 15)
     private let dot = KitBox(fill: KitColor.muted, corners: .capsule)
     private let title = KitLabel("", font: .systemFont(ofSize: 12))
     private let number = ShortcutNumberView(number: 1)
@@ -419,53 +417,50 @@ final class SplitChipView: KitHoverView {
             view.frame = kitSnap(NSRect(x: x, y: mid - size.height / 2, width: size.width, height: size.height))
         }
         let editing = state.editing
-        let lead = SideGrid.lead - SideGrid.pad
         if let field {
-            place(field, x: lead, size: NSSize(width: max(0, bounds.width - 2 * lead), height: 16))
+            place(field, x: 7, size: NSSize(width: max(0, bounds.width - 14), height: 16))
         }
-        var x = lead
-        let gap = SideGrid.gap
-        let side = SideGrid.mark
+        var x: CGFloat = 7
         let loading = tab.loading
         ring.isHidden = editing || !loading
         mark.isHidden = editing || loading || !state.icons
         if !ring.isHidden {
-            place(ring, x: x + (side - 11) / 2, size: NSSize(width: 11, height: 11))
-            x += side + gap
+            place(ring, x: x, size: NSSize(width: 11, height: 11))
+            x += 11 + 6
         } else if !mark.isHidden {
-            place(mark, x: x, size: NSSize(width: side, height: side))
-            x += side + gap
+            place(mark, x: x, size: NSSize(width: 15, height: 15))
+            x += 15 + 6
         }
         let popupOn = !editing && !tab.blockedPopups.isEmpty
         popup?.isHidden = !popupOn
         if let popup, popupOn {
             place(popup, x: x, size: NSSize(width: 17, height: 15))
-            x += 17 + gap
+            x += 17 + 6
         }
         let translateOn = !editing && tab.translation != nil
         translate?.isHidden = !translateOn
         if let translate, translateOn {
             place(translate, x: x, size: NSSize(width: 17, height: 15))
-            x += 17 + gap
+            x += 17 + 6
         }
         dot.isHidden = editing || !state.asking
         if !dot.isHidden {
             place(dot, x: x, size: NSSize(width: 5, height: 5))
-            x += 5 + gap
+            x += 5 + 6
         }
-        var end = bounds.width - lead
+        var end = bounds.width - 7
         let speakerOn = !editing && playing
         speaker?.isHidden = !speakerOn
         if let speaker, speakerOn {
             end -= 15
             place(speaker, x: end, size: NSSize(width: 15, height: 15))
-            end -= gap
+            end -= 6
         }
         number.isHidden = editing || state.number == nil
         if !number.isHidden {
             end -= ShortcutNumberView.side
             place(number, x: end, size: NSSize(width: ShortcutNumberView.side, height: ShortcutNumberView.side))
-            end -= gap
+            end -= 6
         }
         title.isHidden = editing
         let height = title.intrinsicContentSize.height

@@ -379,8 +379,6 @@ final class Bench {
             BenchSiteFiles.run(request, browser, answer)
         case _ where BenchInk.verbs.contains(verb):
             BenchInk.run(request, browser, answer)
-        case _ where BenchSideTree.verbs.contains(verb):
-            BenchSideTree.run(request, browser, answer)
 
         case _ where BenchHooks.verbs.contains(verb):
             BenchHooks.run(request, browser: browser, answer)

@@ -243,7 +243,7 @@ final class AgentLeadTabTests {
         #expect(folders == \GroupHeadingView.chipFold)
         #expect(SideCountView.font == NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium))
         #expect(chip.height == 17)
-        #expect(chip.maxX == heading.bounds.maxX - SideGrid.lead)
+        #expect(chip.maxX == heading.bounds.maxX - 10)
         #expect(chip.width == heading.count.width)
         #expect(abs(chip.midY - heading.bounds.midY) <= 0.5)
     }

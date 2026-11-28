@@ -79,7 +79,7 @@ enum AgentsLayout {
     }
 
     static let dotSide: CGFloat = 7
-    static let tail: CGFloat = SideGrid.lead
+    static let tail: CGFloat = 10
 
     static func rowSlots(width: CGFloat, height: CGFloat) -> RowSlots {
         let side = SideLook.rowMark
